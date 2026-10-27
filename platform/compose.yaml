@@ -8,6 +8,7 @@ services:
     environment:
       APP_ENV: local
       APP_DEBUG: "true"
+      APP_KEY: base64:cHJvZ3Jlc3NpdmUtbG9jYWwtYXBwLWtleS0wMDAwMDA=
       APP_URL: http://localhost:8080
       DB_CONNECTION: pgsql
       DB_HOST: postgres
@@ -16,6 +17,9 @@ services:
       DB_USERNAME: progressive
       DB_PASSWORD: progressive-local-only
       REDIS_HOST: redis
+      SESSION_DRIVER: database
+      SESSION_SECURE_COOKIE: "false"
+      SANCTUM_STATEFUL_DOMAINS: localhost:3000,127.0.0.1:3000
       MAIL_MAILER: smtp
       MAIL_HOST: mailpit
       MAIL_PORT: 1025
@@ -29,7 +33,7 @@ services:
       context: ./apps/web
       target: development
     environment:
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080/api/v1
+      API_BASE_URL: http://api:8080
     ports: ["3000:3000"]
     depends_on:
       api: { condition: service_healthy }

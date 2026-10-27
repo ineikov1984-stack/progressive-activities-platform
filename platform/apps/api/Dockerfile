@@ -10,8 +10,7 @@ WORKDIR /app
 COPY --from=vendor /usr/bin/composer /usr/local/bin/composer
 COPY --from=vendor /app/vendor ./vendor
 COPY . .
-RUN cp .env.example .env \
-    && php artisan key:generate \
+RUN touch .env .env.testing \
     && php artisan package:discover --ansi
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --retries=10 \
