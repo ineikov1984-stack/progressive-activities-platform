@@ -92,7 +92,7 @@ platform/
 
 ## 3. Подробен план за седмици 1–3
 
-### Задача 1: Monorepo, локална среда и автоматични проверки
+### Task 1: Monorepo, локална среда и автоматични проверки
 
 **Файлове:**
 - Create: `platform/apps/api/`
@@ -134,7 +134,7 @@ Expected: всички проверки PASS и двата health endpoint-а о
 
 `git commit -m "chore: scaffold platform monorepo and CI"`
 
-### Задача 2: Архитектурни решения и конфигурационни граници
+### Task 2: Архитектурни решения и конфигурационни граници
 
 **Файлове:**
 - Create: `platform/docs/architecture/0001-modular-monolith.md`
@@ -170,7 +170,7 @@ Expected: PASS.
 
 `git commit -m "docs: record platform architecture decisions"`
 
-### Задача 3: Identity, сигурен вход и MFA-ready модел
+### Task 3: Identity, сигурен вход и MFA-ready модел
 
 **Файлове:**
 - Create: `platform/apps/api/app/Domain/Identity/Models/User.php`
@@ -213,7 +213,7 @@ Expected: PASS.
 
 `git commit -m "feat: add secure user authentication"`
 
-### Задача 4: Организации, членства и tenant context
+### Task 4: Организации, членства и tenant context
 
 **Файлове:**
 - Create: `platform/apps/api/app/Domain/Organizations/Models/Organization.php`
@@ -257,7 +257,7 @@ Expected: PASS за application и database layer.
 
 `git commit -m "feat: enforce organization tenant isolation"`
 
-### Задача 5: Роли, permissions и покани
+### Task 5: Роли, permissions и покани
 
 **Файлове:**
 - Create: `platform/apps/api/app/Domain/Organizations/Enums/OrganizationRole.php`
@@ -296,7 +296,7 @@ Expected: PASS.
 
 `git commit -m "feat: add organization roles and invitations"`
 
-### Задача 6: Неизменяем audit trail
+### Task 6: Неизменяем audit trail
 
 **Файлове:**
 - Create: `platform/apps/api/app/Domain/Audit/Models/AuditEvent.php`
@@ -332,7 +332,7 @@ Expected: PASS.
 
 `git commit -m "feat: add immutable audit trail"`
 
-### Задача 7: Организационен onboarding и операторско одобрение
+### Task 7: Организационен onboarding и операторско одобрение
 
 **Файлове:**
 - Create: `platform/apps/api/app/Domain/Organizations/Enums/OrganizationStatus.php`
@@ -374,7 +374,7 @@ Expected: PASS.
 
 `git commit -m "feat: add controlled organization onboarding"`
 
-### Задача 8: Първа дейност и workflow за одобрение
+### Task 8: Първа дейност и workflow за одобрение
 
 **Файлове:**
 - Create: `platform/apps/api/app/Domain/Catalog/Models/Service.php`
@@ -418,7 +418,7 @@ Expected: оператор одобрява организация; партнь
 
 `git commit -m "feat: add versioned activity approval workflow"`
 
-### Задача 9: OpenAPI договор и генериран web клиент
+### Task 9: OpenAPI договор и генериран web клиент
 
 **Файлове:**
 - Create: `platform/docs/api/openapi.yaml`
@@ -458,7 +458,7 @@ Expected: PASS и няма неприбран generated diff.
 
 `git commit -m "feat: publish v1 API contract and typed client"`
 
-### Задача 10: Staging deployment и оперативна готовност
+### Task 10: Staging deployment и оперативна готовност
 
 **Файлове:**
 - Create: `platform/infra/digitalocean/app.yaml`

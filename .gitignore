@@ -14,10 +14,12 @@ vendor/
 coverage/
 dist/
 build/
+*.tsbuildinfo
+test-results/
+playwright-report/
 
 # Editors and temporary files
 .idea/
 .vscode/
 *.log
 tmp/
-

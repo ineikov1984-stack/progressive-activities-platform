@@ -1,0 +1,13 @@
+{
+  "name": "progressive-activities-platform",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "lint": "pnpm --filter @progressive/web lint",
+    "typecheck": "pnpm --filter @progressive/web typecheck",
+    "test": "pnpm --filter @progressive/web test",
+    "build": "pnpm --filter @progressive/web build",
+    "test:e2e": "pnpm --filter @progressive/web test:e2e",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  }
+}
