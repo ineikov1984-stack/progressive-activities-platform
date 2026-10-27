@@ -7,7 +7,8 @@
     "typecheck": "pnpm --filter @progressive/web typecheck",
     "test": "pnpm --filter @progressive/web test",
     "build": "pnpm --filter @progressive/web build",
+    "docs:check": "node scripts/check-docs.mjs",
     "test:e2e": "pnpm --filter @progressive/web test:e2e",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "verify": "pnpm docs:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   }
 }
