@@ -14,10 +14,15 @@ use App\Http\Controllers\Api\V1\OrganizationApplicationController;
 use App\Http\Controllers\Api\V1\OrganizationCatalogProfileController;
 use App\Http\Controllers\Api\V1\OrganizationContextController;
 use App\Http\Controllers\Api\V1\OrganizationController;
+use App\Http\Controllers\Api\V1\PublicCatalogController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
     Route::get('/health', fn () => response()->json(['status' => 'ok']));
+    Route::get('/public/organizations/{organizationSlug}/catalog', [PublicCatalogController::class, 'catalog']);
+    Route::get('/public/organizations/{organizationSlug}/activities/{activitySlug}', [PublicCatalogController::class, 'activity']);
+    Route::get('/public/organizations/{organizationSlug}/media/{filename}', [PublicCatalogController::class, 'media'])
+        ->where('filename', '[0-9a-f-]{36}\\.(?:jpg|png|webp)');
 
     Route::middleware('web')->group(function (): void {
         Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
