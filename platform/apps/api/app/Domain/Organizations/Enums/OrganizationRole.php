@@ -21,10 +21,10 @@ enum OrganizationRole: string
     public function abilities(): array
     {
         return match ($this) {
-            self::PlatformAdmin, self::OrganizationOwner => ['create', 'update', 'invite', 'finance', 'view'],
-            self::OrganizationAdmin => ['create', 'update', 'invite', 'view'],
-            self::Coordinator => ['create', 'update', 'view'],
-            self::Instructor, self::Viewer => ['view'],
+            self::PlatformAdmin, self::OrganizationOwner => ['create', 'update', 'invite', 'finance', 'view', 'catalog.view', 'catalog.manage', 'catalog.publish'],
+            self::OrganizationAdmin => ['create', 'update', 'invite', 'view', 'catalog.view', 'catalog.manage', 'catalog.publish'],
+            self::Coordinator => ['create', 'update', 'view', 'catalog.view', 'catalog.manage'],
+            self::Instructor, self::Viewer => ['view', 'catalog.view'],
             self::Finance => ['finance', 'view'],
         };
     }
