@@ -31,10 +31,11 @@ final readonly class PublishActivityInternally
     {
         abort_unless($this->context->hasOrganization() && $activity->organization_id === $this->context->organizationId(), 404);
         $organization = Organization::query()->findOrFail($activity->organization_id);
-        abort_unless($organization->status === OrganizationStatus::Active, 403, 'Only active organizations can publish.');
         Gate::forUser($actor)->authorize('catalog.publish', $organization);
 
         return DB::transaction(function () use ($activity, $expectedVersion): Activity {
+            $organization = Organization::query()->whereKey($activity->organization_id)->lockForUpdate()->firstOrFail();
+            abort_unless($organization->status === OrganizationStatus::Active, 403, 'Only active organizations can publish.');
             $locked = Activity::query()->whereKey($activity->id)->lockForUpdate()->firstOrFail();
             abort_unless($locked->version === $expectedVersion, 409, 'Activity version conflict.');
             abort_unless($locked->status === ActivityStatus::Draft, 409, 'Only drafts can be published.');

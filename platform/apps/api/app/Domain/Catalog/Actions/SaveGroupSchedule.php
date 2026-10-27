@@ -36,6 +36,7 @@ final readonly class SaveGroupSchedule
         Gate::authorize('catalog.manage', Organization::query()->findOrFail($activity->organization_id));
 
         return DB::transaction(function () use ($activity, $payload): Group {
+            Organization::query()->whereKey($activity->organization_id)->lockForUpdate()->firstOrFail();
             $activity = Activity::query()->whereKey($activity->id)->lockForUpdate()->firstOrFail();
             abort_unless($activity->getAttribute('status') === ActivityStatus::Draft, 409, 'Only draft schedules can be edited.');
             $group = isset($payload['id'])

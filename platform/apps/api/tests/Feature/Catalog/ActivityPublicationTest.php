@@ -2,15 +2,20 @@
 
 namespace Tests\Feature\Catalog;
 
+use App\Domain\Catalog\Actions\PublishActivityInternally;
+use App\Domain\Catalog\Actions\SaveGroupSchedule;
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\InstructorProfile;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
 use App\Domain\Organizations\Tenancy\TenantContext;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use PDO;
 use Tests\TestCase;
 
 class ActivityPublicationTest extends TestCase
@@ -193,6 +198,68 @@ class ActivityPublicationTest extends TestCase
         $this->assertDatabaseCount('audit_events', 0);
     }
 
+    public function test_schedule_writes_and_publication_serialize_on_the_organization_row(): void
+    {
+        if (! $this->postgresIsAvailable()) {
+            $this->markTestSkipped('PostgreSQL is required for the concurrency check.');
+        }
+
+        Artisan::call('migrate', ['--database' => 'pgsql_admin', '--force' => true]);
+        $originalConnection = DB::getDefaultConnection();
+        DB::setDefaultConnection('pgsql_admin');
+        $lock = $this->postgresPdo();
+
+        try {
+            $user = User::factory()->create();
+            $organization = $this->organizationFor($user);
+            $this->authenticate($user, $organization);
+            $scheduleActivity = $this->activityState([
+                'core' => true, 'offering' => true, 'group' => true, 'price' => false, 'session' => true,
+            ]);
+            $scheduleGroup = $scheduleActivity->offerings()->firstOrFail()->groups()->firstOrFail();
+            $scheduleSession = $scheduleGroup->sessions()->firstOrFail();
+            $publishActivity = $this->activityState([
+                'core' => true, 'offering' => true, 'group' => true, 'price' => true, 'session' => true,
+            ]);
+
+            $lock->beginTransaction();
+            $statement = $lock->prepare('SELECT id FROM organizations WHERE id = :id FOR UPDATE');
+            $statement->execute(['id' => $organization->id]);
+            DB::connection('pgsql_admin')->statement("SET lock_timeout = '100ms'");
+
+            $scheduleTimedOut = $this->lockTimedOut(fn () => app(SaveGroupSchedule::class)->handle(
+                $scheduleActivity,
+                [
+                    'id' => $scheduleGroup->id,
+                    'version' => 1,
+                    'session_overrides' => [[
+                        'id' => $scheduleSession->id,
+                        'starts_at' => '2026-11-03T17:00:00+02:00',
+                        'ends_at' => '2026-11-03T18:00:00+02:00',
+                    ]],
+                ],
+            ));
+            $publishTimedOut = $this->lockTimedOut(fn () => app(PublishActivityInternally::class)->handle(
+                $user,
+                $publishActivity,
+                1,
+            ));
+
+            $this->assertTrue($scheduleTimedOut, 'Schedule writes must wait for the organization publication lock.');
+            $this->assertTrue($publishTimedOut, 'Publication must wait for the organization schedule lock.');
+            $this->assertDatabaseHas('activities', [
+                'id' => $publishActivity->id, 'status' => 'draft', 'version' => 1, 'published_at' => null,
+            ]);
+        } finally {
+            if ($lock->inTransaction()) {
+                $lock->rollBack();
+            }
+            DB::connection('pgsql_admin')->statement('SET lock_timeout TO DEFAULT');
+            DB::setDefaultConnection($originalConnection);
+            app(TenantContext::class)->clear();
+        }
+    }
+
     /** @return array{User, Organization, Activity}|array{User, Organization} */
     private function setupCatalog(bool $withActivity = true): array
     {
@@ -288,5 +355,41 @@ class ActivityPublicationTest extends TestCase
     private function publishUrl(Activity $activity): string
     {
         return '/api/v1/catalog/activities/'.$activity->id.'/publish';
+    }
+
+    private function postgresIsAvailable(): bool
+    {
+        try {
+            DB::connection('pgsql_admin')->getPdo();
+
+            return true;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    private function postgresPdo(): PDO
+    {
+        /** @var array{host: string, port: int|string, database: string, username: string, password: string} $config */
+        $config = config('database.connections.pgsql_admin');
+
+        return new PDO(
+            sprintf('pgsql:host=%s;port=%s;dbname=%s', $config['host'], $config['port'], $config['database']),
+            $config['username'],
+            $config['password'],
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+        );
+    }
+
+    /** @param callable(): mixed $callback */
+    private function lockTimedOut(callable $callback): bool
+    {
+        try {
+            $callback();
+
+            return false;
+        } catch (QueryException $exception) {
+            return str_contains($exception->getMessage(), 'lock timeout');
+        }
     }
 }
