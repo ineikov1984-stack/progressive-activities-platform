@@ -42,6 +42,24 @@ class ActivityDraftTest extends TestCase
             ->assertCreated()->assertJsonPath('activity.slug', 'shkola-po-risuvane-2');
     }
 
+    public function test_maximum_length_titles_keep_unique_slugs_within_database_limit(): void
+    {
+        [$user, $organization] = $this->member();
+        $this->select($user, $organization);
+        $title = str_repeat('a', 255);
+
+        $this->postJson('/api/v1/catalog/activities', [...$this->core(), 'title' => $title])
+            ->assertCreated()->assertJsonPath('activity.slug', $title);
+        $this->postJson('/api/v1/catalog/activities', [...$this->core(), 'title' => $title])
+            ->assertCreated()->assertJsonPath('activity.slug', str_repeat('a', 253).'-2');
+
+        $expanded = $this->postJson('/api/v1/catalog/activities', [
+            ...$this->core(), 'title' => str_repeat('Щ', 255),
+        ])->assertCreated()->json('activity.slug');
+        $this->assertLessThanOrEqual(255, strlen($expanded));
+        $this->assertMatchesRegularExpression('/^[a-z0-9-]+$/', $expanded);
+    }
+
     public function test_sections_and_offering_round_trip_without_tenant_or_status_override(): void
     {
         [$user, $organization] = $this->member();
@@ -113,6 +131,21 @@ class ActivityDraftTest extends TestCase
             ->assertCreated()->assertJsonPath('activity.hero_image_path', $path);
     }
 
+    public function test_real_multipart_png_above_two_megabytes_is_accepted_by_the_shipped_php_limits(): void
+    {
+        $this->assertGreaterThanOrEqual(5 * 1024 * 1024, $this->iniBytes('upload_max_filesize'));
+        $this->assertGreaterThan(5 * 1024 * 1024 + 64 * 1024, $this->iniBytes('post_max_size'));
+        Storage::fake('local');
+        [$user, $organization] = $this->member();
+        $this->select($user, $organization);
+        $file = $this->pngUpload(3 * 1024 * 1024);
+        $this->assertGreaterThan(2 * 1024 * 1024, $file->getSize());
+
+        $path = $this->post('/api/v1/catalog/media', ['file' => $file])
+            ->assertCreated()->json('media.path');
+        Storage::disk('local')->assertExists("catalog/{$organization->id}/".basename($path));
+    }
+
     public function test_media_rejects_svg_executable_and_oversized_files(): void
     {
         Storage::fake('local');
@@ -179,12 +212,35 @@ class ActivityDraftTest extends TestCase
         return ['title' => 'Школа по рисуване', 'category' => 'Изкуство', 'summary' => 'Творчески занимания за деца.', 'age_label' => '6–9 години'];
     }
 
-    private function pngUpload(): UploadedFile
+    private function pngUpload(int $extraBytes = 0): UploadedFile
     {
-        return UploadedFile::fake()->createWithContent('portrait.png', base64_decode(
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/8yQAAAAASUVORK5CYII=',
-            true,
-        ));
+        $png = "\x89PNG\r\n\x1a\n";
+        $png .= $this->pngChunk('IHDR', pack('NNCCCCC', 1, 1, 8, 2, 0, 0, 0));
+        if ($extraBytes > 0) {
+            $png .= $this->pngChunk('tEXt', "Comment\0".str_repeat('x', $extraBytes));
+        }
+        $png .= $this->pngChunk('IDAT', gzcompress("\0\xff\0\0"));
+        $png .= $this->pngChunk('IEND', '');
+
+        return UploadedFile::fake()->createWithContent('portrait.png', $png);
+    }
+
+    private function pngChunk(string $type, string $data): string
+    {
+        return pack('N', strlen($data)).$type.$data.pack('N', crc32($type.$data));
+    }
+
+    private function iniBytes(string $key): int
+    {
+        $setting = strtolower(trim((string) ini_get($key)));
+        $value = (int) $setting;
+
+        return match (substr($setting, -1)) {
+            'g' => $value * 1024 * 1024 * 1024,
+            'm' => $value * 1024 * 1024,
+            'k' => $value * 1024,
+            default => $value,
+        };
     }
 
     /** @return array{User, Organization} */

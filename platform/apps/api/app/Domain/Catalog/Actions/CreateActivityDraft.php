@@ -13,6 +13,8 @@ use Illuminate\Support\Str;
 
 final readonly class CreateActivityDraft
 {
+    private const MAX_SLUG_LENGTH = 255;
+
     public function __construct(private TenantContext $context) {}
 
     /** @param array<string, mixed> $payload */
@@ -25,10 +27,12 @@ final readonly class CreateActivityDraft
             Organization::query()->whereKey($organization->getKey())->lockForUpdate()->firstOrFail();
 
             $base = Str::slug($payload['title']) ?: Str::lower(Str::random(12));
+            $base = rtrim(Str::substr($base, 0, self::MAX_SLUG_LENGTH), '-');
             $slug = $base;
             $suffix = 2;
             while (Activity::query()->where('slug', $slug)->exists()) {
-                $slug = $base.'-'.$suffix++;
+                $ending = '-'.$suffix++;
+                $slug = rtrim(Str::substr($base, 0, self::MAX_SLUG_LENGTH - strlen($ending)), '-').$ending;
             }
 
             $activity = Activity::query()->create([
