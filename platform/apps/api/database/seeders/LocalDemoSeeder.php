@@ -14,6 +14,8 @@ class LocalDemoSeeder extends Seeder
 {
     private const ORGANIZATION_ID = '00000000-0000-4000-8000-000000000101';
 
+    private const OPERATOR_ORGANIZATION_ID = '00000000-0000-4000-8000-000000000102';
+
     public function run(): void
     {
         if (! app()->environment(['local', 'testing'])) {
@@ -60,6 +62,30 @@ class LocalDemoSeeder extends Seeder
                 ],
                 [
                     'role' => 'organization_owner',
+                    'status' => 'active',
+                ],
+            );
+
+            if (DB::getDriverName() === 'pgsql') {
+                DB::select("SELECT set_config('app.current_organization_id', ?, true)", [self::OPERATOR_ORGANIZATION_ID]);
+            }
+
+            $operatorOrganization = Organization::query()->withoutGlobalScopes()->updateOrCreate(
+                ['id' => self::OPERATOR_ORGANIZATION_ID],
+                [
+                    'name' => 'Платформена администрация',
+                    'slug' => 'platform-operations-demo',
+                    'status' => 'active',
+                ],
+            );
+
+            OrganizationMembership::query()->withoutGlobalScopes()->updateOrCreate(
+                [
+                    'organization_id' => $operatorOrganization->id,
+                    'user_id' => $user->id,
+                ],
+                [
+                    'role' => 'platform_admin',
                     'status' => 'active',
                 ],
             );

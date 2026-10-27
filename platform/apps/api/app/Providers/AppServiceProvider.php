@@ -4,8 +4,8 @@ namespace App\Providers;
 
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Policies\OrganizationPolicy;
-use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Domain\Organizations\Tenancy\OperatorContext;
+use App\Domain\Organizations\Tenancy\TenantContext;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;

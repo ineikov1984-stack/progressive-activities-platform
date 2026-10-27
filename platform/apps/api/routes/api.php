@@ -3,10 +3,10 @@
 use App\Http\Controllers\Api\V1\AuditEventController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\InvitationController;
-use App\Http\Controllers\Api\V1\OrganizationContextController;
-use App\Http\Controllers\Api\V1\OrganizationApplicationController;
-use App\Http\Controllers\Api\V1\OrganizationController;
 use App\Http\Controllers\Api\V1\OperatorOrganizationApplicationController;
+use App\Http\Controllers\Api\V1\OrganizationApplicationController;
+use App\Http\Controllers\Api\V1\OrganizationContextController;
+use App\Http\Controllers\Api\V1\OrganizationController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {

@@ -3,7 +3,6 @@
 namespace App\Http\Middleware;
 
 use App\Domain\Organizations\Enums\OrganizationAccessMode;
-use App\Domain\Organizations\Enums\OrganizationStatus;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Closure;
@@ -19,9 +18,7 @@ final readonly class RequireOrganizationAccess
     {
         $required = OrganizationAccessMode::tryFrom($mode);
         $organization = Organization::query()->findOrFail($this->context->organizationId());
-        $status = $organization->status instanceof OrganizationStatus
-            ? $organization->status
-            : OrganizationStatus::from((string) $organization->status);
+        $status = $organization->status;
 
         if ($required === null || ! $status->allowsAccess($required)) {
             return new JsonResponse([

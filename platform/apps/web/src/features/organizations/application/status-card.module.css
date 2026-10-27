@@ -1,0 +1,14 @@
+.card { margin: 1rem 0; padding: 1.35rem; border: 1px solid #dce6e1; border-left: .35rem solid #5b8276; border-radius: 1rem; background: #fff; box-shadow: 0 .5rem 1.5rem rgb(25 60 50 / 5%); }
+.heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .85rem; }
+.heading h2 { margin: .15rem 0 0; font-size: 1.15rem; }
+.icon { display: grid; width: 2.4rem; height: 2.4rem; place-items: center; border-radius: 50%; color: #173f35; background: #e8f6dc; font-weight: 900; }
+.eyebrow { margin: 0; color: #547068; font-size: .72rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.version { color: #667a73; font-size: .76rem; }
+.card > p { margin-bottom: 0; color: #52665f; }
+.guidance { margin-top: 1rem; padding: .85rem 1rem; border-radius: .7rem; background: #f3f6f4; }
+.guidance p { margin: .3rem 0 0; color: #52665f; }
+.review { border-left-color: #c38b20; }
+.approved, .active { border-left-color: #4e9b65; }
+.restricted, .suspended { border-left-color: #b54c42; }
+.error { margin: 1rem 0; padding: .9rem; border-radius: .7rem; color: #8a271f; background: #fff0ee; }
+@media (max-width: 560px) { .heading { grid-template-columns: auto 1fr; } .version { grid-column: 2; } }

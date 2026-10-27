@@ -11,6 +11,7 @@ import {
   loadDashboard,
 } from './api';
 import styles from '@/app/dashboard/page.module.css';
+import { OrganizationStatusCard } from '@/features/organizations/application/status-card';
 
 const roleLabels: Record<string, string> = {
   platform_admin: 'Платформен администратор',
@@ -128,6 +129,9 @@ export function Dashboard() {
           <a href="#team">Екип и покани</a>
           <span>Дейности <small>следващ етап</small></span>
           <a href="#audit">Одит <small>Задача 6</small></a>
+          {data.organizations.some((organization) => organization.role === 'platform_admin') ? (
+            <a href="/operator/organizations">Кандидатури</a>
+          ) : null}
         </nav>
         <p className={styles.demoBadge}>Локална демо среда</p>
       </aside>
@@ -155,6 +159,8 @@ export function Dashboard() {
             <strong>{roleLabels[data.organization.role] ?? data.organization.role}</strong>
           </div>
         </section>
+
+        <OrganizationStatusCard organizationId={data.organization.id} />
 
         <section className={styles.grid} aria-label="Обобщение">
           <article className={styles.card}>

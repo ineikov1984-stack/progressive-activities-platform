@@ -96,7 +96,7 @@ export async function loadDashboard(): Promise<DashboardData> {
       requestJson<{ organizations: DashboardOrganization[] }>('/backend/api/v1/organizations'),
     ]);
 
-    const organization = organizations[0];
+    const organization = organizations.find((item) => item.role === 'organization_owner') ?? organizations[0];
     if (!organization) {
       throw new Error('Профилът няма активна организация.');
     }

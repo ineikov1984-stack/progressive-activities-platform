@@ -21,10 +21,14 @@ class LocalDemoSeederTest extends TestCase
         Artisan::call('db:seed', ['--class' => LocalDemoSeeder::class, '--force' => true]);
 
         $this->assertDatabaseCount('users', 1);
-        $this->assertDatabaseCount('organizations', 1);
-        $this->assertDatabaseCount('organization_memberships', 1);
+        $this->assertDatabaseCount('organizations', 2);
+        $this->assertDatabaseCount('organization_memberships', 2);
         $this->assertDatabaseHas('organization_memberships', [
             'role' => 'organization_owner',
+            'status' => 'active',
+        ]);
+        $this->assertDatabaseHas('organization_memberships', [
+            'role' => 'platform_admin',
             'status' => 'active',
         ]);
     }

@@ -4,12 +4,18 @@ namespace App\Domain\Organizations\Models;
 
 use App\Domain\Organizations\Enums\OrganizationStatus;
 use App\Domain\Organizations\Tenancy\TenantScope;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-/** @property OrganizationStatus $status */
+/**
+ * @property OrganizationStatus $status
+ * @property int $review_version
+ * @property CarbonImmutable|null $submitted_at
+ * @property CarbonImmutable|null $reviewed_at
+ */
 #[Fillable([
     'name',
     'slug',

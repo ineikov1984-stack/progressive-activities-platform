@@ -228,8 +228,9 @@ class OrganizationOnboardingTest extends TestCase
             ->assertJsonValidationErrors(['public_reason', 'next_action']);
     }
 
-    /** @param array<string, mixed> $overrides
-     *  @return array{User, Organization}
+    /**
+     * @param  array<string, mixed>  $overrides
+     * @return array{User, Organization}
      */
     private function applicant(string $role = 'organization_owner', array $overrides = []): array
     {

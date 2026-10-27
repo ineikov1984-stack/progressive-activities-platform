@@ -36,7 +36,6 @@ class OrganizationController extends Controller
             $organizations = Organization::query()
                 ->withoutGlobalScopes()
                 ->whereKey($organizationIds)
-                ->where('status', 'active')
                 ->orderBy('name')
                 ->get(['id', 'name', 'slug', 'status'])
                 ->map(function (Organization $organization) use ($roles): array {

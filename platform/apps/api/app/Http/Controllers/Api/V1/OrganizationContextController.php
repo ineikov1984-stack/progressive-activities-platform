@@ -76,7 +76,7 @@ class OrganizationContextController extends Controller
             'id' => $organization->id,
             'name' => $organization->name,
             'slug' => $organization->slug,
-            'status' => $organization->status,
+            'status' => $organization->status->value,
         ];
     }
 }
