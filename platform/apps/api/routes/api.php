@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\AuditEventController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\InvitationController;
 use App\Http\Controllers\Api\V1\OrganizationContextController;
+use App\Http\Controllers\Api\V1\OrganizationApplicationController;
 use App\Http\Controllers\Api\V1\OrganizationController;
 use Illuminate\Support\Facades\Route;
 
@@ -24,6 +25,11 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/invitations', [InvitationController::class, 'index'])->middleware('tenant');
             Route::post('/invitations/accept', [InvitationController::class, 'accept']);
             Route::get('/audit-events', [AuditEventController::class, 'index'])->middleware('tenant');
+            Route::middleware(['tenant', 'organization.access:onboarding'])->group(function (): void {
+                Route::get('/organization-application', [OrganizationApplicationController::class, 'show']);
+                Route::patch('/organization-application', [OrganizationApplicationController::class, 'update']);
+                Route::post('/organization-application/submit', [OrganizationApplicationController::class, 'submit']);
+            });
         });
     });
 });

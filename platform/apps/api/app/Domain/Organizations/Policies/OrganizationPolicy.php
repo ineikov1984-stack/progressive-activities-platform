@@ -37,11 +37,34 @@ class OrganizationPolicy
         return $this->allows($user, $organization, 'view');
     }
 
+    public function viewApplication(User $user, Organization $organization): bool
+    {
+        return in_array($this->role($user, $organization), [
+            OrganizationRole::OrganizationOwner,
+            OrganizationRole::OrganizationAdmin,
+        ], true);
+    }
+
+    public function updateApplication(User $user, Organization $organization): bool
+    {
+        return $this->viewApplication($user, $organization);
+    }
+
+    public function submitApplication(User $user, Organization $organization): bool
+    {
+        return $this->role($user, $organization) === OrganizationRole::OrganizationOwner;
+    }
+
     private function allows(User $user, Organization $organization, string $ability): bool
+    {
+        return $this->role($user, $organization)?->allows($ability) ?? false;
+    }
+
+    private function role(User $user, Organization $organization): ?OrganizationRole
     {
         if (! $this->context->hasOrganization()
             || $this->context->organizationId() !== $organization->getKey()) {
-            return false;
+            return null;
         }
 
         $membership = OrganizationMembership::query()
@@ -52,11 +75,9 @@ class OrganizationPolicy
             ->first();
 
         if ($membership === null) {
-            return false;
+            return null;
         }
 
-        $role = OrganizationRole::tryFrom($membership->role);
-
-        return $role?->allows($ability) ?? false;
+        return OrganizationRole::tryFrom($membership->role);
     }
 }
