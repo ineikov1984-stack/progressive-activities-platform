@@ -63,6 +63,7 @@ final readonly class SaveGroupSchedule
 
             $generated = null;
             if (isset($data['schedule_pattern'])) {
+                /** @var array<string, mixed> $schedule */
                 $schedule = $data['schedule_pattern'];
                 $schedule['timezone'] ??= 'Europe/Sofia';
                 $schedule['excluded_dates'] ??= [];
@@ -77,7 +78,9 @@ final readonly class SaveGroupSchedule
                     throw ValidationException::withMessages(['schedule_pattern' => $exception->getMessage()]);
                 }
                 // Slot and exception order does not change the recurring schedule.
-                if ($group->exists && Arr::sortRecursive($group->schedule_pattern ?? []) == Arr::sortRecursive($schedule)) {
+                /** @var array<string, mixed> $storedSchedule */
+                $storedSchedule = $group->schedule_pattern ?? [];
+                if ($group->exists && Arr::sortRecursive($storedSchedule) == Arr::sortRecursive($schedule)) {
                     $generated = null;
                 }
                 $group->schedule_pattern = $schedule;

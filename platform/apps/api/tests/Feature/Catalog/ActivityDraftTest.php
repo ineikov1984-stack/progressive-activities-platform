@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Catalog;
 
+use App\Domain\Catalog\Actions\CatalogMediaStore;
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
@@ -188,6 +189,26 @@ class ActivityDraftTest extends TestCase
         $this->patchJson("/api/v1/catalog/activities/{$first}", [
             'version' => 1, 'hero_image_path' => $path,
         ])->assertOk()->assertJsonPath('activity.hero_image_path', $path);
+    }
+
+    public function test_media_metadata_rejects_an_invalid_activity_identifier_type(): void
+    {
+        Storage::fake('local');
+        [$user, $organization] = $this->member();
+        $this->select($user, $organization);
+        $id = (string) Str::uuid();
+        $path = "catalog/{$id}.png";
+        $directory = "catalog/{$organization->id}";
+        Storage::disk('local')->put("{$directory}/{$id}.png", 'image');
+        Storage::disk('local')->put("{$directory}/{$id}.json", json_encode([
+            'organization_id' => $organization->id,
+            'activity_id' => 123,
+            'path' => $path,
+            'mime' => 'image/png',
+        ], JSON_THROW_ON_ERROR));
+        app(TenantContext::class)->select($organization);
+
+        $this->assertNull(app(CatalogMediaStore::class)->metadata($path));
     }
 
     public function test_profile_and_instructor_images_require_tenant_owned_media(): void

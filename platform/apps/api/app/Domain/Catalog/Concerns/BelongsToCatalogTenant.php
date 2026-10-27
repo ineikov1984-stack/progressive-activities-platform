@@ -13,7 +13,7 @@ trait BelongsToCatalogTenant
         static::addGlobalScope(new TenantScope('organization_id'));
 
         static::creating(function (Model $model): void {
-            $model->organization_id = app(TenantContext::class)->organizationId();
+            $model->setAttribute('organization_id', app(TenantContext::class)->organizationId());
         });
     }
 }

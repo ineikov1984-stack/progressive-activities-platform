@@ -44,7 +44,10 @@ final class OrganizationCatalogProfileController extends Controller
             Gate::forUser($request->user())->authorize('catalog.publish', $organization);
         }
 
-        $publicName = $validated['public_name'] ?? $profile?->public_name ?? '';
+        $publicName = $validated['public_name'] ?? '';
+        if (! array_key_exists('public_name', $validated) && $profile !== null) {
+            $publicName = $profile->public_name;
+        }
         if (($validated['is_published'] ?? false) && trim($publicName) === '') {
             throw ValidationException::withMessages(['public_name' => 'Въведете публично име преди публикуване.']);
         }

@@ -70,11 +70,18 @@ final readonly class CatalogMediaStore
         if (! is_array($metadata)
             || ($metadata['organization_id'] ?? null) !== $this->context->organizationId()
             || ($metadata['path'] ?? null) !== $path
-            || ! in_array($metadata['mime'] ?? null, ['image/jpeg', 'image/png', 'image/webp'], true)) {
+            || ! in_array($metadata['mime'] ?? null, ['image/jpeg', 'image/png', 'image/webp'], true)
+            || ! array_key_exists('activity_id', $metadata)
+            || ($metadata['activity_id'] !== null && ! is_string($metadata['activity_id']))) {
             return null;
         }
 
-        return $metadata;
+        return [
+            'organization_id' => $metadata['organization_id'],
+            'activity_id' => $metadata['activity_id'],
+            'path' => $metadata['path'],
+            'mime' => $metadata['mime'],
+        ];
     }
 
     public function isAttachable(string $path, ?string $activityId = null): bool
@@ -82,7 +89,7 @@ final readonly class CatalogMediaStore
         $metadata = $this->metadata($path);
 
         return $metadata !== null
-            && (($metadata['activity_id'] ?? null) === null || ($metadata['activity_id'] ?? null) === $activityId);
+            && ($metadata['activity_id'] === null || $metadata['activity_id'] === $activityId);
     }
 
     public function storagePath(string $path): string

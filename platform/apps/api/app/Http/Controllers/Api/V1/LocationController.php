@@ -71,7 +71,7 @@ final class LocationController extends Controller
     /** @param array<string, mixed> $validated */
     private function requirePhysicalAddress(array $validated, ?Location $location = null): void
     {
-        $type = $validated['type'] ?? $location?->type?->value;
+        $type = $validated['type'] ?? $location?->type->value;
         $address = array_key_exists('address', $validated) ? $validated['address'] : $location?->address;
 
         if ($type === LocationType::Physical->value && (! is_string($address) || trim($address) === '')) {

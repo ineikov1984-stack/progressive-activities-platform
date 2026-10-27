@@ -34,13 +34,17 @@ final readonly class CatalogPolicy
             return false;
         }
 
-        $membership = OrganizationMembership::query()
+        $role = OrganizationMembership::query()
             ->withoutGlobalScopes()
             ->where('organization_id', $organization->getKey())
             ->where('user_id', $user->getAuthIdentifier())
             ->where('status', 'active')
-            ->first();
+            ->value('role');
 
-        return OrganizationRole::tryFrom($membership?->role ?? '')?->allows($ability) ?? false;
+        if (! is_string($role)) {
+            return false;
+        }
+
+        return OrganizationRole::tryFrom($role)?->allows($ability) ?? false;
     }
 }
