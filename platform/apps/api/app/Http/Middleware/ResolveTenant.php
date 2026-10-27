@@ -44,7 +44,6 @@ class ResolveTenant
             $organization = Organization::query()
                 ->withoutGlobalScopes()
                 ->whereKey($organizationId)
-                ->where('status', 'active')
                 ->first();
 
             if (! $membershipExists || $organization === null) {

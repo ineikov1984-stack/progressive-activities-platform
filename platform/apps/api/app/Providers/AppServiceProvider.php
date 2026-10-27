@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Policies\OrganizationPolicy;
 use App\Domain\Organizations\Tenancy\TenantContext;
+use App\Domain\Organizations\Tenancy\OperatorContext;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -20,6 +21,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(TenantContext::class, fn (): TenantContext => new TenantContext);
+        $this->app->scoped(OperatorContext::class, fn (): OperatorContext => new OperatorContext);
     }
 
     /**

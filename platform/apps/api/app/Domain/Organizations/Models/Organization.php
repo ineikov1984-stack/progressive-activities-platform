@@ -2,13 +2,27 @@
 
 namespace App\Domain\Organizations\Models;
 
+use App\Domain\Organizations\Enums\OrganizationStatus;
 use App\Domain\Organizations\Tenancy\TenantScope;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['name', 'slug', 'status'])]
+#[Fillable([
+    'name',
+    'slug',
+    'status',
+    'review_version',
+    'organization_type',
+    'registration_identifier',
+    'public_contact_email',
+    'public_review_reason',
+    'next_action',
+    'submitted_at',
+    'reviewed_at',
+    'reviewed_by',
+])]
 class Organization extends Model
 {
     use HasUuids;
@@ -22,5 +36,16 @@ class Organization extends Model
     public function memberships(): HasMany
     {
         return $this->hasMany(OrganizationMembership::class);
+    }
+
+    /** @return array<string, string> */
+    protected function casts(): array
+    {
+        return [
+            'status' => OrganizationStatus::class,
+            'review_version' => 'integer',
+            'submitted_at' => 'immutable_datetime',
+            'reviewed_at' => 'immutable_datetime',
+        ];
     }
 }

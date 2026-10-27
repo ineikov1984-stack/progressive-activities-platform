@@ -125,7 +125,7 @@ class TenantIsolationTest extends TestCase
             $this->markTestSkipped('PostgreSQL is required for the database-layer isolation check.');
         }
 
-        Artisan::call('migrate', ['--database' => 'pgsql', '--force' => true]);
+        Artisan::call('migrate', ['--database' => 'pgsql_admin', '--force' => true]);
 
         $pdo = $this->postgresPdo();
         $selectedId = (string) Str::uuid();
@@ -166,7 +166,7 @@ class TenantIsolationTest extends TestCase
             $this->markTestSkipped('PostgreSQL is required for the database-layer isolation check.');
         }
 
-        Artisan::call('migrate', ['--database' => 'pgsql', '--force' => true]);
+        Artisan::call('migrate', ['--database' => 'pgsql_admin', '--force' => true]);
 
         $pdo = $this->postgresPdo();
         $userId = (string) Str::uuid();
