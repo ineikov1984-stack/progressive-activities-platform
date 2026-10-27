@@ -76,7 +76,8 @@ final readonly class SaveGroupSchedule
                 } catch (InvalidArgumentException $exception) {
                     throw ValidationException::withMessages(['schedule_pattern' => $exception->getMessage()]);
                 }
-                if ($group->exists && $group->schedule_pattern == $schedule) {
+                // Slot and exception order does not change the recurring schedule.
+                if ($group->exists && Arr::sortRecursive($group->schedule_pattern ?? []) == Arr::sortRecursive($schedule)) {
                     $generated = null;
                 }
                 $group->schedule_pattern = $schedule;

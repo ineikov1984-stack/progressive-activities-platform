@@ -87,6 +87,45 @@ class ActivityGroupTest extends TestCase
             ->assertOk()->assertJsonPath('group.sessions', $response->json('group.sessions'));
     }
 
+    public function test_reordered_pattern_collections_preserve_sessions_and_overrides(): void
+    {
+        [, , $activity] = $this->setupCatalog();
+        $payload = $this->payload();
+        $payload['schedule_pattern'] = [
+            'start_date' => '2026-10-27', 'end_date' => '2026-11-12', 'frequency' => 'weekly',
+            'slots' => [
+                ['weekday' => 2, 'starts_at' => '17:00', 'duration_minutes' => 60],
+                ['weekday' => 4, 'starts_at' => '18:00', 'duration_minutes' => 90],
+            ],
+            'excluded_dates' => ['2026-11-03', '2026-11-05'],
+            'added_dates' => [
+                ['date' => '2026-10-28', 'starts_at' => '16:00', 'duration_minutes' => 60],
+                ['date' => '2026-10-30', 'starts_at' => '16:30', 'duration_minutes' => 90],
+            ],
+        ];
+        $created = $this->postJson($this->url($activity), $payload)->assertCreated()->json('group');
+        $url = '/api/v1/catalog/groups/'.$created['id'];
+        $overridden = $this->patchJson($url, ['version' => 1, 'session_overrides' => [[
+            'id' => $created['sessions'][0]['id'], 'capacity' => 8,
+            'starts_at' => '2026-10-27T18:30:00+02:00', 'ends_at' => '2026-10-27T20:00:00+02:00',
+            'change_reason' => 'Промяна на часа',
+        ]]])->assertOk()->assertJsonPath('group.sessions.0.starts_at', '2026-10-27T18:30:00+02:00')
+            ->assertJsonPath('group.sessions.0.capacity', 8)->json('group');
+
+        foreach (['slots', 'excluded_dates', 'added_dates'] as $index => $collection) {
+            $reordered = $created['schedule_pattern'];
+            $reordered[$collection] = array_reverse($reordered[$collection]);
+            $this->patchJson($url, ['version' => 2 + $index, 'schedule_pattern' => $reordered])
+                ->assertOk()->assertJsonPath('group.sessions', $overridden['sessions']);
+        }
+
+        $changed = $created['schedule_pattern'];
+        $changed['slots'][0]['duration_minutes'] = 45;
+        $this->patchJson($url, ['version' => 5, 'schedule_pattern' => $changed])
+            ->assertOk()->assertJsonPath('group.sessions.0.starts_at', '2026-10-27T17:00:00+02:00')
+            ->assertJsonPath('group.sessions.0.ends_at', '2026-10-27T17:45:00+02:00');
+    }
+
     public function test_conflicting_draft_is_saved_with_blocking_instructor_and_exclusive_location_conflicts(): void
     {
         [, , $activity] = $this->setupCatalog();
