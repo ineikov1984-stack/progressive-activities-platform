@@ -1,230 +1,243 @@
-# Activity Catalog and Publishing Design
+# Проектен дизайн на каталога и публикуването на дейности
 
-Date: 2026-10-27
-Status: Draft for product approval
+Дата: 27.10.2026 г.  
+Статус: Проект за продуктово одобрение
 
-## Intent and why
+## Замисъл и предназначение
 
-The platform needs a reusable catalog and publishing system for extracurricular activities offered by schools, kindergartens, sports clubs, instructors, camps, and other organizations. Parents must be able to discover an activity, understand its educational and practical details, choose a suitable group and enrollment mode, and later manage the enrollment from one account.
+Платформата се нуждае от система за каталог и публикуване на извънкласни дейности, предлагани от училища, детски градини, спортни клубове, преподаватели, организатори на лагери и други организации. Родителите трябва лесно да откриват дейности, да разбират образователните и практическите им характеристики, да избират подходяща група и начин на записване, а впоследствие да управляват записването чрез един общ профил.
 
-The same data must support the global marketplace, an organization's branded catalog, a direct shareable page, and later an embedded catalog or custom domain. The design must remove the current manual problems: duplicated weekly events, stale participant lists, unclear cancellation effects, duplicated content, and enrollment being incorrectly coupled to advance payment.
+Едни и същи данни трябва да се използват в общия маркетплейс, брандирания каталог на организацията, директна страница за споделяне, а по-късно и във вграден каталог или собствен домейн. Решението трябва да премахне настоящите затруднения: дублирани седмични събития, неактуални списъци, неясен ефект при отписване, дублирано съдържание и погрешното обвързване на записването с авансово плащане.
 
-## Goals
+## Основни цели
 
-- Let an organization publish a useful page quickly and enrich it over time.
-- Support rich parent pages comparable to the supplied current-site references.
-- Separate reusable content from provider, place, group, schedule, capacity, price, and dates.
-- Allow internal activities to be published without platform review by authorized organization users.
-- Require platform review for the global marketplace or distribution outside the owning organization.
-- Keep internal publication active while marketplace review is pending.
-- Offer trial, single-visit, full-period, monthly, and package enrollment without implying identical payment timing.
-- Use EUR and store money as integer euro cents.
-- Reuse locations and instructor profiles across groups.
-- Support schedule exceptions, navigation links, and parent notifications.
-- Give platform administrators controlled per-organization access to AI writing help.
+- Организацията бързо да публикува полезна страница и постепенно да я обогатява.
+- Богатите страници за родители да са сравними с изпратените референции от настоящия сайт.
+- Съдържанието да бъде отделено от доставчика, мястото, групата, графика, капацитета, цената и конкретните дати.
+- Упълномощени служители да публикуват вътрешни дейности без преглед от платформата.
+- Одобрение от платформата да се изисква за общия маркетплейс или разпространение извън организацията собственик.
+- Вътрешната публикация да остава активна, докато тече прегледът за маркетплейса.
+- Да се предлагат пробно и еднократно посещение, записване за целия период, месечна такса и пакети, без това автоматично да определя начина на плащане.
+- Работната валута да бъде евро, а сумите да се съхраняват като цели евроцентове.
+- Местата и преподавателските профили да се използват в различни групи.
+- Да се поддържат изключения в графика, навигация и известия.
+- Платформените администратори да дават контролиран достъп до AI помощ на конкретни организации.
 
-## Non-goals for the first delivery
+## Какво не влиза в първата реализация
 
-- Arbitrary drag-and-drop page building.
-- Custom-domain provisioning, full white-label hosting, or third-party embed widgets.
-- Automatic AI publication without human review.
-- Final payment processing, commissions, wallets, invoicing, or bank reconciliation. The catalog stores terms needed by those later modules.
-- The complete parent/child enrollment lifecycle. The catalog exposes the correct group and enrollment choices for that later work.
+- Свободен конструктор на страници с произволно подреждане.
+- Собствени домейни, напълно брандирано хостване и модули за вграждане в чужди сайтове.
+- Автоматично публикуване на AI съдържание без човешка проверка.
+- Окончателна система за разплащания, комисионни, портфейли, фактуриране и банково отчитане. Каталогът ще пази необходимите търговски условия за тези бъдещи модули.
+- Пълният процес за профили на родители и деца и реално записване. Каталогът ще подава правилната група и начин на записване към бъдещия модул.
 
-## Anti-goals
+## Нежелани решения
 
-- Do not place content, location, schedule, pricing, capacity, and every date in one oversized activity record.
-- Do not duplicate an activity merely to offer another group or location.
-- Do not make “enrolled for the period” mean “paid for the period in advance.”
-- Do not block an internal catalog while global review is pending.
-- Do not let AI invent prices, qualifications, safety claims, schedules, or other facts.
-- Do not expose private organization, instructor, or moderation data publicly.
+- Съдържанието, мястото, графикът, цената, капацитетът и всички дати да се съхраняват в един огромен запис.
+- Дейността да се дублира само защото се предлага за друга група или на друго място.
+- „Записване за целия период“ автоматично да означава „плащане на целия период предварително“.
+- Вътрешният каталог да бъде блокиран, докато дейността чака одобрение за маркетплейса.
+- AI да измисля цени, квалификации, твърдения за безопасност, графици или други факти.
+- Публичните страници да показват лични или вътрешни данни.
 
-## Constraints
+## Технически и продуктови ограничения
 
-- Build on the existing Next.js web app, Laravel API, PostgreSQL tenant isolation, roles, lifecycle gates, audit trail, and operator review.
-- Organization-owned records must follow tenant context and row-level security.
-- Existing lifecycle and authorization rules gate creation and publication.
-- Public URLs use unique stable slugs and do not expose internal identifiers.
-- Bulgarian is the initial UI language; the model must permit later localization.
+- Решението надгражда съществуващото уеб приложение с Next.js, Laravel API, PostgreSQL изолацията между организациите, ролите, жизнения цикъл, историята на действията и интерфейса за платформени оператори.
+- Всички записи на организация трябва да спазват избрания организационен контекст и защитата на ниво база данни.
+- Съществуващите роли и статуси определят кой може да създава и публикува.
+- Публичните адреси използват уникални и устойчиви текстови имена и не разкриват вътрешни идентификатори.
+- Първият език е български, но структурата трябва да позволява бъдещи преводи.
 
-## Approaches considered
+## Разгледани подходи
 
-### 1. One large activity record
+### 1. Един голям запис за дейността
 
-Initially fast, but it duplicates data and makes multiple groups, providers, locations, and recurring schedules brittle. Rejected because it recreates the current workflow's weaknesses.
+Подходът е бърз в началото, но води до дублиране и прави ненадеждни различните групи, доставчици, места и повтарящи се графици. Отхвърлен е, защото повтаря слабостите на настоящия процес.
 
-### 2. Activity → Offering → Group → Session — selected
+### 2. Дейност → Предлагане → Група → Занятие — избраният подход
 
-Reusable editorial content is separate from commercial offerings, selectable groups, and actual calendar sessions. This is more deliberate to implement but supports the required channels and future attendance, billing, commissions, and cancellations correctly.
+Представянето се отделя от конкретното търговско предложение, групите за избор и действителните занятия в календара. Реализацията изисква повече внимание, но правилно поддържа необходимите канали и създава основа за бъдещи присъствия, плащания, комисионни и отписвания.
 
-### 3. Fully flexible CMS blocks
+### 3. Напълно свободен конструктор на страници
 
-Maximum visual freedom, but expensive, inconsistent, and too complex for the first marketplace. Deferred. The first version uses curated optional rich sections.
+Дава най-голяма визуална свобода, но е скъп, води до непоследователни страници и е прекалено сложен за първата версия. Остава възможно бъдещо разширение. Първата версия използва подбрани незадължителни секции.
 
-## Core domain model
+## Основна структура
 
-### Activity
+### Дейност
 
-Reusable editorial content belonging to one organization:
+Многократно използваемото представяне на програмата, принадлежащо на една организация:
 
-- title, summary, category, age/grade range, hero and card images;
-- detailed “about” content, benefits, methodology, and lesson flow;
-- participation information, FAQ, and gallery;
-- optional lead instructor/team presentation;
-- content completeness and revision metadata.
+- заглавие, кратко описание, категория, подходяща възраст или клас и изображения;
+- подробно представяне „За дейността“;
+- ползи и развивани умения;
+- методика и типично протичане;
+- условия за участие, често задавани въпроси и галерия;
+- незадължително представяне на водещ преподавател или екип;
+- степен на завършеност и история на редакциите.
 
-Only essential catalog fields are required initially. Rich sections are optional and may be added later.
+За първоначално публикуване се изискват само основните полета. Богатите секции са незадължителни и могат да се добавят по-късно.
 
-### Offering
+### Предлагане
 
-The concrete way an organization offers an activity:
+Конкретният начин, по който организацията предлага дейността:
 
-- provider organization and publication channels;
-- standard location or delivery mode;
-- commercial and participation terms;
-- enrollment and pricing options;
-- optional lead instructor/team;
-- contact and cancellation guidance.
+- организация доставчик и канали за публикуване;
+- обичайно място или начин на провеждане;
+- търговски условия и правила за участие;
+- възможности за записване и ценообразуване;
+- незадължителен водещ преподавател или екип;
+- контакти и указания за отписване.
 
-An activity may have multiple offerings when its commercial or organizational context differs.
+Една дейност може да има няколко предлагания при различен търговски или организационен контекст.
 
-### Group
+### Група
 
-The cohort a parent selects:
+Конкретната група, която родителят избира:
 
-- name, eligibility, minimum and maximum capacity;
-- weekday, start time, duration, and date range;
-- default location and assigned instructor profiles;
-- availability/waitlist state and enrollment options;
-- schedule-generation and cancellation rules.
+- име, възрастови или класови изисквания и минимален/максимален капацитет;
+- ден, начален час, продължителност и период;
+- основно място и избрани преподаватели;
+- свободни места, списък на чакащи и начини на записване;
+- правила за графика и отписването.
 
-One offering may show several groups on the same page.
+На една страница могат да се показват няколко групи.
 
-### Session
+### Занятие
 
-An actual calendar occurrence generated from a group schedule. A session may override date/time, duration, location, instructors, capacity/status, and change/cancellation reason. Editing one session does not rewrite the series.
+Действителното провеждане на конкретна дата, автоматично създадено от графика. За отделно занятие могат да се променят датата и часът, продължителността, мястото, преподавателите, капацитетът, статусът и причината за промяна или отмяна. Редакцията на една дата не променя цялата поредица.
 
-### Location
+### Място
 
-A reusable organization location with name, address, map link/coordinates, public access instructions, visibility, and physical/online/to-be-confirmed type. A group has a default location; sessions may differ. Physical sessions expose a “Navigation” action, and unusual locations may include meeting-point and travel instructions.
+Многократно използваемо място с име, адрес, координати или връзка към карта, публични указания, видимост и вид: физическо, онлайн или предстоящо уточняване. Групата има основно място, но отделно занятие може да е другаде.
 
-### Instructor profile
+Физическите места показват бутон „Навигация“, отварящ приложението за карти. Различното място се обозначава ясно и може да съдържа сборен пункт и указания за пътуване.
 
-A reusable organization profile with public biography, organization-supplied qualifications, image, title, and visibility controls. Instructors may belong to several groups; groups may have several instructors. Account access can be linked without duplicating the public profile.
+### Профил на преподавател
 
-## Parent-facing presentation
+Многократно използваем профил с публична биография, посочени от организацията квалификации, снимка, длъжност и настройки за видимост. Един преподавател може да води няколко групи, а една група може да има повече преподаватели. Потребителският му достъп може да се свърже с профила без дублиране.
 
-### Catalog card
+## Изглед за родители
 
-Cards show image, category, title, short summary, age/grade, duration/schedule summary, price in EUR with its unit, availability, and optional “new” or recommended badge.
+### Карта в каталога
 
-### Activity page
+Всяка карта показва снимка, категория, заглавие, кратко описание, възраст или клас, обичайна продължителност и график, цена в евро с правилната единица, свободни места и незадължителен знак „Ново“ или „Препоръчано“.
 
-The curated layout follows the supplied references:
+### Страница на дейността
 
-1. Hero with title, category, availability, age, value statement, price summary, image, and action.
-2. Practical summary: age, duration, location, group range, and schedule.
-3. About the activity.
-4. Benefits and skills.
-5. Methodology/lesson flow.
-6. Groups, schedules, places, and enrollment actions.
-7. Enrollment, cancellation, payment, and participation terms.
-8. Instructor/team.
-9. Gallery.
-10. FAQ.
+Подредбата следва предоставените референции:
 
-Missing optional sections are omitted cleanly. The platform controls the initial layout for consistency, accessibility, and comparison.
+1. Начален блок със заглавие, категория, свободни места, възраст, кратко послание, цена, изображение и основен бутон.
+2. Практическо резюме с възраст, продължителност, място, размер на групата и график.
+3. Подробно представяне на дейността.
+4. Ползи и развивани умения.
+5. Методика и протичане.
+6. Групи, графици, свободни места и действия за записване.
+7. Условия за записване, отписване, плащане и участие.
+8. Преподавател или екип.
+9. Галерия.
+10. Често задавани въпроси.
 
-### Organization catalog
+Липсващите незадължителни секции не се показват празни. Платформата първоначално определя подредбата за последователност, достъпност и лесно сравнение.
 
-Each organization receives a stable address such as `/o/organization-slug`, branded with its name, logo, colors, and selected catalog. Depending on settings and plan, it may show only its own activities, own plus approved partners, or selected marketplace activities. The same parent account will later work across organization catalogs and the marketplace.
+### Каталог на организацията
 
-Embeds and custom domains will reuse the same API later, after publication permissions are stable.
+Всяка организация получава постоянен адрес, например `/o/ime-na-organizaciya`, оформен с нейното име, лого, цветове и избран каталог. Според настройките и плана той може да показва само собствените дейности, собствени и одобрени партньори или подбрани дейности от маркетплейса.
 
-## Enrollment and pricing
+Впоследствие един и същ профил на родителя ще работи в организационните каталози и общия маркетплейс. Вграждането и собствените домейни по-късно ще използват същите данни.
 
-A group may expose simultaneous options: trial session, one-time attendance, whole-period enrollment, fixed monthly fee, and a package of visits. Each has its own EUR amount, unit, eligibility, availability, cancellation rules, and payment timing. Money is stored in euro cents.
+## Записване и ценообразуване
 
-The parent selects a group, then an enabled enrollment option. A whole-period enrollment creates continuing group membership; it does not create unrelated weekly reservations and does not automatically require full advance payment.
+Една група може едновременно да предлага пробно занятие, еднократно посещение, записване за целия период, фиксирана месечна такса и пакет от посещения. Всяка възможност има собствена сума в евро, единица, условия, наличност, правила за отказ и срок на плащане. Сумите се пазят в евроцентове.
 
-## Publication and moderation
+Родителят избира група, а след това един от разрешените начини на записване. Записването за целия период създава продължаващо участие, а не множество независими седмични резервации, и не изисква автоматично пълно авансово плащане.
 
-Publication is tracked independently by channel:
+## Публикуване и одобрение
 
-- draft: organization staff only;
-- organization catalog: directly publishable by authorized organization users;
-- direct/private link or selected community: controlled by organization permissions;
-- global marketplace: platform review required;
-- another organization's catalog: platform approval plus selection/acceptance by the receiving organization.
+Публикуването се следи отделно за всеки канал:
 
-Marketplace review does not stop allowed internal publication. A submission may be pending, returned, approved, restricted, or suspended independently. Publication and moderation actions are audited.
+- чернова — видима само за упълномощени служители;
+- каталог на организацията — публикува се директно от организацията;
+- директна или частна връзка — управлява се от нейните разрешения;
+- общ маркетплейс — изисква преглед от платформата;
+- каталог на друга организация — изисква одобрение от платформата и приемане от получаващата организация.
 
-After marketplace approval, minor non-substantive corrections may update without a new review. Material changes to title, description, age eligibility, price, terms, instructor presentation, or media create a new reviewable version. The last approved version remains public until the new version is approved; internal publication may show the current organization version immediately.
+Прегледът за маркетплейса не прекъсва разрешеното вътрешно публикуване. Кандидатурата може да бъде чакаща, върната, одобрена, ограничена или спряна независимо от вътрешната публикация. Всички действия се записват.
 
-## Schedule changes and notifications
+След одобрение дребни корекции без промяна на смисъла могат да се публикуват без нов преглед. Съществени промени по заглавието, описанието, възрастта, цената, условията, преподавателя или изображенията създават нова версия за одобрение. Последната одобрена версия остава публична до приемането на новата, докато вътрешният каталог може веднага да показва актуалната версия.
 
-When date, time, location, or cancellation status changes for a session with participants:
+## Промени в графика и известия
 
-- a short parent-facing reason is required;
-- the change is audited;
-- a notification event is created for affected parents;
-- the parent view marks what changed.
+Когато за занятие със записани участници се промени дата, час, място или провеждане:
 
-Initial delivery may use in-app/email; additional channels can follow with the enrollment module.
+- задължително се въвежда кратка причина за родителите;
+- промяната се записва в историята;
+- създава се събитие за известяване;
+- родителският изглед ясно показва какво е променено.
 
-The first catalog slice has no real parent enrollments, so it records change reasons and prepares notification events/interfaces without pretending recipients already exist. Actual recipient resolution and delivery begin with the enrollment slice.
+Първата част на каталога все още няма реални записани родители. Тя подготвя причините и връзката към известията. Реалното определяне и уведомяване на получателите започва с модула за записване.
 
-## Content guidance and AI assistance
+## Подсказки и AI помощ
 
-Optional fields include Bulgarian prompts and examples. Eligible organizations see “Generate with AI” for summaries, benefits, methodology, instructor presentations, and FAQ.
+Незадължителните полета съдържат подсказки и примери на български. Организациите с разрешен достъп виждат „Генерирай с AI“ за кратко описание, ползи, методика, представяне на преподавател и често задавани въпроси.
 
-AI uses structured facts, creates only editable drafts, offers shorter/richer/friendlier variants, and must not invent factual or commercial claims. Generated origin is recorded and content can be edited, regenerated, or discarded.
+AI използва вече въведените факти, създава само редактируема чернова и предлага по-кратък, подробен или приятелски вариант. Няма право да измисля фактически или търговски твърдения. Произходът се отбелязва, а текстът може да се редактира, генерира отново или изтрие.
 
-Access is an entitlement rather than only a plan switch. Plans may include trial or recurring quotas, while a platform administrator may enable, disable, limit, or time-box AI for one organization regardless of plan. Usage is metered. External AI service integration can be delivered as a separate approved slice behind a provider boundary.
+Достъпът е отделно право, а не само част от ценовия план. Плановете могат да включват пробен или месечен лимит, а платформен администратор може да включва, изключва, ограничава или дава временен достъп на конкретна организация. Използването се отчита. Свързването с външна AI услуга може да е отделен одобрен етап.
 
-## Permissions and safety
+## Права и сигурност
 
-- Owners/admins manage content, offerings, groups, locations, instructors, and publication according to capabilities.
-- Coordinators manage groups/sessions only when authorized.
-- Instructors access assigned operational information, not commercial or moderation controls.
-- Platform operators review global distribution and control organization-specific AI access.
-- Public APIs return only explicitly public and currently publishable fields.
-- Tenant selection, lifecycle gates, capability checks, and PostgreSQL RLS remain mandatory.
-- Concurrent edits use revision checks to prevent silent overwrites.
+- Собственици и администратори управляват съдържание, предлагания, групи, места, преподаватели и публикации според правата си.
+- Координаторите управляват групи и занятия само при разрешение.
+- Преподавателите виждат възложената оперативна информация, но не търговските и модераторските настройки.
+- Платформените оператори преглеждат глобалното публикуване и управляват AI достъпа.
+- Публичните API адреси връщат само изрично публикувана и разрешена информация.
+- Организационният контекст, статусът, проверките на правата и защитата в PostgreSQL остават задължителни.
+- Едновременните редакции използват версии, за да не презаписват по-нова промяна.
 
-## Validation and important states
+## Проверки и важни състояния
 
-- Essential fields, one valid offering, and one valid group are required for catalog publication.
-- Group schedules must create valid sessions and respect capacity bounds.
-- A schedule may contain one or more weekly meeting patterns, including different times and durations by weekday, or an every-two-weeks frequency.
-- Generation respects a start/end period and supports holidays, vacations, manually excluded dates, added dates, and per-session moves.
-- Instructor overlaps and exclusive-location overlaps block publication but not draft saving. Shared spaces warn rather than block. Online and unconfirmed locations do not create blocking location conflicts.
-- Conflict checking is initially limited to records inside the same organization.
-- Public price labels must match the price unit.
-- Optional sections can be removed without breaking rendering.
-- Archiving preserves historical enrollments and audit records.
-- Restricted/suspended organizations cannot bypass lifecycle gates via API.
+- За публикуване са необходими основните полета, поне едно валидно предлагане и една валидна група.
+- Графикът трябва да създава валидни занятия и да спазва капацитета.
+- Може да съдържа един или повече седмични дни с различни часове и продължителност или честота през седмица.
+- Автоматичното създаване използва начален и краен период и поддържа празници, ваканции, изключени и добавени дати и преместване на отделно занятие.
+- Застъпване на преподавател или място за самостоятелно ползване блокира публикуването, но не и черновата.
+- Общите пространства показват предупреждение. Онлайн и неуточнените места не създават блокиращ конфликт.
+- Първоначално конфликтите се проверяват в рамките на една организация.
+- Публичната цена винаги съответства на правилната единица.
+- Премахването на незадължителна секция не поврежда публичната страница.
+- Архивирането запазва историческите записвания и историята.
+- Ограничена или спряна организация не може да заобиколи правилата чрез директни API заявки.
 
-## Delivery sequence
+## Последователност на реализацията
 
-1. First vertical slice: tenant-safe domain/API foundations; organization administration for activity, offering, location, instructor, group, schedule, and EUR price; direct internal publication; and visible organization catalog/activity pages. It deliberately excludes real enrollment and global marketplace publication.
-2. Marketplace submission/review with versioned material changes.
-3. Cross-organization catalog placements. A later design will define the bilateral proposal/acceptance workflow before this is implemented.
-4. Enrollment handoff using groups and enrollment options, including real notification recipients.
-5. AI entitlements and assisted writing as a bounded follow-up.
-6. Embedding and custom domains after the catalog stabilizes.
+1. **Първи завършен и видим етап:** защитена структура и API; административни екрани за дейност, предлагане, място, преподавател, група, график и цена в евро; директно вътрешно публикуване; видим каталог на организацията и страница на дейността. Реалното записване и общият маркетплейс не влизат в този етап.
+2. Изпращане и преглед за маркетплейса с версии при съществени промени.
+3. Показване в каталозите на други организации. Преди това ще се уточни двустранният процес за предложение и приемане.
+4. Реално записване чрез групите и начините на записване, включително истински получатели на известия.
+5. AI права и помощ за съдържанието като отделен ограничен етап.
+6. Вграждане в чужди сайтове и собствени домейни след стабилизиране на каталога.
 
-Every slice requires authorization/tenant tests, domain tests, web tests, and risk-proportionate browser verification.
+Всеки етап трябва да има тестове за права и изолация, бизнес правила, уеб интерфейс и проверка в браузър според риска.
 
-## Builder calls that do not change product intent
+## Технически решения, оставени на изпълнителя
 
-- Use curated rich-section types, not arbitrary layout JSON.
-- Prefer reusable locations/instructors with session overrides.
-- Keep slugs stable and relationships on internal immutable IDs.
-- Derive availability from capacity, active enrollments, waitlist rules, and publication state.
-- Keep AI integration behind a provider boundary.
+- В първата версия да се използват предварително определени секции, а не произволна структура.
+- Местата и преподавателите да са многократно използваеми, с промяна за конкретно занятие.
+- Публичните текстови адреси да са устойчиви, а вътрешните връзки да използват непроменяеми идентификатори.
+- Свободните места да се изчисляват от капацитета, активните записвания, списъка на чакащите и статуса, а не да бъдат ръчно зададен етикет.
+- AI връзката да е зад общ интерфейс, за да не зависи продуктът от един доставчик.
 
-## Approval checklist
+## Какво потвърждава окончателното одобрение
 
-Approval confirms the selected domain structure; reference-inspired page; independent internal/marketplace publication; organization URLs; EUR and multiple enrollment modes; reusable instructors/locations and per-session exceptions; reasons and notifications for material changes; AI drafts with admin-controlled entitlements; and the stated first-version boundaries.
+С одобрението се потвърждават:
+
+- структурата „Дейност → Предлагане → Група → Занятие“;
+- богатата страница, вдъхновена от предоставените референции;
+- отделните статуси за вътрешно публикуване и маркетплейс;
+- собствените адреси на организационните каталози;
+- работа в евро и различните начини на записване;
+- многократно използваемите преподаватели и места и изключенията за конкретна дата;
+- задължителните причини и известия при съществени промени;
+- AI черновите и управляваният от платформен администратор достъп;
+- границите на първата версия и отложените възможности.
