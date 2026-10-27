@@ -32,7 +32,7 @@
 
 ---
 
-### Задача 1: Tenant-защитена основа на каталога
+### Task 1: Tenant-защитена основа на каталога
 
 **Файлове:**
 - Създаване: `apps/api/database/migrations/2026_10_27_001000_create_catalog_tables.php`
@@ -83,7 +83,7 @@ git add apps/api/app/Domain/Catalog apps/api/database/migrations/2026_10_27_0010
 git commit -m "feat: add tenant-safe catalog foundation"
 ```
 
-### Задача 2: Места и преподаватели
+### Task 2: Места и преподаватели
 
 **Файлове:**
 - Създаване: `apps/api/app/Domain/Catalog/Policies/CatalogPolicy.php`
@@ -130,7 +130,7 @@ git add apps/api/app/Domain/Catalog/Policies apps/api/app/Http/Controllers/Api/V
 git commit -m "feat: manage catalog locations and instructors"
 ```
 
-### Задача 3: Чернови на дейности, предлагания и богато съдържание
+### Task 3: Чернови на дейности, предлагания и богато съдържание
 
 **Файлове:**
 - Създаване: `apps/api/app/Domain/Catalog/Actions/CreateActivityDraft.php`
@@ -173,7 +173,7 @@ git add apps/api/app/Domain/Catalog/Actions apps/api/app/Http/Controllers/Api/V1
 git commit -m "feat: add catalog activity drafts"
 ```
 
-### Задача 4: Групи, повтарящ график, занятия и конфликти
+### Task 4: Групи, повтарящ график, занятия и конфликти
 
 **Файлове:**
 - Създаване: `apps/api/app/Domain/Catalog/ValueObjects/SchedulePattern.php`
@@ -218,7 +218,7 @@ git add apps/api/app/Domain/Catalog apps/api/app/Http/Controllers/Api/V1/Activit
 git commit -m "feat: add recurring activity groups and sessions"
 ```
 
-### Задача 5: Цени в евро и вътрешно публикуване
+### Task 5: Цени в евро и вътрешно публикуване
 
 **Файлове:**
 - Създаване: `apps/api/app/Domain/Catalog/Enums/EnrollmentMode.php`
@@ -258,7 +258,7 @@ git add apps/api/app/Domain/Catalog apps/api/app/Http/Controllers/Api/V1/Activit
 git commit -m "feat: publish internally priced activities"
 ```
 
-### Задача 6: Административен интерфейс за каталог
+### Task 6: Административен интерфейс за каталог
 
 **Файлове:**
 - Създаване: `apps/web/src/app/dashboard/activities/page.tsx`
@@ -307,7 +307,7 @@ git add apps/web/src/app/dashboard/activities apps/web/src/features/catalog/admi
 git commit -m "feat: add organization catalog workspace"
 ```
 
-### Задача 7: Публичен организационен каталог и страница на дейността
+### Task 7: Публичен организационен каталог и страница на дейността
 
 **Файлове:**
 - Създаване: `apps/api/app/Http/Controllers/Api/V1/PublicCatalogController.php`
@@ -354,7 +354,7 @@ git add apps/api/app/Http/Controllers/Api/V1/PublicCatalogController.php apps/ap
 git commit -m "feat: publish organization activity catalog"
 ```
 
-### Задача 8: Демо данни и browser journey
+### Task 8: Демо данни и browser journey
 
 **Файлове:**
 - Промяна: `apps/api/database/seeders/LocalDemoSeeder.php`
@@ -399,7 +399,7 @@ git add apps/api/database/seeders/LocalDemoSeeder.php apps/api/tests/Feature/Dem
 git commit -m "test: add activity catalog demo journey"
 ```
 
-### Задача 9: Пълна проверка на първия вертикален етап
+### Task 9: Пълна проверка на първия вертикален етап
 
 **Файлове:**
 - Промяна при нужда само от открит дефект: файловете, притежаващи дефекта, и съответният regression test.
