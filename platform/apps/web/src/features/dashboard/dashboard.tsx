@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   AuthenticationRequiredError,
   createInvitation,
@@ -127,7 +128,7 @@ export function Dashboard() {
         <nav aria-label="Административна навигация">
           <a className={styles.activeNav} href="#overview">Общ преглед</a>
           <a href="#team">Екип и покани</a>
-          <span>Дейности <small>следващ етап</small></span>
+          <Link href="/dashboard/activities">Дейности <small>Каталог</small></Link>
           <a href="#audit">Одит <small>Задача 6</small></a>
           {data.organizations.some((organization) => organization.role === 'platform_admin') ? (
             <a href="/operator/organizations">Кандидатури</a>
