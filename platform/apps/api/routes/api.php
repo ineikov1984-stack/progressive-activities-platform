@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AuditEventController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\InvitationController;
 use App\Http\Controllers\Api\V1\OrganizationContextController;
@@ -22,6 +23,7 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/invitations', [InvitationController::class, 'store'])->middleware('tenant');
             Route::get('/invitations', [InvitationController::class, 'index'])->middleware('tenant');
             Route::post('/invitations/accept', [InvitationController::class, 'accept']);
+            Route::get('/audit-events', [AuditEventController::class, 'index'])->middleware('tenant');
         });
     });
 });

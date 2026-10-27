@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domain\Audit\AuditRecorder;
+use App\Domain\Audit\Enums\AuditAction;
+use App\Domain\Audit\ValueObjects\AuditableReference;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
 use App\Domain\Organizations\Tenancy\TenantContext;
@@ -13,13 +16,13 @@ use Symfony\Component\HttpFoundation\Response;
 
 class OrganizationContextController extends Controller
 {
-    public function select(Request $request): JsonResponse
+    public function select(Request $request, TenantContext $context, AuditRecorder $auditRecorder): JsonResponse
     {
         $validated = $request->validate([
             'organization_id' => ['required', 'uuid'],
         ]);
 
-        return DB::transaction(function () use ($request, $validated): JsonResponse {
+        return DB::transaction(function () use ($request, $validated, $context, $auditRecorder): JsonResponse {
             $userId = (string) $request->user()->getAuthIdentifier();
 
             if (DB::getDriverName() === 'pgsql') {
@@ -44,6 +47,16 @@ class OrganizationContextController extends Controller
             }
 
             $request->session()->put('active_organization_id', $organization->id);
+            $context->select($organization);
+
+            try {
+                $auditRecorder->record(
+                    AuditAction::OrganizationContextSelected,
+                    new AuditableReference('organization', $organization->id),
+                );
+            } finally {
+                $context->clear();
+            }
 
             return response()->json(['organization' => $this->present($organization)]);
         });

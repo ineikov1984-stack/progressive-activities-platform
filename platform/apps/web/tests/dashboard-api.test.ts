@@ -11,7 +11,7 @@ describe('dashboard API', () => {
     vi.unstubAllGlobals();
   });
 
-  it('loads the user, selects an organization and returns its invitations', async () => {
+  it('loads the user, selects an organization and returns invitations and audit events', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ user: { id: 'user-1', name: 'Демо собственик', email: 'owner@demo.local' } }))
       .mockResolvedValueOnce(jsonResponse({ organizations: [{
@@ -22,7 +22,14 @@ describe('dashboard API', () => {
         role: 'organization_owner',
         permissions: ['create', 'update', 'invite', 'finance', 'view'],
       }] }))
-      .mockResolvedValueOnce(jsonResponse({ invitations: [] }));
+      .mockResolvedValueOnce(jsonResponse({ invitations: [] }))
+      .mockResolvedValueOnce(jsonResponse({ events: [{
+        id: 'audit-1',
+        action: 'organization.invitation_created',
+        subject_type: 'invitation',
+        subject_id: 'invite-1',
+        created_at: '2026-10-27T18:00:00+00:00',
+      }] }));
     vi.stubGlobal('document', { cookie: 'XSRF-TOKEN=test-token' });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -31,7 +38,11 @@ describe('dashboard API', () => {
     expect(dashboard.user.name).toBe('Демо собственик');
     expect(dashboard.organization.id).toBe('org-1');
     expect(dashboard.invitations).toEqual([]);
+    expect(dashboard.auditEvents).toHaveLength(1);
     expect(fetchMock).toHaveBeenNthCalledWith(3, '/backend/api/v1/invitations', expect.objectContaining({
+      headers: expect.objectContaining({ 'X-Organization-Id': 'org-1' }),
+    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(4, '/backend/api/v1/audit-events', expect.objectContaining({
       headers: expect.objectContaining({ 'X-Organization-Id': 'org-1' }),
     }));
   });

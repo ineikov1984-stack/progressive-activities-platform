@@ -22,11 +22,23 @@ export type DashboardInvitation = {
   expires_at: string;
 };
 
+export type DashboardAuditEvent = {
+  id: string;
+  actor_id?: string;
+  action: string;
+  subject_type: string;
+  subject_id: string;
+  metadata?: Record<string, unknown>;
+  correlation_id: string;
+  created_at: string;
+};
+
 export type DashboardData = {
   user: DashboardUser;
   organization: DashboardOrganization;
   organizations: DashboardOrganization[];
   invitations: DashboardInvitation[];
+  auditEvents: DashboardAuditEvent[];
 };
 
 export class AuthenticationRequiredError extends Error {}
@@ -89,12 +101,18 @@ export async function loadDashboard(): Promise<DashboardData> {
       throw new Error('Профилът няма активна организация.');
     }
 
-    const { invitations } = await requestJson<{ invitations: DashboardInvitation[] }>(
-      '/backend/api/v1/invitations',
-      { headers: { 'X-Organization-Id': organization.id } },
-    );
+    const [{ invitations }, { events: auditEvents }] = await Promise.all([
+      requestJson<{ invitations: DashboardInvitation[] }>(
+        '/backend/api/v1/invitations',
+        { headers: { 'X-Organization-Id': organization.id } },
+      ),
+      requestJson<{ events: DashboardAuditEvent[] }>(
+        '/backend/api/v1/audit-events',
+        { headers: { 'X-Organization-Id': organization.id } },
+      ),
+    ]);
 
-    return { user, organization, organizations, invitations };
+    return { user, organization, organizations, invitations, auditEvents };
   } catch (reason) {
     if (reason instanceof AuthenticationRequiredError) {
       throw reason;

@@ -83,7 +83,7 @@
 .roleCard { min-width: 13rem; padding: 1.15rem; border: 1px solid rgb(255 255 255 / 15%); border-radius: 1rem; background: rgb(255 255 255 / 8%); }
 .roleCard span { display: block; margin-bottom: 0.35rem; color: #b9cfc5; font-size: 0.75rem; text-transform: uppercase; }
 
-.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 1rem 0; }
+.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin: 1rem 0; }
 .card { padding: 1.35rem; border: 1px solid #dce6e1; border-radius: 1rem; background: #fff; box-shadow: 0 0.5rem 1.5rem rgb(25 60 50 / 5%); }
 .card h2 { margin: 0.2rem 0; font-size: 1.15rem; }
 .card p { color: #667a73; }
@@ -116,6 +116,13 @@
 .pending { color: #865e10; background: #fff3cf; }
 .accepted { color: #23644f; background: #dff2e5; }
 .expired { color: #7b342e; background: #f9e4e1; }
+.auditSection { margin-top: 1rem; }
+.auditList { display: grid; margin: 1rem 0 0; padding: 0; list-style: none; }
+.auditList li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.8rem; padding: 0.9rem 0; border-top: 1px solid #edf1ef; }
+.auditList li > div { display: grid; gap: 0.2rem; min-width: 0; }
+.auditList li span:not(.auditDot), .auditList time { color: #667a73; font-size: 0.78rem; }
+.auditList time { text-align: right; }
+.auditDot { width: 0.65rem; height: 0.65rem; border-radius: 50%; background: #76b852; box-shadow: 0 0 0 0.3rem #e8f6dc; }
 .centerState { display: grid; min-height: 70vh; place-content: center; text-align: center; }
 
 @media (max-width: 850px) {

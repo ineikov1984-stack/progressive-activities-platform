@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domain\Audit\AuditRecorder;
+use App\Domain\Audit\Enums\AuditAction;
+use App\Domain\Audit\ValueObjects\AuditableReference;
 use App\Domain\Identity\Models\User;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -13,7 +16,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class AuthController extends Controller
 {
-    public function login(Request $request): JsonResponse
+    public function login(Request $request, AuditRecorder $auditRecorder): JsonResponse
     {
         $credentials = $request->validate([
             'email' => ['required', 'string', 'email:rfc', 'max:254'],
@@ -36,6 +39,10 @@ class AuthController extends Controller
 
         /** @var User $user */
         $user = $request->user();
+        $auditRecorder->record(
+            AuditAction::IdentityLoginSucceeded,
+            new AuditableReference('user', $user->id),
+        );
 
         return response()->json(['user' => $this->presentUser($user)]);
     }

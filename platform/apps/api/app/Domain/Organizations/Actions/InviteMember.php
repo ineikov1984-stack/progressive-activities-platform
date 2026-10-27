@@ -2,11 +2,15 @@
 
 namespace App\Domain\Organizations\Actions;
 
+use App\Domain\Audit\AuditRecorder;
+use App\Domain\Audit\Enums\AuditAction;
+use App\Domain\Audit\ValueObjects\AuditableReference;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Enums\OrganizationRole;
 use App\Domain\Organizations\Models\Invitation;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
+use App\Domain\Organizations\Tenancy\TenantContext;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -17,6 +21,11 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class InviteMember
 {
+    public function __construct(
+        private readonly AuditRecorder $auditRecorder,
+        private readonly TenantContext $tenantContext,
+    ) {}
+
     /** @return array{invitation: Invitation, token: string} */
     public function invite(User $actor, Organization $organization, string $email, OrganizationRole $role): array
     {
@@ -51,6 +60,12 @@ class InviteMember
                 'expires_at' => now()->addMinutes((int) config('invitations.expires_after_minutes')),
                 'invited_by' => $actor->id,
             ]);
+
+            $this->auditRecorder->record(
+                AuditAction::OrganizationInvitationCreated,
+                new AuditableReference('invitation', $invitation->id),
+                ['role' => $role->value],
+            );
 
             return ['invitation' => $invitation, 'token' => $token];
         });
@@ -112,6 +127,20 @@ class InviteMember
                 'accepted_by' => $user->id,
                 'active_key' => null,
             ]);
+
+            if ($membership->wasRecentlyCreated) {
+                $this->tenantContext->select($selectedOrganizationId);
+
+                try {
+                    $this->auditRecorder->record(
+                        AuditAction::OrganizationRoleChanged,
+                        new AuditableReference('membership', $membership->id),
+                        ['from' => null, 'to' => $membership->role],
+                    );
+                } finally {
+                    $this->tenantContext->clear();
+                }
+            }
 
             return $membership;
         });

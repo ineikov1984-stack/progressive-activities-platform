@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   AuthenticationRequiredError,
   createInvitation,
+  DashboardAuditEvent,
   DashboardData,
   DashboardInvitation,
   loadDashboard,
@@ -33,6 +34,14 @@ const invitationStatusLabels: Record<string, string> = {
   pending: 'Очаква приемане',
   accepted: 'Приета',
   expired: 'Изтекла',
+};
+
+const auditActionLabels: Record<string, string> = {
+  'identity.login_succeeded': 'Успешен вход',
+  'organization.context_selected': 'Избрана организация',
+  'organization.invitation_created': 'Създадена покана',
+  'organization.role_changed': 'Зададена роля',
+  'catalog.activity_submitted': 'Дейност, изпратена за преглед',
 };
 
 export function Dashboard() {
@@ -118,7 +127,7 @@ export function Dashboard() {
           <a className={styles.activeNav} href="#overview">Общ преглед</a>
           <a href="#team">Екип и покани</a>
           <span>Дейности <small>следващ етап</small></span>
-          <span>Одит <small>Задача 6</small></span>
+          <a href="#audit">Одит <small>Задача 6</small></a>
         </nav>
         <p className={styles.demoBadge}>Локална демо среда</p>
       </aside>
@@ -162,6 +171,11 @@ export function Dashboard() {
             <span className={styles.cardLabel}>Сигурност</span>
             <strong className={styles.ready}>Tenant защита</strong>
             <p>Достъпът е ограничен до избраната организация</p>
+          </article>
+          <article className={styles.card}>
+            <span className={styles.cardLabel}>Одитни събития</span>
+            <strong className={styles.metric}>{data.auditEvents.length}</strong>
+            <p>Проследими действия в активната организация</p>
           </article>
         </section>
 
@@ -238,6 +252,38 @@ export function Dashboard() {
               </ul>
             )}
           </article>
+        </section>
+
+        <section id="audit" className={`${styles.card} ${styles.auditSection}`}>
+          <div className={styles.sectionHeading}>
+            <div>
+              <p className={styles.eyebrow}>Сигурност и отчетност</p>
+              <h2>Последни действия</h2>
+            </div>
+            <span>{data.auditEvents.length}</span>
+          </div>
+          {data.auditEvents.length === 0 ? (
+            <p className={styles.empty}>Все още няма записани действия.</p>
+          ) : (
+            <ul className={styles.auditList}>
+              {data.auditEvents.map((event: DashboardAuditEvent) => (
+                <li key={event.id}>
+                  <span className={styles.auditDot} aria-hidden="true" />
+                  <div>
+                    <strong>{auditActionLabels[event.action] ?? event.action}</strong>
+                    <span>{event.subject_type} · {event.subject_id}</span>
+                  </div>
+                  <time dateTime={event.created_at}>
+                    {new Intl.DateTimeFormat('bg-BG', {
+                      dateStyle: 'short',
+                      timeStyle: 'short',
+                      timeZone: 'Europe/Sofia',
+                    }).format(new Date(event.created_at))}
+                  </time>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </section>
     </main>
