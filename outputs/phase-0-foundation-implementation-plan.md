@@ -229,6 +229,8 @@ Expected: PASS.
 - Consumes: authenticated `User` от Задача 3.
 - Produces: `TenantContext::organizationId(): string`, `GET /api/v1/organizations`, `POST /api/v1/context/organization`.
 
+**Потвърдена последователност:** В пилота организациите се създават от platform administrator. Самостоятелното публично кандидатстване на училища, клубове и изпълнители остава задължителна следваща възможност и се активира след валидиран процес за проверка и операторско одобрение; не се премахва от продуктовия обхват.
+
 - [ ] **Стъпка 1: Напишете failing tenant isolation тестове**
 
 Създайте две организации и потребител с членство само в първата. Проверете application request и директна repository заявка към чуждата организация. Покрийте потребител с две членства и липсващ/невалиден tenant header/context.
