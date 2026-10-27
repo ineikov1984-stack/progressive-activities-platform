@@ -22,7 +22,7 @@ export function LoginForm() {
         email: String(form.get('email') ?? ''),
         password: String(form.get('password') ?? ''),
       });
-      router.push('/');
+      router.push('/dashboard');
       router.refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Невалиден имейл или парола.');

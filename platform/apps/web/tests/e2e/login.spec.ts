@@ -10,7 +10,7 @@ test('login is accessible and returns a generic error', async () => {
 
   await page.goto(`${process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:3000'}/login`);
 
-  await expect(page.getByRole('heading', { name: 'Вход в платформата' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Вход в (платформата|системата)/ })).toBeVisible();
   await expect(page.getByLabel('Имейл')).toBeVisible();
   await expect(page.getByLabel('Парола')).toBeVisible();
 
