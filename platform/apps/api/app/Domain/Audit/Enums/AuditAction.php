@@ -8,6 +8,8 @@ enum AuditAction: string
     case OrganizationContextSelected = 'organization.context_selected';
     case OrganizationInvitationCreated = 'organization.invitation_created';
     case OrganizationApplicationSubmitted = 'organization.application_submitted';
+    case OrganizationApplicantCreated = 'organization.applicant_created';
+    case OrganizationApplicationReviewed = 'organization.application_reviewed';
     case OrganizationRoleChanged = 'organization.role_changed';
     case CatalogActivitySubmitted = 'catalog.activity_submitted';
 }

@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\AssignCorrelationId;
 use App\Http\Middleware\RequireOrganizationAccess;
+use App\Http\Middleware\ResolvePlatformOperator;
 use App\Http\Middleware\ResolveTenant;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -21,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'tenant' => ResolveTenant::class,
             'organization.access' => RequireOrganizationAccess::class,
+            'platform.operator' => ResolvePlatformOperator::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

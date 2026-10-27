@@ -138,6 +138,96 @@ class OrganizationOnboardingTest extends TestCase
             ->assertNotFound();
     }
 
+    public function test_platform_operator_bootstraps_and_lists_an_applicant_without_exposing_token(): void
+    {
+        $operator = $this->platformOperator();
+
+        $created = $this->actingAs($operator)->postJson('/api/v1/operator/organization-applications', [
+            'name' => 'Ново ателие',
+            'slug' => 'novo-atelie',
+            'owner_email' => 'owner@example.test',
+        ])->assertCreated()
+            ->assertJsonPath('application.status', 'applicant')
+            ->assertJsonPath('application.review_version', 1)
+            ->assertJsonStructure(['owner_invitation_token'])
+            ->json();
+
+        $this->getJson('/api/v1/operator/organization-applications')
+            ->assertOk()
+            ->assertJsonFragment(['id' => $created['application']['id']])
+            ->assertJsonMissingPath('applications.0.owner_invitation_token')
+            ->assertJsonMissing(['token_hash']);
+    }
+
+    public function test_non_operator_cannot_use_operator_application_routes(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->getJson('/api/v1/operator/organization-applications')
+            ->assertForbidden();
+    }
+
+    public function test_operator_reviews_application_atomically_and_records_private_history(): void
+    {
+        $operator = $this->platformOperator();
+        [, $organization] = $this->applicant('organization_owner', [
+            ...$this->completeFields(),
+            'status' => OrganizationStatus::Review->value,
+        ]);
+
+        $payload = [
+            'review_version' => 1,
+            'to_status' => 'approved',
+            'internal_note' => 'Verified registration document.',
+        ];
+
+        $this->actingAs($operator)
+            ->postJson("/api/v1/operator/organization-applications/{$organization->id}/review", $payload)
+            ->assertOk()
+            ->assertJsonPath('application.status', 'approved')
+            ->assertJsonPath('application.review_version', 2)
+            ->assertJsonMissing(['Verified registration document.']);
+
+        $this->postJson("/api/v1/operator/organization-applications/{$organization->id}/review", $payload)
+            ->assertConflict();
+
+        $this->assertSame(1, OrganizationReview::query()->withoutGlobalScopes()->where('organization_id', $organization->id)->count());
+        $this->assertSame(1, DB::table('audit_events')->where('action', 'organization.application_reviewed')->count());
+    }
+
+    public function test_operator_cannot_self_review_and_change_request_needs_public_guidance(): void
+    {
+        $operator = $this->platformOperator();
+        [, $organization] = $this->applicant('organization_owner', [
+            ...$this->completeFields(),
+            'status' => OrganizationStatus::Review->value,
+        ]);
+        OrganizationMembership::query()->withoutGlobalScopes()->create([
+            'organization_id' => $organization->id,
+            'user_id' => $operator->id,
+            'role' => 'viewer',
+            'status' => 'active',
+        ]);
+
+        $this->actingAs($operator)
+            ->postJson("/api/v1/operator/organization-applications/{$organization->id}/review", [
+                'review_version' => 1,
+                'to_status' => 'applicant',
+            ])->assertForbidden();
+
+        OrganizationMembership::query()->withoutGlobalScopes()
+            ->where('organization_id', $organization->id)
+            ->where('user_id', $operator->id)
+            ->delete();
+
+        $this->postJson("/api/v1/operator/organization-applications/{$organization->id}/review", [
+            'review_version' => 1,
+            'to_status' => 'applicant',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['public_reason', 'next_action']);
+    }
+
     /** @param array<string, mixed> $overrides
      *  @return array{User, Organization}
      */
@@ -168,5 +258,14 @@ class OrganizationOnboardingTest extends TestCase
             'registration_identifier' => 'BG123456789',
             'public_contact_email' => 'office@example.test',
         ];
+    }
+
+    private function platformOperator(): User
+    {
+        [$operator] = $this->applicant('platform_admin', [
+            'status' => OrganizationStatus::Active->value,
+        ]);
+
+        return $operator;
     }
 }
