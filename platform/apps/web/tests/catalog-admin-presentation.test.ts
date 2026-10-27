@@ -56,8 +56,8 @@ describe('catalog admin presentation', () => {
       { id: 'price-1', enrollment_mode: 'trial', unit: 'session', amount: '12,50', currency: 'EUR', is_available: true, terms: 'Само веднъж' },
       { id: 'price-2', enrollment_mode: 'monthly', unit: 'month', amount: '40', currency: 'EUR', is_available: false, cancellation_policy: 'До 25-о число', payment_due: 'До 10-о число' },
     ])).toEqual([
-      { id: 'price-1', enrollment_mode: 'trial', unit: 'session', amount_cents: 1250, currency: 'EUR', is_available: true, terms: 'Само веднъж' },
-      { id: 'price-2', enrollment_mode: 'monthly', unit: 'month', amount_cents: 4000, currency: 'EUR', is_available: false, cancellation_policy: 'До 25-о число', payment_due: 'До 10-о число' },
+      { enrollment_mode: 'trial', unit: 'session', amount_cents: 1250, currency: 'EUR', is_available: true, terms: 'Само веднъж' },
+      { enrollment_mode: 'monthly', unit: 'month', amount_cents: 4000, currency: 'EUR', is_available: false, cancellation_policy: 'До 25-о число', payment_due: 'До 10-о число' },
     ]);
   });
 });

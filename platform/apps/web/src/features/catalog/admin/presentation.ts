@@ -20,7 +20,10 @@ export function parseEuroCents(input: string): number {
 }
 
 export function priceOptionsPayload(options: (Omit<PriceOption, 'amount_cents'> & { amount: string })[]): PriceOption[] {
-  return options.map(({ amount, ...option }) => ({ ...option, amount_cents: parseEuroCents(amount), currency: 'EUR' }));
+  return options.map(({ amount, ...option }) => {
+    delete option.id;
+    return { ...option, amount_cents: parseEuroCents(amount), currency: 'EUR' };
+  });
 }
 
 export function activityStatusLabel(status: string): string { return statusLabels[status] ?? status; }
