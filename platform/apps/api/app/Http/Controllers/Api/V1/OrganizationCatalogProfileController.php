@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domain\Catalog\Actions\CatalogMediaStore;
 use App\Domain\Catalog\Models\OrganizationCatalogProfile;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
@@ -21,7 +22,7 @@ final class OrganizationCatalogProfileController extends Controller
         return response()->json(['profile' => $profile ? $this->present($profile) : null]);
     }
 
-    public function update(Request $request, TenantContext $context): JsonResponse
+    public function update(Request $request, TenantContext $context, CatalogMediaStore $media): JsonResponse
     {
         $organization = $this->organization($context);
         Gate::forUser($request->user())->authorize('catalog.manage', $organization);
@@ -34,6 +35,10 @@ final class OrganizationCatalogProfileController extends Controller
             'accent_color' => ['sometimes', 'nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'is_published' => ['sometimes', 'boolean'],
         ]);
+
+        if (isset($validated['logo_path']) && ! $media->isAttachable($validated['logo_path'])) {
+            throw ValidationException::withMessages(['logo_path' => 'Изберете изображение, качено в тази организация.']);
+        }
 
         if (array_key_exists('is_published', $validated)) {
             Gate::forUser($request->user())->authorize('catalog.publish', $organization);

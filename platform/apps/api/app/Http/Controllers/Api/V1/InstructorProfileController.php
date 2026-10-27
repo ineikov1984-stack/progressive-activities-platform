@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domain\Catalog\Actions\CatalogMediaStore;
 use App\Domain\Catalog\Models\InstructorProfile;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
@@ -9,6 +10,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
 
 final class InstructorProfileController extends Controller
@@ -22,20 +24,24 @@ final class InstructorProfileController extends Controller
         ]);
     }
 
-    public function store(Request $request, TenantContext $context): JsonResponse
+    public function store(Request $request, TenantContext $context, CatalogMediaStore $media): JsonResponse
     {
         Gate::forUser($request->user())->authorize('catalog.manage', $this->organization($context));
-        $instructor = InstructorProfile::query()->create($this->validated($request));
+        $validated = $this->validated($request);
+        $this->validatePhoto($validated, $media);
+        $instructor = InstructorProfile::query()->create($validated);
         $instructor->refresh();
 
         return response()->json(['instructor' => $this->present($instructor)], Response::HTTP_CREATED);
     }
 
-    public function update(Request $request, TenantContext $context, string $instructor): JsonResponse
+    public function update(Request $request, TenantContext $context, string $instructor, CatalogMediaStore $media): JsonResponse
     {
         Gate::forUser($request->user())->authorize('catalog.manage', $this->organization($context));
         $record = InstructorProfile::query()->findOrFail($instructor);
-        $record->fill($this->validated($request, false));
+        $validated = $this->validated($request, false);
+        $this->validatePhoto($validated, $media);
+        $record->fill($validated);
         $record->version++;
         $record->save();
 
@@ -59,6 +65,14 @@ final class InstructorProfileController extends Controller
     private function organization(TenantContext $context): Organization
     {
         return Organization::query()->findOrFail($context->organizationId());
+    }
+
+    /** @param array<string, mixed> $validated */
+    private function validatePhoto(array $validated, CatalogMediaStore $media): void
+    {
+        if (isset($validated['photo_path']) && ! $media->isAttachable($validated['photo_path'])) {
+            throw ValidationException::withMessages(['photo_path' => 'Изберете изображение, качено в тази организация.']);
+        }
     }
 
     /** @return array<string, mixed> */
