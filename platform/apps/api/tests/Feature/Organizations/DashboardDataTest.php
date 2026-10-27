@@ -32,7 +32,10 @@ class DashboardDataTest extends TestCase
             ->assertOk()
             ->assertJsonPath('organizations.0.id', $organization->id)
             ->assertJsonPath('organizations.0.role', 'organization_owner')
-            ->assertJsonPath('organizations.0.permissions', ['create', 'update', 'invite', 'finance', 'view']);
+            ->assertJsonPath('organizations.0.permissions', [
+                'create', 'update', 'invite', 'finance', 'view',
+                'catalog.view', 'catalog.manage', 'catalog.publish',
+            ]);
     }
 
     public function test_owner_lists_only_current_tenant_invitations_without_secret_fields(): void

@@ -42,6 +42,8 @@ class CatalogResourcesTest extends TestCase
         $this->assertSame($canView, Gate::forUser($user)->allows('catalog.view', $organization));
         $this->assertSame($canManage, Gate::forUser($user)->allows('catalog.manage', $organization));
         $this->assertSame($canPublish, Gate::forUser($user)->allows('catalog.publish', $organization));
+        $location = Location::query()->create(['name' => 'Existing studio', 'type' => 'online']);
+        $instructor = InstructorProfile::query()->create(['public_name' => 'Existing teacher']);
 
         $this->actingAs($user)->withSession(['active_organization_id' => $organization->id]);
         $this->getJson('/api/v1/catalog/profile')->assertStatus($canView ? 200 : 403);
@@ -51,6 +53,10 @@ class CatalogResourcesTest extends TestCase
             ->assertStatus($canManage ? 201 : 403);
         $this->postJson('/api/v1/catalog/instructors', ['public_name' => 'Teacher'])
             ->assertStatus($canManage ? 201 : 403);
+        $this->patchJson("/api/v1/catalog/locations/{$location->id}", ['name' => 'Renamed studio'])
+            ->assertStatus($canManage ? 200 : 403);
+        $this->patchJson("/api/v1/catalog/instructors/{$instructor->id}", ['role_title' => 'Art teacher'])
+            ->assertStatus($canManage ? 200 : 403);
         $this->patchJson('/api/v1/catalog/profile', ['public_name' => 'School'])
             ->assertStatus($canManage ? 200 : 403);
         $this->patchJson('/api/v1/catalog/profile', ['public_name' => 'School', 'is_published' => true])
