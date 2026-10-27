@@ -11,7 +11,40 @@ async function openPage(viewport: { width: number; height: number }): Promise<{ 
   const page = await context.newPage();
   await page.setViewportSize(viewport);
 
-  return { context, page, close: async () => { await page.close(); if (!endpoint) await browser.close(); } };
+  return { context, page, close: async () => { await page.close(); await context.close(); if (!endpoint) await browser.close(); } };
+}
+
+async function assertAdministrativeWrite(page: Page): Promise<void> {
+  const draftTitle = 'E2E административна чернова';
+  const persistedSummary = 'Проверена и запазена редакция през административния интерфейс.';
+  let draftCard = page.getByRole('article').filter({ has: page.getByRole('heading', { name: draftTitle, exact: true }) });
+
+  if (await draftCard.count() === 0) {
+    await page.getByLabel('Име на дейността').fill(draftTitle);
+    await Promise.all([
+      page.waitForURL(/\/dashboard\/activities\/[^/]+$/),
+      page.getByRole('button', { name: 'Създай чернова' }).click(),
+    ]);
+  } else {
+    await Promise.all([
+      page.waitForURL(/\/dashboard\/activities\/[^/]+$/),
+      draftCard.getByRole('link', { name: /Редактирай/ }).click(),
+    ]);
+  }
+
+  await catalogExpect(page.getByRole('heading', { level: 1, name: draftTitle })).toBeVisible();
+  await page.getByLabel('Кратко описание').fill(persistedSummary);
+  await page.getByRole('button', { name: 'Запази черновата' }).click();
+  await catalogExpect(page.getByRole('status')).toHaveText('Черновата е запазена.');
+  await page.reload();
+  await catalogExpect(page.getByLabel('Кратко описание')).toHaveValue(persistedSummary);
+
+  await Promise.all([
+    page.waitForURL(/\/dashboard\/activities$/),
+    page.getByRole('link', { name: /Всички дейности/ }).click(),
+  ]);
+  draftCard = page.getByRole('article').filter({ has: page.getByRole('heading', { name: draftTitle, exact: true }) });
+  await catalogExpect(draftCard.getByText(persistedSummary)).toBeVisible();
 }
 
 async function assertPublicChessJourney(page: Page): Promise<void> {
@@ -51,6 +84,7 @@ test('demo owner sees the published chess activity in administration and its pub
     await catalogExpect(browser.page.getByRole('heading', { level: 1, name: 'Дейности' })).toBeVisible();
     const chessCard = browser.page.getByRole('article').filter({ has: browser.page.getByRole('heading', { name: 'Шахмат' }) });
     await catalogExpect(chessCard.getByText('Публикувана')).toBeVisible();
+    await assertAdministrativeWrite(browser.page);
     await Promise.all([
       browser.page.waitForURL(/\/dashboard\/activities\/[^/]+$/),
       chessCard.getByRole('link', { name: /Редактирай/ }).click(),
@@ -70,7 +104,7 @@ test('the public chess journey remains usable on a mobile viewport', async () =>
   const browser = await openPage({ width: 390, height: 844 });
   try {
     await assertPublicChessJourney(browser.page);
-    await catalogExpect(browser.page.locator('body')).not.toHaveCSS('overflow-x', 'scroll');
+    await catalogExpect.poll(() => browser.page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   } finally {
     await browser.close();
   }
