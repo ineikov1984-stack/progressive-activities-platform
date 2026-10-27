@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activityStatusLabel, availabilityLabel, compactOptionalSections, conflictPresentation, formatEur, slugPreview, summarizeSchedule } from '../src/features/catalog/admin/presentation';
+import { activityStatusLabel, availabilityLabel, buildSchedulePattern, compactOptionalSections, conflictPresentation, formatEur, mergeActivitySections, parseEuroCents, priceOptionsPayload, slugPreview, summarizeSchedule } from '../src/features/catalog/admin/presentation';
 
 describe('catalog admin presentation', () => {
   it('formats integer euro cents for Bulgarian readers without float input', () => {
@@ -40,5 +40,24 @@ describe('catalog admin presentation', () => {
   it('distinguishes publication blockers from shared-space warnings', () => {
     expect(conflictPresentation({ severity: 'blocking', kind: 'instructor', message: 'Застъпване' })).toEqual({ label: 'Блокира публикуването', tone: 'danger', message: 'Застъпване' });
     expect(conflictPresentation({ severity: 'warning', kind: 'shared_location', message: 'Общо пространство' }).label).toBe('Провери преди публикуване');
+  });
+  it('parses only plain positive euro decimals with at most two fractional digits', () => {
+    expect(parseEuroCents('1')).toBe(100); expect(parseEuroCents('1,05')).toBe(105); expect(parseEuroCents('0.01')).toBe(1);
+    for (const invalid of ['1.005', '1e2', '-1', '0', '  ', '1,2,3']) expect(() => parseEuroCents(invalid)).toThrow('Въведете положителна цена с най-много два знака след десетичната запетая.');
+  });
+  it('preserves unedited FAQ and gallery while updating editable optional sections', () => {
+    expect(mergeActivitySections({ about: 'Стар текст', faq: [{ question: 'Въпрос?', answer: 'Отговор.' }], gallery: [{ path: 'catalog/photo.webp', alt: 'Деца в залата' }] }, { about: 'Нов текст', benefits: ['Концентрация'] })).toEqual({ about: 'Нов текст', benefits: ['Концентрация'], faq: [{ question: 'Въпрос?', answer: 'Отговор.' }], gallery: [{ path: 'catalog/photo.webp', alt: 'Деца в залата' }] });
+  });
+  it('builds a multi-slot schedule with exclusions and added sessions', () => {
+    expect(buildSchedulePattern({ startDate: '2026-11-02', endDate: '2026-12-20', frequency: 'weekly', slots: [{ weekday: 1, starts_at: '16:00', duration_minutes: 60 }, { weekday: 4, starts_at: '17:30', duration_minutes: 90 }], excludedDates: '2026-11-16\n2026-12-07', addedDates: [{ date: '2026-11-18', starts_at: '15:00', duration_minutes: 60 }] })).toEqual({ start_date: '2026-11-02', end_date: '2026-12-20', frequency: 'weekly', timezone: 'Europe/Sofia', slots: [{ weekday: 1, starts_at: '16:00', duration_minutes: 60 }, { weekday: 4, starts_at: '17:30', duration_minutes: 90 }], excluded_dates: ['2026-11-16', '2026-12-07'], added_dates: [{ date: '2026-11-18', starts_at: '15:00', duration_minutes: 60 }] });
+  });
+  it('serializes every edited enrollment option without losing its conditions', () => {
+    expect(priceOptionsPayload([
+      { id: 'price-1', enrollment_mode: 'trial', unit: 'session', amount: '12,50', currency: 'EUR', is_available: true, terms: 'Само веднъж' },
+      { id: 'price-2', enrollment_mode: 'monthly', unit: 'month', amount: '40', currency: 'EUR', is_available: false, cancellation_policy: 'До 25-о число', payment_due: 'До 10-о число' },
+    ])).toEqual([
+      { id: 'price-1', enrollment_mode: 'trial', unit: 'session', amount_cents: 1250, currency: 'EUR', is_available: true, terms: 'Само веднъж' },
+      { id: 'price-2', enrollment_mode: 'monthly', unit: 'month', amount_cents: 4000, currency: 'EUR', is_available: false, cancellation_policy: 'До 25-о число', payment_due: 'До 10-о число' },
+    ]);
   });
 });

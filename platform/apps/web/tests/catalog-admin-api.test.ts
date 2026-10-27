@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CatalogApiError, createActivity, loadCatalogWorkspace, publishActivity, uploadCatalogMedia } from '../src/features/catalog/admin/api';
+import { CatalogApiError, createActivity, loadCatalogWorkspace, publishActivity, saveGroup, uploadCatalogMedia } from '../src/features/catalog/admin/api';
 
 const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -29,5 +29,12 @@ describe('catalog admin API', () => {
     await uploadCatalogMedia('org-1', new File(['image'], 'photo.webp', { type: 'image/webp' }), 'activity-1');
     const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(options.body).toBeInstanceOf(FormData); expect(new Headers(options.headers).has('Content-Type')).toBe(false);
+  });
+  it('updates an existing group without dropping multiple slots or date exceptions', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ group: { id: 'group-1', version: 3 } }));
+    vi.stubGlobal('document', { cookie: 'XSRF-TOKEN=csrf-token' }); vi.stubGlobal('fetch', fetchMock);
+    const schedule = { start_date: '2026-11-02', end_date: '2026-12-20', frequency: 'weekly', timezone: 'Europe/Sofia', slots: [{ weekday: 1, starts_at: '16:00', duration_minutes: 60 }, { weekday: 4, starts_at: '17:30', duration_minutes: 90 }], excluded_dates: ['2026-11-16'], added_dates: [{ date: '2026-11-18', starts_at: '15:00', duration_minutes: 60 }] };
+    await saveGroup('org-1', 'activity-1', { version: 2, name: 'Група 1', schedule_pattern: schedule }, 'group-1');
+    expect(fetchMock).toHaveBeenCalledWith('/backend/api/v1/catalog/groups/group-1', expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ version: 2, name: 'Група 1', schedule_pattern: schedule }) }));
   });
 });

@@ -1,4 +1,4 @@
-import type { ActivitySections, ScheduleConflict, SchedulePattern } from './api';
+import type { ActivitySections, PriceOption, ScheduleConflict, SchedulePattern } from './api';
 
 const statusLabels: Record<string, string> = { draft: 'Чернова', published: 'Публикувана', archived: 'Архивирана' };
 const weekdays: Record<number, string> = { 1: 'понеделник', 2: 'вторник', 3: 'сряда', 4: 'четвъртък', 5: 'петък', 6: 'събота', 7: 'неделя' };
@@ -6,6 +6,21 @@ const weekdays: Record<number, string> = { 1: 'понеделник', 2: 'вто
 export function formatEur(amountCents: number): string {
   if (!Number.isInteger(amountCents)) throw new Error('Цената трябва да е в цели евроцентове.');
   return new Intl.NumberFormat('bg-BG', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(amountCents / 100);
+}
+
+const invalidPriceMessage = 'Въведете положителна цена с най-много два знака след десетичната запетая.';
+export function parseEuroCents(input: string): number {
+  const normalized = input.trim().replace(',', '.');
+  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(normalized);
+  if (!match) throw new Error(invalidPriceMessage);
+  const euros = Number(match[1]); const fraction = (match[2] ?? '').padEnd(2, '0');
+  const value = euros * 100 + Number(fraction || '0');
+  if (!Number.isSafeInteger(value) || value <= 0) throw new Error(invalidPriceMessage);
+  return value;
+}
+
+export function priceOptionsPayload(options: (Omit<PriceOption, 'amount_cents'> & { amount: string })[]): PriceOption[] {
+  return options.map(({ amount, ...option }) => ({ ...option, amount_cents: parseEuroCents(amount), currency: 'EUR' }));
 }
 
 export function activityStatusLabel(status: string): string { return statusLabels[status] ?? status; }
@@ -31,6 +46,23 @@ export function compactOptionalSections(sections: ActivitySections): ActivitySec
   const gallery = sections.gallery?.map((item) => ({ path: item.path.trim(), alt: item.alt.trim() })).filter((item) => item.path && item.alt);
   if (gallery?.length) result.gallery = gallery;
   return result;
+}
+
+export function mergeActivitySections(current: ActivitySections, edited: ActivitySections): ActivitySections {
+  return compactOptionalSections({ ...current, ...edited });
+}
+
+export function buildSchedulePattern(input: {
+  startDate: string; endDate: string; frequency: 'weekly' | 'biweekly';
+  slots: NonNullable<SchedulePattern['slots']>; excludedDates: string;
+  addedDates: NonNullable<SchedulePattern['added_dates']>;
+}): SchedulePattern {
+  return {
+    start_date: input.startDate, end_date: input.endDate, frequency: input.frequency,
+    timezone: 'Europe/Sofia', slots: input.slots,
+    excluded_dates: input.excludedDates.split(/[\n,]/).map((value) => value.trim()).filter(Boolean),
+    added_dates: input.addedDates,
+  };
 }
 
 function endTime(start: string, minutes: number): string {
