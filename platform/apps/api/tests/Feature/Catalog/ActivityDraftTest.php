@@ -40,6 +40,8 @@ class ActivityDraftTest extends TestCase
             ->assertCreated()->assertJsonPath('activity.slug', 'shkola-po-risuvane');
         $this->postJson('/api/v1/catalog/activities', $this->core())
             ->assertCreated()->assertJsonPath('activity.slug', 'shkola-po-risuvane-2');
+        $this->postJson('/api/v1/catalog/activities', [...$this->core(), 'title' => 'Щастие и йога'])
+            ->assertCreated()->assertJsonPath('activity.slug', 'shtastie-i-yoga');
     }
 
     public function test_maximum_length_titles_keep_unique_slugs_within_database_limit(): void

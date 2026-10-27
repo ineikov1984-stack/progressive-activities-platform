@@ -26,7 +26,7 @@ final readonly class CreateActivityDraft
         return DB::transaction(function () use ($organization, $payload): Activity {
             Organization::query()->whereKey($organization->getKey())->lockForUpdate()->firstOrFail();
 
-            $base = Str::slug($payload['title']) ?: Str::lower(Str::random(12));
+            $base = Str::slug($payload['title'], '-', 'bg') ?: Str::lower(Str::random(12));
             $base = rtrim(Str::substr($base, 0, self::MAX_SLUG_LENGTH), '-');
             $slug = $base;
             $suffix = 2;
