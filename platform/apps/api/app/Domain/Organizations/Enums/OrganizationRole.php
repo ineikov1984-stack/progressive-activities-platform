@@ -18,7 +18,7 @@ enum OrganizationRole: string
     }
 
     /** @return list<string> */
-    private function abilities(): array
+    public function abilities(): array
     {
         return match ($this) {
             self::PlatformAdmin, self::OrganizationOwner => ['create', 'update', 'invite', 'finance', 'view'],

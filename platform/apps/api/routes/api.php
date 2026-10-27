@@ -20,6 +20,7 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/context/organization', [OrganizationContextController::class, 'current'])
                 ->middleware('tenant');
             Route::post('/invitations', [InvitationController::class, 'store'])->middleware('tenant');
+            Route::get('/invitations', [InvitationController::class, 'index'])->middleware('tenant');
             Route::post('/invitations/accept', [InvitationController::class, 'accept']);
         });
     });

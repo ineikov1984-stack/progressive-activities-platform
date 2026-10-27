@@ -19,6 +19,8 @@ services:
       DB_PASSWORD: progressive-app-local-only
       DB_ADMIN_USERNAME: progressive
       DB_ADMIN_PASSWORD: progressive-local-only
+      DEMO_USER_EMAIL: owner@demo.progressive.local
+      DEMO_USER_PASSWORD: progressive-demo-local-only
       REDIS_HOST: redis
       SESSION_DRIVER: database
       SANCTUM_STATEFUL_DOMAINS: localhost:3000,127.0.0.1:3000

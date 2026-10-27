@@ -10,11 +10,25 @@ use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\Response;
 
 class InvitationController extends Controller
 {
+    public function index(Request $request, TenantContext $context): JsonResponse
+    {
+        $organization = Organization::query()->findOrFail($context->organizationId());
+        Gate::forUser($request->user())->authorize('invite', $organization);
+
+        $invitations = Invitation::query()
+            ->latest()
+            ->get()
+            ->map(fn (Invitation $invitation): array => $this->presentInvitation($invitation));
+
+        return response()->json(['invitations' => $invitations]);
+    }
+
     public function store(Request $request, TenantContext $context, InviteMember $inviteMember): JsonResponse
     {
         $validated = $request->validate([
@@ -62,14 +76,21 @@ class InvitationController extends Controller
         ]);
     }
 
-    /** @return array{id: string, organization_id: string, email: string, role: string, expires_at: string} */
+    /** @return array{id: string, organization_id: string, email: string, role: string, status: string, expires_at: string} */
     private function presentInvitation(Invitation $invitation): array
     {
+        $status = match (true) {
+            $invitation->accepted_at !== null => 'accepted',
+            $invitation->expires_at->isPast() => 'expired',
+            default => 'pending',
+        };
+
         return [
             'id' => $invitation->id,
             'organization_id' => $invitation->organization_id,
             'email' => $invitation->email,
             'role' => $invitation->role->value,
+            'status' => $status,
             'expires_at' => $invitation->expires_at->toIso8601String(),
         ];
     }
