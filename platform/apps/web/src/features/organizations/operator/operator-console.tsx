@@ -9,6 +9,7 @@ import {
   StaleApplicationError,
 } from '../application/api';
 import styles from './operator-console.module.css';
+import { decisionRequiresGuidance, organizationSlugFromName } from './presentation';
 
 const labels: Record<OrganizationApplication['status'], string> = {
   applicant: 'Чернова', review: 'За преглед', approved: 'Одобрена', active: 'Активна',
@@ -31,7 +32,17 @@ export function OperatorConsole() {
   const [notice, setNotice] = useState<string>();
   const [ownerToken, setOwnerToken] = useState<string>();
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [newName, setNewName] = useState('');
+  const [newSlug, setNewSlug] = useState('');
+  const [slugWasEdited, setSlugWasEdited] = useState(false);
+  const [decisionStatus, setDecisionStatus] = useState<OrganizationApplication['status']>('review');
   const selected = applications.find((item) => item.id === selectedId) ?? applications[0];
+  const visibleApplications = applications.filter((application) => {
+    const matchesSearch = application.name.toLocaleLowerCase('bg-BG').includes(search.toLocaleLowerCase('bg-BG'));
+    return matchesSearch && (statusFilter === 'all' || application.status === statusFilter);
+  });
 
   async function refresh() {
     const result = await loadOperatorApplications();
@@ -63,6 +74,7 @@ export function OperatorConsole() {
       setOwnerToken(result.ownerInvitationToken);
       setNotice('Кандидатурата е създадена. Предайте еднократния код по защитен канал.');
       formElement.reset();
+      setNewName(''); setNewSlug(''); setSlugWasEdited(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Кандидатурата не беше създадена.');
     }
@@ -105,11 +117,20 @@ export function OperatorConsole() {
       {notice ? <p className={styles.notice} role="status">{notice}</p> : null}
       <section className={styles.layout}>
         <aside className={styles.queue} aria-label="Опашка за разглеждане">
-          <div className={styles.queueHeading}><h2>Опашка</h2><span>{applications.length}</span></div>
+          <div className={styles.queueHeading}><h2>Опашка</h2><span>{visibleApplications.length}</span></div>
+          <div className={styles.filters}>
+            <label htmlFor="application-search">Търсене</label>
+            <input id="application-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Име на организация" />
+            <label htmlFor="status-filter">Статус</label>
+            <select id="status-filter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="all">Всички статуси</option>
+              {Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </div>
           {loading ? <p>Зареждане…</p> : applications.length === 0 ? <p>Няма кандидатури.</p> : (
-            <ul>{applications.map((application) => (
+            visibleApplications.length === 0 ? <p>Няма резултати за избраните филтри.</p> : <ul>{visibleApplications.map((application) => (
               <li key={application.id}>
-                <button type="button" className={selected?.id === application.id ? styles.selected : ''} onClick={() => setSelectedId(application.id)}>
+                <button type="button" className={selected?.id === application.id ? styles.selected : ''} onClick={() => { setSelectedId(application.id); setDecisionStatus((decisions[application.status] ?? [])[0]?.value ?? application.status); }}>
                   <strong>{application.name}</strong><span>{labels[application.status]} · версия {application.review_version}</span>
                 </button>
               </li>
@@ -126,13 +147,15 @@ export function OperatorConsole() {
                 <div><dt>Регистрационен номер</dt><dd>{selected.registration_identifier || 'Не е посочен'}</dd></div>
                 <div><dt>Контакт</dt><dd>{selected.public_contact_email || 'Не е посочен'}</dd></div>
               </dl>
-              <form onSubmit={decide} className={styles.form}>
+              <form key={`${selected.id}-${selected.status}`} onSubmit={decide} className={styles.form}>
                 <label htmlFor="to-status">Решение</label>
-                <select id="to-status" name="to_status" required>{(decisions[selected.status] ?? []).map((decision) => <option key={decision.value} value={decision.value}>{decision.label}</option>)}</select>
-                <label htmlFor="public-reason">Публично обяснение</label>
-                <textarea id="public-reason" name="public_reason" rows={3} placeholder="Вижда се от организацията при корекция, ограничаване или спиране." />
-                <label htmlFor="next-action">Какво трябва да направи организацията</label>
-                <textarea id="next-action" name="next_action" rows={3} />
+                <select id="to-status" name="to_status" required defaultValue={(decisions[selected.status] ?? [])[0]?.value} onChange={(event) => setDecisionStatus(event.target.value as OrganizationApplication['status'])}>{(decisions[selected.status] ?? []).map((decision) => <option key={decision.value} value={decision.value}>{decision.label}</option>)}</select>
+                {decisionRequiresGuidance(decisionStatus) ? <>
+                  <label htmlFor="public-reason">Защо е необходимо това решение</label>
+                  <textarea id="public-reason" name="public_reason" rows={3} required placeholder="Кратко и ясно обяснение, което организацията ще вижда." />
+                  <label htmlFor="next-action">Какво трябва да направи организацията</label>
+                  <textarea id="next-action" name="next_action" rows={3} required placeholder="Конкретни стъпки, срок и начин за повторно изпращане." />
+                </> : <p className={styles.guidanceHint}>За това решение не е необходимо публично обяснение.</p>}
                 <label htmlFor="internal-note">Вътрешна бележка</label>
                 <textarea id="internal-note" name="internal_note" rows={3} aria-describedby="private-note-help" />
                 <small id="private-note-help">Вижда се само от платформените администратори.</small>
@@ -144,8 +167,9 @@ export function OperatorConsole() {
           <article className={styles.createCard}>
             <h2>Нова кандидатура</h2>
             <form onSubmit={createApplicant} className={styles.form}>
-              <label htmlFor="new-name">Име на организацията</label><input id="new-name" name="name" required />
-              <label htmlFor="new-slug">Адрес в системата</label><input id="new-slug" name="slug" pattern="[A-Za-z0-9_-]+" required />
+              <label htmlFor="new-name">Име на организацията</label><input id="new-name" name="name" value={newName} onChange={(event) => { const value = event.target.value; setNewName(value); if (!slugWasEdited) setNewSlug(organizationSlugFromName(value)); }} required />
+              <label htmlFor="new-slug">Уникален адрес</label><input id="new-slug" name="slug" value={newSlug} onChange={(event) => { setNewSlug(event.target.value); setSlugWasEdited(true); }} pattern="[a-z0-9-]+" required aria-describedby="slug-help" />
+              <small id="slug-help">Създава се автоматично. Пример: platform.bg/organizations/{newSlug || 'ime-na-organizatsiyata'}</small>
               <label htmlFor="owner-email">Имейл на първия собственик</label><input id="owner-email" name="owner_email" type="email" required />
               <button type="submit">Създай и генерирай покана</button>
             </form>
