@@ -14,8 +14,11 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_DATABASE: progressive
-      DB_USERNAME: progressive
-      DB_PASSWORD: progressive-local-only
+      DB_PGSQL_DATABASE: progressive
+      DB_USERNAME: progressive_app
+      DB_PASSWORD: progressive-app-local-only
+      DB_ADMIN_USERNAME: progressive
+      DB_ADMIN_PASSWORD: progressive-local-only
       REDIS_HOST: redis
       SESSION_DRIVER: database
       SANCTUM_STATEFUL_DOMAINS: localhost:3000,127.0.0.1:3000
@@ -44,6 +47,9 @@ services:
       POSTGRES_USER: progressive
       POSTGRES_PASSWORD: progressive-local-only
     volumes: ["postgres-data:/var/lib/postgresql/data"]
+    configs:
+      - source: postgres-app-role
+        target: /docker-entrypoint-initdb.d/01-app-role.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U progressive -d progressive"]
       interval: 5s
@@ -67,3 +73,7 @@ services:
 volumes:
   postgres-data:
   redis-data:
+
+configs:
+  postgres-app-role:
+    file: ./infra/docker/postgres-init/01-app-role.sql

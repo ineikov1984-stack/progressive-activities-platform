@@ -11,6 +11,29 @@ permissions:
 jobs:
   api:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: progressive
+          POSTGRES_USER: progressive
+          POSTGRES_PASSWORD: progressive-local-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U progressive -d progressive"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: progressive
+      DB_PGSQL_DATABASE: progressive
+      DB_USERNAME: progressive_app
+      DB_PASSWORD: progressive-app-local-only
+      DB_ADMIN_USERNAME: progressive
+      DB_ADMIN_PASSWORD: progressive-local-only
     defaults:
       run:
         working-directory: platform/apps/api
@@ -23,6 +46,14 @@ jobs:
       - uses: ramsey/composer-install@v3
         with:
           working-directory: platform/apps/api
+      - name: Create restricted application database role
+        working-directory: ${{ github.workspace }}
+        run: >-
+          docker run --rm --network host
+          -v "${{ github.workspace }}/platform/infra/docker/postgres-init:/init:ro"
+          -e PGPASSWORD=progressive-local-only postgres:17-alpine
+          psql -h 127.0.0.1 -U progressive -d progressive
+          -v ON_ERROR_STOP=1 -f /init/01-app-role.sql
       - run: cp .env.example .env && php artisan key:generate
       - run: composer audit
       - run: composer verify
