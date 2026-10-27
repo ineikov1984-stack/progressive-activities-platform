@@ -1,0 +1,23 @@
+.DS_Store
+.worktrees/
+.superpowers/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies and generated output
+node_modules/
+vendor/
+.next/
+coverage/
+dist/
+build/
+
+# Editors and temporary files
+.idea/
+.vscode/
+*.log
+tmp/
+
