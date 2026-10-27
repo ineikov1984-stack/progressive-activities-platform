@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\V1;
 use App\Domain\Catalog\Actions\CatalogMediaStore;
 use App\Domain\Catalog\Actions\CreateActivityDraft;
 use App\Domain\Catalog\Actions\UpdateActivityDraft;
+use App\Domain\Catalog\Enums\EnrollmentMode;
+use App\Domain\Catalog\Enums\PriceUnit;
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Offering;
 use App\Domain\Organizations\Models\Organization;
@@ -24,7 +26,7 @@ final class ActivityController extends Controller
         Gate::forUser($request->user())->authorize('catalog.view', $this->organization($context));
 
         return response()->json([
-            'activities' => Activity::query()->with('offerings')->latest()->get()->map($this->present(...))->all(),
+            'activities' => Activity::query()->with('offerings.priceOptions')->latest()->get()->map($this->present(...))->all(),
         ]);
     }
 
@@ -42,7 +44,7 @@ final class ActivityController extends Controller
     public function show(Request $request, TenantContext $context, string $activity): JsonResponse
     {
         Gate::forUser($request->user())->authorize('catalog.view', $this->organization($context));
-        $record = Activity::query()->with('offerings')->findOrFail($activity);
+        $record = Activity::query()->with('offerings.priceOptions')->findOrFail($activity);
 
         return response()->json(['activity' => $this->present($record)]);
     }
@@ -101,6 +103,16 @@ final class ActivityController extends Controller
             'offering.cancellation_policy' => ['sometimes', 'nullable', 'string'],
             'offering.contact_email' => ['sometimes', 'nullable', 'email', 'max:254'],
             'offering.enrollment_instructions' => ['sometimes', 'nullable', 'string'],
+            'offering.price_options' => ['sometimes', 'array', 'max:20'],
+            'offering.price_options.*' => ['array:enrollment_mode,unit,amount_cents,currency,terms,is_available,cancellation_policy,payment_due'],
+            'offering.price_options.*.enrollment_mode' => ['required', Rule::enum(EnrollmentMode::class), 'distinct'],
+            'offering.price_options.*.unit' => ['required', Rule::enum(PriceUnit::class)],
+            'offering.price_options.*.amount_cents' => ['required', 'integer', 'min:1'],
+            'offering.price_options.*.currency' => ['sometimes', 'required', Rule::in(['EUR'])],
+            'offering.price_options.*.terms' => ['sometimes', 'nullable', 'string'],
+            'offering.price_options.*.is_available' => ['sometimes', 'boolean'],
+            'offering.price_options.*.cancellation_policy' => ['sometimes', 'nullable', 'string'],
+            'offering.price_options.*.payment_due' => ['sometimes', 'nullable', 'string', 'max:255'],
         ]);
     }
 
@@ -160,6 +172,17 @@ final class ActivityController extends Controller
                 'cancellation_policy' => $offering->cancellation_policy,
                 'contact_email' => $offering->contact_email,
                 'enrollment_instructions' => $offering->enrollment_instructions,
+                'price_options' => $offering->priceOptions->whereNull('group_id')->values()->map(fn ($price) => [
+                    'id' => $price->id,
+                    'enrollment_mode' => $price->enrollment_mode,
+                    'unit' => $price->unit,
+                    'amount_cents' => $price->amount_cents,
+                    'currency' => $price->currency,
+                    'terms' => $price->terms,
+                    'is_available' => $price->is_available,
+                    'cancellation_policy' => $price->cancellation_policy,
+                    'payment_due' => $price->payment_due,
+                ])->all(),
             ] : null,
         ];
     }

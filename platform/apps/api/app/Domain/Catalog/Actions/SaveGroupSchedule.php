@@ -3,6 +3,8 @@
 namespace App\Domain\Catalog\Actions;
 
 use App\Domain\Catalog\Enums\ActivityStatus;
+use App\Domain\Catalog\Enums\EnrollmentMode;
+use App\Domain\Catalog\Enums\PriceUnit;
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\Session;
@@ -21,7 +23,11 @@ use InvalidArgumentException;
 
 final readonly class SaveGroupSchedule
 {
-    public function __construct(private TenantContext $context, private SessionScheduleGenerator $generator) {}
+    public function __construct(
+        private TenantContext $context,
+        private SessionScheduleGenerator $generator,
+        private SyncPriceOptions $prices,
+    ) {}
 
     /** @param array<string, mixed> $payload */
     public function handle(Activity $activity, array $payload): Group
@@ -110,8 +116,11 @@ final readonly class SaveGroupSchedule
                 }
                 $this->overrideSession($session, $override, $index);
             }
+            if (array_key_exists('price_options', $data)) {
+                $this->prices->handle($offering, $group, $data['price_options']);
+            }
 
-            return $group->refresh()->load(['instructors', 'sessions.instructors']);
+            return $group->refresh()->load(['instructors', 'sessions.instructors', 'priceOptions']);
         });
     }
 
@@ -195,6 +204,16 @@ final readonly class SaveGroupSchedule
             'session_overrides.*.capacity' => ['sometimes', 'nullable', 'integer', 'between:1,100000'],
             'session_overrides.*.status' => ['sometimes', 'required', Rule::in(['scheduled', 'cancelled'])],
             'session_overrides.*.change_reason' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            'price_options' => ['sometimes', 'array', 'max:20'],
+            'price_options.*' => ['array:enrollment_mode,unit,amount_cents,currency,terms,is_available,cancellation_policy,payment_due'],
+            'price_options.*.enrollment_mode' => ['required', Rule::enum(EnrollmentMode::class), 'distinct'],
+            'price_options.*.unit' => ['required', Rule::enum(PriceUnit::class)],
+            'price_options.*.amount_cents' => ['required', 'integer', 'min:1'],
+            'price_options.*.currency' => ['sometimes', 'required', Rule::in(['EUR'])],
+            'price_options.*.terms' => ['sometimes', 'nullable', 'string'],
+            'price_options.*.is_available' => ['sometimes', 'boolean'],
+            'price_options.*.cancellation_policy' => ['sometimes', 'nullable', 'string'],
+            'price_options.*.payment_due' => ['sometimes', 'nullable', 'string', 'max:255'],
         ])->validate();
     }
 

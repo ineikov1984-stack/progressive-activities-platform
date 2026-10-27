@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Gate;
 
 final readonly class UpdateActivityDraft
 {
-    public function __construct(private TenantContext $context) {}
+    public function __construct(private TenantContext $context, private SyncPriceOptions $prices) {}
 
     /** @param array<string, mixed> $payload */
     public function handle(User $actor, Activity $activity, int $expectedVersion, array $payload): Activity
@@ -44,9 +44,12 @@ final readonly class UpdateActivityDraft
                 ]));
                 $offering->version++;
                 $offering->save();
+                if (array_key_exists('price_options', $payload['offering'])) {
+                    $this->prices->handle($offering, null, $payload['offering']['price_options']);
+                }
             }
 
-            return $locked->refresh()->load('offerings');
+            return $locked->refresh()->load('offerings.priceOptions');
         });
     }
 }

@@ -5,13 +5,17 @@ namespace App\Domain\Catalog\Models;
 use App\Domain\Catalog\Concerns\BelongsToCatalogTenant;
 use App\Domain\Catalog\Enums\ActivityStatus;
 use App\Domain\Organizations\Models\Organization;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-/** @property ActivityStatus $status */
+/**
+ * @property ActivityStatus $status
+ * @property CarbonImmutable|null $published_at
+ */
 #[Fillable([
     'slug',
     'title',

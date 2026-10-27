@@ -12,4 +12,5 @@ enum AuditAction: string
     case OrganizationApplicationReviewed = 'organization.application_reviewed';
     case OrganizationRoleChanged = 'organization.role_changed';
     case CatalogActivitySubmitted = 'catalog.activity_submitted';
+    case CatalogActivityPublished = 'catalog.activity_published';
 }

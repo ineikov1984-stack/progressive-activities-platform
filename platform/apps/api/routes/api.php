@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\ActivityController;
 use App\Http\Controllers\Api\V1\ActivityGroupController;
+use App\Http\Controllers\Api\V1\ActivityPublicationController;
 use App\Http\Controllers\Api\V1\AuditEventController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CatalogMediaController;
@@ -45,6 +46,7 @@ Route::prefix('v1')->group(function (): void {
                 Route::middleware('organization.access:operational.write')->group(function (): void {
                     Route::post('/activities', [ActivityController::class, 'store']);
                     Route::patch('/activities/{activity}', [ActivityController::class, 'update']);
+                    Route::post('/activities/{activity}/publish', [ActivityPublicationController::class, 'store']);
                     Route::post('/activities/{activity}/groups', [ActivityGroupController::class, 'store']);
                     Route::patch('/groups/{group}', [ActivityGroupController::class, 'update']);
                     Route::post('/media', [CatalogMediaController::class, 'store']);

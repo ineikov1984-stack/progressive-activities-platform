@@ -15,7 +15,7 @@ final readonly class CreateActivityDraft
 {
     private const MAX_SLUG_LENGTH = 255;
 
-    public function __construct(private TenantContext $context) {}
+    public function __construct(private TenantContext $context, private SyncPriceOptions $prices) {}
 
     /** @param array<string, mixed> $payload */
     public function handle(User $actor, Organization $organization, array $payload): Activity
@@ -43,12 +43,15 @@ final readonly class CreateActivityDraft
                 'slug' => $slug,
             ]);
 
-            $activity->offerings()->create(Arr::only($payload['offering'] ?? [], [
+            $offering = $activity->offerings()->create(Arr::only($payload['offering'] ?? [], [
                 'location_id', 'lead_instructor_profile_id', 'title', 'description', 'terms',
                 'cancellation_policy', 'contact_email', 'enrollment_instructions',
             ]));
+            if (array_key_exists('price_options', $payload['offering'] ?? [])) {
+                $this->prices->handle($offering, null, $payload['offering']['price_options']);
+            }
 
-            return $activity->refresh()->load('offerings');
+            return $activity->refresh()->load('offerings.priceOptions');
         });
     }
 }

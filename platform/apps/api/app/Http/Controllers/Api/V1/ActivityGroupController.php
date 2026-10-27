@@ -57,6 +57,12 @@ final class ActivityGroupController extends Controller
             'capacity_min' => $group->capacity_min, 'capacity_max' => $group->capacity_max,
             'location_id' => $group->location_id, 'instructor_ids' => $group->instructors->modelKeys(),
             'schedule_pattern' => $group->schedule_pattern,
+            'price_options' => $group->priceOptions->map(fn ($price) => [
+                'id' => $price->id, 'enrollment_mode' => $price->enrollment_mode, 'unit' => $price->unit,
+                'amount_cents' => $price->amount_cents, 'currency' => $price->currency,
+                'terms' => $price->terms, 'is_available' => $price->is_available,
+                'cancellation_policy' => $price->cancellation_policy, 'payment_due' => $price->payment_due,
+            ])->all(),
             'sessions' => $group->sessions->sortBy('starts_at')->values()->map(fn (Session $session) => [
                 'id' => $session->id, 'version' => $session->version,
                 'starts_at' => $session->starts_at->setTimezone($timezone)->toIso8601String(),

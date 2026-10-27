@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'enrollment_mode',
     'unit',
     'amount_cents',
+    'currency',
     'terms',
     'is_available',
     'cancellation_policy',
