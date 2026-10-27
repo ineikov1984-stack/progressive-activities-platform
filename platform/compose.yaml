@@ -18,7 +18,6 @@ services:
       DB_PASSWORD: progressive-local-only
       REDIS_HOST: redis
       SESSION_DRIVER: database
-      SESSION_SECURE_COOKIE: "false"
       SANCTUM_STATEFUL_DOMAINS: localhost:3000,127.0.0.1:3000
       MAIL_MAILER: smtp
       MAIL_HOST: mailpit
