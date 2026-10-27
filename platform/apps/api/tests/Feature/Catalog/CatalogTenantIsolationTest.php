@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PDO;
+use PDOException;
 use Tests\TestCase;
 
 class CatalogTenantIsolationTest extends TestCase
@@ -159,6 +160,108 @@ class CatalogTenantIsolationTest extends TestCase
         $this->assertSame('Updated painting', $activity->fresh()->title);
     }
 
+    public function test_request_role_cannot_link_foreign_catalog_parents_or_instructors(): void
+    {
+        if (! $this->postgresIsAvailable()) {
+            $this->markTestSkipped('PostgreSQL is required for the catalog foreign-key isolation check.');
+        }
+
+        Artisan::call('migrate', ['--database' => 'pgsql_admin', '--force' => true]);
+
+        $pdo = $this->postgresPdo();
+        $selectedId = (string) Str::uuid();
+        $foreignId = (string) Str::uuid();
+        $selectedActivity = (string) Str::uuid();
+        $foreignActivity = (string) Str::uuid();
+        $pdo->beginTransaction();
+
+        try {
+            $insertOrganization = $pdo->prepare(
+                'INSERT INTO organizations (id, name, slug, status, created_at, updated_at) '
+                .'VALUES (:id, :name, :slug, :status, NOW(), NOW())'
+            );
+            $insertActivity = $pdo->prepare(
+                'INSERT INTO activities (id, organization_id, title, slug, category, summary, age_label, status, version, created_at, updated_at) '
+                .'VALUES (:id, :organization_id, :title, :slug, :category, :summary, :age_label, :status, 1, NOW(), NOW())'
+            );
+            foreach ([[$selectedId, $selectedActivity, 'Selected'], [$foreignId, $foreignActivity, 'Foreign']] as [$organizationId, $activityId, $name]) {
+                $insertOrganization->execute([
+                    'id' => $organizationId,
+                    'name' => $name,
+                    'slug' => Str::lower($name).'-'.$organizationId,
+                    'status' => 'active',
+                ]);
+                $insertActivity->execute([
+                    'id' => $activityId,
+                    'organization_id' => $organizationId,
+                    'title' => $name,
+                    'slug' => Str::lower($name).'-'.$activityId,
+                    'category' => 'arts',
+                    'summary' => 'Catalog isolation fixture',
+                    'age_label' => '7+',
+                    'status' => 'draft',
+                ]);
+            }
+
+            $selected = $this->insertLinkedCatalogRows($pdo, $selectedId, $selectedActivity);
+            $foreign = $this->insertLinkedCatalogRows($pdo, $foreignId, $foreignActivity);
+
+            $pdo->exec('SET LOCAL ROLE progressive_app');
+            $setTenant = $pdo->prepare("SELECT set_config('app.current_organization_id', :id, true)");
+            $setTenant->execute(['id' => $selectedId]);
+
+            $attempts = [
+                ['offering activity', 'offerings', ['id' => (string) Str::uuid(), 'organization_id' => $selectedId, 'activity_id' => $foreignActivity]],
+                ['offering location', 'offerings', ['id' => (string) Str::uuid(), 'organization_id' => $selectedId, 'activity_id' => $selectedActivity, 'location_id' => $foreign['location']]],
+                ['offering lead instructor', 'offerings', ['id' => (string) Str::uuid(), 'organization_id' => $selectedId, 'activity_id' => $selectedActivity, 'lead_instructor_profile_id' => $foreign['instructor']]],
+                ['group offering', 'activity_groups', ['id' => (string) Str::uuid(), 'organization_id' => $selectedId, 'offering_id' => $foreign['offering'], 'name' => 'Invalid group']],
+                ['group location', 'activity_groups', ['id' => (string) Str::uuid(), 'organization_id' => $selectedId, 'offering_id' => $selected['offering'], 'location_id' => $foreign['location'], 'name' => 'Invalid group']],
+                ['session group', 'activity_sessions', ['id' => (string) Str::uuid(), 'organization_id' => $selectedId, 'group_id' => $foreign['group'], 'starts_at' => '2026-11-04 16:00:00+02', 'ends_at' => '2026-11-04 17:00:00+02']],
+                ['session location', 'activity_sessions', ['id' => (string) Str::uuid(), 'organization_id' => $selectedId, 'group_id' => $selected['group'], 'location_id' => $foreign['location'], 'starts_at' => '2026-11-04 16:00:00+02', 'ends_at' => '2026-11-04 17:00:00+02']],
+                ['price offering', 'price_options', ['id' => (string) Str::uuid(), 'organization_id' => $selectedId, 'offering_id' => $foreign['offering'], 'enrollment_mode' => 'single', 'unit' => 'session', 'amount_cents' => 1500]],
+                ['price group', 'price_options', ['id' => (string) Str::uuid(), 'organization_id' => $selectedId, 'offering_id' => $selected['offering'], 'group_id' => $foreign['group'], 'enrollment_mode' => 'single', 'unit' => 'session', 'amount_cents' => 1500]],
+                ['group pivot group', 'activity_group_instructors', ['organization_id' => $selectedId, 'group_id' => $foreign['group'], 'instructor_profile_id' => $selected['instructor']]],
+                ['group pivot instructor', 'activity_group_instructors', ['organization_id' => $selectedId, 'group_id' => $selected['group'], 'instructor_profile_id' => $foreign['instructor']]],
+                ['session pivot session', 'activity_session_instructors', ['organization_id' => $selectedId, 'session_id' => $foreign['session'], 'instructor_profile_id' => $selected['instructor']]],
+                ['session pivot instructor', 'activity_session_instructors', ['organization_id' => $selectedId, 'session_id' => $selected['session'], 'instructor_profile_id' => $foreign['instructor']]],
+            ];
+
+            foreach ($attempts as [$label, $table, $values]) {
+                $this->assertForeignCatalogLinkRejected($pdo, $label, $table, $values);
+            }
+
+            $validOfferingId = (string) Str::uuid();
+            $validOffering = $pdo->prepare(
+                'INSERT INTO offerings (id, organization_id, activity_id, location_id, lead_instructor_profile_id) '
+                .'VALUES (:id, :organization_id, :activity_id, :location_id, :lead_instructor_profile_id)'
+            );
+            $validOffering->execute([
+                'id' => $validOfferingId,
+                'organization_id' => $selectedId,
+                'activity_id' => $selectedActivity,
+                'location_id' => $selected['location'],
+                'lead_instructor_profile_id' => $selected['instructor'],
+            ]);
+            $this->assertSame(1, $validOffering->rowCount());
+
+            $deleteLocation = $pdo->prepare('DELETE FROM locations WHERE id = :id');
+            $deleteLocation->execute(['id' => $selected['location']]);
+            $this->assertSame(1, $deleteLocation->rowCount());
+            $this->assertCatalogReferenceCleared($pdo, 'offerings', 'location_id', $validOfferingId);
+            $this->assertCatalogReferenceCleared($pdo, 'activity_groups', 'location_id', $selected['group']);
+            $this->assertCatalogReferenceCleared($pdo, 'activity_sessions', 'location_id', $selected['session']);
+
+            $deleteInstructor = $pdo->prepare('DELETE FROM instructor_profiles WHERE id = :id');
+            $deleteInstructor->execute(['id' => $selected['instructor']]);
+            $this->assertSame(1, $deleteInstructor->rowCount());
+            $this->assertCatalogReferenceCleared($pdo, 'offerings', 'lead_instructor_profile_id', $validOfferingId);
+        } finally {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+        }
+    }
+
     private function organization(string $slug): Organization
     {
         return Organization::query()->withoutGlobalScopes()->create([
@@ -213,7 +316,8 @@ class CatalogTenantIsolationTest extends TestCase
         }
     }
 
-    private function insertLinkedCatalogRows(PDO $pdo, string $organizationId, string $activityId): void
+    /** @return array{location: string, instructor: string, offering: string, group: string, session: string} */
+    private function insertLinkedCatalogRows(PDO $pdo, string $organizationId, string $activityId): array
     {
         $locationId = (string) Str::uuid();
         $instructorId = (string) Str::uuid();
@@ -238,6 +342,44 @@ class CatalogTenantIsolationTest extends TestCase
             $statement = $pdo->prepare("INSERT INTO {$table} ({$columns}) VALUES ({$bindings})");
             $statement->execute($values);
         }
+
+        return [
+            'location' => $locationId,
+            'instructor' => $instructorId,
+            'offering' => $offeringId,
+            'group' => $groupId,
+            'session' => $sessionId,
+        ];
+    }
+
+    /** @param array<string, string|int> $values */
+    private function assertForeignCatalogLinkRejected(PDO $pdo, string $label, string $table, array $values): void
+    {
+        $pdo->exec('SAVEPOINT catalog_link_attempt');
+
+        try {
+            $columns = implode(', ', array_keys($values));
+            $bindings = implode(', ', array_map(fn (string $column): string => ':'.$column, array_keys($values)));
+            $statement = $pdo->prepare("INSERT INTO {$table} ({$columns}) VALUES ({$bindings})");
+            $statement->execute($values);
+            $this->fail("{$label} accepted a foreign catalog UUID.");
+        } catch (PDOException $exception) {
+            $this->assertSame('23503', $exception->getCode(), $label);
+        } finally {
+            $pdo->exec('ROLLBACK TO SAVEPOINT catalog_link_attempt');
+            $pdo->exec('RELEASE SAVEPOINT catalog_link_attempt');
+        }
+    }
+
+    private function assertCatalogReferenceCleared(PDO $pdo, string $table, string $column, string $id): void
+    {
+        $statement = $pdo->prepare("SELECT id, {$column} FROM {$table} WHERE id = :id");
+        $statement->execute(['id' => $id]);
+        $row = $statement->fetch(PDO::FETCH_ASSOC);
+
+        $this->assertIsArray($row);
+        $this->assertSame($id, $row['id']);
+        $this->assertNull($row[$column]);
     }
 
     private function postgresPdo(): PDO
