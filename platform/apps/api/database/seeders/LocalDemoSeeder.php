@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -15,6 +16,20 @@ class LocalDemoSeeder extends Seeder
     private const ORGANIZATION_ID = '00000000-0000-4000-8000-000000000101';
 
     private const OPERATOR_ORGANIZATION_ID = '00000000-0000-4000-8000-000000000102';
+
+    private const ACTIVITY_ID = '00000000-0000-4000-8000-000000000201';
+
+    private const OFFERING_ID = '00000000-0000-4000-8000-000000000202';
+
+    private const PROFILE_ID = '00000000-0000-4000-8000-000000000203';
+
+    private const LOCATION_ID = '00000000-0000-4000-8000-000000000204';
+
+    private const INSTRUCTOR_ID = '00000000-0000-4000-8000-000000000205';
+
+    private const GROUP_ONE_ID = '00000000-0000-4000-8000-000000000206';
+
+    private const GROUP_TWO_ID = '00000000-0000-4000-8000-000000000207';
 
     public function run(): void
     {
@@ -66,6 +81,8 @@ class LocalDemoSeeder extends Seeder
                 ],
             );
 
+            $this->seedCatalog();
+
             if (DB::getDriverName() === 'pgsql') {
                 DB::select("SELECT set_config('app.current_organization_id', ?, true)", [self::OPERATOR_ORGANIZATION_ID]);
             }
@@ -90,5 +107,166 @@ class LocalDemoSeeder extends Seeder
                 ],
             );
         });
+    }
+
+    private function seedCatalog(): void
+    {
+        $now = now();
+        $owned = ['organization_id' => self::ORGANIZATION_ID, 'updated_at' => $now];
+
+        DB::table('organization_catalog_profiles')->upsert([[
+            'id' => self::PROFILE_ID,
+            ...$owned,
+            'slug' => 'progressive-academy-demo',
+            'public_name' => 'Progressive Academy Demo',
+            'intro' => 'Занимания, които развиват любопитството, увереността и уменията на децата.',
+            'accent_color' => '#216653',
+            'is_published' => true,
+            'version' => 1,
+            'created_at' => $now,
+        ]], ['id'], ['public_name', 'intro', 'accent_color', 'is_published', 'version', 'updated_at']);
+
+        DB::table('locations')->upsert([[
+            'id' => self::LOCATION_ID,
+            ...$owned,
+            'name' => 'Учебен център Progressive Academy',
+            'type' => 'physical',
+            'space_usage' => 'exclusive',
+            'address' => 'бул. „България“ 100, София',
+            'latitude' => 42.6657000,
+            'longitude' => 23.2868000,
+            'map_url' => 'https://www.google.com/maps/search/?api=1&query=42.6657%2C23.2868',
+            'public_directions' => 'Входът е откъм булеварда. На рецепцията кажете, че сте за заниманието по шах.',
+            'is_public' => true,
+            'version' => 1,
+            'created_at' => $now,
+        ]], ['id'], ['name', 'type', 'space_usage', 'address', 'latitude', 'longitude', 'map_url', 'public_directions', 'is_public', 'version', 'updated_at']);
+
+        DB::table('instructor_profiles')->upsert([[
+            'id' => self::INSTRUCTOR_ID,
+            ...$owned,
+            'public_name' => 'Александър Петров',
+            'role_title' => 'Шахматен треньор',
+            'bio' => 'Работи с деца чрез игри, практически задачи и спокойна индивидуална обратна връзка.',
+            'qualifications' => json_encode(['Треньор по шах за деца', 'Опит с начинаещи'], JSON_THROW_ON_ERROR),
+            'is_public' => true,
+            'version' => 1,
+            'created_at' => $now,
+        ]], ['id'], ['public_name', 'role_title', 'bio', 'qualifications', 'is_public', 'version', 'updated_at']);
+
+        DB::table('activities')->upsert([[
+            'id' => self::ACTIVITY_ID,
+            ...$owned,
+            'slug' => 'shahmat',
+            'title' => 'Шахмат',
+            'category' => 'Логика и мислене',
+            'summary' => 'Шахматни занимания, които чрез игра и практически задачи развиват логическото мислене, концентрацията и увереността.',
+            'age_label' => '1.–4. клас',
+            'about' => 'Децата постепенно опознават фигурите и правилата, решават задачи и играят учебни партии. Всяко занимание насърчава самостоятелното мислене и уважението към другия играч.',
+            'benefits' => json_encode(['Концентрация и внимание', 'Логическо мислене', 'Стратегическо планиране', 'Търпение и самоконтрол'], JSON_THROW_ON_ERROR),
+            'methodology' => 'Започваме с кратка задача, представяме нова идея, упражняваме я чрез игра и завършваме с анализ на решенията.',
+            'participation_terms' => 'Подходящо е и за начинаещи. Записването за период не означава авансово плащане на целия период, освен ако изрично не е посочено.',
+            'faq' => json_encode([
+                ['question' => 'Подходящ ли е шахматът за дете без предишен опит?', 'answer' => 'Да. Групите са подходящи и за начинаещи, а задачите се адаптират към темпото на детето.'],
+                ['question' => 'Необходимо ли е детето да носи шах?', 'answer' => 'Не. Всички материали са осигурени на място.'],
+            ], JSON_THROW_ON_ERROR),
+            'gallery' => json_encode([], JSON_THROW_ON_ERROR),
+            'instructor_intro' => 'Спокоен и подкрепящ подход към всяко дете',
+            'status' => 'published',
+            'published_at' => '2026-10-27 10:00:00+00',
+            'version' => 1,
+            'created_at' => $now,
+        ]], ['id'], ['slug', 'title', 'category', 'summary', 'age_label', 'about', 'benefits', 'methodology', 'participation_terms', 'faq', 'gallery', 'instructor_intro', 'status', 'published_at', 'version', 'updated_at']);
+
+        DB::table('offerings')->upsert([[
+            'id' => self::OFFERING_ID,
+            ...$owned,
+            'activity_id' => self::ACTIVITY_ID,
+            'location_id' => self::LOCATION_ID,
+            'lead_instructor_profile_id' => self::INSTRUCTOR_ID,
+            'title' => 'Шахмат за ученици',
+            'description' => 'Седмични групови занимания в малки групи.',
+            'terms' => 'Мястото се пази след потвърждение от организацията.',
+            'cancellation_policy' => 'За прекратяване на участието уведомете организацията до 25-о число на текущия месец.',
+            'contact_email' => 'owner@demo.progressive.local',
+            'enrollment_instructions' => 'Изберете подходящата група. Реалното записване ще бъде включено в следващ етап.',
+            'version' => 1,
+            'created_at' => $now,
+        ]], ['id'], ['location_id', 'lead_instructor_profile_id', 'title', 'description', 'terms', 'cancellation_policy', 'contact_email', 'enrollment_instructions', 'version', 'updated_at']);
+
+        $groups = [
+            [self::GROUP_ONE_ID, 'Група 1 · 1.–2. клас', '1.–2. клас', 12, '2027-01-11', '2027-02-22', 1, '16:00'],
+            [self::GROUP_TWO_ID, 'Група 2 · 3.–4. клас', '3.–4. клас', 14, '2027-01-13', '2027-02-24', 3, '17:30'],
+        ];
+        foreach ($groups as [$id, $name, $age, $capacity, $start, $end, $weekday, $startsAt]) {
+            DB::table('activity_groups')->upsert([[
+                'id' => $id,
+                ...$owned,
+                'offering_id' => self::OFFERING_ID,
+                'location_id' => self::LOCATION_ID,
+                'name' => $name,
+                'age_label' => $age,
+                'capacity_min' => 4,
+                'capacity_max' => $capacity,
+                'schedule_pattern' => json_encode([
+                    'timezone' => 'Europe/Sofia', 'start_date' => $start, 'end_date' => $end,
+                    'frequency' => 'weekly', 'slots' => [['weekday' => $weekday, 'starts_at' => $startsAt, 'duration_minutes' => 60]],
+                ], JSON_THROW_ON_ERROR),
+                'status' => 'published',
+                'version' => 1,
+                'created_at' => $now,
+            ]], ['id'], ['location_id', 'name', 'age_label', 'capacity_min', 'capacity_max', 'schedule_pattern', 'status', 'version', 'updated_at']);
+        }
+
+        DB::table('activity_group_instructors')->upsert(array_map(fn (string $groupId): array => [
+            'organization_id' => self::ORGANIZATION_ID, 'group_id' => $groupId,
+            'instructor_profile_id' => self::INSTRUCTOR_ID, 'created_at' => $now, 'updated_at' => $now,
+        ], [self::GROUP_ONE_ID, self::GROUP_TWO_ID]), ['group_id', 'instructor_profile_id'], ['updated_at']);
+
+        $this->seedSessions($now);
+
+        $prices = [];
+        foreach ([self::GROUP_ONE_ID, self::GROUP_TWO_ID] as $index => $groupId) {
+            $prices[] = $this->price('00000000-0000-4000-8000-000000000'.(208 + $index * 2), $groupId, 'monthly', 'month', 3000, 'Месечна такса; плащането е за текущия месец.', $now);
+            $prices[] = $this->price('00000000-0000-4000-8000-000000000'.(209 + $index * 2), $groupId, 'trial', 'session', 1500, 'Еднократно пробно занимание при свободни места.', $now);
+        }
+        DB::table('price_options')->upsert($prices, ['id'], ['group_id', 'enrollment_mode', 'unit', 'amount_cents', 'currency', 'terms', 'is_available', 'version', 'updated_at']);
+    }
+
+    private function seedSessions(mixed $now): void
+    {
+        $definitions = [
+            [self::GROUP_ONE_ID, 12, '16:00', ['2027-01-11', '2027-01-18', '2027-01-25', '2027-02-01', '2027-02-08', '2027-02-15', '2027-02-22']],
+            [self::GROUP_TWO_ID, 14, '17:30', ['2027-01-13', '2027-01-20', '2027-01-27', '2027-02-03', '2027-02-10', '2027-02-17', '2027-02-24']],
+        ];
+        $sessions = [];
+        $sequence = 301;
+        foreach ($definitions as [$groupId, $capacity, $time, $dates]) {
+            foreach ($dates as $date) {
+                $startsAt = CarbonImmutable::parse($date.' '.$time, 'Europe/Sofia')->utc();
+                $sessions[] = [
+                    'id' => '00000000-0000-4000-8000-'.str_pad((string) $sequence++, 12, '0', STR_PAD_LEFT),
+                    'organization_id' => self::ORGANIZATION_ID, 'group_id' => $groupId, 'location_id' => self::LOCATION_ID,
+                    'starts_at' => $startsAt, 'ends_at' => $startsAt->addHour(), 'capacity' => $capacity,
+                    'status' => 'scheduled', 'version' => 1, 'created_at' => $now, 'updated_at' => $now,
+                ];
+            }
+        }
+        DB::table('activity_sessions')->upsert($sessions, ['id'], ['group_id', 'location_id', 'starts_at', 'ends_at', 'capacity', 'status', 'version', 'updated_at']);
+        DB::table('activity_session_instructors')->upsert(array_map(fn (array $session): array => [
+            'organization_id' => self::ORGANIZATION_ID, 'session_id' => $session['id'],
+            'instructor_profile_id' => self::INSTRUCTOR_ID, 'created_at' => $now, 'updated_at' => $now,
+        ], $sessions), ['session_id', 'instructor_profile_id'], ['updated_at']);
+    }
+
+    /** @return array<string, mixed> */
+    private function price(string $id, string $groupId, string $mode, string $unit, int $amount, string $terms, mixed $now): array
+    {
+        return [
+            'id' => $id, 'organization_id' => self::ORGANIZATION_ID, 'offering_id' => self::OFFERING_ID,
+            'group_id' => $groupId, 'enrollment_mode' => $mode, 'unit' => $unit, 'amount_cents' => $amount,
+            'currency' => 'EUR', 'terms' => $terms, 'is_available' => true, 'version' => 1,
+            'created_at' => $now, 'updated_at' => $now,
+        ];
     }
 }

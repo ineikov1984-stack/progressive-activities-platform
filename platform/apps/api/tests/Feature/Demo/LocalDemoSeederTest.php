@@ -5,6 +5,7 @@ namespace Tests\Feature\Demo;
 use Database\Seeders\LocalDemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -23,6 +24,14 @@ class LocalDemoSeederTest extends TestCase
         $this->assertDatabaseCount('users', 1);
         $this->assertDatabaseCount('organizations', 2);
         $this->assertDatabaseCount('organization_memberships', 2);
+        $this->assertDatabaseCount('organization_catalog_profiles', 1);
+        $this->assertDatabaseCount('activities', 1);
+        $this->assertDatabaseCount('offerings', 1);
+        $this->assertDatabaseCount('locations', 1);
+        $this->assertDatabaseCount('instructor_profiles', 1);
+        $this->assertDatabaseCount('activity_groups', 2);
+        $this->assertDatabaseCount('activity_sessions', 14);
+        $this->assertDatabaseCount('price_options', 4);
         $this->assertDatabaseHas('organization_memberships', [
             'role' => 'organization_owner',
             'status' => 'active',
@@ -31,6 +40,41 @@ class LocalDemoSeederTest extends TestCase
             'role' => 'platform_admin',
             'status' => 'active',
         ]);
+        $this->assertDatabaseHas('organization_catalog_profiles', [
+            'organization_id' => '00000000-0000-4000-8000-000000000101',
+            'slug' => 'progressive-academy-demo',
+            'public_name' => 'Progressive Academy Demo',
+            'is_published' => true,
+        ]);
+        $this->assertDatabaseHas('activities', [
+            'id' => '00000000-0000-4000-8000-000000000201',
+            'organization_id' => '00000000-0000-4000-8000-000000000101',
+            'slug' => 'shahmat',
+            'title' => 'Шахмат',
+            'status' => 'published',
+        ]);
+        $this->assertDatabaseHas('locations', [
+            'id' => '00000000-0000-4000-8000-000000000204',
+            'type' => 'physical',
+            'is_public' => true,
+        ]);
+        $this->assertDatabaseHas('instructor_profiles', [
+            'id' => '00000000-0000-4000-8000-000000000205',
+            'public_name' => 'Александър Петров',
+            'is_public' => true,
+        ]);
+        $this->assertDatabaseHas('price_options', [
+            'group_id' => '00000000-0000-4000-8000-000000000206',
+            'amount_cents' => 3000,
+            'currency' => 'EUR',
+            'unit' => 'month',
+        ]);
+        $this->assertSame(7, DB::table('activity_sessions')->where('group_id', '00000000-0000-4000-8000-000000000206')->count());
+        $this->assertSame(7, DB::table('activity_sessions')->where('group_id', '00000000-0000-4000-8000-000000000207')->count());
+        $this->assertSame(
+            ['00000000-0000-4000-8000-000000000101'],
+            DB::table('activities')->distinct()->pluck('organization_id')->all(),
+        );
     }
 
     public function test_demo_seeding_is_refused_outside_local_or_testing(): void
