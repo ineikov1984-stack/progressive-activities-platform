@@ -4,6 +4,7 @@ namespace App\Domain\Catalog\Models;
 
 use App\Domain\Catalog\Concerns\BelongsToCatalogTenant;
 use App\Domain\Organizations\Models\Organization;
+use App\Domain\Organizations\Tenancy\TenantContext;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/** @property array<string, mixed>|null $schedule_pattern */
 #[Fillable([
     'offering_id',
     'location_id',
@@ -63,7 +65,7 @@ class Group extends Model
     public function instructors(): BelongsToMany
     {
         return $this->belongsToMany(InstructorProfile::class, 'activity_group_instructors', 'group_id', 'instructor_profile_id')
-            ->withPivotValue('organization_id', $this->organization_id)
+            ->withPivotValue('organization_id', $this->organization_id ?? app(TenantContext::class)->organizationId())
             ->withTimestamps();
     }
 

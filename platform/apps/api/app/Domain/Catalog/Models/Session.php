@@ -4,12 +4,18 @@ namespace App\Domain\Catalog\Models;
 
 use App\Domain\Catalog\Concerns\BelongsToCatalogTenant;
 use App\Domain\Organizations\Models\Organization;
+use App\Domain\Organizations\Tenancy\TenantContext;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
+/**
+ * @property CarbonImmutable $starts_at
+ * @property CarbonImmutable $ends_at
+ */
 #[Fillable([
     'group_id',
     'location_id',
@@ -49,7 +55,7 @@ class Session extends Model
     public function instructors(): BelongsToMany
     {
         return $this->belongsToMany(InstructorProfile::class, 'activity_session_instructors', 'session_id', 'instructor_profile_id')
-            ->withPivotValue('organization_id', $this->organization_id)
+            ->withPivotValue('organization_id', $this->organization_id ?? app(TenantContext::class)->organizationId())
             ->withTimestamps();
     }
 

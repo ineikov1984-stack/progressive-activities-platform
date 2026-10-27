@@ -1,7 +1,8 @@
 <?php
 
-use App\Http\Controllers\Api\V1\AuditEventController;
 use App\Http\Controllers\Api\V1\ActivityController;
+use App\Http\Controllers\Api\V1\ActivityGroupController;
+use App\Http\Controllers\Api\V1\AuditEventController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CatalogMediaController;
 use App\Http\Controllers\Api\V1\InstructorProfileController;
@@ -35,6 +36,7 @@ Route::prefix('v1')->group(function (): void {
                 Route::middleware('organization.access:operational.read')->group(function (): void {
                     Route::get('/activities', [ActivityController::class, 'index']);
                     Route::get('/activities/{activity}', [ActivityController::class, 'show']);
+                    Route::get('/activities/{activity}/groups', [ActivityGroupController::class, 'index']);
                     Route::get('/media/{filename}', [CatalogMediaController::class, 'show']);
                     Route::get('/profile', [OrganizationCatalogProfileController::class, 'show']);
                     Route::get('/locations', [LocationController::class, 'index']);
@@ -43,6 +45,8 @@ Route::prefix('v1')->group(function (): void {
                 Route::middleware('organization.access:operational.write')->group(function (): void {
                     Route::post('/activities', [ActivityController::class, 'store']);
                     Route::patch('/activities/{activity}', [ActivityController::class, 'update']);
+                    Route::post('/activities/{activity}/groups', [ActivityGroupController::class, 'store']);
+                    Route::patch('/groups/{group}', [ActivityGroupController::class, 'update']);
                     Route::post('/media', [CatalogMediaController::class, 'store']);
                     Route::patch('/profile', [OrganizationCatalogProfileController::class, 'update']);
                     Route::post('/locations', [LocationController::class, 'store']);
