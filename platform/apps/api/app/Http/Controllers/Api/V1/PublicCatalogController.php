@@ -9,6 +9,7 @@ use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\InstructorProfile;
 use App\Domain\Catalog\Models\Location;
+use App\Domain\Catalog\Models\Offering;
 use App\Domain\Catalog\Models\OrganizationCatalogProfile;
 use App\Domain\Catalog\Models\PriceOption;
 use App\Domain\Organizations\Enums\OrganizationStatus;
@@ -171,7 +172,8 @@ final class PublicCatalogController extends Controller
                 'gallery' => $this->presentGallery($activity->getAttribute('gallery'), $organizationSlug),
                 'instructor_intro' => $activity->instructor_intro,
             ], fn ($value) => $value !== null && $value !== [] && $value !== ''),
-            'groups' => $groups->map(fn (Group $group) => $this->presentGroup($group))->all(),
+            'groups' => $activity->offerings->flatMap(fn (Offering $offering) => $offering->groups
+                ->map(fn (Group $group) => $this->presentGroup($group, $offering)))->values()->all(),
             'terms' => $activity->offerings->map(fn ($offering) => array_filter([
                 'title' => $offering->title,
                 'terms' => $offering->terms,
@@ -188,10 +190,10 @@ final class PublicCatalogController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function presentGroup(Group $group): array
+    private function presentGroup(Group $group, Offering $publicOffering): array
     {
         /** @var Location|null $location */
-        $location = $group->location ?? $group->offering->location;
+        $location = $group->location ?? $publicOffering->location;
 
         return [
             'name' => $group->name,
@@ -202,7 +204,7 @@ final class PublicCatalogController extends Controller
             'availability' => $this->availability(collect([$group])),
             'location' => $location ? $this->presentLocation($location) : null,
             'prices' => $group->priceOptions
-                ->concat($group->offering->priceOptions->whereNull('group_id'))
+                ->concat($publicOffering->priceOptions)
                 ->unique('id')->values()->map($this->presentPrice(...))->all(),
         ];
     }
@@ -295,7 +297,13 @@ final class PublicCatalogController extends Controller
                 return InstructorProfile::query()->where('is_public', true)->where('photo_path', $path)
                     ->where(function ($query) use ($activity): void {
                         $query->whereHas('leadOfferings', fn ($offering) => $offering->where('activity_id', $activity->id))
-                            ->orWhereHas('groups.offering', fn ($offering) => $offering->where('activity_id', $activity->id));
+                            ->orWhereExists(fn ($groups) => $groups->selectRaw('1')
+                                ->from('activity_group_instructors')
+                                ->join('activity_groups', 'activity_groups.id', '=', 'activity_group_instructors.group_id')
+                                ->join('offerings', 'offerings.id', '=', 'activity_groups.offering_id')
+                                ->whereColumn('activity_group_instructors.instructor_profile_id', 'instructor_profiles.id')
+                                ->where('activity_groups.status', 'published')
+                                ->where('offerings.activity_id', $activity->id));
                     })->exists();
             });
     }

@@ -13,6 +13,7 @@ use App\Domain\Catalog\Models\Session;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -66,6 +67,52 @@ class PublicCatalogTest extends TestCase
         $this->getJson('/api/v1/public/organizations/online-academy/activities/'.$activity->slug)
             ->assertOk()->assertJsonPath('activity.groups.0.location.type', 'online')
             ->assertJsonPath('activity.groups.0.location.navigation_url', null);
+    }
+
+    public function test_group_without_a_public_location_does_not_fall_back_to_a_private_offering_location(): void
+    {
+        [, $activity] = $this->publishedCatalog('private-location-school');
+        $privateLocation = Location::query()->create([
+            'name' => 'Скрита зала', 'type' => 'physical', 'space_usage' => 'exclusive',
+            'address' => 'София, таен адрес 1', 'map_url' => 'https://maps.example/private',
+            'public_directions' => 'Не трябва да се вижда.', 'is_public' => false,
+        ]);
+        $offering = Offering::query()->where('activity_id', $activity->id)->firstOrFail();
+        $offering->update(['location_id' => $privateLocation->id]);
+        Group::query()->where('offering_id', $offering->id)->update(['location_id' => null]);
+
+        $this->getJson('/api/v1/public/organizations/private-location-school/activities/'.$activity->slug)
+            ->assertOk()
+            ->assertJsonPath('activity.groups.0.location', null)
+            ->assertJsonMissing(['name' => 'Скрита зала'])
+            ->assertJsonMissing(['address' => 'София, таен адрес 1']);
+    }
+
+    public function test_instructor_media_linked_only_to_a_draft_group_is_not_publicly_downloadable(): void
+    {
+        Storage::fake('local');
+        [$organization, $activity] = $this->publishedCatalog('draft-instructor-school');
+        $offering = Offering::query()->where('activity_id', $activity->id)->firstOrFail();
+        $filename = Str::uuid().'.png';
+        $path = 'catalog/'.$filename;
+        $instructor = InstructorProfile::query()->create([
+            'public_name' => 'Скрит преподавател', 'photo_path' => $path, 'is_public' => true,
+        ]);
+        $draftGroup = Group::query()->create([
+            'offering_id' => $offering->id, 'name' => 'Чернова група', 'status' => 'draft',
+        ]);
+        $draftGroup->instructors()->attach($instructor->id);
+        $mediaId = pathinfo($filename, PATHINFO_FILENAME);
+        Storage::disk('local')->put('catalog/'.$organization->id.'/'.$filename, 'private-image');
+        Storage::disk('local')->put('catalog/'.$organization->id.'/'.$mediaId.'.json', json_encode([
+            'organization_id' => $organization->id,
+            'activity_id' => $activity->id,
+            'path' => $path,
+            'mime' => 'image/png',
+        ], JSON_THROW_ON_ERROR));
+
+        $this->get('/api/v1/public/organizations/draft-instructor-school/media/'.$filename)
+            ->assertNotFound();
     }
 
     public function test_unpublished_inactive_foreign_and_non_published_activity_slugs_return_not_found(): void
