@@ -84,6 +84,19 @@ export function conflictPresentation(conflict: ScheduleConflict): { label: strin
 
 export type VisitOfferDraft = Omit<VisitOfferFields, 'amount_cents'> & { amount: string; session_ids: string[]; campaign_id: string };
 export type VisitOfferErrors = Record<string, string>;
+const visitOfferFieldSteps: Record<string, number> = {
+  type: 0, title: 0, description: 0, audience_age_label: 0, audience_class_label: 0, campaign_id: 0,
+  activity_id: 1, group_id: 1, session_ids: 1,
+  visit_limit: 2, trial_limit_per_academic_year: 2, single_visit_limit: 2, single_visit_window_days: 2, no_show_trial_limit: 2, waitlist_enabled: 2, unlimited_single_visits: 2,
+  fee_type: 3, currency: 3, amount_cents: 3, fee_reason: 3,
+  booking_deadline_hours: 4, cancellation_deadline_hours: 4, cancellation_policy: 4, cancellation_outcome: 4, terms_version: 4,
+};
+export function visitOfferErrorTarget(key = ''): { step: number; controlId: string } {
+  const field = key.startsWith('session_ids.') ? 'session_ids' : key;
+  return { step: visitOfferFieldSteps[field] ?? 5, controlId: field in visitOfferFieldSteps ? `visit-field-${field}` : 'visit-heading-5' };
+}
+export const cancelledCampaignMembershipMessage = 'Кампанията е отменена. Предложението не може да се премества или отделя от нея. Можете да редактирате останалото съдържание.';
+export class CampaignMembershipLockedError extends Error {}
 export function newVisitOfferDraft(activityId: string): VisitOfferDraft {
   return { activity_id: activityId, group_id: '', type: 'trial', title: '', description: '', audience_age_label: '', audience_class_label: '', visit_limit: 3,
     fee_type: 'free', amount: '', currency: 'EUR', fee_reason: '', booking_deadline_hours: 12, cancellation_deadline_hours: 24,
@@ -137,6 +150,7 @@ export function campaignMembershipChange(offer: Pick<VisitOffer, 'id' | 'version
   if ((offer.campaign_id ?? '') === nextId) return null;
   const target = campaigns.find((item) => item.id === (nextId || offer.campaign_id));
   const source = campaigns.find((item) => item.id === offer.campaign_id);
+  if (source?.status === 'cancelled' || target?.status === 'cancelled') throw new CampaignMembershipLockedError(cancelledCampaignMembershipMessage);
   if (!target || (offer.campaign_id && !source)) throw new Error('Кампанията е променена. Заредете актуалните данни.');
   return { id: target.id, body: { version: target.version, visit_offer_ids: nextId ? [...new Set([...target.visit_offers.map((item) => item.id), offer.id])] : target.visit_offers.filter((item) => item.id !== offer.id).map((item) => item.id), visit_offer_versions: { [offer.id]: offer.version }, source_campaign_versions: source && source.id !== target.id ? { [source.id]: source.version } : {} } };
 }

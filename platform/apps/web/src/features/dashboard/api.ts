@@ -89,18 +89,19 @@ async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export async function loadOrganizationContext(): Promise<Pick<DashboardData, 'user' | 'organization' | 'organizations'>> {
+  const [{ user }, { organizations }] = await Promise.all([
+    requestJson<{ user: DashboardUser }>('/backend/api/v1/me'),
+    requestJson<{ organizations: DashboardOrganization[] }>('/backend/api/v1/organizations'),
+  ]);
+  const organization = organizations.find((item) => item.role === 'organization_owner') ?? organizations[0];
+  if (!organization) throw new Error('Профилът няма активна организация.');
+  return { user, organization, organizations };
+}
+
 export async function loadDashboard(): Promise<DashboardData> {
   try {
-    const [{ user }, { organizations }] = await Promise.all([
-      requestJson<{ user: DashboardUser }>('/backend/api/v1/me'),
-      requestJson<{ organizations: DashboardOrganization[] }>('/backend/api/v1/organizations'),
-    ]);
-
-    const organization = organizations.find((item) => item.role === 'organization_owner') ?? organizations[0];
-    if (!organization) {
-      throw new Error('Профилът няма активна организация.');
-    }
-
+    const { user, organization, organizations } = await loadOrganizationContext();
     const [{ invitations }, { events: auditEvents }] = await Promise.all([
       requestJson<{ invitations: DashboardInvitation[] }>(
         '/backend/api/v1/invitations',

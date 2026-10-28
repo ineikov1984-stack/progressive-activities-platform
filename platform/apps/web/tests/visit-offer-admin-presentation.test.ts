@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { campaignMembershipChange, changeVisitOfferGroup, newVisitOfferDraft, visitOfferDraftFromRecord, visitOfferErrors, visitOfferPayload } from '../src/features/catalog/admin/presentation';
+import { campaignMembershipChange, changeVisitOfferGroup, newVisitOfferDraft, visitOfferDraftFromRecord, visitOfferErrors, visitOfferErrorTarget, visitOfferPayload } from '../src/features/catalog/admin/presentation';
 import type { ActivityGroup, OpenDayCampaign, VisitOffer } from '../src/features/catalog/admin/api';
 
 const groups: ActivityGroup[] = [{ id: 'group-1', offering_id: 'offering-1', version: 1, name: 'Начинаещи', age_label: '6–8 г.', status: 'published', capacity_min: 1, capacity_max: 12, instructor_ids: [], schedule_pattern: { timezone: 'Europe/Sofia', frequency: 'weekly' }, price_options: [], conflicts: [], sessions: [{ id: 'session-1', starts_at: '2030-11-01T14:00:00Z', ends_at: '2030-11-01T15:00:00Z', status: 'scheduled' }, { id: 'cancelled', starts_at: '2030-11-02T14:00:00Z', ends_at: '2030-11-02T15:00:00Z', status: 'cancelled' }] }];
@@ -7,6 +7,16 @@ const valid = () => ({ ...newVisitOfferDraft('activity-1'), title: 'Пробно
 const now = Date.parse('2030-10-01T00:00:00Z');
 
 describe('visit offer administration', () => {
+  it.each([['type', 0], ['fee_type', 3], ['cancellation_outcome', 4], ['waitlist_enabled', 2], ['unlimited_single_visits', 2], ['currency', 3], ['activity_id', 1]])('routes protected %s errors to the actual field in step %i', (key, step) => {
+    expect(visitOfferErrorTarget(String(key))).toEqual({ step, controlId: `visit-field-${key}` });
+  });
+  it('rejects detach or move from a cancelled campaign as locked membership rather than a version conflict', () => {
+    const campaigns = [{ id: 'source', status: 'cancelled', version: 4, visit_offers: [{ id: 'offer-1' }] }, { id: 'target', status: 'published', version: 8, visit_offers: [] }] as OpenDayCampaign[];
+    const offer = { id: 'offer-1', version: 7, campaign_id: 'source' };
+    expect(() => campaignMembershipChange(offer, '', campaigns)).toThrow('Кампанията е отменена');
+    expect(() => campaignMembershipChange(offer, 'target', campaigns)).toThrow('Кампанията е отменена');
+    expect(campaignMembershipChange(offer, 'source', campaigns)).toBeNull();
+  });
   it('submits deadline and eligibility defaults for a new trial and a single visit', () => {
     expect(visitOfferPayload(valid())).toMatchObject({ booking_deadline_hours: 12, cancellation_deadline_hours: 24, trial_limit_per_academic_year: 1, amount_cents: 0 });
     const single = { ...valid(), type: 'single' as const };

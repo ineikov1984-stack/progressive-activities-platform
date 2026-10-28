@@ -1,9 +1,25 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CatalogApiError, loadOpenDayCampaigns, loadVisitOffers, saveVisitOffer, transitionVisitOffer, updateCampaignMembership } from '../src/features/catalog/admin/api';
+import { loadOrganizationContext } from '../src/features/dashboard/api';
 
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 describe('visit offer admin API contract', () => {
   afterEach(() => vi.unstubAllGlobals());
+  it('opens catalog context for a coordinator whose invitations endpoint returns 403', async () => {
+    const requested: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      requested.push(url);
+      if (url.endsWith('/invitations')) return response({ message: 'Forbidden' }, 403);
+      if (url.endsWith('/me')) return response({ user: { id: 'coordinator-1', name: 'Координатор', email: 'coordinator@example.test' } });
+      if (url.endsWith('/organizations')) return response({ organizations: [{ id: 'org-1', name: 'Школа', slug: 'school', status: 'active', role: 'coordinator', permissions: ['catalog.view', 'catalog.manage'] }] });
+      if (url.endsWith('/visit-offers')) return response({ visit_offers: [] });
+      throw new Error(`Unexpected request ${url}`);
+    }));
+    const context = await loadOrganizationContext();
+    expect(context.organization.role).toBe('coordinator');
+    expect(await loadVisitOffers(context.organization.id)).toEqual([]);
+    expect(requested).toEqual(['/backend/api/v1/me', '/backend/api/v1/organizations', '/backend/api/v1/catalog/visit-offers']);
+  });
   it('reads offers and campaigns using the active tenant', async () => {
     const fetch = vi.fn().mockResolvedValueOnce(response({ visit_offers: [] })).mockResolvedValueOnce(response({ campaigns: [] })); vi.stubGlobal('fetch', fetch);
     expect(await loadVisitOffers('org-1')).toEqual([]); expect(await loadOpenDayCampaigns('org-1')).toEqual([]);
