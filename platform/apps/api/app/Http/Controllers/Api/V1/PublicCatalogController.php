@@ -5,27 +5,33 @@ namespace App\Http\Controllers\Api\V1;
 use App\Domain\Catalog\Actions\CatalogMediaStore;
 use App\Domain\Catalog\Enums\ActivityStatus;
 use App\Domain\Catalog\Enums\LocationType;
+use App\Domain\Catalog\Enums\VisitOfferStatus;
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\InstructorProfile;
 use App\Domain\Catalog\Models\Location;
 use App\Domain\Catalog\Models\Offering;
+use App\Domain\Catalog\Models\OpenDayCampaign;
 use App\Domain\Catalog\Models\OrganizationCatalogProfile;
 use App\Domain\Catalog\Models\PriceOption;
 use App\Domain\Catalog\Models\Session;
+use App\Domain\Catalog\Services\PublicAvailabilityPresenter;
 use App\Domain\Organizations\Enums\OrganizationStatus;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
 
 final class PublicCatalogController extends Controller
 {
-    public function __construct(private readonly TenantContext $context) {}
+    public function __construct(
+        private readonly TenantContext $context,
+        private readonly PublicAvailabilityPresenter $availabilityPresenter,
+    ) {}
 
     public function catalog(string $organizationSlug): JsonResponse
     {
@@ -56,6 +62,59 @@ final class PublicCatalogController extends Controller
                 return response()->json([
                     'organization' => $this->presentProfile($profile),
                     'activity' => $this->presentActivity($activity, $profile->slug),
+                ]);
+            } finally {
+                $this->context->clear();
+            }
+        });
+    }
+
+    public function openDay(string $organizationSlug, string $campaignSlug): JsonResponse
+    {
+        return DB::transaction(function () use ($organizationSlug, $campaignSlug): JsonResponse {
+            try {
+                $profile = $this->resolvePublishedProfile($organizationSlug);
+                $campaign = OpenDayCampaign::query()->where('slug', $campaignSlug)
+                    ->where('status', VisitOfferStatus::Published)
+                    ->with(['visitOffers' => fn ($query) => $query->where('status', VisitOfferStatus::Published)
+                        ->with(['activity', 'group.offering', 'sessions.group', 'campaign'])])->firstOrFail();
+
+                $days = [];
+                $at = CarbonImmutable::now();
+                foreach ($campaign->visitOffers as $offer) {
+                    foreach ($this->availabilityPresenter->rows(collect([$offer]), $at) as $row) {
+                        $activity = $offer->activity;
+                        $date = CarbonImmutable::parse($row['starts_at'])->setTimezone(
+                            $offer->group->schedule_pattern['timezone'] ?? 'Europe/Sofia',
+                        )->toDateString();
+                        $key = $activity->slug;
+                        $days[$date][$key]['activity'] = [
+                            'slug' => $activity->slug,
+                            'title' => $activity->title,
+                            'category' => $activity->category,
+                            'summary' => $activity->summary,
+                            'hero_image_url' => $this->mediaUrl($activity->hero_image_path, $profile->slug),
+                        ];
+                        $days[$date][$key]['visit_offers'][] = $row;
+                    }
+                }
+                abort_if($days === [], 404);
+                ksort($days);
+
+                return response()->json([
+                    'organization' => $this->presentProfile($profile),
+                    'campaign' => [
+                        'slug' => $campaign->slug,
+                        'title' => $campaign->title,
+                        'description' => $campaign->description,
+                        'starts_on' => $campaign->starts_on?->toDateString(),
+                        'ends_on' => $campaign->ends_on?->toDateString(),
+                        'image_url' => $this->mediaUrl($campaign->image_path, $profile->slug),
+                        'days' => collect($days)->map(fn (array $activities, string $date) => [
+                            'date' => $date,
+                            'activities' => array_values($activities),
+                        ])->values()->all(),
+                    ],
                 ]);
             } finally {
                 $this->context->clear();
@@ -107,6 +166,8 @@ final class PublicCatalogController extends Controller
     private function publicRelations(): array
     {
         return [
+            'visitOffers' => fn ($query) => $query->where('status', VisitOfferStatus::Published)
+                ->with(['activity', 'group.offering', 'sessions.group', 'campaign']),
             'offerings' => fn ($query) => $query->with([
                 'location' => fn ($location) => $location->where('is_public', true),
                 'leadInstructor' => fn ($instructor) => $instructor->where('is_public', true),
@@ -142,7 +203,13 @@ final class PublicCatalogController extends Controller
         $price = $groups->flatMap->priceOptions
             ->concat($activity->offerings->flatMap->priceOptions)
             ->sortBy('amount_cents')->first();
-        $availability = $this->availability($groups);
+        $rows = $this->availabilityPresenter->rows($activity->visitOffers, CarbonImmutable::now());
+        $availability = $this->availabilityPresenter->cardAvailability($rows)
+            ?? $this->availabilityPresenter->groupAvailability($groups, CarbonImmutable::now());
+        $offerPrice = collect($rows)->sortBy('amount_cents')->first();
+        $audienceRow = collect($rows)->first(fn (array $row): bool => $row['audience'] !== null);
+        $campaignRow = collect($rows)->first(fn (array $row): bool => $row['type'] === 'open_day'
+            && $row['campaign_slug'] !== null);
 
         return [
             'slug' => $activity->slug,
@@ -151,8 +218,13 @@ final class PublicCatalogController extends Controller
             'summary' => $activity->summary,
             'age_label' => $activity->age_label,
             'hero_image_url' => $this->mediaUrl($activity->hero_image_path, $organizationSlug),
-            'price' => $price ? $this->presentPrice($price) : null,
+            'price' => $offerPrice ? $this->presentVisitPrice($offerPrice) : ($price ? $this->presentPrice($price) : null),
+            'audience' => $audienceRow['audience'] ?? $activity->age_label,
             'availability' => $availability,
+            'special_offer' => $this->availabilityPresenter->specialOffer($rows),
+            'special_offer_url' => $campaignRow === null ? null
+                : '/o/'.rawurlencode($organizationSlug).'/open-days/'
+                    .rawurlencode($campaignRow['campaign_slug']),
             'schedule' => $groups->first()?->schedule_pattern,
         ];
     }
@@ -189,6 +261,7 @@ final class PublicCatalogController extends Controller
                 'qualifications' => $instructor->qualifications,
                 'photo_url' => $this->mediaUrl($instructor->photo_path, $organizationSlug),
             ])->all(),
+            'visit_offers' => $this->availabilityPresenter->rows($activity->visitOffers, CarbonImmutable::now()),
         ];
     }
 
@@ -205,7 +278,7 @@ final class PublicCatalogController extends Controller
             'capacity_min' => $group->capacity_min,
             'capacity_max' => $group->capacity_max,
             'schedule' => $group->schedule_pattern,
-            'availability' => $this->availability(collect([$group])),
+            'availability' => $this->availabilityPresenter->groupAvailability(collect([$group]), CarbonImmutable::now()),
             'location' => $location ? $this->presentLocation($location) : null,
             'prices' => $group->priceOptions
                 ->concat($publicOffering->priceOptions)
@@ -220,17 +293,17 @@ final class PublicCatalogController extends Controller
     }
 
     /**
-     * @param  Collection<int, Group>  $groups
-     * @return array{status: string, remaining_places: ?int}
+     * @param  array<string, mixed>  $offer
+     * @return array<string, mixed>
      */
-    private function availability(Collection $groups): array
+    private function presentVisitPrice(array $offer): array
     {
-        $capacities = $groups->pluck('capacity_max')->filter(fn ($capacity) => $capacity !== null);
-        $remaining = $capacities->isEmpty() ? null : (int) $capacities->sum();
-
         return [
-            'status' => $remaining !== null && $remaining <= 3 ? 'limited' : 'available',
-            'remaining_places' => $remaining,
+            'unit' => 'session',
+            'amount_cents' => $offer['amount_cents'],
+            'currency' => $offer['currency'],
+            'label' => $offer['fee_type'] === 'free' ? 'Безплатно'
+                : number_format($offer['amount_cents'] / 100, 2, ',', '')."\u{00A0}€ / посещение",
         ];
     }
 
@@ -292,6 +365,16 @@ final class PublicCatalogController extends Controller
     {
         $profileUsesMedia = OrganizationCatalogProfile::query()->where('is_published', true)->where('logo_path', $path)->exists();
         if ($profileUsesMedia) {
+            return true;
+        }
+
+        $campaignUsesMedia = OpenDayCampaign::query()->where('status', VisitOfferStatus::Published)
+            ->where('image_path', $path)
+            ->with(['visitOffers' => fn ($query) => $query->where('status', VisitOfferStatus::Published)
+                ->with(['activity', 'group.offering', 'sessions.group', 'campaign'])])->get()
+            ->contains(fn (OpenDayCampaign $campaign): bool => $this->availabilityPresenter
+                ->rows($campaign->visitOffers, CarbonImmutable::now()) !== []);
+        if ($campaignUsesMedia) {
             return true;
         }
 

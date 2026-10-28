@@ -25,6 +25,7 @@ Route::prefix('v1')->group(function (): void {
     Route::get('/health', fn () => response()->json(['status' => 'ok']));
     Route::get('/public/organizations/{organizationSlug}/catalog', [PublicCatalogController::class, 'catalog']);
     Route::get('/public/organizations/{organizationSlug}/activities/{activitySlug}', [PublicCatalogController::class, 'activity']);
+    Route::get('/public/organizations/{organizationSlug}/open-days/{campaignSlug}', [PublicCatalogController::class, 'openDay']);
     Route::get('/public/organizations/{organizationSlug}/media/{filename}', [PublicCatalogController::class, 'media'])
         ->where('filename', '[0-9a-f-]{36}\\.(?:jpg|png|webp)');
 

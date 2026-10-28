@@ -34,6 +34,9 @@ class PublicCatalogTest extends TestCase
             ->assertJsonPath('activities.0.price.amount_cents', 4500)
             ->assertJsonPath('activities.0.price.unit', 'month')
             ->assertJsonPath('activities.0.availability.remaining_places', 3)
+            ->assertJsonPath('activities.0.availability.status', 'limited')
+            ->assertJsonPath('activities.0.audience', '1.–4. клас')
+            ->assertJsonPath('activities.0.special_offer', null)
             ->assertJsonMissingPath('activities.0.organization_id')
             ->assertJsonMissingPath('activities.0.version')
             ->assertJsonMissingPath('activities.0.published_at');
@@ -56,6 +59,7 @@ class PublicCatalogTest extends TestCase
             ->assertJsonPath('activity.groups.0.schedule.frequency', 'weekly')
             ->assertJsonPath('activity.groups.0.schedule.slots.0.starts_at', '16:00')
             ->assertJsonPath('activity.groups.0.availability.remaining_places', 3)
+            ->assertJsonPath('activity.visit_offers', [])
             ->assertJsonPath('activity.groups.0.location.type', 'physical')
             ->assertJsonPath('activity.groups.0.location.navigation_url', 'https://maps.example/school')
             ->assertJsonPath('activity.groups.0.prices.0.label', '45,00 € / месец')
