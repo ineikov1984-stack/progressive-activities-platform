@@ -207,6 +207,9 @@ final class PublicCatalogController extends Controller
         $availability = $this->availabilityPresenter->cardAvailability($rows)
             ?? $this->availabilityPresenter->groupAvailability($groups, CarbonImmutable::now());
         $offerPrice = collect($rows)->sortBy('amount_cents')->first();
+        $offerPriceVaries = collect($rows)->map(fn (array $row): string => implode(':', [
+            $row['fee_type'], $row['amount_cents'], $row['currency'],
+        ]))->unique()->count() > 1;
         $audienceRow = collect($rows)->first(fn (array $row): bool => $row['audience'] !== null);
         $campaignRow = collect($rows)->first(fn (array $row): bool => $row['type'] === 'open_day'
             && $row['campaign_slug'] !== null);
@@ -218,7 +221,8 @@ final class PublicCatalogController extends Controller
             'summary' => $activity->summary,
             'age_label' => $activity->age_label,
             'hero_image_url' => $this->mediaUrl($activity->hero_image_path, $organizationSlug),
-            'price' => $offerPrice ? $this->presentVisitPrice($offerPrice) : ($price ? $this->presentPrice($price) : null),
+            'price' => $offerPrice ? $this->presentVisitPrice($offerPrice, $offerPriceVaries)
+                : ($price ? $this->presentPrice($price) : null),
             'audience' => $audienceRow['audience'] ?? $activity->age_label,
             'availability' => $availability,
             'special_offer' => $this->availabilityPresenter->specialOffer($rows),
@@ -296,14 +300,16 @@ final class PublicCatalogController extends Controller
      * @param  array<string, mixed>  $offer
      * @return array<string, mixed>
      */
-    private function presentVisitPrice(array $offer): array
+    private function presentVisitPrice(array $offer, bool $from): array
     {
         return [
             'unit' => 'session',
             'amount_cents' => $offer['amount_cents'],
             'currency' => $offer['currency'],
-            'label' => $offer['fee_type'] === 'free' ? 'Безплатно'
-                : number_format($offer['amount_cents'] / 100, 2, ',', '')."\u{00A0}€ / посещение",
+            'from' => $from,
+            'label' => $from ? 'От '.number_format($offer['amount_cents'] / 100, 2, ',', '')."\u{00A0}€ / посещение"
+                : ($offer['fee_type'] === 'free' ? 'Безплатно'
+                    : number_format($offer['amount_cents'] / 100, 2, ',', '')."\u{00A0}€ / посещение"),
         ];
     }
 

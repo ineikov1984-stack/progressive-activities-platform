@@ -37,6 +37,7 @@ class PublicVisitOfferTest extends TestCase
         $this->assertSame(['status' => 'available', 'remaining_places' => 8], $card['availability']);
         $this->assertSame('open_day', $card['special_offer']);
         $this->assertSame('/o/'.$organization->slug.'/open-days/autumn-campaign', $card['special_offer_url']);
+        $this->assertFalse($card['price']['from']);
         $this->assertCount(2, array_filter([$card['availability']['status'], $card['special_offer']]));
         $this->assertArrayNotHasKey('badges', $card);
 
@@ -164,6 +165,10 @@ class PublicVisitOfferTest extends TestCase
             'visit_limit' => 1,
         ]);
         $danceOffer->sessions()->attach($danceSession->id);
+
+        $card = $this->getJson($this->base($organization->slug).'/catalog')->assertOk()->json('activities.0');
+        $this->assertTrue($card['price']['from']);
+        $this->assertSame('От 0,00 € / посещение', $card['price']['label']);
 
         $url = $this->base($organization->slug).'/open-days/'.$campaign->slug;
         $response = $this->getJson($url)->assertOk()
