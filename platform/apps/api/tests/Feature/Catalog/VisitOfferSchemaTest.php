@@ -143,6 +143,37 @@ class VisitOfferSchemaTest extends TestCase
         $offer->sessions()->attach($otherSession->id);
     }
 
+    public function test_offer_cannot_change_groups_while_a_session_from_the_old_group_is_attached(): void
+    {
+        [$activity, $group, $session] = $this->catalogFixture();
+        $otherGroup = $group->offering->groups()->create(['name' => 'Thursday']);
+        $otherSession = $otherGroup->sessions()->create([
+            'starts_at' => '2026-11-05 16:00:00+02',
+            'ends_at' => '2026-11-05 17:00:00+02',
+        ]);
+        $offer = VisitOffer::query()->create([
+            'activity_id' => $activity->id,
+            'group_id' => $group->id,
+            'type' => 'trial',
+            'title' => 'Trial',
+            'visit_limit' => 1,
+        ]);
+        $offer->sessions()->attach($session->id);
+
+        try {
+            $offer->update(['group_id' => $otherGroup->id]);
+            $this->fail('A group change must not leave sessions from the old group attached.');
+        } catch (QueryException) {
+            $this->assertSame($group->id, $offer->fresh()->group_id);
+            $this->assertSame($session->id, $offer->fresh()->sessions->sole()->id);
+        }
+
+        $offer->sessions()->detach($session->id);
+        $offer->update(['group_id' => $otherGroup->id]);
+        $offer->sessions()->attach($otherSession->id);
+        $this->assertSame($otherSession->id, $offer->fresh()->sessions->sole()->id);
+    }
+
     public function test_application_snapshot_columns_are_available(): void
     {
         foreach (['visit_offer_id', 'visit_offer_title_snapshot', 'fee_reason_snapshot', 'cancellation_policy_snapshot'] as $column) {

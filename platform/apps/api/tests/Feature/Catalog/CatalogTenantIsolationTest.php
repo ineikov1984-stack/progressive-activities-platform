@@ -341,6 +341,77 @@ class CatalogTenantIsolationTest extends TestCase
         }
     }
 
+    public function test_postgresql_rejects_offer_group_change_with_incompatible_attached_session(): void
+    {
+        if (! $this->postgresIsAvailable()) {
+            $this->markTestSkipped('PostgreSQL is required for the visit-offer group-change guard.');
+        }
+
+        Artisan::call('migrate', ['--database' => 'pgsql_admin', '--force' => true]);
+        $pdo = $this->postgresPdo();
+        $organizationId = (string) Str::uuid();
+        $activityId = (string) Str::uuid();
+        $offerId = (string) Str::uuid();
+        $pdo->beginTransaction();
+
+        try {
+            $pdo->prepare(
+                'INSERT INTO organizations (id, name, slug, status, created_at, updated_at) '
+                .'VALUES (:id, :name, :slug, :status, NOW(), NOW())'
+            )->execute(['id' => $organizationId, 'name' => 'Visit guard', 'slug' => $organizationId, 'status' => 'active']);
+            $pdo->prepare(
+                'INSERT INTO activities (id, organization_id, title, slug, category, summary, age_label, status) '
+                .'VALUES (:id, :organization_id, :title, :slug, :category, :summary, :age_label, :status)'
+            )->execute([
+                'id' => $activityId, 'organization_id' => $organizationId, 'title' => 'Chess',
+                'slug' => $activityId, 'category' => 'games', 'summary' => 'Chess classes',
+                'age_label' => '7+', 'status' => 'draft',
+            ]);
+            $first = $this->insertLinkedCatalogRows($pdo, $organizationId, $activityId);
+            $second = $this->insertLinkedCatalogRows($pdo, $organizationId, $activityId);
+            $pdo->prepare(
+                'INSERT INTO visit_offers (id, organization_id, activity_id, group_id, type, title, visit_limit) '
+                .'VALUES (:id, :organization_id, :activity_id, :group_id, :type, :title, :visit_limit)'
+            )->execute([
+                'id' => $offerId, 'organization_id' => $organizationId,
+                'activity_id' => $activityId, 'group_id' => $first['group'],
+                'type' => 'trial', 'title' => 'Trial', 'visit_limit' => 1,
+            ]);
+            $pdo->prepare(
+                'INSERT INTO visit_offer_sessions (organization_id, visit_offer_id, session_id) '
+                .'VALUES (:organization_id, :visit_offer_id, :session_id)'
+            )->execute([
+                'organization_id' => $organizationId, 'visit_offer_id' => $offerId,
+                'session_id' => $first['session'],
+            ]);
+
+            $pdo->exec('SAVEPOINT offer_group_change');
+            try {
+                $pdo->prepare('UPDATE visit_offers SET group_id = :group_id WHERE id = :id')
+                    ->execute(['group_id' => $second['group'], 'id' => $offerId]);
+                $this->fail('PostgreSQL accepted a group change that stranded an attached session.');
+            } catch (PDOException $exception) {
+                $this->assertSame('23514', $exception->getCode());
+            } finally {
+                $pdo->exec('ROLLBACK TO SAVEPOINT offer_group_change');
+                $pdo->exec('RELEASE SAVEPOINT offer_group_change');
+            }
+
+            $currentGroup = $pdo->prepare('SELECT group_id FROM visit_offers WHERE id = :id');
+            $currentGroup->execute(['id' => $offerId]);
+            $this->assertSame($first['group'], $currentGroup->fetchColumn());
+            $pdo->prepare('DELETE FROM visit_offer_sessions WHERE visit_offer_id = :id')->execute(['id' => $offerId]);
+            $pdo->prepare('UPDATE visit_offers SET group_id = :group_id WHERE id = :id')
+                ->execute(['group_id' => $second['group'], 'id' => $offerId]);
+            $currentGroup->execute(['id' => $offerId]);
+            $this->assertSame($second['group'], $currentGroup->fetchColumn());
+        } finally {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+        }
+    }
+
     private function organization(string $slug): Organization
     {
         return Organization::query()->withoutGlobalScopes()->create([
