@@ -26,6 +26,8 @@ final class ParentEnrollmentController extends Controller
     {
         $applications = EnrollmentApplication::query()->withoutGlobalScopes()
             ->where('parent_user_id', $request->user()->id)
+            // Eager loading is limited to these owned application IDs; database RLS remains active.
+            ->with(['enrollment' => fn ($query) => $query->withoutGlobalScopes()])
             ->latest()->get();
 
         return response()->json(['applications' => $applications->map($this->present(...))->all()]);
@@ -176,6 +178,7 @@ final class ParentEnrollmentController extends Controller
     {
         return [
             'id' => $application->id,
+            'enrollment_id' => $application->relationLoaded('enrollment') ? $application->enrollment?->id : null,
             'organization_id' => $application->organization_id,
             'parent_user_id' => $application->parent_user_id,
             'child_id' => $application->child_id,

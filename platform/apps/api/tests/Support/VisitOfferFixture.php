@@ -4,6 +4,7 @@ namespace Tests\Support;
 
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
+use App\Domain\Catalog\Models\OrganizationCatalogProfile;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Catalog\Models\VisitOffer;
 use App\Domain\Enrollment\Models\Child;
@@ -23,6 +24,7 @@ trait VisitOfferFixture
             'name' => 'Visit organization', 'slug' => (string) Str::uuid(), 'status' => 'active',
         ]);
         app(TenantContext::class)->select($organization);
+        OrganizationCatalogProfile::create(['public_name' => 'Visit organization', 'is_published' => true]);
         $activity = Activity::query()->create([
             'slug' => (string) Str::uuid(), 'title' => 'Chess', 'category' => 'games',
             'summary' => 'Chess classes', 'age_label' => '7+', 'status' => 'published',

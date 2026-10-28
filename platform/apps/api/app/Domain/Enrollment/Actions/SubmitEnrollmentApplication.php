@@ -6,6 +6,7 @@ use App\Domain\Catalog\Enums\ActivityStatus;
 use App\Domain\Catalog\Enums\EnrollmentMode;
 use App\Domain\Catalog\Enums\VisitOfferType;
 use App\Domain\Catalog\Models\Group;
+use App\Domain\Catalog\Models\OrganizationCatalogProfile;
 use App\Domain\Catalog\Models\PriceOption;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Catalog\Models\VisitOffer;
@@ -97,11 +98,12 @@ final class SubmitEnrollmentApplication
                     ->first();
 
                 if ($existing !== null) {
-                    return $existing;
+                    return $existing->load('enrollment');
                 }
 
                 if ($group === null || $group->status !== 'published'
-                    || $group->offering->activity->status !== ActivityStatus::Published) {
+                    || $group->offering->activity->status !== ActivityStatus::Published
+                    || ! OrganizationCatalogProfile::query()->where('is_published', true)->exists()) {
                     throw ValidationException::withMessages(['group_id' => 'Избраната група не е достъпна.']);
                 }
 
@@ -137,6 +139,7 @@ final class SubmitEnrollmentApplication
                         $status = EnrollmentApplicationStatus::Waitlisted;
                     }
                     $metadata = [
+                        'visit_offer_type' => $offer->type->value,
                         'cancellation_deadline_hours' => $offer->cancellation_deadline_hours,
                         'cancellation_outcome' => $offer->cancellation_outcome,
                         'session_starts_at' => $session->starts_at->toIso8601String(),
@@ -183,13 +186,13 @@ final class SubmitEnrollmentApplication
                 ]);
 
                 if ($group->enrollment_approval_mode !== 'automatic' || $status === EnrollmentApplicationStatus::Waitlisted) {
-                    return $application;
+                    return $application->load('enrollment');
                 }
 
                 $reviewed = $this->review->handle($overrideActor ?? $actor, $application, 'approve', 1, null, null, $overrideReason);
                 $reviewed->wasRecentlyCreated = true;
 
-                return $reviewed;
+                return $reviewed->load('enrollment');
             });
         } finally {
             $this->context->clear();

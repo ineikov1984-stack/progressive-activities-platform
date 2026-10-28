@@ -2,7 +2,6 @@
 
 namespace App\Domain\Enrollment\Services;
 
-use App\Domain\Catalog\Enums\VisitOfferType;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Catalog\Models\VisitOffer;
@@ -83,8 +82,6 @@ final class EnrollmentCapacity
         $applicationIds = $applications->pluck('id');
         $enrollments = Enrollment::query()->whereIn('application_id', $applicationIds)
             ->where('session_id', $session->id)
-            ->where('scope', $offer->type === VisitOfferType::Trial
-                ? EnrollmentScope::Trial : EnrollmentScope::Single)
             ->whereIn('status', [EnrollmentStatus::Active, EnrollmentStatus::Paused, EnrollmentStatus::Ended]);
         if (DB::transactionLevel() > 0) {
             $enrollments->lockForUpdate();

@@ -51,7 +51,8 @@ final class RecordVisitOutcome
             $start = isset($accepted['session_starts_at']) ? CarbonImmutable::parse($accepted['session_starts_at']) : $session->starts_at;
             $deadlineHours = $accepted['cancellation_deadline_hours'] ?? $offer->cancellation_deadline_hours;
             $timely = now()->lessThanOrEqualTo($start->subHours($deadlineHours));
-            if (($outcome === 'cancelled_in_time' && ! $timely)
+            if ((! $staff && (now()->greaterThanOrEqualTo($start) || now()->greaterThanOrEqualTo($session->starts_at)))
+                || ($outcome === 'cancelled_in_time' && ! $timely)
                 || ($outcome === 'late_cancelled' && $timely)
                 || (! $cancellation && now()->lessThan($start))) {
                 throw ValidationException::withMessages(['outcome' => 'Резултатът не съответства на срока за посещението.']);

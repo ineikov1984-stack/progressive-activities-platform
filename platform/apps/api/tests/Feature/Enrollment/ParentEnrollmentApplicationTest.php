@@ -4,6 +4,7 @@ namespace Tests\Feature\Enrollment;
 
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
+use App\Domain\Catalog\Models\OrganizationCatalogProfile;
 use App\Domain\Catalog\Models\PriceOption;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Enrollment\Models\Child;
@@ -173,6 +174,7 @@ class ParentEnrollmentApplicationTest extends TestCase
             'name' => 'Демо организация', 'slug' => fake()->unique()->slug(), 'status' => 'active',
         ]);
         app(TenantContext::class)->select($organization);
+        OrganizationCatalogProfile::create(['public_name' => 'Demo', 'is_published' => true]);
         $parent = User::factory()->create();
         $child = $parent->children()->create(['first_name' => 'Ани', 'last_name' => 'Иванова']);
         $activity = Activity::query()->create([

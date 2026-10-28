@@ -107,6 +107,28 @@ class VisitOutcomeTest extends TestCase
         $this->assertSame('submitted', $foreign->status->value);
     }
 
+    public function test_parent_cannot_cancel_after_start_and_staff_no_show_still_counts(): void
+    {
+        [$org, , $group, $session, $offer, $child] = $this->visitFixture(['trial_limit_per_academic_year' => 10, 'no_show_trial_limit' => 1]);
+        $enrollment = $this->visitEnrollment($child, $group, $session, 'trial', $offer);
+        $staff = User::factory()->create();
+        OrganizationMembership::create(['organization_id' => $org->id, 'user_id' => $staff->id, 'role' => 'coordinator', 'status' => 'active']);
+        foreach (['2026-11-03T14:00:00Z', '2026-11-03T16:00:00Z'] as $time) {
+            $this->travelTo($time);
+            $this->actingAs($child->owner)->postJson('/api/v1/parent/enrollments/'.$enrollment->id.'/visit-outcome', ['outcome' => 'late_cancelled'])
+                ->assertUnprocessable()->assertJsonValidationErrors('outcome');
+        }
+        app(TenantContext::class)->select($org);
+        $this->assertSame('active', $enrollment->refresh()->status->value);
+        $this->assertSame(0, $enrollment->transitions()->count());
+        app(RecordVisitOutcome::class)->handle($staff, $enrollment, 'no_show', 'Absent');
+        $next = $group->sessions()->create(['starts_at' => '2026-11-10T14:00:00Z', 'ends_at' => '2026-11-10T15:00:00Z', 'status' => 'scheduled']);
+        $offer->sessions()->attach($next->id);
+        $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'after-no-show')->postJson('/api/v1/parent/enrollment-applications', [
+            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $next->id, 'accepted_terms_version' => 'v1',
+        ])->assertUnprocessable()->assertJsonValidationErrors('no_show_limit');
+    }
+
     public function test_unrelated_parent_and_foreign_staff_cannot_record_outcomes(): void
     {
         [$org, , $group, $session, $offer, $child] = $this->visitFixture();

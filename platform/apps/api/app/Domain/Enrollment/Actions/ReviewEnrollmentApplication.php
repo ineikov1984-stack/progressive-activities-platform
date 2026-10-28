@@ -66,6 +66,12 @@ final class ReviewEnrollmentApplication
             }
 
             if ($offer !== null) {
+                $acceptedType = $current->transitions()->whereNotNull('metadata->visit_offer_type')->first()?->metadata['visit_offer_type']
+                    ?? ($current->scope === EnrollmentScope::Trial ? 'trial' : null);
+                // Legacy trial scope is unambiguous; legacy single/open-day requests need resubmission.
+                if ($acceptedType !== $offer->type->value) {
+                    throw ValidationException::withMessages(['visit_offer_id' => 'Видът на предложението е променен. Подайте нова заявка.']);
+                }
                 if ($current->session === null || now()->greaterThanOrEqualTo($current->session->starts_at)) {
                     throw ValidationException::withMessages(['session_id' => 'Избраната дата вече е започнала.']);
                 }

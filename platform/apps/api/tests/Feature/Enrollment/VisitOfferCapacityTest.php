@@ -65,7 +65,7 @@ class VisitOfferCapacityTest extends TestCase
         $this->assertSame(0, $capacity->remainingForOffer($offer, $session));
     }
 
-    public function test_full_period_enrollment_does_not_use_an_offer_type_limit(): void
+    public function test_offer_membership_counts_even_with_a_mismatched_scope(): void
     {
         [, , $group, $session, $offer, $child] = $this->visitFixture(
             ['visit_limit' => 2], ['capacity_max' => 3], ['capacity' => 3],
@@ -73,7 +73,15 @@ class VisitOfferCapacityTest extends TestCase
         $this->visitEnrollment($child, $group, $session, 'full_period', $offer, startsOn: '2026-11-01');
 
         $this->assertSame(2, app(EnrollmentCapacity::class)->remainingForSession($session));
-        $this->assertSame(2, app(EnrollmentCapacity::class)->remainingForOffer($offer, $session));
+        $this->assertSame(1, app(EnrollmentCapacity::class)->remainingForOffer($offer, $session));
+    }
+
+    public function test_changing_offer_type_does_not_reset_its_used_quota(): void
+    {
+        [, , $group, $session, $offer, $child] = $this->visitFixture(['visit_limit' => 1]);
+        $this->visitEnrollment($child, $group, $session, 'trial', $offer);
+        $offer->update(['type' => 'single']);
+        $this->assertSame(0, app(EnrollmentCapacity::class)->remainingForOffer($offer, $session));
     }
 
     public function test_offer_limit_counts_only_its_own_visit_enrollments(): void
