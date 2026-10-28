@@ -3,6 +3,7 @@
 namespace App\Domain\Catalog\Models;
 
 use App\Domain\Catalog\Concerns\BelongsToCatalogTenant;
+use App\Domain\Enrollment\Models\EnrollmentSessionException;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Carbon\CarbonImmutable;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property CarbonImmutable $starts_at
@@ -57,6 +59,12 @@ class Session extends Model
         return $this->belongsToMany(InstructorProfile::class, 'activity_session_instructors', 'session_id', 'instructor_profile_id')
             ->withPivotValue('organization_id', $this->organization_id ?? app(TenantContext::class)->organizationId())
             ->withTimestamps();
+    }
+
+    /** @return HasMany<EnrollmentSessionException, $this> */
+    public function enrollmentExceptions(): HasMany
+    {
+        return $this->hasMany(EnrollmentSessionException::class);
     }
 
     /** @return array<string, string> */

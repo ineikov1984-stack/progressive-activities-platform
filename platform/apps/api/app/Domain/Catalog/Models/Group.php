@@ -3,6 +3,7 @@
 namespace App\Domain\Catalog\Models;
 
 use App\Domain\Catalog\Concerns\BelongsToCatalogTenant;
+use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -21,6 +22,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'capacity_min',
     'capacity_max',
     'schedule_pattern',
+    'enrollment_approval_mode',
+    'waitlist_enabled',
     'status',
     'version',
 ])]
@@ -61,6 +64,12 @@ class Group extends Model
         return $this->hasMany(PriceOption::class);
     }
 
+    /** @return HasMany<Enrollment, $this> */
+    public function enrollments(): HasMany
+    {
+        return $this->hasMany(Enrollment::class);
+    }
+
     /** @return BelongsToMany<InstructorProfile, $this> */
     public function instructors(): BelongsToMany
     {
@@ -76,6 +85,7 @@ class Group extends Model
             'capacity_min' => 'integer',
             'capacity_max' => 'integer',
             'schedule_pattern' => 'array',
+            'waitlist_enabled' => 'boolean',
             'version' => 'integer',
         ];
     }

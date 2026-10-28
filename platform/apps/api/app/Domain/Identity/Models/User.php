@@ -2,12 +2,14 @@
 
 namespace App\Domain\Identity\Models;
 
+use App\Domain\Enrollment\Models\Child;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -23,6 +25,12 @@ class User extends Authenticatable implements MustVerifyEmail
     public function uniqueIds(): array
     {
         return ['id'];
+    }
+
+    /** @return HasMany<Child, $this> */
+    public function children(): HasMany
+    {
+        return $this->hasMany(Child::class, 'owner_user_id');
     }
 
     protected static function newFactory(): UserFactory
