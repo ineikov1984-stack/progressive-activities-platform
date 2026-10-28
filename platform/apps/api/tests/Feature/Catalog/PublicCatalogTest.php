@@ -45,8 +45,13 @@ class PublicCatalogTest extends TestCase
     {
         [, $activity] = $this->publishedCatalog('progressive-school');
 
+        $group = Group::query()->firstOrFail();
+        $session = Session::query()->firstOrFail();
+        $price = PriceOption::query()->firstOrFail();
+
         $this->getJson('/api/v1/public/organizations/progressive-school/activities/'.$activity->slug)
             ->assertOk()->assertJsonPath('activity.title', 'Шах за деца')
+            ->assertJsonPath('activity.groups.0.id', $group->id)
             ->assertJsonPath('activity.sections.benefits.0', 'Концентрация')
             ->assertJsonPath('activity.groups.0.schedule.frequency', 'weekly')
             ->assertJsonPath('activity.groups.0.schedule.slots.0.starts_at', '16:00')
@@ -54,7 +59,13 @@ class PublicCatalogTest extends TestCase
             ->assertJsonPath('activity.groups.0.location.type', 'physical')
             ->assertJsonPath('activity.groups.0.location.navigation_url', 'https://maps.example/school')
             ->assertJsonPath('activity.groups.0.prices.0.label', '45,00 € / месец')
+            ->assertJsonPath('activity.groups.0.prices.0.id', $price->id)
+            ->assertJsonPath('activity.groups.0.sessions.0.id', $session->id)
+            ->assertJsonPath('activity.groups.0.sessions.0.starts_at', '2026-11-02T14:00:00+00:00')
+            ->assertJsonPath('activity.groups.0.sessions.0.ends_at', '2026-11-02T15:00:00+00:00')
+            ->assertJsonPath('activity.groups.0.sessions.0.status', 'scheduled')
             ->assertJsonPath('activity.instructors.0.public_name', 'Анна Иванова')
+            ->assertJsonMissingPath('activity.groups.0.sessions.0.organization_id')
             ->assertJsonMissingPath('activity.groups.0.location.space_usage')
             ->assertJsonMissingPath('activity.offerings.0.contact_email')
             ->assertJsonMissingPath('activity.organization_id');

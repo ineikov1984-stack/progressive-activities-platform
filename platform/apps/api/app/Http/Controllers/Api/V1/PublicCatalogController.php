@@ -12,6 +12,7 @@ use App\Domain\Catalog\Models\Location;
 use App\Domain\Catalog\Models\Offering;
 use App\Domain\Catalog\Models\OrganizationCatalogProfile;
 use App\Domain\Catalog\Models\PriceOption;
+use App\Domain\Catalog\Models\Session;
 use App\Domain\Organizations\Enums\OrganizationStatus;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
@@ -114,6 +115,8 @@ final class PublicCatalogController extends Controller
                     'location' => fn ($location) => $location->where('is_public', true),
                     'instructors' => fn ($instructor) => $instructor->where('is_public', true),
                     'priceOptions' => fn ($price) => $price->where('is_available', true),
+                    'sessions' => fn ($session) => $session->where('status', 'scheduled')
+                        ->where('starts_at', '>', now())->orderBy('starts_at'),
                 ]),
             ]),
         ];
@@ -196,6 +199,7 @@ final class PublicCatalogController extends Controller
         $location = $group->location ?? $publicOffering->location;
 
         return [
+            'id' => $group->id,
             'name' => $group->name,
             'age_label' => $group->age_label,
             'capacity_min' => $group->capacity_min,
@@ -206,6 +210,12 @@ final class PublicCatalogController extends Controller
             'prices' => $group->priceOptions
                 ->concat($publicOffering->priceOptions)
                 ->unique('id')->values()->map($this->presentPrice(...))->all(),
+            'sessions' => $group->sessions->map(fn (Session $session) => [
+                'id' => $session->id,
+                'starts_at' => $session->starts_at->toIso8601String(),
+                'ends_at' => $session->ends_at->toIso8601String(),
+                'status' => $session->status,
+            ])->all(),
         ];
     }
 
@@ -234,6 +244,7 @@ final class PublicCatalogController extends Controller
         };
 
         return [
+            'id' => $price->id,
             'enrollment_mode' => $price->enrollment_mode,
             'unit' => $price->unit,
             'amount_cents' => $price->amount_cents,

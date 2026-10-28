@@ -11,6 +11,7 @@ use App\Domain\Enrollment\Enums\EnrollmentScope;
 use App\Domain\Enrollment\Enums\EnrollmentSource;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -18,6 +19,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
+/**
+ * @property EnrollmentScope $scope
+ * @property EnrollmentSource $source
+ * @property EnrollmentApplicationStatus $status
+ * @property CarbonImmutable|null $accepted_terms_at
+ */
 #[Fillable([
     'parent_user_id', 'child_id', 'group_id', 'price_option_id', 'session_id',
     'scope', 'source', 'status', 'idempotency_key', 'accepted_terms_version',

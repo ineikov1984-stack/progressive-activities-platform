@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\V1\OrganizationCatalogProfileController;
 use App\Http\Controllers\Api\V1\OrganizationContextController;
 use App\Http\Controllers\Api\V1\OrganizationController;
 use App\Http\Controllers\Api\V1\ParentChildController;
+use App\Http\Controllers\Api\V1\ParentEnrollmentController;
 use App\Http\Controllers\Api\V1\PublicCatalogController;
 use Illuminate\Support\Facades\Route;
 
@@ -35,6 +36,9 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/parent/children', [ParentChildController::class, 'store']);
             Route::get('/parent/children/{child}', [ParentChildController::class, 'show']);
             Route::patch('/parent/children/{child}', [ParentChildController::class, 'update']);
+            Route::get('/parent/enrollment-applications', [ParentEnrollmentController::class, 'index']);
+            Route::post('/parent/enrollment-applications', [ParentEnrollmentController::class, 'store']);
+            Route::post('/parent/enrollment-applications/{application}/withdraw', [ParentEnrollmentController::class, 'withdraw']);
             Route::get('/organizations', [OrganizationController::class, 'index']);
             Route::post('/context/organization', [OrganizationContextController::class, 'select']);
             Route::get('/context/organization', [OrganizationContextController::class, 'current'])
