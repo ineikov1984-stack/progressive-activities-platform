@@ -144,8 +144,6 @@ final class PublicAvailabilityPresenter
             $sessions = $group->sessions->filter(fn (Session $session): bool => $session->status === 'scheduled'
                 && $session->starts_at->greaterThan($at));
             if ($sessions->isEmpty()) {
-                $presentations[] = ['status' => 'closed', 'remaining_places' => null];
-
                 continue;
             }
             $remaining = $this->capacity->remainingForGroup($group, $at);

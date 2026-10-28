@@ -98,6 +98,41 @@ class PublicCatalogTest extends TestCase
             ->assertJsonPath('activities.0.availability.remaining_places', 20);
     }
 
+    public function test_historical_group_does_not_close_card_with_an_available_current_group(): void
+    {
+        $this->travelTo('2026-10-28T10:00:00Z');
+        [, $activity] = $this->publishedCatalog('current-group-school');
+        $offering = Offering::query()->where('activity_id', $activity->id)->firstOrFail();
+        Session::query()->where('group_id', Group::query()->where('offering_id', $offering->id)->firstOrFail()->id)
+            ->update(['starts_at' => '2026-10-01T14:00:00Z', 'ends_at' => '2026-10-01T15:00:00Z']);
+        $current = Group::query()->create([
+            'offering_id' => $offering->id, 'name' => 'Current group',
+            'capacity_max' => 10, 'status' => 'published',
+            'schedule_pattern' => ['timezone' => 'Europe/Sofia'],
+        ]);
+        Session::query()->create([
+            'group_id' => $current->id, 'starts_at' => '2026-11-04T14:00:00Z',
+            'ends_at' => '2026-11-04T15:00:00Z', 'capacity' => 10, 'status' => 'scheduled',
+        ]);
+
+        $this->getJson('/api/v1/public/organizations/current-group-school/catalog')->assertOk()
+            ->assertJsonPath('activities.0.availability.status', 'available')
+            ->assertJsonPath('activities.0.availability.remaining_places', 10);
+    }
+
+    public function test_all_historical_groups_leave_card_closed(): void
+    {
+        $this->travelTo('2026-10-28T10:00:00Z');
+        $this->publishedCatalog('historical-only-school');
+        Session::query()->update([
+            'starts_at' => '2026-10-01T14:00:00Z', 'ends_at' => '2026-10-01T15:00:00Z',
+        ]);
+
+        $this->getJson('/api/v1/public/organizations/historical-only-school/catalog')->assertOk()
+            ->assertJsonPath('activities.0.availability.status', 'closed')
+            ->assertJsonPath('activities.0.availability.remaining_places', null);
+    }
+
     public function test_online_location_never_exposes_a_navigation_action(): void
     {
         [, $activity] = $this->publishedCatalog('online-academy', locationType: 'online');
