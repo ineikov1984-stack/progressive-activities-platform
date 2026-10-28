@@ -51,6 +51,12 @@ class Activity extends Model
         return $this->hasMany(Offering::class);
     }
 
+    /** @return HasMany<VisitOffer, $this> */
+    public function visitOffers(): HasMany
+    {
+        return $this->hasMany(VisitOffer::class);
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {

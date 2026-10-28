@@ -61,6 +61,14 @@ class Session extends Model
             ->withTimestamps();
     }
 
+    /** @return BelongsToMany<VisitOffer, $this> */
+    public function visitOffers(): BelongsToMany
+    {
+        return $this->belongsToMany(VisitOffer::class, 'visit_offer_sessions', 'session_id', 'visit_offer_id')
+            ->withPivotValue('organization_id', $this->organization_id ?? app(TenantContext::class)->organizationId())
+            ->withTimestamps();
+    }
+
     /** @return HasMany<EnrollmentSessionException, $this> */
     public function enrollmentExceptions(): HasMany
     {

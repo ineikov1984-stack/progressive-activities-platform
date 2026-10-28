@@ -7,9 +7,11 @@ use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\InstructorProfile;
 use App\Domain\Catalog\Models\Location;
 use App\Domain\Catalog\Models\Offering;
+use App\Domain\Catalog\Models\OpenDayCampaign;
 use App\Domain\Catalog\Models\OrganizationCatalogProfile;
 use App\Domain\Catalog\Models\PriceOption;
 use App\Domain\Catalog\Models\Session;
+use App\Domain\Catalog\Models\VisitOffer;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -96,8 +98,31 @@ class CatalogTenantIsolationTest extends TestCase
             $insertProfile->execute(['id' => (string) Str::uuid(), 'organization_id' => $foreignId, 'slug' => 'foreign-'.$foreignId, 'public_name' => 'Foreign', 'is_published' => 'true']);
             $insertProfile->execute(['id' => (string) Str::uuid(), 'organization_id' => $draftId, 'slug' => 'draft-'.$draftId, 'public_name' => 'Draft', 'is_published' => 'false']);
 
-            $this->insertLinkedCatalogRows($pdo, $selectedId, $selectedActivity);
-            $this->insertLinkedCatalogRows($pdo, $foreignId, $foreignActivity);
+            $selectedLinked = $this->insertLinkedCatalogRows($pdo, $selectedId, $selectedActivity);
+            $foreignLinked = $this->insertLinkedCatalogRows($pdo, $foreignId, $foreignActivity);
+            $selectedCampaign = (string) Str::uuid();
+            $foreignCampaign = (string) Str::uuid();
+            $selectedVisitOffer = (string) Str::uuid();
+            $foreignVisitOffer = (string) Str::uuid();
+            $insertCampaign = $pdo->prepare(
+                'INSERT INTO open_day_campaigns (id, organization_id, slug, title) VALUES (:id, :organization_id, :slug, :title)'
+            );
+            $insertVisitOffer = $pdo->prepare(
+                'INSERT INTO visit_offers (id, organization_id, activity_id, group_id, campaign_id, type, title, visit_limit) '
+                .'VALUES (:id, :organization_id, :activity_id, :group_id, :campaign_id, :type, :title, :visit_limit)'
+            );
+            foreach ([
+                [$selectedId, $selectedActivity, $selectedLinked['group'], $selectedCampaign, $selectedVisitOffer, 'selected'],
+                [$foreignId, $foreignActivity, $foreignLinked['group'], $foreignCampaign, $foreignVisitOffer, 'foreign'],
+            ] as [$organizationId, $activityId, $groupId, $campaignId, $offerId, $label]) {
+                $insertCampaign->execute(['id' => $campaignId, 'organization_id' => $organizationId, 'slug' => $label, 'title' => $label]);
+                $insertVisitOffer->execute([
+                    'id' => $offerId, 'organization_id' => $organizationId,
+                    'activity_id' => $activityId, 'group_id' => $groupId,
+                    'campaign_id' => $campaignId, 'type' => 'open_day',
+                    'title' => $label, 'visit_limit' => 1,
+                ]);
+            }
 
             $pdo->exec('SET LOCAL ROLE progressive_app');
             $this->assertSame('progressive_app', $pdo->query('SELECT current_user')->fetchColumn());
@@ -106,6 +131,14 @@ class CatalogTenantIsolationTest extends TestCase
             $setTenant->execute(['id' => $selectedId]);
 
             $this->assertSame([$selectedActivity], $pdo->query('SELECT id FROM activities ORDER BY id')->fetchAll(PDO::FETCH_COLUMN));
+            $this->assertSame([$selectedCampaign], $pdo->query('SELECT id FROM open_day_campaigns')->fetchAll(PDO::FETCH_COLUMN));
+            $this->assertSame([$selectedVisitOffer], $pdo->query('SELECT id FROM visit_offers')->fetchAll(PDO::FETCH_COLUMN));
+            $updateForeignCampaign = $pdo->prepare('UPDATE open_day_campaigns SET title = :title WHERE id = :id');
+            $updateForeignCampaign->execute(['title' => 'tampered', 'id' => $foreignCampaign]);
+            $this->assertSame(0, $updateForeignCampaign->rowCount());
+            $updateForeignOffer = $pdo->prepare('UPDATE visit_offers SET title = :title WHERE id = :id');
+            $updateForeignOffer->execute(['title' => 'tampered', 'id' => $foreignVisitOffer]);
+            $this->assertSame(0, $updateForeignOffer->rowCount());
             $this->assertSame([$selectedId], $pdo->query('SELECT organization_id FROM organization_catalog_profiles ORDER BY organization_id')->fetchAll(PDO::FETCH_COLUMN));
             foreach ([
                 'offerings',
@@ -122,6 +155,8 @@ class CatalogTenantIsolationTest extends TestCase
 
             $setTenant->execute(['id' => '']);
             $this->assertSame([], $pdo->query('SELECT id FROM activities')->fetchAll(PDO::FETCH_COLUMN));
+            $this->assertSame([], $pdo->query('SELECT id FROM open_day_campaigns')->fetchAll(PDO::FETCH_COLUMN));
+            $this->assertSame([], $pdo->query('SELECT id FROM visit_offers')->fetchAll(PDO::FETCH_COLUMN));
             $fixtureProfiles = $pdo->prepare(
                 'SELECT organization_id FROM organization_catalog_profiles '
                 .'WHERE organization_id IN (:selected, :foreign, :draft) ORDER BY organization_id'
@@ -166,6 +201,42 @@ class CatalogTenantIsolationTest extends TestCase
 
         $this->assertSame($selected->id, $activity->fresh()->organization_id);
         $this->assertSame('Updated painting', $activity->fresh()->title);
+    }
+
+    public function test_visit_offers_and_campaigns_are_scoped_to_the_selected_organization(): void
+    {
+        $selected = $this->organization('selected-visits');
+        $foreign = $this->organization('foreign-visits');
+        $selectedRows = $this->catalogRows($selected);
+        $foreignRows = $this->catalogRows($foreign);
+
+        app(TenantContext::class)->select($foreign);
+        $foreignCampaign = OpenDayCampaign::query()->create(['slug' => 'foreign-day', 'title' => 'Foreign day']);
+        $foreignOffer = VisitOffer::query()->create([
+            'activity_id' => $foreignRows[Activity::class],
+            'group_id' => $foreignRows[Group::class],
+            'campaign_id' => $foreignCampaign->id,
+            'type' => 'open_day',
+            'title' => 'Foreign visit',
+            'visit_limit' => 1,
+        ]);
+        app(TenantContext::class)->select($selected);
+        $selectedCampaign = OpenDayCampaign::query()->create(['slug' => 'selected-day', 'title' => 'Selected day']);
+        $selectedOffer = VisitOffer::query()->create([
+            'activity_id' => $selectedRows[Activity::class],
+            'group_id' => $selectedRows[Group::class],
+            'campaign_id' => $selectedCampaign->id,
+            'type' => 'open_day',
+            'title' => 'Selected visit',
+            'visit_limit' => 1,
+        ]);
+
+        $this->assertSame([$selectedOffer->id], VisitOffer::query()->pluck('id')->all());
+        $this->assertSame([$selectedCampaign->id], OpenDayCampaign::query()->pluck('id')->all());
+        $this->assertSame(0, VisitOffer::query()->whereKey($foreignOffer->id)->update(['title' => 'Tampered']));
+        $this->assertSame(0, OpenDayCampaign::query()->whereKey($foreignCampaign->id)->update(['title' => 'Tampered']));
+        $this->assertSame('Foreign visit', VisitOffer::query()->withoutGlobalScopes()->findOrFail($foreignOffer->id)->title);
+        $this->assertSame('Foreign day', OpenDayCampaign::query()->withoutGlobalScopes()->findOrFail($foreignCampaign->id)->title);
     }
 
     public function test_request_role_cannot_link_foreign_catalog_parents_or_instructors(): void

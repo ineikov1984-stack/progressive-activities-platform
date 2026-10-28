@@ -64,6 +64,12 @@ class Group extends Model
         return $this->hasMany(PriceOption::class);
     }
 
+    /** @return HasMany<VisitOffer, $this> */
+    public function visitOffers(): HasMany
+    {
+        return $this->hasMany(VisitOffer::class, 'group_id');
+    }
+
     /** @return HasMany<Enrollment, $this> */
     public function enrollments(): HasMany
     {

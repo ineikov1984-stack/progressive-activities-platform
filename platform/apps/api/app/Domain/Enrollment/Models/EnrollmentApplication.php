@@ -6,6 +6,7 @@ use App\Domain\Catalog\Concerns\BelongsToCatalogTenant;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\PriceOption;
 use App\Domain\Catalog\Models\Session;
+use App\Domain\Catalog\Models\VisitOffer;
 use App\Domain\Enrollment\Enums\EnrollmentApplicationStatus;
 use App\Domain\Enrollment\Enums\EnrollmentScope;
 use App\Domain\Enrollment\Enums\EnrollmentSource;
@@ -29,7 +30,9 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'parent_user_id', 'child_id', 'group_id', 'price_option_id', 'session_id',
     'scope', 'source', 'status', 'idempotency_key', 'accepted_terms_version',
     'accepted_terms_at', 'amount_cents_snapshot', 'currency_snapshot',
-    'unit_snapshot', 'public_reason', 'internal_note', 'version',
+    'unit_snapshot', 'visit_offer_id', 'visit_offer_title_snapshot',
+    'fee_reason_snapshot', 'cancellation_policy_snapshot', 'public_reason',
+    'internal_note', 'version',
 ])]
 class EnrollmentApplication extends Model
 {
@@ -75,6 +78,12 @@ class EnrollmentApplication extends Model
     public function session(): BelongsTo
     {
         return $this->belongsTo(Session::class);
+    }
+
+    /** @return BelongsTo<VisitOffer, $this> */
+    public function visitOffer(): BelongsTo
+    {
+        return $this->belongsTo(VisitOffer::class);
     }
 
     /** @return HasOne<Enrollment, $this> */
