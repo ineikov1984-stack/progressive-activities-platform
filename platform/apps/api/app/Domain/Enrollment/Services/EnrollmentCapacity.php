@@ -18,6 +18,10 @@ final class EnrollmentCapacity
 
     public function remainingForGroup(Group $group, ?CarbonImmutable $onDate = null): ?int
     {
+        if (DB::transactionLevel() > 0) {
+            $group = Group::query()->whereKey($group->id)->lockForUpdate()->firstOrFail();
+        }
+
         $timezone = $group->schedule_pattern['timezone'] ?? 'Europe/Sofia';
         $date = ($onDate ?? CarbonImmutable::today($timezone))->setTimezone($timezone)->toDateString();
         $occupied = Enrollment::query()->where('group_id', $group->id)
@@ -43,8 +47,9 @@ final class EnrollmentCapacity
 
     public function remainingForSession(Session $session): ?int
     {
-        // Serialise competing allocations on the same session when called in a transaction.
+        // Every capacity path locks the group before sessions, enrollments and applications.
         if (DB::transactionLevel() > 0) {
+            Group::query()->whereKey($session->group_id)->lockForUpdate()->firstOrFail();
             $session = Session::query()->whereKey($session->id)->lockForUpdate()->firstOrFail();
         }
 

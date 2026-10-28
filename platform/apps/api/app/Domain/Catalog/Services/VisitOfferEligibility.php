@@ -48,11 +48,30 @@ final class VisitOfferEligibility
                 throw ValidationException::withMessages(['trial_limit' => 'Лимитът за пробни посещения е достигнат.']);
             }
         } elseif ($offer->type === VisitOfferType::Single && ! $offer->unlimited_single_visits) {
-            $first = $visitDate->subDays($offer->single_visit_window_days);
-            $used = (clone $history)->where('scope', 'single')
-                ->whereDate('starts_on', '>=', $first->toDateString())
-                ->whereDate('starts_on', '<=', $visitDate->toDateString())->count();
-            if ($used >= $offer->single_visit_limit && ! $this->hasReasonedOverride($overrideActor, $overrideReason, $organizationId)) {
+            $windowDays = $offer->single_visit_window_days;
+            $targetDate = $visitDate->toDateString();
+            $dates = (clone $history)->where('scope', 'single')
+                ->whereDate('starts_on', '>=', $visitDate->subDays($windowDays - 1)->toDateString())
+                ->whereDate('starts_on', '<=', $visitDate->addDays($windowDays - 1)->toDateString())
+                ->pluck('starts_on')->map(fn ($date): string => CarbonImmutable::parse($date, $timezone)->toDateString())
+                ->all();
+            $dates[] = $targetDate;
+            sort($dates);
+
+            $limitReached = false;
+            $right = 0;
+            foreach ($dates as $left => $firstDate) {
+                $endDate = CarbonImmutable::parse($firstDate, $timezone)->addDays($windowDays)->toDateString();
+                while ($right < count($dates) && $dates[$right] < $endDate) {
+                    $right++;
+                }
+                if ($firstDate <= $targetDate && $targetDate < $endDate && $right - $left > $offer->single_visit_limit) {
+                    $limitReached = true;
+                    break;
+                }
+            }
+
+            if ($limitReached && ! $this->hasReasonedOverride($overrideActor, $overrideReason, $organizationId)) {
                 throw ValidationException::withMessages(['single_visit_limit' => 'Лимитът за еднократни посещения е достигнат.']);
             }
         }

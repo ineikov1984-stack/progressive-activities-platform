@@ -63,6 +63,62 @@ class VisitOfferEligibilityTest extends TestCase
         app(VisitOfferEligibility::class)->assertEligible($child, $offer->refresh(), $session);
     }
 
+    public function test_reverse_order_single_bookings_cannot_exceed_any_rolling_window(): void
+    {
+        [, , $group, $session, $offer, $child] = $this->visitFixture(['type' => 'single']);
+        $session->update(['starts_at' => '2026-11-10T14:00:00Z', 'ends_at' => '2026-11-10T15:00:00Z']);
+        foreach (['2026-11-20', '2026-11-15'] as $day) {
+            $later = $group->sessions()->create([
+                'starts_at' => $day.'T14:00:00Z', 'ends_at' => $day.'T15:00:00Z',
+                'status' => 'scheduled',
+            ]);
+            $this->visitEnrollment($child, $group, $later, 'single');
+        }
+
+        try {
+            app(VisitOfferEligibility::class)->assertEligible($child, $offer, $session->refresh());
+            $this->fail('Reverse-order bookings exceeded the single-visit limit.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('single_visit_limit', $exception->errors());
+        }
+    }
+
+    public function test_single_limit_counts_bookings_before_and_after_requested_visit(): void
+    {
+        [, , $group, $session, $offer, $child] = $this->visitFixture(['type' => 'single']);
+        $session->update(['starts_at' => '2026-11-15T14:00:00Z', 'ends_at' => '2026-11-15T15:00:00Z']);
+        foreach (['2026-10-25', '2026-11-20'] as $day) {
+            $otherSession = $group->sessions()->create([
+                'starts_at' => $day.'T14:00:00Z', 'ends_at' => $day.'T15:00:00Z',
+                'status' => 'scheduled',
+            ]);
+            $this->visitEnrollment($child, $group, $otherSession, 'single');
+        }
+
+        try {
+            app(VisitOfferEligibility::class)->assertEligible($child, $offer, $session->refresh());
+            $this->fail('Visits on both sides of the requested date exceeded the limit.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('single_visit_limit', $exception->errors());
+        }
+    }
+
+    public function test_bookings_on_both_sides_without_a_shared_window_remain_eligible(): void
+    {
+        [, , $group, $session, $offer, $child] = $this->visitFixture(['type' => 'single']);
+        $session->update(['starts_at' => '2026-11-15T14:00:00Z', 'ends_at' => '2026-11-15T15:00:00Z']);
+        foreach (['2026-10-20', '2026-12-10'] as $day) {
+            $otherSession = $group->sessions()->create([
+                'starts_at' => $day.'T14:00:00Z', 'ends_at' => $day.'T15:00:00Z',
+                'status' => 'scheduled',
+            ]);
+            $this->visitEnrollment($child, $group, $otherSession, 'single');
+        }
+
+        $this->expectNotToPerformAssertions();
+        app(VisitOfferEligibility::class)->assertEligible($child, $offer, $session->refresh());
+    }
+
     public function test_staff_override_requires_active_membership_and_a_nonblank_reason(): void
     {
         [$organization, , $group, $session, $offer, $child] = $this->visitFixture();
