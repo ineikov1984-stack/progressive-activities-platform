@@ -122,11 +122,19 @@ class CatalogTenantIsolationTest extends TestCase
 
             $setTenant->execute(['id' => '']);
             $this->assertSame([], $pdo->query('SELECT id FROM activities')->fetchAll(PDO::FETCH_COLUMN));
-            $publicProfileIds = $pdo->query('SELECT organization_id FROM organization_catalog_profiles')->fetchAll(PDO::FETCH_COLUMN);
-            $this->assertCount(2, $publicProfileIds);
-            $this->assertContains($selectedId, $publicProfileIds);
-            $this->assertContains($foreignId, $publicProfileIds);
-            $this->assertNotContains($draftId, $publicProfileIds);
+            $fixtureProfiles = $pdo->prepare(
+                'SELECT organization_id FROM organization_catalog_profiles '
+                .'WHERE organization_id IN (:selected, :foreign, :draft) ORDER BY organization_id'
+            );
+            $fixtureProfiles->execute([
+                'selected' => $selectedId,
+                'foreign' => $foreignId,
+                'draft' => $draftId,
+            ]);
+            $publicProfileIds = $fixtureProfiles->fetchAll(PDO::FETCH_COLUMN);
+            $expectedPublicProfileIds = [$selectedId, $foreignId];
+            sort($expectedPublicProfileIds);
+            $this->assertSame($expectedPublicProfileIds, $publicProfileIds);
             $updateProfile = $pdo->prepare("UPDATE organization_catalog_profiles SET public_name = 'Not allowed' WHERE organization_id = :id");
             $updateProfile->execute(['id' => $selectedId]);
             $this->assertSame(0, $updateProfile->rowCount());

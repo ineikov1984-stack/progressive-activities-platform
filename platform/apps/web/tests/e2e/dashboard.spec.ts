@@ -5,7 +5,7 @@ test('demo owner can log in, view the administration and create an invitation', 
   const browser = cdpEndpoint
     ? await chromium.connectOverCDP(cdpEndpoint)
     : await chromium.launch({ channel: 'chrome' });
-  const context = browser.contexts()[0] ?? (await browser.newContext());
+  const context = await browser.newContext();
   const page = await context.newPage();
 
   await page.goto(`${process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:3000'}/login`);
@@ -27,6 +27,7 @@ test('demo owner can log in, view the administration and create an invitation', 
   await expect(page.getByText('Token за еднократно приемане')).toBeVisible();
 
   await page.close();
+  await context.close();
   if (!cdpEndpoint) {
     await browser.close();
   }
