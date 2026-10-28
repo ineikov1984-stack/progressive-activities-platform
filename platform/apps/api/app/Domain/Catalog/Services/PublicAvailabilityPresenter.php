@@ -33,6 +33,7 @@ final class PublicAvailabilityPresenter
         $rows = [];
         foreach ($offers as $offer) {
             if ($offer->status !== VisitOfferStatus::Published
+                || trim((string) $offer->terms_version) === ''
                 || $offer->activity?->status !== ActivityStatus::Published
                 || $offer->group?->status !== 'published'
                 || $offer->group->offering?->activity_id !== $offer->activity_id) {

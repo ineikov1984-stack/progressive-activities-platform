@@ -116,6 +116,33 @@ class PublicVisitOfferTest extends TestCase
             ])->assertCreated()->assertJsonPath('application.accepted_terms_version', 'visit-v2');
     }
 
+    public function test_legacy_published_offer_without_terms_version_is_not_publicly_actionable(): void
+    {
+        $this->travelTo('2026-10-28T10:00:00Z');
+        [$organization, $activity, , , $offer] = $this->visitFixture([
+            'type' => 'open_day', 'terms_version' => null,
+        ]);
+        $campaign = OpenDayCampaign::query()->create([
+            'slug' => 'legacy-without-terms', 'title' => 'Legacy campaign', 'status' => 'published',
+        ]);
+        $offer->update(['campaign_id' => $campaign->id]);
+
+        $base = $this->base($organization->slug);
+        $this->getJson($base.'/catalog')->assertOk()
+            ->assertJsonPath('activities.0.special_offer', null)
+            ->assertJsonPath('activities.0.special_offer_url', null);
+        $this->getJson($base.'/activities/'.$activity->slug)->assertOk()
+            ->assertJsonPath('activity.visit_offers', []);
+        $this->getJson($base.'/open-days/legacy-without-terms')->assertNotFound();
+
+        app(TenantContext::class)->select($organization);
+        $offer->update(['terms_version' => 'visit-v2']);
+        $this->getJson($base.'/activities/'.$activity->slug)->assertOk()
+            ->assertJsonPath('activity.visit_offers.0.terms_version', 'visit-v2')
+            ->assertJsonPath('activity.visit_offers.0.action', 'apply');
+        $this->getJson($base.'/open-days/legacy-without-terms')->assertOk();
+    }
+
     public function test_detail_excludes_draft_stale_cancelled_offers_and_private_fields(): void
     {
         $this->travelTo('2026-10-28T10:00:00Z');
@@ -308,6 +335,7 @@ class PublicVisitOfferTest extends TestCase
             'activity_id' => $original->activity_id, 'group_id' => $original->group_id,
             'campaign_id' => $original->campaign_id, 'type' => $original->type->value,
             'status' => 'published', 'title' => 'Another visit', 'visit_limit' => 8,
+            'terms_version' => $original->terms_version,
         ], $attributes));
     }
 

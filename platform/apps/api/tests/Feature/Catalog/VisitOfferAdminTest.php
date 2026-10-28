@@ -90,6 +90,52 @@ class VisitOfferAdminTest extends TestCase
         $this->postJson("/api/v1/catalog/visit-offers/{$id}/publish", ['version' => 1])->assertConflict();
     }
 
+    public function test_draft_may_omit_terms_version_but_publish_requires_an_explicit_nonblank_version(): void
+    {
+        [$organization, $activity, $group, $session] = $this->fixture();
+        $this->login($organization);
+        $id = $this->postJson('/api/v1/catalog/visit-offers', [
+            ...$this->offerPayload($activity, $group, $session), 'terms_version' => null,
+        ])->assertCreated()->assertJsonPath('visit_offer.terms_version', null)->json('visit_offer.id');
+
+        $url = "/api/v1/catalog/visit-offers/{$id}";
+        $this->postJson($url.'/publish', ['version' => 1])
+            ->assertUnprocessable()->assertJsonValidationErrors('terms_version');
+        $this->assertDatabaseHas('visit_offers', ['id' => $id, 'status' => 'draft', 'version' => 1]);
+        $this->patchJson($url, ['version' => 1, 'terms_version' => '  '])
+            ->assertOk()->assertJsonPath('visit_offer.version', 2);
+        $this->postJson($url.'/publish', ['version' => 2])
+            ->assertUnprocessable()->assertJsonValidationErrors('terms_version');
+        $this->assertDatabaseHas('visit_offers', ['id' => $id, 'status' => 'draft', 'version' => 2]);
+        $this->assertDatabaseMissing('audit_events', [
+            'subject_id' => $id, 'action' => 'catalog.visit_offer_published',
+        ]);
+
+        $this->patchJson($url, ['version' => 2, 'terms_version' => 'visit-v2'])
+            ->assertOk()->assertJsonPath('visit_offer.version', 3);
+        $this->postJson($url.'/publish', ['version' => 3])
+            ->assertOk()->assertJsonPath('visit_offer.status', 'published')
+            ->assertJsonPath('visit_offer.terms_version', 'visit-v2');
+    }
+
+    public function test_published_offer_cannot_remove_its_terms_version_on_update(): void
+    {
+        [$organization, $activity, $group, $session] = $this->fixture();
+        $this->login($organization);
+        $id = $this->postJson('/api/v1/catalog/visit-offers', $this->offerPayload($activity, $group, $session))
+            ->assertCreated()->json('visit_offer.id');
+        $url = "/api/v1/catalog/visit-offers/{$id}";
+        $this->postJson($url.'/publish', ['version' => 1])->assertOk();
+
+        $this->patchJson($url, ['version' => 2, 'terms_version' => null])
+            ->assertUnprocessable()->assertJsonValidationErrors('terms_version');
+        $this->patchJson($url, ['version' => 2, 'terms_version' => '  '])
+            ->assertUnprocessable()->assertJsonValidationErrors('terms_version');
+        $this->assertDatabaseHas('visit_offers', [
+            'id' => $id, 'status' => 'published', 'terms_version' => 'v1', 'version' => 2,
+        ]);
+    }
+
     public function test_update_is_versioned_and_audits_each_material_change(): void
     {
         [$organization, $activity, $group, $session] = $this->fixture();
@@ -360,7 +406,7 @@ class VisitOfferAdminTest extends TestCase
     {
         return [
             'activity_id' => $activity->id, 'group_id' => $group->id, 'session_ids' => [$session->id],
-            'type' => 'trial', 'title' => 'Trial chess', 'visit_limit' => 3,
+            'type' => 'trial', 'title' => 'Trial chess', 'visit_limit' => 3, 'terms_version' => 'v1',
         ];
     }
 }

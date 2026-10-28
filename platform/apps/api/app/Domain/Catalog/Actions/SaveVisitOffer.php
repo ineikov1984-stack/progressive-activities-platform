@@ -66,6 +66,9 @@ final readonly class SaveVisitOffer
             abort_unless($locked->version === $expectedVersion, 409, 'Visit offer version conflict.');
             abort_if($locked->status === VisitOfferStatus::Cancelled, 409, 'Cancelled offers cannot be edited.');
             $effective = array_merge($locked->only(self::FIELDS), $data);
+            if ($locked->status === VisitOfferStatus::Published && trim((string) $effective['terms_version']) === '') {
+                throw ValidationException::withMessages(['terms_version' => 'Публикуваното предложение изисква версия на условията.']);
+            }
             $this->checkRelations($effective, $data['session_ids'] ?? $locked->sessions()->pluck('activity_sessions.id')->all());
 
             $before = $locked->only(self::FIELDS);

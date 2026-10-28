@@ -41,6 +41,7 @@ trait VisitOfferFixture
         $offer = VisitOffer::query()->create(array_merge([
             'activity_id' => $activity->id, 'group_id' => $group->id,
             'type' => 'trial', 'status' => 'published', 'title' => 'Try chess', 'visit_limit' => 3,
+            'terms_version' => 'v1',
         ], $offerAttributes));
         $offer->sessions()->attach($session->id);
         $parent = User::factory()->create();

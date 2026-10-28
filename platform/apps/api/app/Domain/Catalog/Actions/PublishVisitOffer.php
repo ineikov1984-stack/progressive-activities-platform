@@ -47,6 +47,9 @@ final readonly class PublishVisitOffer
                     || ($locked->fee_type->value !== 'free' && ($locked->amount_cents <= 0 || trim((string) $locked->fee_reason) === ''))) {
                     throw ValidationException::withMessages(['visit_offer' => 'Попълнете лимит, цена и основание преди публикуване.']);
                 }
+                if (trim((string) $locked->terms_version) === '') {
+                    throw ValidationException::withMessages(['terms_version' => 'Посочете версия на условията преди публикуване.']);
+                }
                 if (collect($this->conflicts->forGroup($locked->group))->contains('blocking', true)) {
                     throw ValidationException::withMessages(['session_ids' => 'Има конфликт в графика.']);
                 }
