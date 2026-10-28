@@ -288,12 +288,15 @@ git commit -m "feat(web): add visit offer administration"
 
 ### Task 7: Public cards, activity offers and open-day page
 
+**Design addendum:** `platform/docs/superpowers/specs/2026-10-28-public-activity-premium-design.md`
+
 **Files:**
 - Modify: `platform/apps/web/src/features/catalog/public/api.ts`
 - Modify: `platform/apps/web/src/features/catalog/public/presentation.ts`
 - Modify: `platform/apps/web/src/features/catalog/public/catalog-page.tsx`
 - Modify: `platform/apps/web/src/features/catalog/public/activity-page.tsx`
 - Modify: `platform/apps/web/src/features/catalog/public/catalog.module.css`
+- Create: `platform/apps/web/src/features/catalog/public/category-illustration.tsx`
 - Create: `platform/apps/web/src/features/catalog/public/open-day-page.tsx`
 - Create: `platform/apps/web/src/app/o/[organizationSlug]/open-days/[campaignSlug]/page.tsx`
 - Create: `platform/apps/web/tests/visit-offer-public-presentation.test.ts`
@@ -301,23 +304,51 @@ git commit -m "feat(web): add visit offer administration"
 
 **Interfaces:**
 - Consumes: Task 5 public projections.
-- Produces: approved card hierarchy, computed availability/special badges, age/class audience row, activity offer chooser and public campaign page grouped by date/activity.
+- Produces: approved card hierarchy, deterministic category artwork, server-derived availability/special badges, age/class audience row, adaptive rich/balanced/minimal activity layouts, an honest offer chooser and a public campaign page grouped by local date/activity.
 
 - [ ] **Step 1: Write failing presentation and browser tests**
 
-Assert Bulgarian labels for all availability states, only two status badges, age-only fallback, last-place and closed actions, free/paid fee explanation, navigation to offer details, full/waitlist behavior and responsive card layout without overflow at desktop, tablet and mobile widths.
+In `visit-offer-public-presentation.test.ts`, pin Bulgarian labels for every server availability/action value; maximum one availability plus one special-offer badge; audience outside the badge row with `6–8 г. · I–II клас` and age-only fallback; `Безплатно`, exact and `От ...` prices; trimmed-content filtering; and closed actions without `href`. Assert that multiple offers produce a chooser target and never silently select the first session.
+
+In `public-visit-offers.spec.ts`, add rich, balanced and minimal fixtures. Cover missing and failed real images with deterministic category artwork; whitespace-only optional sections with no empty heading/landmark/gap; physical navigation only when the API supplies its safe action; no invented campaign location; full/waitlist behavior only from the server; inactive campaign 404 with a friendly unavailable state; and local-day/activity grouping with mixed free and paid campaign offers.
 
 - [ ] **Step 2: Run focused tests and confirm failure**
 
-Run: `docker compose run --rm --build web pnpm test -- visit-offer-public-presentation.test.ts && docker compose run --rm web pnpm test:e2e -- public-visit-offers.spec.ts`
+Run: `docker compose run --rm --build web pnpm test -- visit-offer-public-presentation.test.ts`
+
+Expected: FAIL because adaptive presentation helpers and category artwork do not exist.
+
+Run: `docker compose run --rm web pnpm test:e2e -- public-visit-offers.spec.ts`
 
 Expected: FAIL because the projections are not rendered.
 
-- [ ] **Step 3: Implement public components and styling**
+- [ ] **Step 3: Implement deterministic presentation helpers and category artwork**
 
-Render one availability badge plus one special-offer badge, then the separate audience line below the title. Show full fee/cancellation/deadline details on the activity/campaign pages, not on crowded cards. Preserve existing location/navigation behavior and accessibility.
+Filter optional strings with `trim()` and arrays to meaningful entries before rendering. Map the API price label/from semantics without recomputing money or availability. Implement `CategoryIllustration` as a code-native SVG/CSS fallback for chess, sport, arts, languages, technology, music and general education; keep its geometry identical to real media and use safe organization accent tokens. A decorative fallback has empty alt text; a real image describes the activity and falls back without layout shift when loading fails.
 
-- [ ] **Step 4: Run the complete verification suite**
+- [ ] **Step 4: Implement the adaptive catalog and activity page**
+
+Render image/artwork, at most two status badges, title, separate audience row, optional clamped summary, server price, schedule and bottom-aligned action on each card. Build rich, balanced and minimal activity compositions which completely omit unavailable optional sections. Keep price, availability, group/session schedule, public location and honest next action prominent; a physical location may render the existing safe navigation action, while online/private/missing locations never do.
+
+When one offer exists, show its details and server-permitted state. When several exist, scroll to an accessible chooser and require an explicit selection. Until the parent enrollment flow is built, do not simulate booking success, login return or a working sticky enrollment CTA. Full/closed offers remain informative; waitlist is actionable only when the projection allows it.
+
+- [ ] **Step 5: Implement the open-day page and route**
+
+Render the campaign title, meaningful description, wrapper period and published image/category fallback. Group offers by their actual local calendar day and activity while preserving each offer's own time, price, remaining state and action. Do not infer campaign-wide capacity or location. Convert the public 404 for an inactive/empty campaign into a friendly Bulgarian unavailable page.
+
+- [ ] **Step 6: Complete responsive and accessibility styling**
+
+Verify the premium navy/orange/green/cream system at 390, 768, 820, 1024 and 1440 px. Use one-column phone layouts, two-column tablet cards with an odd final card spanning the row, and a maximum content width near 1180 px on desktop. Prevent page-level horizontal overflow; preserve only a named keyboard-scrollable related carousel if real API content exists. Provide visible focus, semantic headings, text-backed statuses, 44×44 px targets, reduced-motion support and safe-area spacing. Do not add invented partner, thematic-plan or related-activity content.
+
+- [ ] **Step 7: Run focused tests and visual QA**
+
+Run: `docker compose run --rm --build web pnpm test -- visit-offer-public-presentation.test.ts && docker compose run --rm web pnpm test:e2e -- public-visit-offers.spec.ts`
+
+Expected: PASS.
+
+Capture rich, balanced and minimal pages at 390, 768, 820, 1024 and 1440 px. Confirm no page overflow, no empty optional section, stable media geometry, usable keyboard focus and no control below 44×44 px.
+
+- [ ] **Step 8: Run the complete verification suite**
 
 Run: `docker compose run --rm --build api composer verify`
 
@@ -327,9 +358,9 @@ Run: `docker compose run --rm --build web pnpm test && docker compose run --rm w
 
 Expected: all web tests, typecheck, lint and production build PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add platform/apps/web/src/features/catalog/public platform/apps/web/src/app/o platform/apps/web/tests/e2e/public-visit-offers.spec.ts
+git add platform/apps/web/src/features/catalog/public platform/apps/web/src/app/o platform/apps/web/tests/visit-offer-public-presentation.test.ts platform/apps/web/tests/e2e/public-visit-offers.spec.ts
 git commit -m "feat(web): present visit offers and open days"
 ```
