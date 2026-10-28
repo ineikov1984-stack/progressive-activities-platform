@@ -3,12 +3,14 @@
 namespace App\Domain\Enrollment\Models;
 
 use App\Domain\Identity\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/** @property CarbonImmutable|null $birth_date */
 #[Fillable([
     'owner_user_id',
     'first_name',

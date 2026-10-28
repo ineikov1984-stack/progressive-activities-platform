@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\V1\OrganizationApplicationController;
 use App\Http\Controllers\Api\V1\OrganizationCatalogProfileController;
 use App\Http\Controllers\Api\V1\OrganizationContextController;
 use App\Http\Controllers\Api\V1\OrganizationController;
+use App\Http\Controllers\Api\V1\ParentChildController;
 use App\Http\Controllers\Api\V1\PublicCatalogController;
 use Illuminate\Support\Facades\Route;
 
@@ -30,6 +31,10 @@ Route::prefix('v1')->group(function (): void {
         Route::middleware('auth:sanctum')->group(function (): void {
             Route::post('/auth/logout', [AuthController::class, 'logout']);
             Route::get('/me', [AuthController::class, 'me']);
+            Route::get('/parent/children', [ParentChildController::class, 'index']);
+            Route::post('/parent/children', [ParentChildController::class, 'store']);
+            Route::get('/parent/children/{child}', [ParentChildController::class, 'show']);
+            Route::patch('/parent/children/{child}', [ParentChildController::class, 'update']);
             Route::get('/organizations', [OrganizationController::class, 'index']);
             Route::post('/context/organization', [OrganizationContextController::class, 'select']);
             Route::get('/context/organization', [OrganizationContextController::class, 'current'])

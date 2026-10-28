@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Domain\Catalog\Policies\CatalogPolicy;
+use App\Domain\Enrollment\Models\Child;
+use App\Domain\Enrollment\Policies\EnrollmentPolicy;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Policies\OrganizationPolicy;
 use App\Domain\Organizations\Tenancy\OperatorContext;
@@ -31,6 +33,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::policy(Organization::class, OrganizationPolicy::class);
+        Gate::policy(Child::class, EnrollmentPolicy::class);
         Gate::define('catalog.view', [CatalogPolicy::class, 'view']);
         Gate::define('catalog.manage', [CatalogPolicy::class, 'manage']);
         Gate::define('catalog.publish', [CatalogPolicy::class, 'publish']);
