@@ -75,6 +75,29 @@ class PublicCatalogTest extends TestCase
             ->assertJsonMissingPath('activity.organization_id');
     }
 
+    public function test_fallback_card_availability_uses_each_groups_own_capacity_ratio(): void
+    {
+        $this->travelTo('2026-10-28T10:00:00Z');
+        [, $activity] = $this->publishedCatalog('capacity-school');
+        $offering = Offering::query()->where('activity_id', $activity->id)->firstOrFail();
+        $first = Group::query()->where('offering_id', $offering->id)->firstOrFail();
+        $first->update(['capacity_max' => 100]);
+        Session::query()->where('group_id', $first->id)->update(['capacity' => 20]);
+        $second = Group::query()->create([
+            'offering_id' => $offering->id, 'name' => 'Group 2',
+            'capacity_max' => 10, 'status' => 'published',
+            'schedule_pattern' => ['timezone' => 'Europe/Sofia'],
+        ]);
+        Session::query()->create([
+            'group_id' => $second->id, 'starts_at' => '2026-11-04T14:00:00Z',
+            'ends_at' => '2026-11-04T15:00:00Z', 'capacity' => 10, 'status' => 'scheduled',
+        ]);
+
+        $this->getJson('/api/v1/public/organizations/capacity-school/catalog')->assertOk()
+            ->assertJsonPath('activities.0.availability.status', 'limited')
+            ->assertJsonPath('activities.0.availability.remaining_places', 20);
+    }
+
     public function test_online_location_never_exposes_a_navigation_action(): void
     {
         [, $activity] = $this->publishedCatalog('online-academy', locationType: 'online');

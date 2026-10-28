@@ -93,6 +93,29 @@ class PublicVisitOfferTest extends TestCase
             ->assertJsonPath('activity.visit_offers.0.action', 'closed');
     }
 
+    public function test_public_detail_terms_version_can_be_used_to_submit_the_selected_offer(): void
+    {
+        $this->travelTo('2026-10-28T10:00:00Z');
+        [$organization, $activity, , $session, $offer, $child] = $this->visitFixture([
+            'terms_version' => 'visit-v2',
+        ]);
+
+        $base = $this->base($organization->slug);
+        $this->getJson($base.'/catalog')->assertOk()->assertJsonMissingPath('activities.0.terms_version');
+        $row = $this->getJson($base.'/activities/'.$activity->slug)->assertOk()->json('activity.visit_offers.0');
+        $this->assertSame('visit-v2', $row['terms_version']);
+        $this->assertSame($offer->id, $row['visit_offer_id']);
+        $this->assertSame($session->id, $row['session_id']);
+
+        $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'public-terms')
+            ->postJson('/api/v1/parent/enrollment-applications', [
+                'child_id' => $child->id,
+                'visit_offer_id' => $row['visit_offer_id'],
+                'session_id' => $row['session_id'],
+                'accepted_terms_version' => $row['terms_version'],
+            ])->assertCreated()->assertJsonPath('application.accepted_terms_version', 'visit-v2');
+    }
+
     public function test_detail_excludes_draft_stale_cancelled_offers_and_private_fields(): void
     {
         $this->travelTo('2026-10-28T10:00:00Z');
@@ -194,6 +217,29 @@ class PublicVisitOfferTest extends TestCase
             $this->assertSame('free', $item['visit_offers'][0]['fee_type']);
             $this->assertSame('last_place', $item['visit_offers'][0]['availability']['status']);
         }
+    }
+
+    public function test_campaign_groups_a_utc_crossing_session_by_tokyo_local_day_and_exposes_timezone(): void
+    {
+        $this->travelTo('2026-10-28T10:00:00Z');
+        [$organization, $activity, $group, $session, $offer] = $this->visitFixture();
+        $group->update(['schedule_pattern' => ['timezone' => 'Asia/Tokyo']]);
+        $session->update([
+            'starts_at' => '2026-11-03T23:30:00Z', 'ends_at' => '2026-11-04T00:30:00Z',
+        ]);
+        $campaign = OpenDayCampaign::query()->create([
+            'slug' => 'tokyo-open-day', 'title' => 'Tokyo open day', 'status' => 'published',
+        ]);
+        $offer->update(['campaign_id' => $campaign->id, 'type' => 'open_day']);
+
+        $base = $this->base($organization->slug);
+        $this->getJson($base.'/activities/'.$activity->slug)->assertOk()
+            ->assertJsonPath('activity.visit_offers.0.starts_at', '2026-11-03T23:30:00+00:00')
+            ->assertJsonPath('activity.visit_offers.0.timezone', 'Asia/Tokyo');
+        $this->getJson($base.'/open-days/tokyo-open-day')->assertOk()
+            ->assertJsonPath('campaign.days.0.date', '2026-11-04')
+            ->assertJsonPath('campaign.days.0.activities.0.visit_offers.0.timezone', 'Asia/Tokyo')
+            ->assertJsonPath('campaign.days.0.activities.0.visit_offers.0.starts_at', '2026-11-03T23:30:00+00:00');
     }
 
     public function test_campaign_and_offers_fail_closed_for_unpublished_profile_campaign_and_foreign_tenant(): void

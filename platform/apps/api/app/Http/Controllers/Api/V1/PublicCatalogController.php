@@ -84,9 +84,7 @@ final class PublicCatalogController extends Controller
                 foreach ($campaign->visitOffers as $offer) {
                     foreach ($this->availabilityPresenter->rows(collect([$offer]), $at) as $row) {
                         $activity = $offer->activity;
-                        $date = CarbonImmutable::parse($row['starts_at'])->setTimezone(
-                            $offer->group->schedule_pattern['timezone'] ?? 'Europe/Sofia',
-                        )->toDateString();
+                        $date = CarbonImmutable::parse($row['starts_at'])->setTimezone($row['timezone'])->toDateString();
                         $key = $activity->slug;
                         $days[$date][$key]['activity'] = [
                             'slug' => $activity->slug,
