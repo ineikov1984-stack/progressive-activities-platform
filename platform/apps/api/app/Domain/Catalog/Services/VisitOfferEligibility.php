@@ -9,6 +9,7 @@ use App\Domain\Catalog\Models\VisitOffer;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Child;
 use App\Domain\Enrollment\Models\Enrollment;
+use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\OrganizationMembership;
 use App\Domain\Organizations\Tenancy\TenantContext;
@@ -39,6 +40,13 @@ final class VisitOfferEligibility
             ->whereHas('group.offering', fn ($query) => $query->where('activity_id', $offer->activity_id));
 
         if ($offer->type === VisitOfferType::Trial) {
+            $noShows = EnrollmentTransition::query()->where('metadata->outcome', 'no_show')
+                ->whereHas('enrollment', fn ($query) => $query->where('child_id', $child->id)->where('scope', 'trial'))
+                ->count();
+            if ($offer->no_show_trial_limit !== null && $noShows >= $offer->no_show_trial_limit
+                && ! $this->hasReasonedOverride($overrideActor, $overrideReason, $organizationId)) {
+                throw ValidationException::withMessages(['no_show_limit' => 'Новите пробни посещения са ограничени поради неявявания.']);
+            }
             $year = $visitDate->month >= 9 ? $visitDate->year : $visitDate->year - 1;
             $first = CarbonImmutable::create($year, 9, 1, 0, 0, 0, $timezone);
             $used = (clone $history)->where('scope', 'trial')
@@ -74,6 +82,13 @@ final class VisitOfferEligibility
             if ($limitReached && ! $this->hasReasonedOverride($overrideActor, $overrideReason, $organizationId)) {
                 throw ValidationException::withMessages(['single_visit_limit' => 'Лимитът за еднократни посещения е достигнат.']);
             }
+        }
+    }
+
+    public function assertOverride(User $actor, ?string $reason): void
+    {
+        if (! $this->hasReasonedOverride($actor, $reason, app(TenantContext::class)->organizationId())) {
+            throw ValidationException::withMessages(['eligibility_override_reason' => 'Изключението изисква оторизиран служител и основание.']);
         }
     }
 

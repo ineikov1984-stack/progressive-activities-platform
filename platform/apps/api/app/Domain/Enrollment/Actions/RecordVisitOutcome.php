@@ -1,0 +1,80 @@
+<?php
+
+namespace App\Domain\Enrollment\Actions;
+
+use App\Domain\Catalog\Models\Group;
+use App\Domain\Catalog\Models\Session;
+use App\Domain\Enrollment\Enums\EnrollmentScope;
+use App\Domain\Enrollment\Enums\EnrollmentStatus;
+use App\Domain\Enrollment\Models\Child;
+use App\Domain\Enrollment\Models\Enrollment;
+use App\Domain\Enrollment\Models\EnrollmentEvent;
+use App\Domain\Enrollment\Models\EnrollmentTransition;
+use App\Domain\Identity\Models\User;
+use App\Domain\Organizations\Models\OrganizationMembership;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
+final class RecordVisitOutcome
+{
+    public function handle(User $actor, Enrollment $enrollment, string $outcome, ?string $reason): EnrollmentTransition
+    {
+        return DB::transaction(function () use ($actor, $enrollment, $outcome, $reason): EnrollmentTransition {
+            Child::query()->whereKey($enrollment->child_id)->lockForUpdate()->firstOrFail();
+            Group::query()->whereKey($enrollment->group_id)->lockForUpdate()->firstOrFail();
+            $session = Session::query()->whereKey($enrollment->session_id)->lockForUpdate()->firstOrFail();
+            $current = Enrollment::query()->lockForUpdate()->findOrFail($enrollment->id);
+            $application = $current->application;
+            $staff = $actor->is_active && OrganizationMembership::query()->where('user_id', $actor->id)
+                ->where('organization_id', $current->organization_id)->where('status', 'active')
+                ->whereIn('role', ['organization_owner', 'organization_admin', 'coordinator'])->exists();
+            $cancellation = in_array($outcome, ['cancelled_in_time', 'late_cancelled'], true);
+            abort_unless($staff || ($cancellation && $actor->is_active && $application->parent_user_id === $actor->id), 403);
+            if ($current->scope === EnrollmentScope::FullPeriod || $application->visit_offer_id === null
+                || ! in_array($outcome, ['attended', 'cancelled_in_time', 'late_cancelled', 'no_show'], true)) {
+                throw ValidationException::withMessages(['outcome' => 'Невалиден резултат за посещението.']);
+            }
+            $existing = $current->transitions()->whereNotNull('metadata->outcome')->first();
+            if ($existing !== null) {
+                if ($existing->metadata['outcome'] !== $outcome) {
+                    throw ValidationException::withMessages(['outcome' => 'Резултатът вече е записан.']);
+                }
+
+                return $existing;
+            }
+            if ($current->status !== EnrollmentStatus::Active) {
+                throw ValidationException::withMessages(['outcome' => 'Посещението не е активно.']);
+            }
+            $accepted = $application->transitions()->whereNotNull('metadata->cancellation_deadline_hours')->first()?->metadata;
+            $offer = $application->visitOffer;
+            $start = isset($accepted['session_starts_at']) ? CarbonImmutable::parse($accepted['session_starts_at']) : $session->starts_at;
+            $deadlineHours = $accepted['cancellation_deadline_hours'] ?? $offer->cancellation_deadline_hours;
+            $timely = now()->lessThanOrEqualTo($start->subHours($deadlineHours));
+            if (($outcome === 'cancelled_in_time' && ! $timely)
+                || ($outcome === 'late_cancelled' && $timely)
+                || (! $cancellation && now()->lessThan($start))) {
+                throw ValidationException::withMessages(['outcome' => 'Резултатът не съответства на срока за посещението.']);
+            }
+            $metadata = [
+                'outcome' => $outcome,
+                'session_id' => $session->id,
+                'cancellation_outcome' => $accepted['cancellation_outcome'] ?? $offer->cancellation_outcome,
+                'refund_performed' => false,
+            ];
+            $status = $outcome === 'cancelled_in_time' ? EnrollmentStatus::Cancelled : EnrollmentStatus::Ended;
+            $transition = EnrollmentTransition::query()->create([
+                'application_id' => $application->id, 'enrollment_id' => $current->id,
+                'actor_user_id' => $actor->id, 'from_status' => $current->status->value,
+                'to_status' => $status->value, 'public_reason' => $reason, 'metadata' => $metadata,
+            ]);
+            $current->update(['status' => $status, 'version' => $current->version + 1]);
+            EnrollmentEvent::query()->create([
+                'type' => 'enrollment.visit_outcome_recorded', 'application_id' => $application->id,
+                'enrollment_id' => $current->id, 'payload' => $metadata, 'occurred_at' => now(),
+            ]);
+
+            return $transition;
+        });
+    }
+}

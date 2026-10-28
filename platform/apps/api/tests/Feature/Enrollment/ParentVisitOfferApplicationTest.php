@@ -1,0 +1,257 @@
+<?php
+
+namespace Tests\Feature\Enrollment;
+
+use App\Domain\Enrollment\Actions\ReviewEnrollmentApplication;
+use App\Domain\Enrollment\Actions\SubmitEnrollmentApplication;
+use App\Domain\Enrollment\Models\EnrollmentApplication;
+use App\Domain\Enrollment\Models\EnrollmentTransition;
+use App\Domain\Identity\Models\User;
+use App\Domain\Organizations\Models\OrganizationMembership;
+use App\Domain\Organizations\Tenancy\TenantContext;
+use Illuminate\Database\QueryException;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Support\VisitOfferFixture;
+use Tests\TestCase;
+
+class ParentVisitOfferApplicationTest extends TestCase
+{
+    use RefreshDatabase, VisitOfferFixture;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->withoutMiddleware(PreventRequestForgery::class);
+        $this->travelTo('2026-10-28T10:00:00Z');
+    }
+
+    public static function submissionModes(): array
+    {
+        return [['visit'], ['full_period']];
+    }
+
+    #[DataProvider('submissionModes')]
+    public function test_postgresql_application_role_can_submit_without_an_existing_tenant(string $mode): void
+    {
+        try {
+            DB::connection('pgsql_admin')->getPdo();
+        } catch (\Throwable) {
+            $this->markTestSkipped('PostgreSQL is required for the application-role submission check.');
+        }
+        Artisan::call('migrate', ['--database' => 'pgsql_admin', '--force' => true]);
+        $original = DB::getDefaultConnection();
+        DB::setDefaultConnection('pgsql_admin');
+        DB::beginTransaction();
+        try {
+            [$org, , $group, $session, $offer, $child] = $this->visitFixture([], ['enrollment_approval_mode' => 'automatic']);
+            $price = $group->offering->priceOptions()->create(['group_id' => $group->id, 'enrollment_mode' => 'monthly', 'unit' => 'month', 'amount_cents' => 4500, 'currency' => 'EUR', 'is_available' => true]);
+            $payload = ['child_id' => $child->id, 'accepted_terms_version' => 'v1'];
+            $payload += $mode === 'visit'
+                ? ['visit_offer_id' => $offer->id, 'session_id' => $session->id]
+                : ['group_id' => $group->id, 'price_option_id' => $price->id];
+            [, , $draftGroup, , $draftOffer] = $this->visitFixture(['status' => 'draft'], ['status' => 'draft']);
+            [$inactiveOrg, , $inactiveGroup, , $inactiveOffer] = $this->visitFixture();
+            $inactiveOrg->update(['status' => 'suspended']);
+            $foreignParent = User::factory()->create();
+            app(TenantContext::class)->clear();
+            DB::statement('SET LOCAL ROLE progressive_app');
+            DB::select("SELECT set_config('app.current_organization_id', '', true)");
+            $this->assertSame('progressive_app', DB::selectOne('SELECT current_user AS role')->role);
+            $this->assertSame(0, DB::table('visit_offers')->where('id', $offer->id)->count());
+            DB::select("SELECT set_config('app.current_user_id', ?, true)", [$child->owner_user_id]);
+            foreach ([[$draftGroup->id, null], [null, $draftOffer->id], [$inactiveGroup->id, null], [null, $inactiveOffer->id], [(string) Str::uuid(), null], [null, (string) Str::uuid()]] as [$groupId, $offerId]) {
+                $this->assertNull(DB::selectOne('SELECT public.enrollment_catalog_tenant(?::uuid, ?::uuid, ?::uuid) AS id', [$groupId, $offerId, $child->owner_user_id])->id);
+            }
+            $response = $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'pg-'.$mode)
+                ->postJson('/api/v1/parent/enrollment-applications', $payload)->assertCreated()
+                ->assertJsonPath('application.organization_id', $org->id)->assertJsonPath('application.status', 'approved');
+            if ($mode === 'visit') {
+                DB::table('visit_offers')->where('id', $offer->id)->update(['status' => 'closed']);
+            }
+            DB::select("SELECT set_config('app.current_organization_id', '', true)");
+            $this->postJson('/api/v1/parent/enrollment-applications', $payload)->assertOk()
+                ->assertJsonPath('application.id', $response->json('application.id'));
+            $enrollmentId = DB::table('enrollments')->where('application_id', $response->json('application.id'))->value('id');
+            DB::select("SELECT set_config('app.current_organization_id', '', true)");
+            $this->assertSame(0, DB::table('enrollments')->where('id', $enrollmentId)->count());
+            if ($mode === 'visit') {
+                $this->postJson('/api/v1/parent/enrollments/'.$enrollmentId.'/visit-outcome', ['outcome' => 'cancelled_in_time'])->assertOk();
+                DB::select("SELECT set_config('app.current_organization_id', '', true)");
+                DB::select("SELECT set_config('app.current_user_id', ?, true)", [$foreignParent->id]);
+                $this->assertNull(DB::selectOne('SELECT public.enrollment_owned_tenant(?::uuid, ?::uuid) AS id', [$enrollmentId, $child->owner_user_id])->id);
+                $this->assertNull(DB::selectOne('SELECT public.enrollment_owned_tenant(?::uuid, ?::uuid) AS id', [$enrollmentId, $foreignParent->id])->id);
+            }
+        } finally {
+            DB::rollBack();
+            DB::setDefaultConnection($original);
+            app(TenantContext::class)->clear();
+        }
+    }
+
+    public function test_offer_alone_derives_scope_tenant_group_price_and_immutable_terms(): void
+    {
+        [$organization, , $group, $session, $offer, $child] = $this->visitFixture([
+            'type' => 'single', 'title' => 'One chess class', 'fee_type' => 'paid',
+            'amount_cents' => 1250, 'fee_reason' => 'Materials', 'terms_version' => 'visit-v2',
+            'cancellation_policy' => 'Credit for another date', 'cancellation_outcome' => 'credit',
+        ]);
+        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id,
+            'accepted_terms_version' => 'visit-v2', 'group_id' => (string) Str::uuid(),
+            'price_option_id' => (string) Str::uuid(), 'scope' => 'full_period', 'amount_cents_snapshot' => 1];
+        $first = $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'offer-snapshot')
+            ->postJson('/api/v1/parent/enrollment-applications', $payload)->assertCreated()
+            ->assertJsonPath('application.organization_id', $organization->id)
+            ->assertJsonPath('application.group_id', $group->id)
+            ->assertJsonPath('application.scope', 'single')
+            ->assertJsonPath('application.price_option_id', null)
+            ->assertJsonPath('application.visit_offer_id', $offer->id)
+            ->assertJsonPath('application.price.amount_cents', 1250)
+            ->assertJsonPath('application.price.currency', 'EUR')
+            ->assertJsonPath('application.price.unit', 'session')
+            ->assertJsonPath('application.visit_offer_title_snapshot', 'One chess class')
+            ->assertJsonPath('application.fee_reason_snapshot', 'Materials')
+            ->assertJsonPath('application.cancellation_policy_snapshot', 'Credit for another date');
+        app(TenantContext::class)->select($organization);
+        $offer->update(['title' => 'Changed', 'amount_cents' => 2200, 'status' => 'closed']);
+        $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'offer-snapshot')
+            ->postJson('/api/v1/parent/enrollment-applications', $payload)->assertOk()
+            ->assertJsonPath('application.id', $first->json('application.id'))
+            ->assertJsonPath('application.price.amount_cents', 1250);
+        $this->assertDatabaseCount('enrollment_applications', 1);
+        $transition = EnrollmentTransition::withoutGlobalScopes()->where('application_id', $first->json('application.id'))->firstOrFail();
+        $this->assertSame(24, $transition->metadata['cancellation_deadline_hours']);
+        $this->assertSame('credit', $transition->metadata['cancellation_outcome']);
+    }
+
+    public function test_unpublished_unselected_foreign_and_deadline_sessions_are_rejected(): void
+    {
+        [$org, , $group, $session, $offer, $child] = $this->visitFixture(['terms_version' => 'v1']);
+        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1'];
+        foreach (['draft', 'closed', 'cancelled'] as $status) {
+            app(TenantContext::class)->select($org);
+            $offer->update(['status' => $status]);
+            $this->actingAs($child->owner)->withHeader('Idempotency-Key', $status)->postJson('/api/v1/parent/enrollment-applications', $payload)
+                ->assertUnprocessable()->assertJsonValidationErrors('visit_offer_id');
+        }
+        app(TenantContext::class)->select($org);
+        $offer->update(['status' => 'published']);
+        $otherSession = $group->sessions()->create(['starts_at' => '2026-11-04T14:00:00Z', 'ends_at' => '2026-11-04T15:00:00Z', 'status' => 'scheduled']);
+        $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'unselected')->postJson('/api/v1/parent/enrollment-applications', [...$payload, 'session_id' => $otherSession->id])->assertUnprocessable();
+        [, , , $foreignSession] = $this->visitFixture();
+        $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'foreign')->postJson('/api/v1/parent/enrollment-applications', [...$payload, 'session_id' => $foreignSession->id])->assertUnprocessable();
+        $this->travelTo('2026-11-03T02:00:00Z');
+        $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'deadline')->postJson('/api/v1/parent/enrollment-applications', $payload)->assertUnprocessable()->assertJsonValidationErrors('session_id');
+        $this->travelTo('2026-11-03T01:59:59Z');
+        $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'before-deadline')->postJson('/api/v1/parent/enrollment-applications', $payload)->assertCreated();
+    }
+
+    public function test_offer_capacity_and_both_waitlist_flags_apply_to_automatic_and_manual_approval(): void
+    {
+        [$org, , $group, $session, $offer, $child] = $this->visitFixture(['visit_limit' => 1], ['enrollment_approval_mode' => 'automatic']);
+        $this->visitEnrollment($child, $group, $session, 'trial', $offer);
+        $other = $child->owner->children()->create(['first_name' => 'Ben', 'last_name' => 'Smith']);
+        $payload = ['child_id' => $other->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1'];
+        $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'full-offer')->postJson('/api/v1/parent/enrollment-applications', $payload)->assertCreated()->assertJsonPath('application.status', 'waitlisted');
+        app(TenantContext::class)->select($org);
+        $offer->update(['waitlist_enabled' => false]);
+        $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'no-waitlist')->postJson('/api/v1/parent/enrollment-applications', $payload)->assertUnprocessable()->assertJsonValidationErrors('capacity');
+        app(TenantContext::class)->select($org);
+        $offer->update(['waitlist_enabled' => true]);
+        $group->update(['enrollment_approval_mode' => 'manual']);
+        // A submitted request does not reserve a place: the review must check again.
+        $offer->update(['visit_limit' => 2]);
+        $response = $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'manual')->postJson('/api/v1/parent/enrollment-applications', $payload)->assertCreated()->assertJsonPath('application.status', 'submitted');
+        app(TenantContext::class)->select($org);
+        $offer->update(['visit_limit' => 1]);
+        $application = EnrollmentApplication::findOrFail($response->json('application.id'));
+        $reviewed = app(ReviewEnrollmentApplication::class)->handle($child->owner, $application, 'approve', 1, null, null);
+        $this->assertSame('waitlisted', $reviewed->status->value);
+        $this->assertDatabaseCount('enrollments', 1);
+    }
+
+    public function test_manual_approval_rechecks_eligibility_and_reasoned_override_is_audited(): void
+    {
+        [$org, , $group, $session, $offer, $child] = $this->visitFixture();
+        $application = app(SubmitEnrollmentApplication::class)->handle($child->owner, [
+            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1',
+        ], 'manual-eligibility');
+        app(TenantContext::class)->select($org);
+        $this->visitEnrollment($child, $group, $session, 'trial', $offer);
+        try {
+            app(ReviewEnrollmentApplication::class)->handle($child->owner, $application, 'approve', 1, null, null);
+            $this->fail('A second trial must be rejected at approval.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('trial_limit', $exception->errors());
+        }
+        $staff = User::factory()->create();
+        OrganizationMembership::create(['organization_id' => $org->id, 'user_id' => $staff->id, 'role' => 'coordinator', 'status' => 'active']);
+        $reviewed = app(ReviewEnrollmentApplication::class)->handle($staff, $application, 'approve', 1, null, null, 'Try the advanced class');
+        $this->assertSame('approved', $reviewed->status->value);
+        $transition = $reviewed->transitions()->where('to_status', 'approved')->firstOrFail();
+        $this->assertSame('Try the advanced class', $transition->metadata['eligibility_override_reason']);
+        $this->assertSame($staff->id, $transition->actor_user_id);
+    }
+
+    public function test_full_session_rejects_when_group_waitlist_is_disabled_and_stale_terms_are_rejected(): void
+    {
+        [$org, , $group, $session, $offer, $child] = $this->visitFixture(['terms_version' => 'v2'], ['waitlist_enabled' => false], ['capacity' => 1]);
+        $this->visitEnrollment($child, $group, null, 'full_period', startsOn: '2026-11-01');
+        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1'];
+        $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'stale')->postJson('/api/v1/parent/enrollment-applications', $payload)->assertUnprocessable()->assertJsonValidationErrors('accepted_terms_version');
+        $this->withHeader('Idempotency-Key', 'full')->postJson('/api/v1/parent/enrollment-applications', [...$payload, 'accepted_terms_version' => 'v2'])->assertUnprocessable()->assertJsonValidationErrors('capacity');
+    }
+
+    public function test_manual_eligibility_override_is_retained_when_capacity_requires_waitlisting(): void
+    {
+        [$org, , $group, $session, $offer, $child] = $this->visitFixture(['visit_limit' => 1]);
+        $application = app(SubmitEnrollmentApplication::class)->handle($child->owner, [
+            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1',
+        ], 'waitlisted-override');
+        app(TenantContext::class)->select($org);
+        $this->visitEnrollment($child, $group, $session, 'trial', $offer);
+        $staff = User::factory()->create();
+        OrganizationMembership::create(['organization_id' => $org->id, 'user_id' => $staff->id, 'role' => 'coordinator', 'status' => 'active']);
+        $reviewed = app(ReviewEnrollmentApplication::class)->handle($staff, $application, 'approve', 1, null, null, 'Another level');
+        $this->assertSame('waitlisted', $reviewed->status->value);
+        $transition = $reviewed->transitions()->where('to_status', 'waitlisted')->firstOrFail();
+        $this->assertSame('Another level', $transition->metadata['eligibility_override_reason'] ?? null);
+    }
+
+    public function test_manual_approval_does_not_create_a_past_visit(): void
+    {
+        [$org, , , $session, $offer, $child] = $this->visitFixture();
+        $application = app(SubmitEnrollmentApplication::class)->handle($child->owner, [
+            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1',
+        ], 'past-review');
+        app(TenantContext::class)->select($org);
+        $this->travelTo('2026-11-03T15:00:00Z');
+        $this->expectException(ValidationException::class);
+        app(ReviewEnrollmentApplication::class)->handle($child->owner, $application, 'approve', 1, null, null);
+    }
+
+    public function test_price_migration_round_trip_preserves_guards_and_refuses_data_loss(): void
+    {
+        $migration = require database_path('migrations/2026_10_28_000400_allow_offer_backed_enrollment_prices.php');
+        $migration->down();
+        $migration->up();
+        [$org, , , $session, $offer, $child] = $this->visitFixture();
+        $application = app(SubmitEnrollmentApplication::class)->handle($child->owner, [
+            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1',
+        ], 'migration');
+        try {
+            $migration->down();
+            $this->fail('Rollback must preserve existing offer-backed applications.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('Cannot roll back', $exception->getMessage());
+        }
+        $this->assertDatabaseHas('enrollment_applications', ['id' => $application->id, 'price_option_id' => null]);
+        $this->expectException(QueryException::class);
+        $application->update(['version' => 0]);
+    }
+}

@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/** @property array<string, mixed>|null $metadata */
 #[Fillable([
     'application_id', 'enrollment_id', 'actor_user_id', 'from_status',
     'to_status', 'public_reason', 'internal_note', 'metadata',

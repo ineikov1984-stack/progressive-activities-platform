@@ -20,6 +20,9 @@ final class ChangeEnrollment
 {
     public function endFrom(User $actor, Enrollment $enrollment, string $effectiveDate, string $reason): Enrollment
     {
+        if ($enrollment->application->visit_offer_id !== null) {
+            throw ValidationException::withMessages(['outcome' => 'Използвайте резултат от посещението за отказване.']);
+        }
         $date = CarbonImmutable::parse($effectiveDate)->startOfDay();
         $this->validateReasonAndDate($reason, $date, $enrollment);
 

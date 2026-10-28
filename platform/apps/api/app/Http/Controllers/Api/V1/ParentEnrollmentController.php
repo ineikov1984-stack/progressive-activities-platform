@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Enrollment\Actions\ChangeEnrollment;
+use App\Domain\Enrollment\Actions\RecordVisitOutcome;
 use App\Domain\Enrollment\Actions\SubmitEnrollmentApplication;
 use App\Domain\Enrollment\Enums\EnrollmentApplicationStatus;
 use App\Domain\Enrollment\Models\Enrollment;
@@ -39,9 +40,10 @@ final class ParentEnrollmentController extends Controller
 
         $payload = $request->validate([
             'child_id' => ['required', 'uuid'],
-            'group_id' => ['required', 'uuid'],
-            'price_option_id' => ['required', 'uuid'],
-            'session_id' => ['sometimes', 'nullable', 'uuid'],
+            'group_id' => ['required_without:visit_offer_id', 'uuid'],
+            'price_option_id' => ['required_without:visit_offer_id', 'uuid'],
+            'visit_offer_id' => ['sometimes', 'nullable', 'uuid'],
+            'session_id' => ['required_with:visit_offer_id', 'nullable', 'uuid'],
             'accepted_terms_version' => ['required', 'string', 'max:100'],
         ]);
         $application = $submit->handle($request->user(), $payload, $idempotencyKey);
@@ -113,6 +115,44 @@ final class ParentEnrollmentController extends Controller
         }
     }
 
+    public function visitOutcome(Request $request, string $enrollment, RecordVisitOutcome $recordOutcome): JsonResponse
+    {
+        $validated = $request->validate([
+            'outcome' => ['required', 'in:attended,cancelled_in_time,late_cancelled,no_show'],
+            'reason' => ['sometimes', 'nullable', 'string', 'max:1000'],
+        ]);
+
+        return DB::transaction(function () use ($request, $enrollment, $recordOutcome, $validated): JsonResponse {
+            try {
+                if (DB::getDriverName() === 'pgsql') {
+                    DB::select("SELECT set_config('app.current_user_id', ?, true)", [$request->user()->id]);
+                    $tenant = DB::selectOne('SELECT public.enrollment_owned_tenant(?::uuid, ?::uuid) AS id', [$enrollment, $request->user()->id])?->id;
+                    abort_if($tenant === null, 404);
+                    $this->context->select($tenant);
+                    $this->setDatabaseTenant();
+                }
+                $record = $this->ownedEnrollment($request, $enrollment);
+                $transition = $recordOutcome->handle($request->user(), $record, $validated['outcome'], $validated['reason'] ?? null);
+
+                return response()->json(['enrollment' => $this->presentEnrollment($record->refresh()), 'outcome' => $transition->metadata['outcome']]);
+            } finally {
+                $this->context->clear();
+            }
+        });
+    }
+
+    public function staffVisitOutcome(Request $request, string $enrollment, RecordVisitOutcome $recordOutcome): JsonResponse
+    {
+        $validated = $request->validate([
+            'outcome' => ['required', 'in:attended,cancelled_in_time,late_cancelled,no_show'],
+            'reason' => ['sometimes', 'nullable', 'string', 'max:1000'],
+        ]);
+        $record = Enrollment::query()->findOrFail($enrollment);
+        $transition = $recordOutcome->handle($request->user(), $record, $validated['outcome'], $validated['reason'] ?? null);
+
+        return response()->json(['enrollment' => $this->presentEnrollment($record->refresh()), 'outcome' => $transition->metadata['outcome']]);
+    }
+
     public function excludeSession(Request $request, string $enrollment, ChangeEnrollment $change): JsonResponse
     {
         $validated = $request->validate([
@@ -141,6 +181,10 @@ final class ParentEnrollmentController extends Controller
             'child_id' => $application->child_id,
             'group_id' => $application->group_id,
             'price_option_id' => $application->price_option_id,
+            'visit_offer_id' => $application->visit_offer_id,
+            'visit_offer_title_snapshot' => $application->visit_offer_title_snapshot,
+            'fee_reason_snapshot' => $application->fee_reason_snapshot,
+            'cancellation_policy_snapshot' => $application->cancellation_policy_snapshot,
             'session_id' => $application->session_id,
             'scope' => $application->scope->value,
             'source' => $application->source->value,
