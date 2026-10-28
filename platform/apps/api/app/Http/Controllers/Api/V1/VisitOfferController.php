@@ -84,7 +84,7 @@ final class VisitOfferController extends Controller
             'version' => $offer ? ['required', 'integer', 'min:1'] : ['prohibited'],
             'activity_id' => [$required, 'uuid', Rule::exists('activities', 'id')->where('organization_id', $tenant)],
             'group_id' => [$required, 'uuid', Rule::exists('activity_groups', 'id')->where('organization_id', $tenant)],
-            'campaign_id' => ['sometimes', 'nullable', 'uuid', Rule::exists('open_day_campaigns', 'id')->where('organization_id', $tenant)],
+            'campaign_id' => ['prohibited'],
             'session_ids' => ['sometimes', 'array'],
             'session_ids.*' => ['required', 'uuid', 'distinct', Rule::exists('activity_sessions', 'id')->where('organization_id', $tenant)],
             'type' => [$required, Rule::enum(VisitOfferType::class)],

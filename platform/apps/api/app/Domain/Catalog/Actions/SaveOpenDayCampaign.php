@@ -41,7 +41,7 @@ final readonly class SaveOpenDayCampaign
                 $fields['slug'] = rtrim(Str::substr($base, 0, 255 - strlen($ending)), '-').$ending;
             }
             $campaign = OpenDayCampaign::query()->create($fields);
-            $this->syncOffers($campaign, $data['visit_offer_ids'] ?? []);
+            $this->syncOffers($campaign, $data['visit_offer_ids'] ?? [], $data['visit_offer_versions'] ?? [], $data['source_campaign_versions'] ?? []);
             $this->audit->record(AuditAction::CatalogOpenDayCampaignCreated, new AuditableReference('open_day_campaign', $campaign->id), ['version' => 1]);
 
             return $campaign->load('visitOffers');
@@ -54,16 +54,22 @@ final readonly class SaveOpenDayCampaign
         $this->authorize($actor, $campaign);
 
         return DB::transaction(function () use ($campaign, $expectedVersion, $data): OpenDayCampaign {
+            Organization::query()->whereKey($this->context->organizationId())->lockForUpdate()->firstOrFail();
             $locked = OpenDayCampaign::query()->whereKey($campaign->id)->lockForUpdate()->firstOrFail();
             abort_unless($locked->version === $expectedVersion, 409, 'Campaign version conflict.');
             abort_if($locked->status === VisitOfferStatus::Cancelled, 409);
+            if (array_key_exists('slug', $data) && $data['slug'] !== $locked->slug
+                && OpenDayCampaign::query()->where('slug', $data['slug'])->whereKeyNot($locked->id)->exists()) {
+                throw ValidationException::withMessages(['slug' => 'Този адрес вече се използва.']);
+            }
             $locked->fill(Arr::only($data, self::FIELDS));
+            $membership = ['added' => [], 'removed' => []];
+            if (array_key_exists('visit_offer_ids', $data)) {
+                $membership = $this->syncOffers($locked, $data['visit_offer_ids'], $data['visit_offer_versions'] ?? [], $data['source_campaign_versions'] ?? []);
+            }
             $locked->version++;
             $locked->save();
-            if (array_key_exists('visit_offer_ids', $data)) {
-                $this->syncOffers($locked, $data['visit_offer_ids']);
-            }
-            $this->audit->record(AuditAction::CatalogOpenDayCampaignUpdated, new AuditableReference('open_day_campaign', $locked->id), ['version' => $locked->version]);
+            $this->audit->record(AuditAction::CatalogOpenDayCampaignUpdated, new AuditableReference('open_day_campaign', $locked->id), ['version' => $locked->version, 'membership' => $membership]);
 
             return $locked->refresh()->load('visitOffers');
         });
@@ -116,14 +122,69 @@ final readonly class SaveOpenDayCampaign
         }
     }
 
-    /** @param list<string> $offerIds */
-    private function syncOffers(OpenDayCampaign $campaign, array $offerIds): void
+    /**
+     * @param  list<string>  $offerIds
+     * @param  array<string, int>  $offerVersions
+     * @param  array<string, int>  $sourceVersions
+     * @return array{added: list<string>, removed: list<string>}
+     */
+    private function syncOffers(OpenDayCampaign $campaign, array $offerIds, array $offerVersions = [], array $sourceVersions = []): array
     {
-        $offers = VisitOffer::query()->whereIn('id', $offerIds)->lockForUpdate()->get();
-        if ($offers->count() !== count($offerIds)) {
+        $currentIds = $campaign->visitOffers()->pluck('visit_offers.id')->all();
+        $candidateIds = array_values(array_unique(array_merge($offerIds, $currentIds)));
+        sort($candidateIds);
+        $offers = VisitOffer::query()->whereIn('id', $candidateIds)->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+        if (count(array_diff($offerIds, $offers->keys()->all())) > 0) {
             throw ValidationException::withMessages(['visit_offer_ids' => 'Някои предложения не са достъпни.']);
         }
-        $campaign->visitOffers()->whereNotIn('id', $offerIds)->update(['campaign_id' => null]);
-        VisitOffer::query()->whereIn('id', $offerIds)->update(['campaign_id' => $campaign->id]);
+        $added = [];
+        $removed = [];
+        $changed = [];
+        $sourceIds = [];
+        $sourceOfferIds = [];
+        foreach ($offers as $offer) {
+            $nextCampaignId = in_array($offer->id, $offerIds, true) ? $campaign->id : null;
+            if ($offer->campaign_id === $nextCampaignId) {
+                continue;
+            }
+            abort_unless(($offerVersions[$offer->id] ?? null) === $offer->version, 409, 'Visit offer version conflict.');
+            $changed[] = [$offer, $nextCampaignId];
+            if ($nextCampaignId === null) {
+                $removed[] = $offer->id;
+            } else {
+                $added[] = $offer->id;
+            }
+            if ($offer->campaign_id !== null && $offer->campaign_id !== $campaign->id) {
+                $sourceIds[] = $offer->campaign_id;
+                $sourceOfferIds[$offer->campaign_id][] = $offer->id;
+            }
+        }
+        $sourceIds = array_values(array_unique($sourceIds));
+        sort($sourceIds);
+        $sources = OpenDayCampaign::query()->whereIn('id', $sourceIds)->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+        foreach ($sourceIds as $sourceId) {
+            $source = $sources->get($sourceId);
+            abort_unless($source !== null && ($sourceVersions[$sourceId] ?? null) === $source->version, 409, 'Source campaign version conflict.');
+        }
+        foreach ($changed as [$offer, $nextCampaignId]) {
+            $previousCampaignId = $offer->campaign_id;
+            $offer->campaign_id = $nextCampaignId;
+            $offer->version++;
+            $offer->save();
+            $this->audit->record(AuditAction::CatalogVisitOfferUpdated, new AuditableReference('visit_offer', $offer->id), [
+                'version' => $offer->version, 'campaign_id' => ['old' => $previousCampaignId, 'new' => $nextCampaignId],
+            ]);
+        }
+        foreach ($sources as $source) {
+            $source->version++;
+            $source->save();
+            $this->audit->record(AuditAction::CatalogOpenDayCampaignUpdated, new AuditableReference('open_day_campaign', $source->id), [
+                'version' => $source->version, 'membership' => [
+                    'removed' => $sourceOfferIds[$source->id], 'moved_to' => $campaign->id,
+                ],
+            ]);
+        }
+
+        return ['added' => $added, 'removed' => $removed];
     }
 }

@@ -132,10 +132,13 @@ class VisitOfferAdminTest extends TestCase
             ->assertCreated()->json('visit_offer.id');
         $campaign = $this->postJson('/api/v1/catalog/open-day-campaigns', [
             'title' => 'Open doors', 'starts_on' => '2030-11-03', 'ends_on' => '2030-11-04', 'visit_offer_ids' => [$id],
+            'visit_offer_versions' => [$id => 1],
         ])->assertCreated()->assertJsonPath('campaign.visit_offers.0.id', $id);
         $campaignId = $campaign->json('campaign.id');
         $this->getJson('/api/v1/catalog/open-day-campaigns')->assertOk()->assertJsonCount(1, 'campaigns');
-        $this->patchJson("/api/v1/catalog/open-day-campaigns/{$campaignId}", ['version' => 1, 'visit_offer_ids' => []])
+        $this->patchJson("/api/v1/catalog/open-day-campaigns/{$campaignId}", [
+            'version' => 1, 'visit_offer_ids' => [], 'visit_offer_versions' => [$id => 2],
+        ])
             ->assertOk()->assertJsonPath('campaign.version', 2)->assertJsonCount(0, 'campaign.visit_offers');
         $this->assertDatabaseHas('visit_offers', ['id' => $id, 'campaign_id' => null]);
         $this->postJson("/api/v1/catalog/open-day-campaigns/{$campaignId}/publish", ['version' => 2])
@@ -150,11 +153,11 @@ class VisitOfferAdminTest extends TestCase
             ->assertCreated()->json('visit_offer.id');
         $campaignId = $this->postJson('/api/v1/catalog/open-day-campaigns', [
             'title' => 'Open doors', 'starts_on' => '2030-11-03', 'ends_on' => '2030-11-04',
-            'visit_offer_ids' => [$offerId],
+            'visit_offer_ids' => [$offerId], 'visit_offer_versions' => [$offerId => 1],
         ])->assertCreated()->json('campaign.id');
         $this->postJson("/api/v1/catalog/open-day-campaigns/{$campaignId}/publish", ['version' => 1])
             ->assertUnprocessable()->assertJsonValidationErrors('visit_offer_ids');
-        $this->postJson("/api/v1/catalog/visit-offers/{$offerId}/publish", ['version' => 1])->assertOk();
+        $this->postJson("/api/v1/catalog/visit-offers/{$offerId}/publish", ['version' => 2])->assertOk();
         $this->postJson("/api/v1/catalog/open-day-campaigns/{$campaignId}/publish", ['version' => 1])
             ->assertOk()->assertJsonPath('campaign.status', 'published');
         $this->postJson("/api/v1/catalog/open-day-campaigns/{$campaignId}/close", ['version' => 2])
@@ -182,6 +185,10 @@ class VisitOfferAdminTest extends TestCase
             'version' => 1, 'starts_on' => '2030-11-05',
         ])->assertUnprocessable()->assertJsonValidationErrors('ends_on');
         $this->assertDatabaseHas('open_day_campaigns', ['id' => $id, 'version' => 1]);
+        $this->patchJson("/api/v1/catalog/open-day-campaigns/{$id}", [
+            'version' => 1, 'slug' => 'open-doors-2',
+        ])->assertUnprocessable()->assertJsonValidationErrors('slug');
+        $this->assertDatabaseHas('open_day_campaigns', ['id' => $id, 'slug' => 'open-doors', 'version' => 1]);
     }
 
     public function test_confirmed_application_blocks_incompatible_offer_edits(): void
@@ -209,6 +216,76 @@ class VisitOfferAdminTest extends TestCase
         $this->patchJson("/api/v1/catalog/visit-offers/{$id}", ['version' => 1, 'visit_limit' => 1])
             ->assertUnprocessable()->assertJsonValidationErrors('visit_limit');
         $this->assertDatabaseHas('visit_offers', ['id' => $id, 'visit_limit' => 3, 'version' => 1]);
+        $this->patchJson("/api/v1/catalog/visit-offers/{$id}", [
+            'version' => 1, 'type' => 'trial', 'fee_type' => 'free', 'title' => 'New display title',
+        ])->assertOk()->assertJsonPath('visit_offer.version', 2)
+            ->assertJsonPath('visit_offer.title', 'New display title');
+        $this->assertDatabaseHas('enrollment_applications', [
+            'visit_offer_id' => $id, 'visit_offer_title_snapshot' => 'Trial chess',
+        ]);
+    }
+
+    public function test_membership_moves_advance_and_audit_each_offer_and_campaign_version(): void
+    {
+        [$organization, $activity, $group, $session] = $this->fixture();
+        $this->login($organization);
+        $offerId = $this->postJson('/api/v1/catalog/visit-offers', $this->offerPayload($activity, $group, $session))
+            ->assertCreated()->json('visit_offer.id');
+        $a = $this->postJson('/api/v1/catalog/open-day-campaigns', [
+            'title' => 'Campaign A', 'visit_offer_ids' => [$offerId],
+            'visit_offer_versions' => [$offerId => 1],
+        ])->assertCreated()->json('campaign.id');
+        $this->assertDatabaseHas('visit_offers', ['id' => $offerId, 'campaign_id' => $a, 'version' => 2]);
+        $this->assertDatabaseHas('audit_events', [
+            'subject_id' => $offerId, 'action' => 'catalog.visit_offer_updated',
+        ]);
+        $b = $this->postJson('/api/v1/catalog/open-day-campaigns', ['title' => 'Campaign B'])
+            ->assertCreated()->json('campaign.id');
+
+        $this->patchJson("/api/v1/catalog/open-day-campaigns/{$b}", [
+            'version' => 1, 'visit_offer_ids' => [$offerId],
+            'visit_offer_versions' => [$offerId => 2],
+            'source_campaign_versions' => [$a => 1],
+        ])->assertOk()->assertJsonPath('campaign.version', 2);
+        $this->assertDatabaseHas('visit_offers', ['id' => $offerId, 'campaign_id' => $b, 'version' => 3]);
+        $this->assertDatabaseHas('open_day_campaigns', ['id' => $a, 'version' => 2]);
+        $this->assertDatabaseHas('audit_events', [
+            'subject_id' => $a, 'action' => 'catalog.open_day_campaign_updated',
+        ]);
+        $sourceAudit = DB::table('audit_events')->where('subject_id', $a)
+            ->where('action', 'catalog.open_day_campaign_updated')->sole();
+        $this->assertSame([$offerId], json_decode($sourceAudit->metadata, true)['membership']['removed']);
+        $this->assertSame(2, DB::table('audit_events')->where('subject_id', $offerId)
+            ->where('action', 'catalog.visit_offer_updated')->count());
+
+        $this->patchJson("/api/v1/catalog/open-day-campaigns/{$b}", [
+            'version' => 2, 'visit_offer_ids' => [], 'visit_offer_versions' => [$offerId => 2],
+        ])->assertConflict();
+        $this->patchJson("/api/v1/catalog/open-day-campaigns/{$a}", [
+            'version' => 2, 'visit_offer_ids' => [$offerId],
+            'visit_offer_versions' => [$offerId => 3],
+            'source_campaign_versions' => [$b => 1],
+        ])->assertConflict();
+        $this->assertDatabaseHas('visit_offers', ['id' => $offerId, 'campaign_id' => $b, 'version' => 3]);
+        $this->assertDatabaseHas('open_day_campaigns', ['id' => $a, 'version' => 2]);
+        $this->assertDatabaseHas('open_day_campaigns', ['id' => $b, 'version' => 2]);
+    }
+
+    public function test_offer_endpoint_rejects_direct_campaign_membership_edits(): void
+    {
+        [$organization, $activity, $group, $session] = $this->fixture();
+        $this->login($organization);
+        $campaignId = $this->postJson('/api/v1/catalog/open-day-campaigns', ['title' => 'Open doors'])
+            ->assertCreated()->json('campaign.id');
+        $this->postJson('/api/v1/catalog/visit-offers', [
+            ...$this->offerPayload($activity, $group, $session), 'campaign_id' => $campaignId,
+        ])->assertUnprocessable()->assertJsonValidationErrors('campaign_id');
+        $offerId = $this->postJson('/api/v1/catalog/visit-offers', $this->offerPayload($activity, $group, $session))
+            ->assertCreated()->json('visit_offer.id');
+        $this->patchJson("/api/v1/catalog/visit-offers/{$offerId}", [
+            'version' => 1, 'campaign_id' => $campaignId,
+        ])->assertUnprocessable()->assertJsonValidationErrors('campaign_id');
+        $this->assertDatabaseHas('visit_offers', ['id' => $offerId, 'campaign_id' => null, 'version' => 1]);
     }
 
     public function test_draft_can_change_groups_when_its_selected_sessions_change_together(): void

@@ -8,7 +8,6 @@ use App\Domain\Audit\ValueObjects\AuditableReference;
 use App\Domain\Catalog\Enums\VisitOfferStatus;
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
-use App\Domain\Catalog\Models\OpenDayCampaign;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Catalog\Models\VisitOffer;
 use App\Domain\Identity\Models\User;
@@ -22,7 +21,7 @@ use Illuminate\Validation\ValidationException;
 final readonly class SaveVisitOffer
 {
     private const FIELDS = [
-        'activity_id', 'group_id', 'campaign_id', 'type', 'title', 'description',
+        'activity_id', 'group_id', 'type', 'title', 'description',
         'audience_age_label', 'audience_class_label', 'visit_limit', 'fee_type',
         'amount_cents', 'currency', 'fee_reason', 'booking_deadline_hours',
         'cancellation_deadline_hours', 'cancellation_policy', 'cancellation_outcome',
@@ -80,7 +79,8 @@ final readonly class SaveVisitOffer
             }
             if ($locked->applications()->where('status', 'approved')->exists()) {
                 foreach (self::PROTECTED_FIELDS as $field) {
-                    if (array_key_exists($field, $data) && $before[$field] != $data[$field]) {
+                    $previous = $before[$field] instanceof \BackedEnum ? $before[$field]->value : $before[$field];
+                    if (array_key_exists($field, $data) && $previous != $data[$field]) {
                         throw ValidationException::withMessages([$field => 'Потвърдените посещения не позволяват тази промяна.']);
                     }
                 }
@@ -144,10 +144,6 @@ final readonly class SaveVisitOffer
         $group = Group::query()->whereKey($data['group_id'])->with('offering')->first();
         if ($activity === null || $group === null || $group->offering->activity_id !== $activity->id) {
             throw ValidationException::withMessages(['group_id' => 'Групата трябва да принадлежи на дейността.']);
-        }
-        if (($data['campaign_id'] ?? null) !== null
-            && ! OpenDayCampaign::query()->whereKey($data['campaign_id'])->exists()) {
-            throw ValidationException::withMessages(['campaign_id' => 'Кампанията не е достъпна.']);
         }
         foreach ($sessionIds ?? $data['session_ids'] ?? [] as $sessionId) {
             if (! Session::query()->whereKey($sessionId)->where('group_id', $group->id)->where('organization_id', $tenant)->exists()) {

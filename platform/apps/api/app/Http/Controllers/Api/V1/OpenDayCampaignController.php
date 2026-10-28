@@ -87,6 +87,10 @@ final class OpenDayCampaignController extends Controller
             'image_path' => ['sometimes', 'nullable', 'string', 'max:255'],
             'visit_offer_ids' => ['sometimes', 'array'],
             'visit_offer_ids.*' => ['required', 'uuid', 'distinct', Rule::exists('visit_offers', 'id')->where('organization_id', $tenant)],
+            'visit_offer_versions' => ['sometimes', 'array'],
+            'visit_offer_versions.*' => ['required', 'integer', 'min:1'],
+            'source_campaign_versions' => ['sometimes', 'array'],
+            'source_campaign_versions.*' => ['required', 'integer', 'min:1'],
         ]);
         $start = array_key_exists('starts_on', $data) ? $data['starts_on'] : $campaign?->starts_on?->toDateString();
         $end = array_key_exists('ends_on', $data) ? $data['ends_on'] : $campaign?->ends_on?->toDateString();
