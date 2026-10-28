@@ -89,7 +89,7 @@ final class EnrollmentCapacity
         if (DB::transactionLevel() > 0) {
             $enrollments->lockForUpdate();
         }
-        $offerRemaining = max(0, $offer->visit_limit - $enrollments->get()->count());
+        $offerRemaining = max(0, $offer->visit_limit - count($enrollments->get()->all()));
 
         return $total === null ? $offerRemaining : min($total, $offerRemaining);
     }

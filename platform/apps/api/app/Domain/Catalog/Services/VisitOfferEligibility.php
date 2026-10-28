@@ -83,7 +83,7 @@ final class VisitOfferEligibility
             return false;
         }
 
-        return $actor->exists && $actor->is_active && $actor->id !== null
+        return $actor->exists && $actor->is_active
             && OrganizationMembership::query()->where('user_id', $actor->id)
                 ->where('organization_id', $organizationId)
                 ->where('status', 'active')

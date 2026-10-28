@@ -13,4 +13,18 @@ enum AuditAction: string
     case OrganizationRoleChanged = 'organization.role_changed';
     case CatalogActivitySubmitted = 'catalog.activity_submitted';
     case CatalogActivityPublished = 'catalog.activity_published';
+    case CatalogVisitOfferCreated = 'catalog.visit_offer_created';
+    case CatalogVisitOfferUpdated = 'catalog.visit_offer_updated';
+    case CatalogVisitOfferPublished = 'catalog.visit_offer_published';
+    case CatalogVisitOfferClosed = 'catalog.visit_offer_closed';
+    case CatalogVisitOfferCancelled = 'catalog.visit_offer_cancelled';
+    case CatalogVisitOfferCapacityChanged = 'catalog.visit_offer_capacity_changed';
+    case CatalogVisitOfferPriceChanged = 'catalog.visit_offer_price_changed';
+    case CatalogVisitOfferDeadlineChanged = 'catalog.visit_offer_deadline_changed';
+    case CatalogVisitOfferPolicyChanged = 'catalog.visit_offer_policy_changed';
+    case CatalogOpenDayCampaignCreated = 'catalog.open_day_campaign_created';
+    case CatalogOpenDayCampaignUpdated = 'catalog.open_day_campaign_updated';
+    case CatalogOpenDayCampaignPublished = 'catalog.open_day_campaign_published';
+    case CatalogOpenDayCampaignClosed = 'catalog.open_day_campaign_closed';
+    case CatalogOpenDayCampaignCancelled = 'catalog.open_day_campaign_cancelled';
 }

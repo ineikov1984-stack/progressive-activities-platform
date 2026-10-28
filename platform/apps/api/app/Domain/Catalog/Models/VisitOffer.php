@@ -9,6 +9,7 @@ use App\Domain\Catalog\Enums\VisitOfferType;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -16,6 +17,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property VisitOfferType $type
+ * @property VisitOfferStatus $status
+ * @property VisitFeeType $fee_type
+ * @property CarbonImmutable|null $published_at
+ * @property CarbonImmutable|null $closed_at
+ * @property CarbonImmutable|null $cancelled_at
+ */
 #[Fillable([
     'activity_id', 'group_id', 'campaign_id', 'type', 'status', 'title', 'description',
     'audience_age_label', 'audience_class_label', 'visit_limit', 'fee_type',

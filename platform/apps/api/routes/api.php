@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\CatalogMediaController;
 use App\Http\Controllers\Api\V1\InstructorProfileController;
 use App\Http\Controllers\Api\V1\InvitationController;
 use App\Http\Controllers\Api\V1\LocationController;
+use App\Http\Controllers\Api\V1\OpenDayCampaignController;
 use App\Http\Controllers\Api\V1\OperatorOrganizationApplicationController;
 use App\Http\Controllers\Api\V1\OrganizationApplicationController;
 use App\Http\Controllers\Api\V1\OrganizationCatalogProfileController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\Api\V1\OrganizationController;
 use App\Http\Controllers\Api\V1\ParentChildController;
 use App\Http\Controllers\Api\V1\ParentEnrollmentController;
 use App\Http\Controllers\Api\V1\PublicCatalogController;
+use App\Http\Controllers\Api\V1\VisitOfferController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -58,6 +60,10 @@ Route::prefix('v1')->group(function (): void {
                     Route::get('/profile', [OrganizationCatalogProfileController::class, 'show']);
                     Route::get('/locations', [LocationController::class, 'index']);
                     Route::get('/instructors', [InstructorProfileController::class, 'index']);
+                    Route::get('/visit-offers', [VisitOfferController::class, 'index']);
+                    Route::get('/visit-offers/{visitOffer}', [VisitOfferController::class, 'show']);
+                    Route::get('/open-day-campaigns', [OpenDayCampaignController::class, 'index']);
+                    Route::get('/open-day-campaigns/{campaign}', [OpenDayCampaignController::class, 'show']);
                 });
                 Route::middleware('organization.access:operational.write')->group(function (): void {
                     Route::post('/activities', [ActivityController::class, 'store']);
@@ -71,6 +77,16 @@ Route::prefix('v1')->group(function (): void {
                     Route::patch('/locations/{location}', [LocationController::class, 'update']);
                     Route::post('/instructors', [InstructorProfileController::class, 'store']);
                     Route::patch('/instructors/{instructor}', [InstructorProfileController::class, 'update']);
+                    Route::post('/visit-offers', [VisitOfferController::class, 'store']);
+                    Route::patch('/visit-offers/{visitOffer}', [VisitOfferController::class, 'update']);
+                    Route::post('/visit-offers/{visitOffer}/publish', [VisitOfferController::class, 'publish']);
+                    Route::post('/visit-offers/{visitOffer}/close', [VisitOfferController::class, 'close']);
+                    Route::post('/visit-offers/{visitOffer}/cancel', [VisitOfferController::class, 'cancel']);
+                    Route::post('/open-day-campaigns', [OpenDayCampaignController::class, 'store']);
+                    Route::patch('/open-day-campaigns/{campaign}', [OpenDayCampaignController::class, 'update']);
+                    Route::post('/open-day-campaigns/{campaign}/publish', [OpenDayCampaignController::class, 'publish']);
+                    Route::post('/open-day-campaigns/{campaign}/close', [OpenDayCampaignController::class, 'close']);
+                    Route::post('/open-day-campaigns/{campaign}/cancel', [OpenDayCampaignController::class, 'cancel']);
                 });
             });
             Route::middleware(['tenant', 'organization.access:onboarding'])->group(function (): void {
