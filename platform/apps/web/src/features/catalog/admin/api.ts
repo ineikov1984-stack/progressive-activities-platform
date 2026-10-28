@@ -61,8 +61,11 @@ export type OpenDayCampaign = {
   visit_offers: Pick<VisitOffer, 'id' | 'title' | 'status' | 'type'>[];
 };
 export type CampaignMembershipInput = { version: number; visit_offer_ids: string[]; visit_offer_versions: Record<string, number>; source_campaign_versions: Record<string, number> };
+export type OpenDayCampaignInput = Pick<OpenDayCampaign, 'title'> & Partial<Pick<OpenDayCampaign, 'slug' | 'description' | 'starts_on' | 'ends_on' | 'image_path'>> & Partial<CampaignMembershipInput>;
 export const loadVisitOffers = (organizationId: string) => request<{ visit_offers: VisitOffer[] }>(organizationId, '/visit-offers').then((x) => x.visit_offers);
 export const loadOpenDayCampaigns = (organizationId: string) => request<{ campaigns: OpenDayCampaign[] }>(organizationId, '/open-day-campaigns').then((x) => x.campaigns);
 export const saveVisitOffer = (organizationId: string, body: VisitOfferInput, id?: string) => request<{ visit_offer: VisitOffer }>(organizationId, id ? `/visit-offers/${id}` : '/visit-offers', { method: id ? 'PATCH' : 'POST', ...json(body) }, true).then((x) => x.visit_offer);
 export const transitionVisitOffer = (organizationId: string, id: string, version: number, transition: 'publish' | 'close' | 'cancel') => request<{ visit_offer: VisitOffer }>(organizationId, `/visit-offers/${id}/${transition}`, { method: 'POST', ...json({ version }) }, true).then((x) => x.visit_offer);
 export const updateCampaignMembership = (organizationId: string, id: string, body: CampaignMembershipInput) => request<{ campaign: OpenDayCampaign }>(organizationId, `/open-day-campaigns/${id}`, { method: 'PATCH', ...json(body) }, true).then((x) => x.campaign);
+export const saveOpenDayCampaign = (organizationId: string, body: OpenDayCampaignInput, id?: string) => request<{ campaign: OpenDayCampaign }>(organizationId, id ? `/open-day-campaigns/${id}` : '/open-day-campaigns', { method: id ? 'PATCH' : 'POST', ...json(body) }, true).then((x) => x.campaign);
+export const transitionOpenDayCampaign = (organizationId: string, id: string, version: number, transition: 'publish' | 'close' | 'cancel') => request<{ campaign: OpenDayCampaign }>(organizationId, `/open-day-campaigns/${id}/${transition}`, { method: 'POST', ...json({ version }) }, true).then((x) => x.campaign);

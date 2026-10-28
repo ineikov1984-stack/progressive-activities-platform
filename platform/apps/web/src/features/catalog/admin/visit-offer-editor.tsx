@@ -101,6 +101,7 @@ export function VisitOfferEditor({ activityId }: { activityId: string }) {
   const [blocked, setBlocked] = useState(false);
   const [latest, setLatest] = useState<VisitOffer>();
   const [attempt, setAttempt] = useState(0);
+  const [validationAt, setValidationAt] = useState(Date.now);
 
   useEffect(() => {
     let active = true;
@@ -162,7 +163,7 @@ export function VisitOfferEditor({ activityId }: { activityId: string }) {
     } catch { setError('Актуалните данни не бяха заредени. Опитайте отново.'); } finally { setBusy(false); }
   }
   async function persist(publish: boolean) {
-    const validation = visitOfferErrors(draft, groups, publish || saved?.status === 'published');
+    const validation = visitOfferErrors(draft, groups, publish || saved?.status === 'published', Date.now(), saved?.status === 'published' ? saved.sessions.map((session) => session.id) : []);
     if (saved && saved.campaign_id !== (draft.campaign_id || null) && campaigns.some((item) => item.id === saved.campaign_id && item.status === 'cancelled')) validation.campaign_id = cancelledCampaignMembershipMessage;
     setErrors(validation); setError(''); setNotice('');
     if (Object.keys(validation).length) { const first = Object.keys(validation)[0]; setStep(publish ? 5 : visitOfferErrorTarget(first).step); if (!publish) focusError(first); return; }
@@ -195,13 +196,32 @@ export function VisitOfferEditor({ activityId }: { activityId: string }) {
       }
     } finally { setBusy(false); }
   }
+  async function endOffer(transition: 'close' | 'cancel') {
+    if (!saved || dirty) return;
+    const consequence = 'Новите заявки спират. Потвърдените посещения, заявленията и историята се запазват. Няма автоматични плащания или възстановявания.';
+    if (!window.confirm(`${transition === 'close' ? 'Да приключим' : 'Да отменим'} предложението? ${consequence}${transition === 'cancel' ? ' След отмяна редакцията се заключва.' : ''}`)) return;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const record = await transitionVisitOffer(organizationId, saved.id, saved.version, transition);
+      keepRecord(record); setDraft(visitOfferDraftFromRecord(record)); setErrors({});
+      setNotice(transition === 'close' ? 'Предложението е приключено.' : 'Предложението е отменено.');
+    } catch (reason) {
+      if (reason instanceof CatalogApiError && reason.status === 403) setError('Нямате право за това действие. Обърнете се към администратор на организацията.');
+      else { setBlocked(true); setError('Предложението е променено или действието не завърши. Заредете актуалните данни преди нов опит.'); }
+    } finally { setBusy(false); }
+  }
   if (!activity) return <main className={admin.page}><Link href={`/dashboard/activities/${activityId}`}>← Редактор на дейността</Link><p role={error ? 'alert' : 'status'}>{error || 'Зареждане на предложенията…'}</p>{error && <button type="button" onClick={() => { setError(''); setAttempt((value) => value + 1); }}>Опитай отново</button>}</main>;
-  const shownErrors = step === 5 ? { ...visitOfferErrors(draft, groups, true), ...errors } : errors;
+  const shownErrors = step === 5 ? { ...visitOfferErrors(draft, groups, true, validationAt, saved?.status === 'published' ? saved.sessions.map((session) => session.id) : []), ...errors } : errors;
   return <main className={`${admin.page} ${styles.page}`}>
     <header className={admin.pageHeader}><div><Link href={`/dashboard/activities/${activityId}`} onClick={(event) => { if (dirty && !window.confirm('Имате незапазени промени. Да напуснем без запазване?')) event.preventDefault(); }}>← Редактор на дейността</Link><p className={admin.eyebrow}>Предложения за посещение</p><h1>{activity.title}</h1><p>Пробни посещения, еднократни посещения и отворени врати</p></div></header>
     <section className={admin.panel}><label className={styles.selector}>Предложение за редакция<select value={saved?.id ?? ''} onChange={(event) => selectOffer(event.target.value)} disabled={busy}><option value="">Ново предложение</option>{offers.map((offer) => <option value={offer.id} key={offer.id}>{offer.title} · {statuses[offer.status]}</option>)}</select></label>{!offers.length && <p className={admin.help}>Още няма предложения за тази дейност. Създайте първото в шестте стъпки по-долу.</p>}</section>
     {notice && <p className={admin.notice} role="status">{notice}</p>}{error && <p className={admin.error} role="alert">{error}</p>}
     {blocked && <section className={admin.panel}><button type="button" disabled={busy} onClick={refreshConflict}>Зареди актуалните данни</button>{latest && <><h2>Последно запазено предложение</h2><p>{latest.title} · {statuses[latest.status]} · {priceLabel(visitOfferDraftFromRecord(latest))}</p><p>{latest.description}</p><p>{latest.sessions.map(sessionLabel).join('; ')}</p><button type="button" onClick={() => { keepRecord(latest); setDraft(visitOfferDraftFromRecord(latest)); setDirty(false); setBlocked(false); setError(''); setErrors({}); setLatest(undefined); }}>Замени формата с актуалното предложение</button><p className={admin.help}>Това заменя вашите незапазени промени с показаните данни от сървъра.</p></>}</section>}
-    <VisitOfferForm draft={draft} groups={groups} campaigns={campaigns} activityTitle={activity.title} step={step} errors={shownErrors} busy={busy} blocked={blocked} status={saved?.status ?? 'draft'} membershipLocked={campaigns.some((item) => item.id === saved?.campaign_id && item.status === 'cancelled')} onSetup={openGroupSetup} onChange={(value) => { setDraft(value); setDirty(true); setErrors({}); setNotice(''); }} onStep={setStep} onSave={() => persist(false)} onPublish={() => persist(true)}/>
+    <section className={admin.panel}><Link href="/dashboard/open-days" onClick={(event) => { if (dirty && !window.confirm('Имате незапазени промени. Да отворим кампаниите без запазване?')) event.preventDefault(); }}>Създай или управлявай кампании „Отворени врати“</Link>
+      {saved && <><h2>Статус на предложението: {statuses[saved.status]}</h2><p>При приключване или отмяна новите заявки спират. Потвърдените посещения, заявленията и историята се запазват. Няма автоматични плащания или възстановявания. Приключено предложение не се публикува повторно; отмененото е заключено за редакция.</p>
+        <div className={admin.headerActions}>{saved.status === 'published' && <button type="button" disabled={busy || blocked || dirty} onClick={() => endOffer('close')}>Приключи предложението</button>}{saved.status !== 'cancelled' && <button type="button" className={admin.dangerButton} disabled={busy || blocked || dirty} onClick={() => endOffer('cancel')}>Отмени предложението</button>}</div>{dirty && <p>Запазете промените преди приключване или отмяна.</p>}
+      </>}
+    </section>
+    <VisitOfferForm draft={draft} groups={groups} campaigns={campaigns} activityTitle={activity.title} step={step} errors={shownErrors} busy={busy} blocked={blocked} status={saved?.status ?? 'draft'} membershipLocked={campaigns.some((item) => item.id === saved?.campaign_id && item.status === 'cancelled')} onSetup={openGroupSetup} onChange={(value) => { setDraft(value); setDirty(true); setErrors({}); setNotice(''); }} onStep={(value) => { setValidationAt(Date.now()); setStep(value); }} onSave={() => persist(false)} onPublish={() => persist(true)}/>
   </main>;
 }

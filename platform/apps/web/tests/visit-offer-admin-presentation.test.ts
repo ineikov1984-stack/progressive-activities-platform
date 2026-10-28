@@ -7,6 +7,14 @@ const valid = () => ({ ...newVisitOfferDraft('activity-1'), title: 'Пробно
 const now = Date.parse('2030-10-01T00:00:00Z');
 
 describe('visit offer administration', () => {
+  it('permits published content edits with unchanged historical sessions but rejects new past attachments', () => {
+    const past = { id: 'past', starts_at: '2030-09-01T14:00:00Z', ends_at: '2030-09-01T15:00:00Z', status: 'scheduled' };
+    const changedGroups = [{ ...groups[0], sessions: [...groups[0].sessions, past, { ...past, id: 'new-past' }] }];
+    const draft = { ...valid(), session_ids: ['past', 'session-1'] };
+    expect(visitOfferErrors(draft, changedGroups, true, now, ['past', 'session-1'])).toEqual({});
+    expect(visitOfferErrors({ ...draft, session_ids: [...draft.session_ids, 'new-past'] }, changedGroups, true, now, ['past', 'session-1']).session_ids).toBeTruthy();
+    expect(visitOfferErrors(draft, changedGroups, true, now).session_ids).toBeTruthy();
+  });
   it.each([['type', 0], ['fee_type', 3], ['cancellation_outcome', 4], ['waitlist_enabled', 2], ['unlimited_single_visits', 2], ['currency', 3], ['activity_id', 1]])('routes protected %s errors to the actual field in step %i', (key, step) => {
     expect(visitOfferErrorTarget(String(key))).toEqual({ step, controlId: `visit-field-${key}` });
   });

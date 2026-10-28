@@ -15,13 +15,14 @@ use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Enrollment\Models\EnrollmentEvent;
 use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
+use App\Domain\Enrollment\Services\SessionAllocation;
 use App\Domain\Identity\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 final class ReviewEnrollmentApplication
 {
-    public function __construct(private readonly EnrollmentCapacity $capacity, private readonly VisitOfferEligibility $eligibility) {}
+    public function __construct(private readonly EnrollmentCapacity $capacity, private readonly VisitOfferEligibility $eligibility, private readonly SessionAllocation $allocation) {}
 
     public function handle(
         User $actor,
@@ -65,6 +66,15 @@ final class ReviewEnrollmentApplication
                 throw ValidationException::withMessages(['decision' => 'Невалидно решение.']);
             }
 
+            if ($current->session !== null) {
+                $this->allocation->assertAvailable($current->child, $current->session, $current->id);
+            } elseif ($current->scope === EnrollmentScope::FullPeriod) {
+                foreach (Session::query()->where('group_id', $group->id)->where('status', 'scheduled')
+                    ->where('starts_at', '>', now())->orderBy('id')->get() as $session) {
+                    $this->allocation->assertAvailable($current->child, $session, $current->id);
+                }
+            }
+
             if ($offer !== null) {
                 $acceptedType = $current->transitions()->whereNotNull('metadata->visit_offer_type')->first()?->metadata['visit_offer_type']
                     ?? ($current->scope === EnrollmentScope::Trial ? 'trial' : null);
@@ -81,10 +91,10 @@ final class ReviewEnrollmentApplication
                 }
             }
             $remaining = $offer !== null
-                ? $this->capacity->remainingForOffer($offer, $current->session)
+                ? $this->capacity->remainingForOffer($offer, $current->session, forAllocation: true)
                 : ($current->scope === EnrollmentScope::FullPeriod
-                ? $this->capacity->remainingForGroup($group)
-                : $this->capacity->remainingForSession($current->session()->firstOrFail()));
+                ? $this->capacity->remainingForGroup($group, forAllocation: true)
+                : $this->capacity->remainingForSession($current->session()->firstOrFail(), forAllocation: true));
 
             if ($remaining !== null && $remaining < 1) {
                 if (! $group->waitlist_enabled || ($offer !== null && ! $offer->waitlist_enabled)) {

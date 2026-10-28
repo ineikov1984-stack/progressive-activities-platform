@@ -114,3 +114,15 @@ test('protected-field validation summaries open and focus each invalid control',
     await expect(page.locator(`#error-${key}`)).toBeVisible();
   }
 });
+
+test('published multi-date content can be saved with retained historical sessions', async ({ page }) => {
+  const state = await fixture(page);
+  const past = { ...session, id: 'past-session', starts_at: '2025-11-01T14:00:00Z', ends_at: '2025-11-01T15:00:00Z' };
+  state.groups = [{ ...group, sessions: [past, session] }];
+  state.offers = [{ ...offer, status: 'published', sessions: [past, session] }];
+  await page.goto('/dashboard/activities/activity-1/visit-offers?offer=offer-1');
+  await page.getByLabel('Публично заглавие').fill('Поправено заглавие след първото посещение');
+  await page.getByRole('button', { name: 'Запази промените' }).click();
+  await expect(page.getByRole('status')).toHaveText('Предложението е запазено.');
+  expect(state.writes[0]).toMatchObject({ version: 4, session_ids: ['past-session', 'session-1'] });
+});

@@ -75,9 +75,10 @@ final readonly class SaveVisitOffer
             $oldSessions = $locked->sessions()->pluck('activity_sessions.id')->sort()->values()->all();
             $newSessions = $data['session_ids'] ?? $oldSessions;
             sort($newSessions);
+            $addedSessions = array_values(array_diff($newSessions, $oldSessions));
             if ($locked->status === VisitOfferStatus::Published && array_key_exists('session_ids', $data)
-                && ($newSessions === [] || Session::query()->whereIn('id', $newSessions)
-                    ->where('status', 'scheduled')->where('starts_at', '>', now())->count() !== count($newSessions))) {
+                && ($newSessions === [] || Session::query()->whereIn('id', $addedSessions)
+                    ->where('status', 'scheduled')->where('starts_at', '>', now())->count() !== count($addedSessions))) {
                 throw ValidationException::withMessages(['session_ids' => 'Публикуваното предложение изисква бъдещи занятия.']);
             }
             if ($locked->applications()->where('status', 'approved')->exists()) {

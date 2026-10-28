@@ -129,6 +129,7 @@ export function Dashboard() {
           <a className={styles.activeNav} href="#overview">Общ преглед</a>
           <a href="#team">Екип и покани</a>
           <Link href="/dashboard/activities">Дейности <small>Каталог</small></Link>
+          <Link href="/dashboard/open-days">Отворени врати <small>Кампании</small></Link>
           <a href="#audit">Одит <small>Задача 6</small></a>
           {data.organizations.some((organization) => organization.role === 'platform_admin') ? (
             <a href="/operator/organizations">Кандидатури</a>

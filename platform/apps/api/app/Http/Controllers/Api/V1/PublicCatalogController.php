@@ -219,7 +219,7 @@ final class PublicCatalogController extends Controller
             'summary' => $activity->summary,
             'age_label' => $activity->age_label,
             'hero_image_url' => $this->mediaUrl($activity->hero_image_path, $organizationSlug),
-            'price' => $offerPrice ? $this->presentVisitPrice($offerPrice, $offerPriceVaries)
+            'price' => $offerPrice ? $this->presentVisitPrice($offerPrice, $offerPriceVaries || $offerPrice['fee_type'] === 'from_price')
                 : ($price ? $this->presentPrice($price) : null),
             'audience' => $audienceRow['audience'] ?? $activity->age_label,
             'availability' => $availability,

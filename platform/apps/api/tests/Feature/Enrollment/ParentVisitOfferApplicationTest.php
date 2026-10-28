@@ -159,8 +159,13 @@ class ParentVisitOfferApplicationTest extends TestCase
     {
         [$org, , , $session, $offer, $child] = $this->visitFixture(['visit_limit' => 1]);
         $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1'];
+        $secondSession = $session->replicate();
+        $secondSession->starts_at = $session->starts_at->addWeek();
+        $secondSession->ends_at = $session->ends_at->addWeek();
+        $secondSession->save();
+        $offer->sessions()->attach($secondSession);
         $first = app(SubmitEnrollmentApplication::class)->handle($child->owner, $payload, 'first-trial');
-        $second = app(SubmitEnrollmentApplication::class)->handle($child->owner, $payload, 'second-trial');
+        $second = app(SubmitEnrollmentApplication::class)->handle($child->owner, [...$payload, 'session_id' => $secondSession->id], 'second-trial');
         app(TenantContext::class)->select($org);
         $offer->update(['type' => 'single']);
         foreach ([$first, $second] as $application) {
@@ -277,6 +282,8 @@ class ParentVisitOfferApplicationTest extends TestCase
         $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'full-offer')->postJson('/api/v1/parent/enrollment-applications', $payload)->assertCreated()->assertJsonPath('application.status', 'waitlisted');
         app(TenantContext::class)->select($org);
         $offer->update(['waitlist_enabled' => false]);
+        $third = $child->owner->children()->create(['first_name' => 'Cora', 'last_name' => 'Smith']);
+        $payload['child_id'] = $third->id;
         $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'no-waitlist')->postJson('/api/v1/parent/enrollment-applications', $payload)->assertUnprocessable()->assertJsonValidationErrors('capacity');
         app(TenantContext::class)->select($org);
         $offer->update(['waitlist_enabled' => true]);
@@ -299,7 +306,11 @@ class ParentVisitOfferApplicationTest extends TestCase
             'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1',
         ], 'manual-eligibility');
         app(TenantContext::class)->select($org);
-        $this->visitEnrollment($child, $group, $session, 'trial', $offer);
+        $past = $session->replicate();
+        $past->starts_at = $session->starts_at->subWeek();
+        $past->ends_at = $session->ends_at->subWeek();
+        $past->save();
+        $this->visitEnrollment($child, $group, $past, 'trial', $offer, 'ended');
         try {
             app(ReviewEnrollmentApplication::class)->handle($child->owner, $application, 'approve', 1, null, null);
             $this->fail('A second trial must be rejected at approval.');
@@ -318,7 +329,8 @@ class ParentVisitOfferApplicationTest extends TestCase
     public function test_full_session_rejects_when_group_waitlist_is_disabled_and_stale_terms_are_rejected(): void
     {
         [$org, , $group, $session, $offer, $child] = $this->visitFixture(['terms_version' => 'v2'], ['waitlist_enabled' => false], ['capacity' => 1]);
-        $this->visitEnrollment($child, $group, null, 'full_period', startsOn: '2026-11-01');
+        $other = $child->owner->children()->create(['first_name' => 'Ben', 'last_name' => 'Smith']);
+        $this->visitEnrollment($other, $group, null, 'full_period', startsOn: '2026-11-01');
         $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1'];
         $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'stale')->postJson('/api/v1/parent/enrollment-applications', $payload)->assertUnprocessable()->assertJsonValidationErrors('accepted_terms_version');
         $this->withHeader('Idempotency-Key', 'full')->postJson('/api/v1/parent/enrollment-applications', [...$payload, 'accepted_terms_version' => 'v2'])->assertUnprocessable()->assertJsonValidationErrors('capacity');
@@ -331,7 +343,13 @@ class ParentVisitOfferApplicationTest extends TestCase
             'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1',
         ], 'waitlisted-override');
         app(TenantContext::class)->select($org);
-        $this->visitEnrollment($child, $group, $session, 'trial', $offer);
+        $past = $session->replicate();
+        $past->starts_at = $session->starts_at->subWeek();
+        $past->ends_at = $session->ends_at->subWeek();
+        $past->save();
+        $this->visitEnrollment($child, $group, $past, 'trial', $offer, 'ended');
+        $other = $child->owner->children()->create(['first_name' => 'Ben', 'last_name' => 'Smith']);
+        $this->visitEnrollment($other, $group, $session, 'trial', $offer);
         $staff = User::factory()->create();
         OrganizationMembership::create(['organization_id' => $org->id, 'user_id' => $staff->id, 'role' => 'coordinator', 'status' => 'active']);
         $reviewed = app(ReviewEnrollmentApplication::class)->handle($staff, $application, 'approve', 1, null, null, 'Another level');

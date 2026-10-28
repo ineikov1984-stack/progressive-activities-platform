@@ -165,6 +165,7 @@ final readonly class SaveOpenDayCampaign
         foreach ($sourceIds as $sourceId) {
             $source = $sources->get($sourceId);
             abort_unless($source !== null && ($sourceVersions[$sourceId] ?? null) === $source->version, 409, 'Source campaign version conflict.');
+            abort_if($source->status === VisitOfferStatus::Cancelled, 409, 'Offers cannot be moved out of a cancelled campaign.');
         }
         foreach ($changed as [$offer, $nextCampaignId]) {
             $previousCampaignId = $offer->campaign_id;

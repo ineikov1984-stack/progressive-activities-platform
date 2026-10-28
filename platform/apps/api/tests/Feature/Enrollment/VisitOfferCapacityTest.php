@@ -3,6 +3,7 @@
 namespace Tests\Feature\Enrollment;
 
 use App\Domain\Catalog\Models\VisitOffer;
+use App\Domain\Catalog\Services\PublicAvailabilityPresenter;
 use App\Domain\Catalog\Services\VisitOfferAvailabilityService;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
 use Carbon\CarbonImmutable;
@@ -178,7 +179,7 @@ class VisitOfferCapacityTest extends TestCase
                 flush();
                 try {
                     $session = \App\Domain\Catalog\Models\Session::query()->findOrFail($argv[2]);
-                    $remaining = app(\App\Domain\Enrollment\Services\EnrollmentCapacity::class)->remainingForSession($session);
+                    $remaining = app(\App\Domain\Enrollment\Services\EnrollmentCapacity::class)->remainingForSession($session, forAllocation: true);
                     $connection->commit();
                     echo "DONE:{$remaining}\n";
                 } catch (\Throwable $exception) {
@@ -211,7 +212,7 @@ class VisitOfferCapacityTest extends TestCase
             }
             $this->assertTrue($waiting, 'The second PostgreSQL connection did not reach a row lock.');
             $this->assertSame(2, app(EnrollmentCapacity::class)->remainingForGroup(
-                $group, CarbonImmutable::parse('2026-10-28T10:00:00Z'),
+                $group, CarbonImmutable::parse('2026-10-28T10:00:00Z'), forAllocation: true,
             ));
             $connection->commit();
 
@@ -242,6 +243,92 @@ class VisitOfferCapacityTest extends TestCase
                 $connection->table('users')->where('id', $parentId)->delete();
             }
             DB::setDefaultConnection($originalConnection);
+        }
+    }
+
+    public function test_postgresql_public_reads_in_opposite_group_order_do_not_take_allocation_locks(): void
+    {
+        try {
+            DB::connection('pgsql_admin')->getPdo();
+        } catch (Throwable) {
+            $this->markTestSkipped('PostgreSQL is required for observational read verification.');
+        }
+        Artisan::call('migrate', ['--database' => 'pgsql_admin', '--force' => true]);
+        $original = DB::getDefaultConnection();
+        DB::setDefaultConnection('pgsql_admin');
+        $connection = DB::connection('pgsql_admin');
+        $organizationId = null;
+        $parentId = null;
+        try {
+            [$org, $activity, $group, $session, $first, $child] = $this->visitFixture();
+            $organizationId = $org->id;
+            $parentId = $child->owner_user_id;
+            $otherGroup = $group->replicate();
+            $otherGroup->save();
+            $otherSession = $session->replicate();
+            $otherSession->group_id = $otherGroup->id;
+            $otherSession->save();
+            $second = $first->replicate();
+            $second->group_id = $otherGroup->id;
+            $second->save();
+            $second->sessions()->attach($otherSession);
+            $connection->beginTransaction();
+            $connection->enableQueryLog();
+            $at = CarbonImmutable::parse('2026-10-28T10:00:00Z');
+            app(PublicAvailabilityPresenter::class)->rows(collect([$first, $second]), $at);
+            $queries = $connection->getQueryLog();
+            $connection->disableQueryLog();
+            $this->assertSame([], array_values(array_filter($queries, fn (array $query): bool => str_contains(strtolower($query['query']), 'for update'))));
+
+            // While the first public transaction remains open, read the same groups in reverse order.
+            $worker = <<<'PHP'
+                require 'vendor/autoload.php';
+                $app = require 'bootstrap/app.php';
+                $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+                \Illuminate\Support\Facades\DB::setDefaultConnection('pgsql_admin');
+                app(\App\Domain\Organizations\Tenancy\TenantContext::class)->select($argv[1]);
+                $connection = \Illuminate\Support\Facades\DB::connection('pgsql_admin');
+                $connection->beginTransaction();
+                $connection->statement("SET LOCAL lock_timeout = '500ms'");
+                $connection->enableQueryLog();
+                $offers = collect([$argv[2], $argv[3]])->map(fn ($id) => \App\Domain\Catalog\Models\VisitOffer::findOrFail($id));
+                $rows = app(\App\Domain\Catalog\Services\PublicAvailabilityPresenter::class)->rows($offers, \Carbon\CarbonImmutable::parse('2026-10-28T10:00:00Z'));
+                foreach ($connection->getQueryLog() as $query) {
+                    if (str_contains(strtolower($query['query']), 'for update')) exit(2);
+                }
+                $connection->commit();
+                echo count($rows);
+                PHP;
+            $process = proc_open([PHP_BINARY, '-r', $worker, $org->id, $second->id, $first->id],
+                [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, base_path());
+            $this->assertIsResource($process);
+            fclose($pipes[0]);
+            $output = stream_get_contents($pipes[1]);
+            $error = stream_get_contents($pipes[2]);
+            fclose($pipes[1]);
+            fclose($pipes[2]);
+            $this->assertSame(0, proc_close($process), $error);
+            $this->assertSame('2', $output);
+            $connection->rollBack();
+
+            $connection->enableQueryLog();
+            $this->travelTo($at);
+            $this->getJson('/api/v1/public/organizations/'.$org->slug.'/catalog')->assertOk();
+            $this->getJson('/api/v1/public/organizations/'.$org->slug.'/activities/'.$activity->slug)->assertOk();
+            $queries = $connection->getQueryLog();
+            $this->assertSame([], array_values(array_filter($queries, fn (array $query): bool => str_contains(strtolower($query['query']), 'for update'))));
+        } finally {
+            $connection->disableQueryLog();
+            if ($connection->transactionLevel() > 0) {
+                $connection->rollBack();
+            }
+            if ($organizationId !== null) {
+                $connection->table('organizations')->where('id', $organizationId)->delete();
+            }
+            if ($parentId !== null) {
+                $connection->table('users')->where('id', $parentId)->delete();
+            }
+            DB::setDefaultConnection($original);
         }
     }
 }

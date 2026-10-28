@@ -18,6 +18,7 @@ use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Enrollment\Models\EnrollmentEvent;
 use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
+use App\Domain\Enrollment\Services\SessionAllocation;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Enums\OrganizationStatus;
 use App\Domain\Organizations\Models\Organization;
@@ -32,6 +33,7 @@ final class SubmitEnrollmentApplication
         private readonly ReviewEnrollmentApplication $review,
         private readonly VisitOfferEligibility $eligibility,
         private readonly EnrollmentCapacity $capacity,
+        private readonly SessionAllocation $allocation,
     ) {}
 
     /** @param array<string, mixed> $payload */
@@ -125,6 +127,7 @@ final class SubmitEnrollmentApplication
                 $status = EnrollmentApplicationStatus::Submitted;
                 $metadata = [];
                 if ($offer !== null && $session !== null) {
+                    $this->allocation->assertAvailable($child, $session);
                     $this->eligibility->assertEligible($child, $offer, $session, $overrideActor, $overrideReason);
                     if (now()->greaterThanOrEqualTo($session->starts_at->subHours($offer->booking_deadline_hours))) {
                         throw ValidationException::withMessages(['session_id' => 'Срокът за записване е изтекъл.']);
@@ -132,7 +135,7 @@ final class SubmitEnrollmentApplication
                     if ($offer->terms_version !== null && $payload['accepted_terms_version'] !== $offer->terms_version) {
                         throw ValidationException::withMessages(['accepted_terms_version' => 'Приемете актуалните условия.']);
                     }
-                    if ($this->capacity->remainingForOffer($offer, $session) < 1) {
+                    if ($this->capacity->remainingForOffer($offer, $session, forAllocation: true) < 1) {
                         if (! $offer->waitlist_enabled || ! $group->waitlist_enabled) {
                             throw ValidationException::withMessages(['capacity' => 'Няма свободни места.']);
                         }

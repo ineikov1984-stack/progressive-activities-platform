@@ -122,7 +122,7 @@ export function visitOfferPayload(draft: VisitOfferDraft, version?: number): Vis
 export function changeVisitOfferGroup(draft: VisitOfferDraft, groupId: string): VisitOfferDraft {
   return { ...draft, group_id: groupId, session_ids: draft.group_id === groupId ? draft.session_ids : [] };
 }
-export function visitOfferErrors(draft: VisitOfferDraft, groups: ActivityGroup[], publish: boolean, now = Date.now()): VisitOfferErrors {
+export function visitOfferErrors(draft: VisitOfferDraft, groups: ActivityGroup[], publish: boolean, now = Date.now(), retainedSessionIds: string[] = []): VisitOfferErrors {
   const errors: VisitOfferErrors = {};
   if (!draft.title.trim()) errors.title = 'Въведете публично заглавие.';
   const group = groups.find((item) => item.id === draft.group_id);
@@ -139,7 +139,7 @@ export function visitOfferErrors(draft: VisitOfferDraft, groups: ActivityGroup[]
   }
   if (draft.session_ids.some((id) => !group?.sessions.some((session) => session.id === id))) errors.session_ids = 'Изберете занятия от избраната група.';
   if (publish) {
-    if (!draft.session_ids.length || draft.session_ids.some((id) => !group?.sessions.some((s) => s.id === id && s.status === 'scheduled' && Date.parse(s.starts_at) > now))) errors.session_ids = 'Изберете поне едно бъдещо, неотменено занятие.';
+    if (!draft.session_ids.length || draft.session_ids.some((id) => !retainedSessionIds.includes(id) && !group?.sessions.some((s) => s.id === id && s.status === 'scheduled' && Date.parse(s.starts_at) > now))) errors.session_ids = 'Новите занятия трябва да са бъдещи и неотменени. Изберете поне едно занятие.';
     const conflicts = group?.conflicts.filter((item) => item.severity === 'blocking');
     if (conflicts?.length) errors.session_ids = conflicts.map((item) => item.message).join(' ');
     if (!draft.terms_version?.trim()) errors.terms_version = 'Посочете издание на условията преди публикуване.';
