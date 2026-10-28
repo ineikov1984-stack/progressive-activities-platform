@@ -39,6 +39,8 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/parent/enrollment-applications', [ParentEnrollmentController::class, 'index']);
             Route::post('/parent/enrollment-applications', [ParentEnrollmentController::class, 'store']);
             Route::post('/parent/enrollment-applications/{application}/withdraw', [ParentEnrollmentController::class, 'withdraw']);
+            Route::post('/parent/enrollments/{enrollment}/end-from', [ParentEnrollmentController::class, 'endFrom']);
+            Route::post('/parent/enrollments/{enrollment}/exclude-session', [ParentEnrollmentController::class, 'excludeSession']);
             Route::get('/organizations', [OrganizationController::class, 'index']);
             Route::post('/context/organization', [OrganizationContextController::class, 'select']);
             Route::get('/context/organization', [OrganizationContextController::class, 'current'])

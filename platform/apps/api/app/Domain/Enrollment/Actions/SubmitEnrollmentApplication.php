@@ -11,6 +11,7 @@ use App\Domain\Enrollment\Enums\EnrollmentApplicationStatus;
 use App\Domain\Enrollment\Enums\EnrollmentScope;
 use App\Domain\Enrollment\Enums\EnrollmentSource;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
+use App\Domain\Enrollment\Models\EnrollmentEvent;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Enums\OrganizationStatus;
 use App\Domain\Organizations\Models\Organization;
@@ -20,7 +21,10 @@ use Illuminate\Validation\ValidationException;
 
 final class SubmitEnrollmentApplication
 {
-    public function __construct(private readonly TenantContext $context) {}
+    public function __construct(
+        private readonly TenantContext $context,
+        private readonly ReviewEnrollmentApplication $review,
+    ) {}
 
     /** @param array<string, mixed> $payload */
     public function handle(User $actor, array $payload, string $idempotencyKey): EnrollmentApplication
@@ -68,7 +72,7 @@ final class SubmitEnrollmentApplication
                 $scope = $this->scopeFor(EnrollmentMode::from($price->enrollment_mode));
                 $session = $this->resolveSession($payload['session_id'] ?? null, $group, $scope);
 
-                return EnrollmentApplication::query()->create([
+                $application = EnrollmentApplication::query()->create([
                     'parent_user_id' => $actor->id,
                     'child_id' => $child->id,
                     'group_id' => $group->id,
@@ -84,6 +88,21 @@ final class SubmitEnrollmentApplication
                     'currency_snapshot' => $price->currency,
                     'unit_snapshot' => $price->unit,
                 ]);
+                EnrollmentEvent::query()->create([
+                    'type' => 'enrollment.application_submitted',
+                    'application_id' => $application->id,
+                    'payload' => ['status' => EnrollmentApplicationStatus::Submitted->value],
+                    'occurred_at' => now(),
+                ]);
+
+                if ($group->enrollment_approval_mode !== 'automatic') {
+                    return $application;
+                }
+
+                $reviewed = $this->review->handle($actor, $application, 'approve', 1, null, null);
+                $reviewed->wasRecentlyCreated = true;
+
+                return $reviewed;
             });
         } finally {
             $this->context->clear();

@@ -9,12 +9,19 @@ use App\Domain\Catalog\Models\Session;
 use App\Domain\Enrollment\Enums\EnrollmentScope;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Organizations\Models\Organization;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property EnrollmentScope $scope
+ * @property EnrollmentStatus $status
+ * @property CarbonImmutable $starts_on
+ * @property CarbonImmutable|null $ends_on
+ */
 #[Fillable([
     'application_id', 'child_id', 'group_id', 'price_option_id', 'session_id',
     'scope', 'status', 'starts_on', 'ends_on', 'transferred_from_id', 'version',
