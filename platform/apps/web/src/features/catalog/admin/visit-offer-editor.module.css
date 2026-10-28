@@ -1,0 +1,19 @@
+.page { overflow-wrap: anywhere; }
+.form { min-width: 0; margin: 0; padding: 0; border: 0; }
+.form section[hidden] { display: none; }
+.steps button { flex: 0 0 auto; background: transparent; color: #206450 !important; border: 1px solid transparent; }
+.steps button[aria-current="step"] { background: #e8f4ef; border-color: #206450; }
+.selector { display: grid; gap: .5rem; font-weight: 750; }
+.sessions { min-width: 0; margin-top: 1rem; padding: 1rem; border: 1px solid #d9e3df; border-radius: .8rem; }
+.sessions legend { font-weight: 750; }
+.check { display: flex !important; align-items: start; gap: .6rem; margin: .7rem 0; font-weight: 600; }
+.check input { flex: 0 0 auto; width: 1.2rem; height: 1.2rem; margin: .1rem 0; accent-color: #206450; }
+.fieldError { color: #8a271f; font-size: .85rem; }
+.page [aria-invalid="true"] { border-color: #ae382c; }
+.page :is(input, select, textarea, button, a):focus-visible { outline: 3px solid #b46219; outline-offset: 3px; }
+.actions { display: flex; flex-wrap: wrap; gap: .75rem; max-width: 86rem; margin: 1rem auto; }
+.actions p { flex-basis: 100%; margin: .25rem 0; color: #506b60; font-size: .85rem; }
+.preview { max-width: 44rem; white-space: pre-line; }
+.preview h3 { font-size: 1.7rem; }
+.page .errorLink { padding: .3rem 0; color: #8a271f !important; background: transparent; text-align: left; text-decoration: underline; }
+@media (max-width: 760px) { .actions > button { flex: 1 1 auto; } .steps { position: static; } }

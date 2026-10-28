@@ -38,3 +38,31 @@ export const createInstructor = (organizationId: string, body: Partial<Instructo
 export const saveGroup = (organizationId: string, activityId: string, body: Record<string, unknown>, groupId?: string) => request<{ group: ActivityGroup }>(organizationId, groupId ? `/groups/${groupId}` : `/activities/${activityId}/groups`, { method: groupId ? 'PATCH' : 'POST', ...json(body) }, true).then((x) => x.group);
 export async function uploadCatalogMedia(organizationId: string, file: File, activityId?: string): Promise<{ path: string }> { const body = new FormData(); body.append('file', file); if (activityId) body.append('activity_id', activityId); return request<{ media: { path: string } }>(organizationId, '/media', { method: 'POST', body }, true).then((x) => x.media); }
 export const privateMediaUrl = (path?: string | null) => path ? `/backend/api/v1/catalog/media/${encodeURIComponent(path.replace(/^catalog\//, ''))}` : undefined;
+
+export type VisitOfferType = 'trial' | 'single' | 'open_day';
+export type VisitOfferStatus = 'draft' | 'published' | 'closed' | 'cancelled';
+export type VisitOfferFields = {
+  activity_id: string; group_id: string; type: VisitOfferType; title: string; description: string | null;
+  audience_age_label: string | null; audience_class_label: string | null; visit_limit: number;
+  fee_type: 'free' | 'paid' | 'from_price'; amount_cents: number; currency: 'EUR'; fee_reason: string | null;
+  booking_deadline_hours: number; cancellation_deadline_hours: number; cancellation_policy: string | null;
+  cancellation_outcome: 'refund' | 'credit' | 'non_refundable'; terms_version: string | null;
+  trial_limit_per_academic_year: number; single_visit_limit: number; single_visit_window_days: number;
+  unlimited_single_visits: boolean; no_show_trial_limit: number | null; waitlist_enabled: boolean;
+};
+export type VisitOffer = VisitOfferFields & {
+  id: string; campaign_id: string | null; status: VisitOfferStatus; version: number;
+  sessions: ActivityGroup['sessions']; published_at: string | null; closed_at: string | null; cancelled_at: string | null;
+};
+export type VisitOfferInput = Pick<VisitOfferFields, 'activity_id' | 'group_id' | 'type' | 'title' | 'visit_limit'> & Partial<VisitOfferFields> & { version?: number; session_ids?: string[] };
+export type OpenDayCampaign = {
+  id: string; slug: string; title: string; description: string | null; starts_on: string | null; ends_on: string | null;
+  image_path: string | null; status: VisitOfferStatus; version: number; published_at: string | null;
+  visit_offers: Pick<VisitOffer, 'id' | 'title' | 'status' | 'type'>[];
+};
+export type CampaignMembershipInput = { version: number; visit_offer_ids: string[]; visit_offer_versions: Record<string, number>; source_campaign_versions: Record<string, number> };
+export const loadVisitOffers = (organizationId: string) => request<{ visit_offers: VisitOffer[] }>(organizationId, '/visit-offers').then((x) => x.visit_offers);
+export const loadOpenDayCampaigns = (organizationId: string) => request<{ campaigns: OpenDayCampaign[] }>(organizationId, '/open-day-campaigns').then((x) => x.campaigns);
+export const saveVisitOffer = (organizationId: string, body: VisitOfferInput, id?: string) => request<{ visit_offer: VisitOffer }>(organizationId, id ? `/visit-offers/${id}` : '/visit-offers', { method: id ? 'PATCH' : 'POST', ...json(body) }, true).then((x) => x.visit_offer);
+export const transitionVisitOffer = (organizationId: string, id: string, version: number, transition: 'publish' | 'close' | 'cancel') => request<{ visit_offer: VisitOffer }>(organizationId, `/visit-offers/${id}/${transition}`, { method: 'POST', ...json({ version }) }, true).then((x) => x.visit_offer);
+export const updateCampaignMembership = (organizationId: string, id: string, body: CampaignMembershipInput) => request<{ campaign: OpenDayCampaign }>(organizationId, `/open-day-campaigns/${id}`, { method: 'PATCH', ...json(body) }, true).then((x) => x.campaign);

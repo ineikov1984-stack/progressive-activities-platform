@@ -1,4 +1,4 @@
-import type { ActivitySections, PriceOption, ScheduleConflict, SchedulePattern } from './api';
+import type { ActivityGroup, ActivitySections, CampaignMembershipInput, OpenDayCampaign, PriceOption, ScheduleConflict, SchedulePattern, VisitOffer, VisitOfferFields, VisitOfferInput } from './api';
 
 const statusLabels: Record<string, string> = { draft: 'Чернова', published: 'Публикувана', archived: 'Архивирана' };
 const weekdays: Record<number, string> = { 1: 'понеделник', 2: 'вторник', 3: 'сряда', 4: 'четвъртък', 5: 'петък', 6: 'събота', 7: 'неделя' };
@@ -80,4 +80,63 @@ export function summarizeSchedule(schedule: SchedulePattern): string {
 
 export function conflictPresentation(conflict: ScheduleConflict): { label: string; tone: 'danger' | 'warning'; message: string } {
   return { label: conflict.severity === 'blocking' ? 'Блокира публикуването' : 'Провери преди публикуване', tone: conflict.severity === 'blocking' ? 'danger' : 'warning', message: conflict.message };
+}
+
+export type VisitOfferDraft = Omit<VisitOfferFields, 'amount_cents'> & { amount: string; session_ids: string[]; campaign_id: string };
+export type VisitOfferErrors = Record<string, string>;
+export function newVisitOfferDraft(activityId: string): VisitOfferDraft {
+  return { activity_id: activityId, group_id: '', type: 'trial', title: '', description: '', audience_age_label: '', audience_class_label: '', visit_limit: 3,
+    fee_type: 'free', amount: '', currency: 'EUR', fee_reason: '', booking_deadline_hours: 12, cancellation_deadline_hours: 24,
+    cancellation_policy: '', cancellation_outcome: 'non_refundable', terms_version: '', trial_limit_per_academic_year: 1,
+    single_visit_limit: 2, single_visit_window_days: 30, unlimited_single_visits: false, no_show_trial_limit: null, waitlist_enabled: true, session_ids: [], campaign_id: '' };
+}
+export function visitOfferDraftFromRecord(offer: VisitOffer): VisitOfferDraft {
+  const draft = newVisitOfferDraft(offer.activity_id);
+  for (const key of Object.keys(draft) as (keyof VisitOfferDraft)[]) {
+    if (key in offer && key !== 'campaign_id') Object.assign(draft, { [key]: offer[key as keyof VisitOffer] });
+  }
+  return { ...draft, amount: (offer.amount_cents / 100).toFixed(2), session_ids: offer.sessions.map((session) => session.id), campaign_id: offer.campaign_id ?? '' };
+}
+export function visitOfferPayload(draft: VisitOfferDraft, version?: number): VisitOfferInput {
+  const { amount, campaign_id: _campaign, ...fields } = draft;
+  void _campaign;
+  const payload: VisitOfferInput = { ...fields, title: draft.title.trim(), amount_cents: draft.fee_type === 'free' ? 0 : parseEuroCents(amount), ...(version === undefined ? {} : { version }) };
+  if (draft.type !== 'trial') { delete payload.trial_limit_per_academic_year; delete payload.no_show_trial_limit; }
+  if (draft.type !== 'single') { delete payload.single_visit_limit; delete payload.single_visit_window_days; delete payload.unlimited_single_visits; }
+  else if (draft.unlimited_single_visits) { delete payload.single_visit_limit; delete payload.single_visit_window_days; }
+  return payload;
+}
+export function changeVisitOfferGroup(draft: VisitOfferDraft, groupId: string): VisitOfferDraft {
+  return { ...draft, group_id: groupId, session_ids: draft.group_id === groupId ? draft.session_ids : [] };
+}
+export function visitOfferErrors(draft: VisitOfferDraft, groups: ActivityGroup[], publish: boolean, now = Date.now()): VisitOfferErrors {
+  const errors: VisitOfferErrors = {};
+  if (!draft.title.trim()) errors.title = 'Въведете публично заглавие.';
+  const group = groups.find((item) => item.id === draft.group_id);
+  if (!group) errors.group_id = 'Изберете група от тази дейност.';
+  const integer = (key: keyof VisitOfferDraft, minimum: number) => {
+    const value = draft[key]; if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < minimum) errors[key] = `Въведете цяло число, не по-малко от ${minimum}.`;
+  };
+  integer('visit_limit', 1); integer('booking_deadline_hours', 0); integer('cancellation_deadline_hours', 0);
+  if (draft.type === 'trial') { integer('trial_limit_per_academic_year', 1); if (draft.no_show_trial_limit !== null) integer('no_show_trial_limit', 1); }
+  if (draft.type === 'single' && !draft.unlimited_single_visits) { integer('single_visit_limit', 1); integer('single_visit_window_days', 1); }
+  if (draft.fee_type !== 'free') {
+    try { parseEuroCents(draft.amount); } catch { errors.amount_cents = invalidPriceMessage; }
+    if (!draft.fee_reason?.trim()) errors.fee_reason = 'Обяснете публично какво покрива таксата.';
+  }
+  if (draft.session_ids.some((id) => !group?.sessions.some((session) => session.id === id))) errors.session_ids = 'Изберете занятия от избраната група.';
+  if (publish) {
+    if (!draft.session_ids.length || draft.session_ids.some((id) => !group?.sessions.some((s) => s.id === id && s.status === 'scheduled' && Date.parse(s.starts_at) > now))) errors.session_ids = 'Изберете поне едно бъдещо, неотменено занятие.';
+    const conflicts = group?.conflicts.filter((item) => item.severity === 'blocking');
+    if (conflicts?.length) errors.session_ids = conflicts.map((item) => item.message).join(' ');
+    if (!draft.terms_version?.trim()) errors.terms_version = 'Посочете издание на условията преди публикуване.';
+  }
+  return errors;
+}
+export function campaignMembershipChange(offer: Pick<VisitOffer, 'id' | 'version' | 'campaign_id'>, nextId: string, campaigns: OpenDayCampaign[]): { id: string; body: CampaignMembershipInput } | null {
+  if ((offer.campaign_id ?? '') === nextId) return null;
+  const target = campaigns.find((item) => item.id === (nextId || offer.campaign_id));
+  const source = campaigns.find((item) => item.id === offer.campaign_id);
+  if (!target || (offer.campaign_id && !source)) throw new Error('Кампанията е променена. Заредете актуалните данни.');
+  return { id: target.id, body: { version: target.version, visit_offer_ids: nextId ? [...new Set([...target.visit_offers.map((item) => item.id), offer.id])] : target.visit_offers.filter((item) => item.id !== offer.id).map((item) => item.id), visit_offer_versions: { [offer.id]: offer.version }, source_campaign_versions: source && source.id !== target.id ? { [source.id]: source.version } : {} } };
 }
