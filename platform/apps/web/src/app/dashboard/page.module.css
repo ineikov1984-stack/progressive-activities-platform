@@ -1,65 +1,5 @@
-.shell {
-  display: grid;
-  grid-template-columns: 16.5rem minmax(0, 1fr);
-  min-height: 100vh;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  background: #f3f6f4;
-}
-
-.sidebar {
-  position: sticky;
-  top: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  padding: 1.75rem 1.25rem;
-  color: #f7faf8;
-  background: #173f35;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  margin-bottom: 2.5rem;
-  font-weight: 750;
-}
-
-.mark {
-  display: grid;
-  width: 2.25rem;
-  height: 2.25rem;
-  place-items: center;
-  border-radius: 0.75rem;
-  color: #173f35;
-  background: #b9e986;
-}
-
-.sidebar nav {
-  display: grid;
-  gap: 0.35rem;
-}
-
-.sidebar nav a,
-.sidebar nav > span {
-  display: flex;
-  justify-content: space-between;
-  padding: 0.8rem 0.9rem;
-  border-radius: 0.7rem;
-  color: #dbe8e2;
-  text-decoration: none;
-}
-
-.sidebar nav > span { opacity: 0.65; }
-.sidebar nav small { font-size: 0.68rem; }
-.sidebar nav .activeNav { color: #102d26; background: #b9e986; }
-.demoBadge { margin-top: auto; font-size: 0.8rem; color: #b9cfc5; }
-
+.dashboardPage { max-width:none; margin:0; padding:0; background:#f3f6f4; }
 .content { min-width: 0; padding: 1.75rem clamp(1rem, 3vw, 3.25rem) 4rem; }
-.topbar { display: flex; align-items: center; justify-content: space-between; gap: 2rem; margin-bottom: 1.5rem; }
-.topbar h1 { margin: 0.15rem 0 0; font-size: clamp(1.8rem, 3vw, 2.5rem); }
 .eyebrow { margin: 0; color: #547068; font-size: 0.75rem; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; }
 .identity { display: grid; text-align: right; }
 .identity span { color: #667a73; font-size: 0.85rem; }
@@ -126,16 +66,10 @@
 .centerState { display: grid; min-height: 70vh; place-content: center; text-align: center; }
 
 @media (max-width: 850px) {
-  .shell { grid-template-columns: 1fr; }
-  .sidebar { position: static; min-height: auto; padding: 1rem; }
-  .sidebar nav { grid-template-columns: repeat(2, 1fr); }
-  .demoBadge { margin-top: 1rem; }
   .grid, .teamGrid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 560px) {
-  .topbar, .hero { align-items: flex-start; flex-direction: column; }
-  .identity { text-align: left; }
+  .hero { align-items: flex-start; flex-direction: column; }
   .roleCard { min-width: 0; width: 100%; box-sizing: border-box; }
-  .sidebar nav { grid-template-columns: 1fr; }
 }

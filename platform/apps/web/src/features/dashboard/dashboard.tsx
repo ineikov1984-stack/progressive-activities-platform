@@ -2,7 +2,6 @@
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import {
   AuthenticationRequiredError,
   createInvitation,
@@ -119,37 +118,8 @@ export function Dashboard() {
   }
 
   return (
-    <main className={styles.shell}>
-      <aside className={styles.sidebar}>
-        <div className={styles.brand}>
-          <span className={styles.mark}>P</span>
-          <span>Progressive Activities</span>
-        </div>
-        <nav aria-label="Административна навигация">
-          <a className={styles.activeNav} href="#overview">Общ преглед</a>
-          <a href="#team">Екип и покани</a>
-          <Link href="/dashboard/activities">Дейности <small>Каталог</small></Link>
-          <Link href="/dashboard/open-days">Отворени врати <small>Кампании</small></Link>
-          <a href="#audit">Одит <small>Задача 6</small></a>
-          {data.organizations.some((organization) => organization.role === 'platform_admin') ? (
-            <a href="/operator/organizations">Кандидатури</a>
-          ) : null}
-        </nav>
-        <p className={styles.demoBadge}>Локална демо среда</p>
-      </aside>
-
+    <main className={styles.dashboardPage}>
       <section className={styles.content}>
-        <header className={styles.topbar}>
-          <div>
-            <p className={styles.eyebrow}>Активна организация</p>
-            <h1>Администрация</h1>
-          </div>
-          <div className={styles.identity}>
-            <strong>{data.user.name}</strong>
-            <span>{data.user.email}</span>
-          </div>
-        </header>
-
         <section id="overview" className={styles.hero}>
           <div>
             <p className={styles.eyebrow}>Работно пространство</p>
