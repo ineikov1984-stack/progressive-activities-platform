@@ -4,11 +4,20 @@ namespace App\Domain\Enrollment\Models;
 
 use App\Domain\Catalog\Concerns\BelongsToCatalogTenant;
 use App\Domain\Organizations\Models\Organization;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property string $type
+ * @property string|null $application_id
+ * @property string|null $enrollment_id
+ * @property array<string, mixed> $payload
+ * @property CarbonImmutable $occurred_at
+ * @property CarbonImmutable|null $expanded_at
+ */
 #[Fillable([
     'type', 'application_id', 'enrollment_id', 'payload', 'occurred_at',
     'delivered_at', 'attempts', 'expanded_at',

@@ -37,6 +37,12 @@ final readonly class CatalogPolicy
         return $this->allows($user, $organization, 'enrollment.manage');
     }
 
+    /** Parents' names, phones, emails and notes (docs/product/enrollment-contacts-and-emails.md, т. 3). */
+    public function viewEnrollmentContacts(User $user, Organization $organization): bool
+    {
+        return $this->allows($user, $organization, 'enrollment.contacts');
+    }
+
     private function allows(User $user, Organization $organization, string $ability): bool
     {
         if (! $this->context->hasOrganization()

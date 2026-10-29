@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDashboardContext } from '@/features/dashboard/dashboard-context';
-import { type ApplicationFacets, type ApplicationPage, loadApplications, loadStaffGroups, reviewApplication, type ReviewDecision, type StaffApplication, type StaffGroup } from './api';
+import { type ApplicationFacets, type ApplicationPage, type DetailsTarget, loadApplications, loadStaffGroups, reviewApplication, type ReviewDecision, type StaffApplication, type StaffGroup } from './api';
+import { ChildDetailsPanel, DetailsName } from './child-details';
 import { GroupRosterPanel } from './group-roster';
 import {
   activitySummary, applicationPlaces, dateText, dateTimeText, type GroupFilter, groupFill, groupFilterLabels, groupsByActivity, hasPlaceForWaiting,
@@ -39,9 +40,11 @@ type RowProps = {
   /** In a queue under its group: the heading already names the activity and the group. */
   inQueue?: boolean;
   onDecide: (decision: ReviewDecision, reason?: string) => void;
+  /** Opens the "Подробности" panel; the button is given back the focus when it closes. */
+  onDetails: (opener: HTMLElement) => void;
 };
 
-function ApplicationRow({ application, busy, canManage, inQueue = false, onDecide }: RowProps) {
+function ApplicationRow({ application, busy, canManage, inQueue = false, onDecide, onDetails }: RowProps) {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const waiting = application.status === 'waitlisted';
@@ -54,8 +57,9 @@ function ApplicationRow({ application, busy, canManage, inQueue = false, onDecid
   return (
     <article className={styles.appRow} aria-labelledby={`app-${application.id}`}>
       <div className={styles.appWho}>
-        <Heading id={`app-${application.id}`} className={styles.child}>{name}</Heading>
+        <Heading id={`app-${application.id}`} className={styles.child}><DetailsName name={name} onOpen={onDetails} /></Heading>
         <span className={styles.small}>{application.child.class_label ? `${application.child.class_label} · ` : ''}заявка от {dateText(application.submitted_at)}</span>
+        {application.parent_name ? <span className={styles.small}>Родител: {application.parent_name}</span> : null}
       </div>
       <div className={styles.appWhat}>
         {!inQueue ? <span className={styles.meta}>{application.activity.title} · {application.group.name}</span> : null}
@@ -93,7 +97,7 @@ function ApplicationRow({ application, busy, canManage, inQueue = false, onDecid
 
 type FilterValues = { search: string; activityId: string; groupId: string };
 
-function ApplicationFiltersBar({ facets, values, total, onChange, onClear }: { facets?: ApplicationFacets; values: FilterValues; total?: number; onChange: (values: FilterValues) => void; onClear: () => void }) {
+function ApplicationFiltersBar({ facets, values, total, byParent, onChange, onClear }: { facets?: ApplicationFacets; values: FilterValues; total?: number; byParent: boolean; onChange: (values: FilterValues) => void; onClear: () => void }) {
   const active = values.search.trim() !== '' || values.activityId !== '' || values.groupId !== '';
   // On a phone the filters fold behind one button; the button says when a filter is on.
   const [open, setOpen] = useState(false);
@@ -107,8 +111,9 @@ function ApplicationFiltersBar({ facets, values, total, onChange, onClear }: { f
       </button>
       <div id="applications-filters" className={`${styles.filters} ${open ? styles.filtersOpen : ''}`} role="search" aria-label="Търсене в заявките">
         <div className={styles.filterField}>
-          <label htmlFor="applications-search">Дете</label>
-          <input id="applications-search" type="search" value={values.search} placeholder="Име на детето" maxLength={100} onChange={(event) => onChange({ ...values, search: event.target.value })} />
+          {/* The parent's name is searched only for those who see contacts. */}
+          <label htmlFor="applications-search">{byParent ? 'Дете или родител' : 'Дете'}</label>
+          <input id="applications-search" type="search" value={values.search} placeholder={byParent ? 'Име на детето или родителя' : 'Име на детето'} maxLength={100} onChange={(event) => onChange({ ...values, search: event.target.value })} />
         </div>
         <div className={styles.filterField}>
           <label htmlFor="applications-activity">Дейност</label>
@@ -139,7 +144,7 @@ function ApplicationFiltersBar({ facets, values, total, onChange, onClear }: { f
 }
 
 /** Waiting children under their group, in the order they applied, with the places the group has today. */
-function WaitingQueues({ queues, counts, busyId, canManage, onDecide }: { queues: StaffApplication[][]; counts: Map<string, number>; busyId: string; canManage: boolean; onDecide: (application: StaffApplication, decision: ReviewDecision, reason?: string) => void }) {
+function WaitingQueues({ queues, counts, busyId, canManage, onDecide, onDetails }: { queues: StaffApplication[][]; counts: Map<string, number>; busyId: string; canManage: boolean; onDecide: (application: StaffApplication, decision: ReviewDecision, reason?: string) => void; onDetails: (target: DetailsTarget, opener: HTMLElement) => void }) {
   return (
     <div className={styles.queues}>
       {queues.map((items) => {
@@ -156,7 +161,8 @@ function WaitingQueues({ queues, counts, busyId, canManage, onDecide }: { queues
             <ol className={styles.queueList}>
               {items.map((application) => (
                 <li key={application.id}>
-                  <ApplicationRow application={application} canManage={canManage} inQueue busy={busyId === application.id} onDecide={(decision, reason) => onDecide(application, decision, reason)} />
+                  <ApplicationRow application={application} canManage={canManage} inQueue busy={busyId === application.id} onDecide={(decision, reason) => onDecide(application, decision, reason)}
+                    onDetails={(opener) => onDetails({ kind: 'application', id: application.id }, opener)} />
                 </li>
               ))}
             </ol>
@@ -167,7 +173,7 @@ function WaitingQueues({ queues, counts, busyId, canManage, onDecide }: { queues
   );
 }
 
-function GroupsView({ groups, organizationId, canManage, openGroup, onToggleGroup, onChanged }: { groups: StaffGroup[]; organizationId: string; canManage: boolean; openGroup?: string; onToggleGroup: (groupId: string) => void; onChanged: () => void }) {
+function GroupsView({ groups, organizationId, canManage, openGroup, onToggleGroup, onChanged, onDetails }: { groups: StaffGroup[]; organizationId: string; canManage: boolean; openGroup?: string; onToggleGroup: (groupId: string) => void; onChanged: () => void; onDetails: (target: DetailsTarget, opener: HTMLElement) => void }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<GroupFilter>('all');
   // Many activities open folded, except the one with the group opened from a link.
@@ -258,7 +264,7 @@ function GroupsView({ groups, organizationId, canManage, openGroup, onToggleGrou
                               <span className={styles.toggle}><span className={styles.toggleText}>{expanded ? 'Скрий децата' : 'Деца'}</span><Chevron open={expanded} /></span>
                             </button>
                           </h4>
-                          {expanded ? <GroupRosterPanel organizationId={organizationId} groupId={group.id} canManage={canManage} onChanged={onChanged} /> : null}
+                          {expanded ? <GroupRosterPanel organizationId={organizationId} groupId={group.id} canManage={canManage} onChanged={onChanged} onDetails={onDetails} /> : null}
                         </li>
                       );
                     })}
@@ -285,6 +291,18 @@ export function EnrollmentsPage() {
   const [groupsError, setGroupsError] = useState('');
   const canManage = organization.permissions.includes('enrollment.manage');
   const canView = organization.permissions.includes('enrollment.view');
+  const canSeeContacts = organization.permissions.includes('enrollment.contacts');
+  // One "Подробности" panel at a time; closing it gives the focus back to the button that opened it.
+  const [details, setDetails] = useState<DetailsTarget>();
+  const detailsOpener = useRef<HTMLElement | null>(null);
+  const openDetails = useCallback((target: DetailsTarget, opener: HTMLElement) => {
+    detailsOpener.current = opener;
+    setDetails(target);
+  }, []);
+  const closeDetails = useCallback(() => {
+    setDetails(undefined);
+    requestAnimationFrame(() => detailsOpener.current?.focus());
+  }, []);
   const [openGroup, setOpenGroup] = useState<string | undefined>(() => searchParams.get('group') ?? undefined);
   // Opened from "Какво чака вас": once the groups are loaded, bring that group into view and focus it.
   const linkedGroup = useRef(searchParams.get('group'));
@@ -447,7 +465,7 @@ export function EnrollmentsPage() {
         {tab !== 'groups' ? (
           <>
             {showFilters ? (
-              <ApplicationFiltersBar facets={unfiltered?.facets} values={filters} total={page?.total}
+              <ApplicationFiltersBar facets={unfiltered?.facets} values={filters} total={page?.total} byParent={canSeeContacts}
                 onChange={changeFilters} onClear={() => { changeFilters(noFilters); setQuery(''); }} />
             ) : null}
             {list === undefined || visible === undefined ? <span className={styles.skeleton} aria-busy="true" /> : list.length === 0 ? (
@@ -456,10 +474,11 @@ export function EnrollmentsPage() {
                 <p>{filtering ? 'Променете търсенето или изчистете филтрите.' : tab === 'submitted' ? 'Когато родител подаде заявка, тя ще се появи тук и в „Какво чака вас“.' : 'Тук ще са децата, които чакат свободно място в пълна група.'}</p>
               </div>
             ) : tab === 'waitlisted' ? (
-              <WaitingQueues queues={queues ?? []} counts={filtering ? new Map() : queueCounts} busyId={busyId} canManage={canManage} onDecide={decide} />
+              <WaitingQueues queues={queues ?? []} counts={filtering ? new Map() : queueCounts} busyId={busyId} canManage={canManage} onDecide={decide} onDetails={openDetails} />
             ) : (
               <div className={styles.appList}>
-                {visible.map((application) => <ApplicationRow key={application.id} application={application} canManage={canManage} busy={busyId === application.id} onDecide={(decision, reason) => decide(application, decision, reason)} />)}
+                {visible.map((application) => <ApplicationRow key={application.id} application={application} canManage={canManage} busy={busyId === application.id} onDecide={(decision, reason) => decide(application, decision, reason)}
+                  onDetails={(opener) => openDetails({ kind: 'application', id: application.id }, opener)} />)}
               </div>
             )}
             {hidden > 0 ? (
@@ -481,9 +500,10 @@ export function EnrollmentsPage() {
           </div>
         ) : (
           <GroupsView groups={groups} organizationId={organization.id} canManage={canManage} openGroup={openGroup}
-            onToggleGroup={(groupId) => setOpenGroup((current) => current === groupId ? undefined : groupId)} onChanged={refreshGroups} />
+            onToggleGroup={(groupId) => setOpenGroup((current) => current === groupId ? undefined : groupId)} onChanged={refreshGroups} onDetails={openDetails} />
         )}
       </section>
+      {details ? <ChildDetailsPanel key={`${details.kind}-${details.id}`} organizationId={organization.id} target={details} onClose={closeDetails} /> : null}
     </div>
   );
 }

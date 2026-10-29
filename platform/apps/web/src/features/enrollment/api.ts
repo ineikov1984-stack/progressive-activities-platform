@@ -16,6 +16,8 @@ export type StaffApplication = {
   price: { amount_cents: number; currency: string; unit: string };
   public_reason: string | null;
   submitted_at: string | null;
+  /** Only for owner, administrator and coordinator (enrollment.contacts). */
+  parent_name?: string | null;
 };
 export type PauseReason = 'health' | 'holiday' | 'family' | 'other';
 export type RosterPause = { id: string; starts_on: string; ends_on: string; reason_category: PauseReason | string };
@@ -120,6 +122,56 @@ export type ApplicationFacets = {
 };
 export type ApplicationPage = { applications: StaffApplication[]; total: number; has_more: boolean; facets?: ApplicationFacets };
 export type ApplicationFilters = { q?: string; activityId?: string; groupId?: string };
+
+/** The "Подробности" panel (docs/product/enrollment-contacts-and-emails.md, т. 9.1). */
+export type DetailsTarget = { kind: 'application' | 'enrollment'; id: string };
+/** Age, school and kindergarten group only for those who see contacts. */
+export type ChildDetails = StaffChild & { age?: number | null; school_name?: string | null; institution_group?: string | null };
+export type ParentContact = { source: string; name: string | null; phone: string | null; phone_display: string | null; email: string | null; email_verified: boolean };
+/** shown — in the window; outside_window — the record is closed; not_allowed — the role does not see contacts. */
+export type ContactStatus = 'shown' | 'outside_window' | 'not_allowed';
+export type ChildRecord =
+  | {
+    kind: 'enrollment'; id: string; status: string; scope: string; activity_title: string | null; group_id: string; group_name: string | null;
+    schedule?: WeeklySchedule | null; starts_on: string; ends_on: string | null; session_starts_at: string | null; paused_until: string | null;
+    next_pause: { starts_on: string; ends_on: string } | null; moves_to: { group_name: string | null; starts_on: string } | null; next_session_at: string | null;
+  }
+  | {
+    kind: 'application'; id: string; status: string; scope: string; activity_title: string | null; group_id: string; group_name: string | null;
+    schedule?: WeeklySchedule | null; submitted_at: string | null; session_starts_at: string | null; queue_position: number | null;
+  };
+export type HistoryActor = { kind: 'parent' | 'team' | 'automatic' | string; name: string | null };
+export type HistoryItem = {
+  id: string; type: string; occurred_at: string; actor: HistoryActor | null;
+  public_reason: string | null; internal_note: string | null; details: Record<string, string | boolean | undefined>;
+};
+export type DetailsEnrollment = {
+  id: string; status: string; scope: string; version: number;
+  activity: { id: string | null; title: string | null }; group: { id: string; name: string | null };
+  schedule?: WeeklySchedule | null; starts_on: string; ends_on: string | null; session_starts_at: string | null;
+  price: { amount_cents: number | null; currency: string | null; unit: string | null };
+  next_session_at: string | null; paused_today: boolean; pauses: RosterPause[];
+  skipped_sessions: { session_id: string; starts_at: string | null }[];
+  moves_to: { group_id: string; group_name: string | null; starts_on: string } | null;
+  transferred_from: { group_id: string; group_name: string | null; last_day: string | null } | null;
+};
+type DetailsCommon = {
+  child: ChildDetails; contact_status: ContactStatus; contact: ParentContact | null; parent_note: string | null;
+  /** When the note was written: the application's date. */
+  parent_note_at?: string | null;
+  records: ChildRecord[];
+  /** Only for those who manage enrollments. */
+  history: HistoryItem[] | null;
+};
+export type ApplicationDetails = DetailsCommon & {
+  kind: 'application';
+  application: StaffApplication & { schedule?: WeeklySchedule | null; queue_position: number | null; enrollment_id: string | null };
+};
+export type EnrollmentDetails = DetailsCommon & { kind: 'enrollment'; enrollment: DetailsEnrollment };
+export type ChildDetailsResponse = ApplicationDetails | EnrollmentDetails;
+
+export const loadDetails = (organizationId: string, target: DetailsTarget) =>
+  request<ChildDetailsResponse>(organizationId, `/${target.kind === 'application' ? 'applications' : 'enrollments'}/${target.id}`);
 
 export const loadApplications = (organizationId: string, status: 'submitted' | 'waitlisted' = 'submitted', filters: ApplicationFilters = {}) => {
   const query = new URLSearchParams({ status });

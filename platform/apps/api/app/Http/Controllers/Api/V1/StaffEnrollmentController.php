@@ -12,7 +12,6 @@ use App\Domain\Enrollment\Actions\ReviewEnrollmentApplication;
 use App\Domain\Enrollment\Enums\EnrollmentApplicationStatus;
 use App\Domain\Enrollment\Enums\EnrollmentScope;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
-use App\Domain\Enrollment\Models\Child;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Enrollment\Models\EnrollmentPause;
@@ -21,6 +20,7 @@ use App\Domain\Enrollment\Services\EnrollmentCapacity;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
+use App\Http\Presenters\StaffEnrollmentPresenter;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -32,7 +32,8 @@ use Illuminate\Validation\Rule;
 /**
  * Enrollment work for the organization's team (docs/product/staff-enrollment.md, Б1).
  * Everything is tenant-scoped: models use the tenant global scope and the database RLS.
- * Parent contact details are deliberately not exposed here.
+ * Parent contact details are not exposed here: the parent's name only to those who see contacts
+ * (docs/product/enrollment-contacts-and-emails.md, т. 3.2); phone, email and note in the details.
  */
 final class StaffEnrollmentController extends Controller
 {
@@ -50,19 +51,22 @@ final class StaffEnrollmentController extends Controller
             'q' => ['sometimes', 'nullable', 'string', 'max:100'],
         ]);
         $status = $validated['status'] ?? 'submitted';
+        $contacts = $this->allows($request, 'enrollment.contacts');
+        $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], trim((string) ($validated['q'] ?? ''))).'%';
+        $like = fn (string $column): string => "{$column} ".$this->likeOperator()." ? escape '!'";
 
         $query = EnrollmentApplication::query()->where('status', $status)
             ->when($validated['group_id'] ?? null, fn ($query, string $groupId) => $query->where('group_id', $groupId))
             ->when($validated['activity_id'] ?? null, fn ($query, string $activityId) => $query
                 ->whereHas('group.offering', fn ($offering) => $offering->where('activity_id', $activityId)))
-            ->when(trim((string) ($validated['q'] ?? '')), fn ($query, string $search) => $query
-                ->whereHas('child', fn ($child) => $child->whereRaw(
-                    "(first_name || ' ' || coalesce(last_name, '')) ".$this->likeOperator()." ? escape '!'",
-                    ['%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%'],
-                )));
+            // The child's name; the parent's name only for those who may see it — otherwise the results
+            // would tell which child belongs to which parent.
+            ->when(trim((string) ($validated['q'] ?? '')) !== '', fn ($query) => $query->where(fn ($either) => $either
+                ->whereHas('child', fn ($child) => $child->whereRaw($like("(first_name || ' ' || coalesce(last_name, ''))"), [$pattern]))
+                ->when($contacts, fn ($or) => $or->orWhereHas('parent', fn ($parent) => $parent->whereRaw($like('name'), [$pattern])))));
         $total = (clone $query)->count();
         // Oldest first: the team works through the queue in the order parents applied.
-        $applications = $query->with(['child', 'group.offering.activity', 'session'])
+        $applications = $query->with(['child', 'group.offering.activity', 'session', ...($contacts ? ['parent'] : [])])
             ->oldest()
             ->limit(self::PAGE_SIZE)
             ->get();
@@ -71,7 +75,7 @@ final class StaffEnrollmentController extends Controller
         $taken = $this->placesTakenByGroup($applications->pluck('group_id')->unique()->values()->all());
 
         return response()->json([
-            'applications' => $applications->map(fn (EnrollmentApplication $application): array => $this->presentApplication($application, (int) ($taken[$application->group_id] ?? 0)))->all(),
+            'applications' => $applications->map(fn (EnrollmentApplication $application): array => StaffEnrollmentPresenter::application($application, (int) ($taken[$application->group_id] ?? 0), $contacts))->all(),
             'total' => $total,
             'has_more' => $total > $applications->count(),
             'facets' => $this->facets($status),
@@ -157,7 +161,7 @@ final class StaffEnrollmentController extends Controller
         ]);
 
         return response()->json([
-            'application' => $this->presentApplication($reviewed->load(['child', 'group.offering.activity', 'session'])),
+            'application' => StaffEnrollmentPresenter::application($reviewed->load(['child', 'group.offering.activity', 'session'])),
         ]);
     }
 
@@ -234,13 +238,14 @@ final class StaffEnrollmentController extends Controller
             ])
             ->orderBy('starts_on')
             ->get();
+        $contacts = $this->allows($request, 'enrollment.contacts');
         $waiting = EnrollmentApplication::query()
             ->where('group_id', $record->id)
             ->where('status', EnrollmentApplicationStatus::Waitlisted->value)
-            ->with('child')
+            ->with(['child', ...($contacts ? ['parent'] : [])])
             ->oldest()
             ->get();
-        $canManage = Gate::forUser($request->user())->allows('enrollment.manage', Organization::query()->findOrFail($this->context->organizationId()));
+        $canManage = $this->allows($request, 'enrollment.manage');
 
         return response()->json([
             'group' => [
@@ -255,7 +260,7 @@ final class StaffEnrollmentController extends Controller
                 'enrollment_approval_mode' => $record->enrollment_approval_mode,
             ],
             'enrollments' => $enrollments->map(fn (Enrollment $enrollment): array => $this->presentRosterEnrollment($enrollment, $today, $canManage))->all(),
-            'waitlist' => $waiting->map($this->presentApplication(...))->all(),
+            'waitlist' => $waiting->map(fn (EnrollmentApplication $application): array => StaffEnrollmentPresenter::application($application, null, $contacts))->all(),
             'upcoming_sessions' => $canManage ? Session::query()->where('group_id', $record->id)->where('status', 'scheduled')
                 ->where('starts_at', '>', now())->orderBy('starts_at')->limit(12)->get()
                 ->map(fn (Session $session): array => ['id' => $session->id, 'starts_at' => $session->starts_at->toIso8601String()])->all() : [],
@@ -274,7 +279,7 @@ final class StaffEnrollmentController extends Controller
 
         return [
             'id' => $enrollment->id,
-            'child' => $this->presentChild($enrollment->child),
+            'child' => StaffEnrollmentPresenter::child($enrollment->child),
             'scope' => $enrollment->scope->value,
             'status' => $enrollment->status->value,
             'starts_on' => $enrollment->starts_on->format('Y-m-d'),
@@ -303,47 +308,14 @@ final class StaffEnrollmentController extends Controller
         ];
     }
 
-    /** @return array<string, mixed> */
-    private function presentApplication(EnrollmentApplication $application, ?int $placesTaken = null): array
-    {
-        $activity = $application->group?->offering?->activity;
-
-        return [
-            'id' => $application->id,
-            'status' => $application->status->value,
-            'version' => $application->version,
-            'scope' => $application->scope->value,
-            'source' => $application->source->value,
-            'child' => $this->presentChild($application->child),
-            'group' => ['id' => $application->group_id, 'name' => $application->group?->name] + ($placesTaken === null ? [] : [
-                'capacity_max' => $application->group?->capacity_max, 'places_taken' => $placesTaken,
-            ]),
-            'activity' => ['id' => $activity?->id, 'title' => $activity?->title],
-            'session_starts_at' => $application->session?->starts_at?->toIso8601String(),
-            'visit_offer_title' => $application->visit_offer_title_snapshot,
-            'price' => [
-                'amount_cents' => $application->amount_cents_snapshot,
-                'currency' => $application->currency_snapshot,
-                'unit' => $application->unit_snapshot,
-            ],
-            'public_reason' => $application->public_reason,
-            'submitted_at' => $application->created_at?->toIso8601String(),
-        ];
-    }
-
-    /** @return array{id: string|null, name: string|null, class_label: string|null} */
-    private function presentChild(?Child $child): array
-    {
-        return [
-            'id' => $child?->id,
-            'name' => $child === null ? null : trim($child->first_name.' '.$child->last_name),
-            'class_label' => $child?->class_label,
-        ];
-    }
-
     private function authorizeAbility(Request $request, string $ability): void
     {
         $organization = Organization::query()->findOrFail($this->context->organizationId());
         Gate::forUser($request->user())->authorize($ability, $organization);
+    }
+
+    private function allows(Request $request, string $ability): bool
+    {
+        return Gate::forUser($request->user())->allows($ability, Organization::query()->findOrFail($this->context->organizationId()));
     }
 }

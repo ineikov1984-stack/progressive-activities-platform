@@ -21,7 +21,16 @@ class LocalDemoSeederTest extends TestCase
         Artisan::call('db:seed', ['--class' => LocalDemoSeeder::class, '--force' => true]);
         Artisan::call('db:seed', ['--class' => LocalDemoSeeder::class, '--force' => true]);
 
-        $this->assertDatabaseCount('users', 1);
+        // The owner and one synthetic parent with a child, an application with a note and an enrollment.
+        $this->assertDatabaseCount('users', 2);
+        $this->assertDatabaseHas('users', ['email' => 'parent@demo.progressive.local', 'phone' => '+359880000002']);
+        $this->assertDatabaseCount('children', 1);
+        $this->assertDatabaseCount('enrollment_applications', 2);
+        $this->assertDatabaseCount('enrollments', 1);
+        $this->assertSame(1, DB::table('enrollment_applications')->whereNotNull('parent_note')->where('status', 'submitted')->count());
+        // Its history is already expanded: seeding never queues emails.
+        $this->assertDatabaseCount('enrollment_events', 3);
+        $this->assertSame(0, DB::table('enrollment_events')->whereNull('expanded_at')->count());
         $this->assertDatabaseCount('organizations', 2);
         $this->assertDatabaseCount('organization_memberships', 2);
         $this->assertDatabaseCount('organization_catalog_profiles', 1);

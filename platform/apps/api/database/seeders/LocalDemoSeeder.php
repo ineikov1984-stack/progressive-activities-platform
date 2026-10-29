@@ -31,6 +31,17 @@ class LocalDemoSeeder extends Seeder
 
     private const GROUP_TWO_ID = '00000000-0000-4000-8000-000000000207';
 
+    /** A synthetic family for the "Подробности" panel (docs/product/enrollment-contacts-and-emails.md, т. 11). */
+    private const DEMO_PARENT_EMAIL = 'parent@demo.progressive.local';
+
+    private const DEMO_CHILD_ID = '00000000-0000-4000-8000-000000000401';
+
+    private const DEMO_APPLICATION_ID = '00000000-0000-4000-8000-000000000402';
+
+    private const DEMO_APPROVED_APPLICATION_ID = '00000000-0000-4000-8000-000000000403';
+
+    private const DEMO_ENROLLMENT_ID = '00000000-0000-4000-8000-000000000404';
+
     public function run(): void
     {
         if (! app()->environment(['local', 'testing'])) {
@@ -84,6 +95,7 @@ class LocalDemoSeeder extends Seeder
             );
 
             $this->seedCatalog();
+            $this->seedDemoFamily($user->id);
 
             if (DB::getDriverName() === 'pgsql') {
                 DB::select("SELECT set_config('app.current_organization_id', ?, true)", [self::OPERATOR_ORGANIZATION_ID]);
@@ -259,6 +271,71 @@ class LocalDemoSeeder extends Seeder
             'organization_id' => self::ORGANIZATION_ID, 'session_id' => $session['id'],
             'instructor_profile_id' => self::INSTRUCTOR_ID, 'created_at' => $now, 'updated_at' => $now,
         ], $sessions), ['session_id', 'instructor_profile_id'], ['updated_at']);
+    }
+
+    /**
+     * Мария Демо (synthetic) with Ния: a new application with a note in Група 1 and an enrollment in
+     * Група 2, decided by the demo owner. Created once and never reset, so a decision taken while
+     * trying the screen stays; history rows and events are immutable and only inserted.
+     */
+    private function seedDemoFamily(string $ownerId): void
+    {
+        $now = now();
+        $parent = User::query()->updateOrCreate(
+            ['email' => self::DEMO_PARENT_EMAIL],
+            [
+                'name' => 'Мария Демо',
+                'phone' => '+359880000002',
+                // Not a sign-in account for the demo: an unknown random password.
+                'password' => Hash::make(bin2hex(random_bytes(16))),
+                'email_verified_at' => $now,
+                'locale' => 'bg',
+                'timezone' => 'Europe/Sofia',
+                'is_active' => true,
+            ],
+        );
+        DB::table('children')->insertOrIgnore([[
+            'id' => self::DEMO_CHILD_ID, 'owner_user_id' => $parent->id, 'first_name' => 'Ния', 'last_name' => 'Демова',
+            'birth_date' => '2018-05-14', 'school_name' => '120 СУ (демо)', 'class_label' => '2 клас',
+            'status' => 'active', 'version' => 1, 'created_at' => $now, 'updated_at' => $now,
+        ]]);
+        $application = fn (string $id, string $groupId, string $priceId, string $status, ?string $note, string $key): array => [
+            'id' => $id, 'organization_id' => self::ORGANIZATION_ID, 'parent_user_id' => $parent->id,
+            'child_id' => self::DEMO_CHILD_ID, 'group_id' => $groupId, 'price_option_id' => $priceId,
+            'scope' => 'full_period', 'source' => 'organization_catalog', 'status' => $status,
+            'idempotency_key' => $key, 'accepted_terms_version' => 'demo', 'accepted_terms_at' => $now,
+            'amount_cents_snapshot' => 3000, 'currency_snapshot' => 'EUR', 'unit_snapshot' => 'month',
+            'parent_note' => $note, 'version' => 1, 'created_at' => $now, 'updated_at' => $now,
+        ];
+        DB::table('enrollment_applications')->insertOrIgnore([
+            $application(self::DEMO_APPLICATION_ID, self::GROUP_ONE_ID, '00000000-0000-4000-8000-000000000208', 'submitted',
+                'Моля, обадете се след 17:00 — тогава съм свободна. Ния тренира и плуване във вторник.', 'demo-family-1'),
+            $application(self::DEMO_APPROVED_APPLICATION_ID, self::GROUP_TWO_ID, '00000000-0000-4000-8000-000000000210', 'approved', null, 'demo-family-2'),
+        ]);
+        DB::table('enrollments')->insertOrIgnore([[
+            'id' => self::DEMO_ENROLLMENT_ID, 'organization_id' => self::ORGANIZATION_ID,
+            'application_id' => self::DEMO_APPROVED_APPLICATION_ID, 'child_id' => self::DEMO_CHILD_ID,
+            'group_id' => self::GROUP_TWO_ID, 'price_option_id' => '00000000-0000-4000-8000-000000000210',
+            'scope' => 'full_period', 'status' => 'active', 'starts_on' => '2027-01-13', 'version' => 1,
+            'created_at' => $now, 'updated_at' => $now,
+        ]]);
+        $transitionId = '00000000-0000-4000-8000-000000000405';
+        DB::table('enrollment_transitions')->insertOrIgnore([[
+            'id' => $transitionId, 'organization_id' => self::ORGANIZATION_ID,
+            'application_id' => self::DEMO_APPROVED_APPLICATION_ID, 'actor_user_id' => $ownerId,
+            'from_status' => 'submitted', 'to_status' => 'approved', 'created_at' => $now, 'updated_at' => $now,
+        ]]);
+        // Already expanded: the demo never sends emails for its own history.
+        $event = fn (string $id, string $type, string $applicationId, ?string $enrollmentId, array $payload): array => [
+            'id' => $id, 'organization_id' => self::ORGANIZATION_ID, 'type' => $type, 'application_id' => $applicationId,
+            'enrollment_id' => $enrollmentId, 'payload' => json_encode($payload, JSON_THROW_ON_ERROR),
+            'occurred_at' => $now, 'expanded_at' => $now, 'attempts' => 0, 'created_at' => $now, 'updated_at' => $now,
+        ];
+        DB::table('enrollment_events')->insertOrIgnore([
+            $event('00000000-0000-4000-8000-000000000406', 'enrollment.application_submitted', self::DEMO_APPLICATION_ID, null, ['status' => 'submitted']),
+            $event('00000000-0000-4000-8000-000000000407', 'enrollment.application_submitted', self::DEMO_APPROVED_APPLICATION_ID, null, ['status' => 'submitted']),
+            $event('00000000-0000-4000-8000-000000000408', 'enrollment.application_approved', self::DEMO_APPROVED_APPLICATION_ID, self::DEMO_ENROLLMENT_ID, ['status' => 'approved', 'transition_id' => $transitionId]),
+        ]);
     }
 
     /** @return array<string, mixed> */
