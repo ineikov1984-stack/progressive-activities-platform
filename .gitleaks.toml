@@ -1,0 +1,15 @@
+# Secret scanning rules for CI (gitleaks). Default rules plus a narrow
+# allowlist for values that are documented as local-development-only.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Local-only development values and lockfile integrity hashes"
+regexes = [
+  '''\bprogressive-(app-|demo-)?local-only\b''',
+  '''base64:cHJvZ3Jlc3NpdmUtbG9jYWwtYXBwLWtleS0wMDAwMDA=''',
+]
+paths = [
+  '''(^|/)pnpm-lock\.yaml$''',
+  '''(^|/)composer\.lock$''',
+]
