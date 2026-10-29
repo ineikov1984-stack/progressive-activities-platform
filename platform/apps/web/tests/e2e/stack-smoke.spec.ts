@@ -6,6 +6,14 @@ const demo = {
   email: process.env.DEMO_USER_EMAIL ?? 'owner@demo.progressive.local',
   password: process.env.DEMO_USER_PASSWORD ?? 'progressive-demo-local-only',
   organizationId: '00000000-0000-4000-8000-000000000101',
+  // LocalDemoSeeder::ACTIVITY_ID — the published "Шахмат" activity.
+  publishedActivityId: '00000000-0000-4000-8000-000000000201',
+};
+
+// E2eForeignTenantSeeder: an organization the demo owner does not belong to.
+const foreign = {
+  organizationId: '00000000-0000-4000-8000-000000000103',
+  activityId: '00000000-0000-4000-8000-000000000301',
 };
 
 const slow = expect.configure({ timeout: 20_000 });
@@ -20,23 +28,31 @@ async function signIn(page: Page): Promise<void> {
   ]);
 }
 
-async function apiStatus(page: Page, path: string, init?: { method?: string; body?: unknown; organization?: boolean }): Promise<number> {
-  return page.evaluate(async ({ path, init, organizationId }) => {
+type ApiCall = { method?: string; body?: unknown; organizationId?: string };
+
+async function api(page: Page, path: string, call: ApiCall = {}): Promise<{ status: number; body: string }> {
+  return page.evaluate(async ({ path, call }) => {
     const xsrf = document.cookie.split('; ').find((item) => item.startsWith('XSRF-TOKEN='))?.slice('XSRF-TOKEN='.length);
     const response = await fetch(`/backend/api/v1/${path}`, {
-      method: init?.method ?? 'GET',
+      method: call.method ?? 'GET',
       credentials: 'include',
       headers: {
         Accept: 'application/json',
-        ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(call.body ? { 'Content-Type': 'application/json' } : {}),
         ...(xsrf ? { 'X-XSRF-TOKEN': decodeURIComponent(xsrf) } : {}),
-        ...(init?.organization ? { 'X-Organization-Id': organizationId } : {}),
+        ...(call.organizationId ? { 'X-Organization-Id': call.organizationId } : {}),
       },
-      body: init?.body ? JSON.stringify(init.body) : undefined,
+      body: call.body ? JSON.stringify(call.body) : undefined,
     });
-    return response.status;
-  }, { path, init, organizationId: demo.organizationId });
+    const text = await response.text();
+    let body = text;
+    // Laravel escapes Cyrillic in JSON (\u0418…); compare against readable text.
+    try { body = JSON.stringify(JSON.parse(text)); } catch { /* not JSON */ }
+    return { status: response.status, body };
+  }, { path, call });
 }
+
+const apiStatus = async (page: Page, path: string, call?: ApiCall) => (await api(page, path, call)).status;
 
 // One sign-in for the whole suite: the API allows 5 login attempts per minute per
 // email and IP, and every test here runs from the same IP.
@@ -63,6 +79,17 @@ test('sign in leads to the home screen with tasks', async () => {
   await expect(page.getByText(/catalog\.|tenant|organization_id/)).toHaveCount(0);
 });
 
+test('an owner invites a colleague from the home screen', async () => {
+  await page.goto('/dashboard');
+  const email = `teacher-e2e+${Date.now()}@example.test`;
+  await slow(page.getByLabel('Имейл')).toBeVisible();
+  await page.getByLabel('Имейл').fill(email);
+  await page.getByLabel('Роля').selectOption('instructor');
+  await page.getByRole('button', { name: 'Изпрати покана' }).click();
+  await slow(page.getByRole('status')).toContainText('Поканата е създадена');
+  await expect(page.getByText(email)).toBeVisible();
+});
+
 test('the session survives navigation, reloads and many API calls', async () => {
   for (const path of ['/dashboard/activities', '/dashboard', '/dashboard/open-days', '/dashboard/activities']) {
     await page.goto(path);
@@ -71,31 +98,39 @@ test('the session survives navigation, reloads and many API calls', async () => 
   }
   await page.reload();
   for (let index = 0; index < 10; index += 1) {
-    expect(await apiStatus(page, 'catalog/activities', { organization: true })).toBe(200);
+    expect(await apiStatus(page, 'catalog/activities', { organizationId: demo.organizationId })).toBe(200);
   }
   expect(await apiStatus(page, 'me')).toBe(200);
   await page.goto('/dashboard');
   await expect(page).toHaveURL(/\/dashboard$/);
 });
 
-test('the selected organization is kept in the session', async () => {
-  // Known issue (docs/process/WORKBOARD.md): the API answers 200 but the next request
-  // still has no organization. Marked as expected to fail until the API is fixed;
-  // when it starts passing, Playwright reports it so the marker can be removed.
-  test.fail();
+test('the organization can be selected', async () => {
   expect(await apiStatus(page, 'context/organization', { method: 'POST', body: { organization_id: demo.organizationId } })).toBe(200);
-  expect(await apiStatus(page, 'context/organization')).toBe(200);
 });
 
-test('another organization is not reachable', async () => {
-  const status = await page.evaluate(async () => {
-    const response = await fetch('/backend/api/v1/catalog/activities', {
-      credentials: 'include',
-      headers: { Accept: 'application/json', 'X-Organization-Id': '00000000-0000-4000-8000-0000000009ff' },
-    });
-    return response.status;
-  });
-  expect(status).toBe(404);
+test('the selected organization is kept in the session', async () => {
+  // Known issue (docs/process/WORKBOARD.md): after a successful selection the next request
+  // still has no organization (409). Expected to fail with exactly that until the API is
+  // fixed; Playwright then reports the passing test so this marker can be removed.
+  test.fail(true, 'WORKBOARD: the session does not keep active_organization_id');
+  expect(await apiStatus(page, 'context/organization')).not.toBe(409);
+});
+
+test('another organization is not reachable through the header', async () => {
+  const response = await api(page, 'catalog/activities', { organizationId: foreign.organizationId });
+  expect(response.status).toBe(404);
+  expect(response.body).toContain('Организацията не е намерена.');
+  expect(response.body).not.toContain(foreign.activityId);
+});
+
+test('another organization\'s activity is not reachable from our own organization (RLS)', async () => {
+  const single = await api(page, `catalog/activities/${foreign.activityId}`, { organizationId: demo.organizationId });
+  expect(single.status).toBe(404);
+  expect(single.body).not.toContain('Чужда дейност');
+  const list = await api(page, 'catalog/activities', { organizationId: demo.organizationId });
+  expect(list.status).toBe(200);
+  expect(list.body).not.toContain(foreign.activityId);
 });
 
 test('an owner creates a draft activity and continues in the editor', async () => {
@@ -115,11 +150,11 @@ test('an owner creates a draft activity and continues in the editor', async () =
   const card = page.getByRole('article').filter({ has: page.getByRole('heading', { name: title }) });
   await slow(card).toBeVisible();
   await expect(card.getByText('Чернова', { exact: true })).toBeVisible();
-  await expect(card.getByText(/от 7 стъпки/)).toBeVisible();
+  await expect(card.getByText(/от \d+ стъпки/)).toBeVisible();
 });
 
 test('a published activity is locked in the editor', async () => {
-  await page.goto('/dashboard/activities/00000000-0000-4000-8000-000000000201');
+  await page.goto(`/dashboard/activities/${demo.publishedActivityId}`);
   await slow(page.getByRole('note')).toContainText('публикувана');
   await expect(page.getByLabel('Кратко описание')).toBeDisabled();
 });

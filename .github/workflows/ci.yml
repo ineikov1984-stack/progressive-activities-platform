@@ -136,6 +136,7 @@ jobs:
   e2e-stack:
     name: e2e (real API + database)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:17-alpine
@@ -150,7 +151,8 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
-    # Same values as platform/compose.yaml (local-only, synthetic demo data).
+    # Based on platform/compose.yaml (local-only, synthetic demo data). CI differences:
+    # APP_DEBUG off, no Redis (cache and queue use the database), mail goes to the log.
     env:
       APP_ENV: local
       APP_DEBUG: "false"
@@ -171,6 +173,8 @@ jobs:
       SANCTUM_STATEFUL_DOMAINS: localhost:3000,127.0.0.1:3000
       MAIL_MAILER: log
       API_BASE_URL: http://127.0.0.1:8080
+      # More than one PHP worker so page renders and browser API calls do not queue.
+      PHP_CLI_SERVER_WORKERS: 4
     steps:
       - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
@@ -194,6 +198,7 @@ jobs:
           cp .env.example .env && php artisan key:generate --ansi
           php artisan migrate --force --ansi
           php artisan db:seed --class='Database\Seeders\LocalDemoSeeder' --force --ansi
+          php artisan db:seed --class='Database\Seeders\E2eForeignTenantSeeder' --force --ansi
           nohup php artisan serve --host=127.0.0.1 --port=8080 --no-reload > "$RUNNER_TEMP/api.log" 2>&1 &
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/up >/dev/null && exit 0; sleep 1; done
           echo "::error title=API did not start::$(tail -c 2000 "$RUNNER_TEMP/api.log" | tr '\n' ' ')"; exit 1
@@ -217,9 +222,14 @@ jobs:
       - name: API log on failure
         if: ${{ failure() }}
         run: |
-          grep -E "ERROR|Exception| 5[0-9]{2} " "$RUNNER_TEMP/api.log" | tail -n 40 | while IFS= read -r line; do echo "::warning title=API log::${line:0:900}"; done || true
-          tail -n 40 platform/apps/api/storage/logs/laravel.log 2>/dev/null | grep -E "ERROR|Exception" | while IFS= read -r line; do echo "::warning title=Laravel log::${line:0:900}"; done || true
-
+          tail -n 60 platform/apps/api/storage/logs/laravel.log 2>/dev/null | grep -E "ERROR|Exception" | while IFS= read -r line; do echo "::warning title=Laravel log::${line:0:900}"; done || true
+      - name: Keep Playwright traces on failure
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-stack-traces
+          path: platform/apps/web/test-results/
+          retention-days: 7
   docker:
     runs-on: ubuntu-latest
     steps:
