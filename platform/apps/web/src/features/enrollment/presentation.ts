@@ -7,6 +7,13 @@ export const scopeLabels: Record<string, string> = {
   trial: 'Пробно занимание',
 };
 
+/** "Вид" in the details: what kind of place the child has, without repeating the word "записване". */
+export const kindLabels: Record<string, string> = {
+  full_period: 'За целия период',
+  single: 'Еднократно посещение',
+  trial: 'Пробно занимание',
+};
+
 const unitLabels: Record<string, string> = { month: 'на месец', session: 'за занимание', period: 'за периода', package: 'за пакета' };
 
 export function priceText(price: StaffApplication['price']): string {

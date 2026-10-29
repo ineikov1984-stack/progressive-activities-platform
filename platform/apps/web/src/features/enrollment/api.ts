@@ -157,6 +157,8 @@ export type DetailsEnrollment = {
 };
 type DetailsCommon = {
   child: ChildDetails; contact_status: ContactStatus; contact: ParentContact | null; parent_note: string | null;
+  /** When the note was written: the application's date. */
+  parent_note_at?: string | null;
   records: ChildRecord[];
   /** Only for those who manage enrollments. */
   history: HistoryItem[] | null;

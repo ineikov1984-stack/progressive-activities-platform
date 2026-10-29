@@ -68,7 +68,7 @@ final class StaffEnrollmentDetailsController extends Controller
             ],
             ...$this->childAndParent($record, $access['contacts'], $contact),
             'records' => $this->records($record->child_id, $record->id, $enrollmentId),
-            'history' => $access['manage'] ? $this->history([$record->id], $enrollmentId === null ? [] : [$enrollmentId]) : null,
+            'history' => $access['manage'] ? $this->history([$record->id], $enrollmentId === null ? [] : [$enrollmentId], $contact) : null,
         ];
         if ($contact) {
             $this->recordView($request, 'enrollment_application', $record->id);
@@ -96,7 +96,7 @@ final class StaffEnrollmentDetailsController extends Controller
             'enrollment' => $this->presentEnrollment($record, $access['manage']),
             ...$this->childAndParent($application, $access['contacts'], $contact, $record->child),
             'records' => $this->records($record->child_id, $record->application_id, $record->id),
-            'history' => $access['manage'] ? $this->history([$record->application_id], [$record->id]) : null,
+            'history' => $access['manage'] ? $this->history([$record->application_id], [$record->id], $contact) : null,
         ];
         if ($contact) {
             $this->recordView($request, 'enrollment', $record->id);
@@ -109,7 +109,7 @@ final class StaffEnrollmentDetailsController extends Controller
      * Who the parent is and how to reach them. The parent's account is read only through a record
      * this organization can see.
      *
-     * @return array{child: array<string, mixed>, contact_status: string, contact: array<string, mixed>|null, parent_note: string|null}
+     * @return array{child: array<string, mixed>, contact_status: string, contact: array<string, mixed>|null, parent_note: string|null, parent_note_at: string|null}
      */
     private function childAndParent(?EnrollmentApplication $application, bool $contacts, bool $inWindow, ?Child $child = null): array
     {
@@ -132,6 +132,8 @@ final class StaffEnrollmentDetailsController extends Controller
                 'email_verified' => $parent->hasVerifiedEmail(),
             ],
             'parent_note' => $inWindow ? $application?->parent_note : null,
+            // Written when the parent applied.
+            'parent_note_at' => $inWindow && $application?->parent_note !== null ? $application->created_at?->toIso8601String() : null,
         ];
     }
 
@@ -194,20 +196,20 @@ final class StaffEnrollmentDetailsController extends Controller
      */
     private function records(string $childId, ?string $exceptApplication, ?string $exceptEnrollment): array
     {
-        $oldestEnd = ContactWindow::oldestEnd();
+        // Current, ahead or ended up to 90 days ago — the same rule as the contacts' window, so a visit
+        // ends with its session (a child has few enrollments; the rule is applied after loading).
         $enrollments = Enrollment::query()->where('child_id', $childId)
             ->when($exceptEnrollment, fn ($query, string $id) => $query->whereKeyNot($id))
-            ->where(fn ($query) => $query
-                ->whereIn('status', [EnrollmentStatus::Active->value, EnrollmentStatus::Paused->value])
-                ->orWhere(fn ($ended) => $ended->where('status', EnrollmentStatus::Ended->value)
-                    ->where(fn ($day) => $day->whereNull('ends_on')->orWhereDate('ends_on', '>=', $oldestEnd))))
+            ->where('status', '!=', EnrollmentStatus::Cancelled->value)
             ->with([
                 'group.offering.activity', 'session',
                 'pauses' => fn ($query) => $query->whereNull('cancelled_at')->orderBy('starts_on'),
                 'transferredTo' => fn ($query) => $query->where('status', '!=', EnrollmentStatus::Cancelled->value)->with('group'),
             ])
             ->orderBy('starts_on')
-            ->get();
+            ->get()
+            ->filter(fn (Enrollment $enrollment): bool => $this->window->enrollment($enrollment))
+            ->values();
         $applications = EnrollmentApplication::query()->where('child_id', $childId)
             ->when($exceptApplication, fn ($query, string $id) => $query->whereKeyNot($id))
             ->whereIn('status', [EnrollmentApplicationStatus::Submitted->value, EnrollmentApplicationStatus::Waitlisted->value])
@@ -261,11 +263,14 @@ final class StaffEnrollmentDetailsController extends Controller
      * What happened, newest first: the events of the record, with the transition each one names for
      * who did it and what the parent was told. Events from before transition_id have no actor.
      *
+     * A reason the parent wrote is the parent's own words: like the note, only for those who see
+     * contacts and only inside the window. What the team told the parent is always shown.
+     *
      * @param  list<string>  $applicationIds
      * @param  list<string>  $enrollmentIds
      * @return list<array<string, mixed>>
      */
-    private function history(array $applicationIds, array $enrollmentIds): array
+    private function history(array $applicationIds, array $enrollmentIds, bool $parentWords): array
     {
         $events = EnrollmentEvent::query()
             ->where(fn ($query) => $query->whereIn('application_id', $applicationIds)->orWhereIn('enrollment_id', $enrollmentIds))
@@ -289,7 +294,7 @@ final class StaffEnrollmentDetailsController extends Controller
         $sessions = Session::query()->whereKey($payloadIds('session_id'))->get()->keyBy('id');
         $previous = Enrollment::query()->with('group')->whereKey($payloadIds('transferred_from_id'))->get()->keyBy('id');
 
-        return $events->map(function (EnrollmentEvent $event) use ($transitions, $parents, $names, $sessions, $previous): array {
+        return $events->map(function (EnrollmentEvent $event) use ($transitions, $parents, $names, $sessions, $previous, $parentWords): array {
             $payload = $event->payload;
             $transition = $transitions->get($payload['transition_id'] ?? '');
             $parentId = $parents->get($event->application_id ?? '');
@@ -311,7 +316,7 @@ final class StaffEnrollmentDetailsController extends Controller
                 'type' => $event->type,
                 'occurred_at' => $event->occurred_at->toIso8601String(),
                 'actor' => $actor,
-                'public_reason' => $transition?->public_reason,
+                'public_reason' => $byParent && ! $parentWords ? null : $transition?->public_reason,
                 'internal_note' => $transition?->internal_note,
                 // Named fields only: the payload itself is never passed through.
                 'details' => array_filter([

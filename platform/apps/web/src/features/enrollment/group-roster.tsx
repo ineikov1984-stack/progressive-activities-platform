@@ -7,6 +7,7 @@ import {
 } from './api';
 import { ApprovalSetting } from './approval-setting';
 import { ChangePanel } from './change-panel';
+import { DetailsName } from './child-details';
 import { addDays, dateText, needsGroupPlace, placesText, type RosterNote, rosterNotes, scopeLabels, shortDay, sofiaDay } from './presentation';
 import styles from './enrollments.module.css';
 
@@ -138,12 +139,9 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
             {roster.waitlist.map((item) => (
               <li key={item.id}>
                 <span className={styles.waitWho}>
-                  <span><span className={styles.listName}>{item.child.name}</span> <span className={styles.small}>от {dateText(item.submitted_at)}{item.parent_name ? ` · родител: ${item.parent_name}` : ''}</span></span>
-                  {onDetails ? (
-                    <button type="button" className={`${styles.linkButton} ${styles.detailsLink}`} onClick={(event) => onDetails({ kind: 'application', id: item.id }, event.currentTarget)}>
-                      Подробности<span className={styles.srOnly}> за {item.child.name}</span>
-                    </button>
-                  ) : null}
+                  {onDetails ? <span className={styles.listName}><DetailsName name={item.child.name ?? 'Дете'} onOpen={(opener) => onDetails({ kind: 'application', id: item.id }, opener)} /></span>
+                    : <span className={styles.listName}>{item.child.name}</span>}
+                  <span className={styles.small}>от {dateText(item.submitted_at)}{item.parent_name ? ` · родител: ${item.parent_name}` : ''}</span>
                 </span>
                 {canManage ? (
                   <span className={styles.actions}>
@@ -243,16 +241,11 @@ function RosterRow({ onActivity, organizationId, roster, enrollment, today, canM
   return (
     <li className={styles.row} ref={row}>
       <div className={styles.rowMain}>
-        <span className={styles.listName}>{name}</span>
+        <span className={styles.listName}>{onDetails ? <DetailsName name={name} onOpen={onDetails} /> : name}</span>
         <span className={styles.small}>
           {enrollment.child.class_label ? `${enrollment.child.class_label} · ` : ''}
           {fullPeriod ? `от ${dateText(enrollment.starts_on)}` : scopeLabels[enrollment.scope] ?? 'Записване'}
         </span>
-        {onDetails ? (
-          <button type="button" className={`${styles.linkButton} ${styles.detailsLink}`} onClick={(event) => onDetails(event.currentTarget)}>
-            Подробности<span className={styles.srOnly}> за {name}</span>
-          </button>
-        ) : null}
         {notes.length > 0 ? (
           <ul className={styles.notes} aria-label={`Бележки за ${name}`}>
             {notes.map((note) => (

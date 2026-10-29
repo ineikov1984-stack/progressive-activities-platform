@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDashboardContext } from '@/features/dashboard/dashboard-context';
 import { type ApplicationFacets, type ApplicationPage, type DetailsTarget, loadApplications, loadStaffGroups, reviewApplication, type ReviewDecision, type StaffApplication, type StaffGroup } from './api';
-import { ChildDetailsPanel } from './child-details';
+import { ChildDetailsPanel, DetailsName } from './child-details';
 import { GroupRosterPanel } from './group-roster';
 import {
   activitySummary, applicationPlaces, dateText, dateTimeText, type GroupFilter, groupFill, groupFilterLabels, groupsByActivity, hasPlaceForWaiting,
@@ -57,12 +57,9 @@ function ApplicationRow({ application, busy, canManage, inQueue = false, onDecid
   return (
     <article className={styles.appRow} aria-labelledby={`app-${application.id}`}>
       <div className={styles.appWho}>
-        <Heading id={`app-${application.id}`} className={styles.child}>{name}</Heading>
+        <Heading id={`app-${application.id}`} className={styles.child}><DetailsName name={name} onOpen={onDetails} /></Heading>
         <span className={styles.small}>{application.child.class_label ? `${application.child.class_label} · ` : ''}заявка от {dateText(application.submitted_at)}</span>
         {application.parent_name ? <span className={styles.small}>Родител: {application.parent_name}</span> : null}
-        <button type="button" className={`${styles.linkButton} ${styles.detailsLink}`} onClick={(event) => onDetails(event.currentTarget)}>
-          Подробности<span className={styles.srOnly}> за {name}</span>
-        </button>
       </div>
       <div className={styles.appWhat}>
         {!inQueue ? <span className={styles.meta}>{application.activity.title} · {application.group.name}</span> : null}

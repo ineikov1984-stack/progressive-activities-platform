@@ -166,6 +166,68 @@ class StaffEnrollmentDetailsTest extends TestCase
         $this->assertSame(2, AuditEvent::query()->where('action', 'enrollment.contact_viewed')->count());
     }
 
+    public function test_a_visit_closes_the_window_with_its_session(): void
+    {
+        $f = $this->fixture();
+        [$recent, $old, $stale] = $this->withTenant($f['organization'], function () use ($f): array {
+            // A trial visit keeps its status after the outcome ("attended" = ended) and has no end date.
+            $visit = function (string $day, string $status) use ($f): Enrollment {
+                $session = $f['groupTwo']->sessions()->create(['starts_at' => "{$day}T14:00:00Z", 'ends_at' => "{$day}T15:00:00Z", 'status' => 'scheduled']);
+                $application = EnrollmentApplication::query()->create([
+                    'parent_user_id' => $f['parent']->id, 'child_id' => $f['child']->id, 'group_id' => $f['groupTwo']->id,
+                    'price_option_id' => $f['priceTwo']->id, 'session_id' => $session->id, 'scope' => 'trial', 'source' => 'organization_catalog',
+                    'status' => 'approved', 'idempotency_key' => fake()->uuid(), 'accepted_terms_version' => 'v1',
+                    'accepted_terms_at' => now(), 'amount_cents_snapshot' => 1500, 'currency_snapshot' => 'EUR', 'unit_snapshot' => 'session',
+                ]);
+
+                return Enrollment::query()->create([
+                    'application_id' => $application->id, 'child_id' => $f['child']->id, 'group_id' => $f['groupTwo']->id,
+                    'price_option_id' => $f['priceTwo']->id, 'session_id' => $session->id, 'scope' => 'trial', 'status' => $status, 'starts_on' => $day,
+                ]);
+            };
+
+            return [$visit('2026-08-15', 'ended'), $visit('2026-07-01', 'ended'), $visit('2026-06-01', 'active')];
+        });
+        $this->actAs($this->member($f['organization'], 'organization_owner'), $f['organization']);
+
+        $this->getJson("/api/v1/enrollment/enrollments/{$recent->id}")->assertOk()->assertJsonPath('contact_status', 'shown');
+        foreach ([$old, $stale] as $closed) {
+            $this->getJson("/api/v1/enrollment/enrollments/{$closed->id}")->assertOk()
+                ->assertJsonPath('contact_status', 'outside_window')->assertJsonPath('contact', null)->assertJsonPath('parent_note', null);
+        }
+        // "При нас" follows the same rule: the recent visit is there, the old ones are not.
+        $ids = array_column($this->getJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}")->json('records'), 'id');
+        $this->assertContains($recent->id, $ids);
+        $this->assertNotContains($old->id, $ids);
+        $this->assertNotContains($stale->id, $ids);
+    }
+
+    public function test_a_reason_the_parent_wrote_follows_the_contact_rules(): void
+    {
+        $f = $this->fixture();
+        $this->withTenant($f['organization'], function () use ($f): void {
+            $transition = EnrollmentTransition::query()->create([
+                'enrollment_id' => $f['enrollment']->id, 'actor_user_id' => $f['parent']->id,
+                'from_status' => 'active', 'to_status' => 'ended', 'public_reason' => 'Местим се в друг град.',
+            ]);
+            EnrollmentEvent::query()->create([
+                'type' => 'enrollment.ended', 'application_id' => $f['enrollment']->application_id, 'enrollment_id' => $f['enrollment']->id,
+                'payload' => ['last_day' => '2026-11-30', 'cancelled' => false, 'transition_id' => $transition->id], 'occurred_at' => now(),
+            ]);
+        });
+        $path = "/api/v1/enrollment/enrollments/{$f['enrollment']->id}";
+
+        $this->actAs($this->member($f['organization'], 'coordinator'), $f['organization'])->getJson($path)->assertOk()
+            ->assertJsonPath('history.0.type', 'enrollment.ended')
+            ->assertJsonPath('history.0.actor.kind', 'parent')
+            ->assertJsonPath('history.0.details.last_day', '2026-11-30')
+            ->assertJsonPath('history.0.public_reason', 'Местим се в друг град.');
+        // The platform operator sees what happened, not the parent's words.
+        $this->actAs($this->member($f['organization'], 'platform_admin'), $f['organization'])->getJson($path)->assertOk()
+            ->assertJsonPath('history.0.type', 'enrollment.ended')
+            ->assertJsonPath('history.0.public_reason', null);
+    }
+
     public function test_an_enrollment_shows_what_comes_next_and_who_decided(): void
     {
         $f = $this->fixture();
@@ -184,6 +246,7 @@ class StaffEnrollmentDetailsTest extends TestCase
             ->assertJsonPath('enrollment.next_session_at', '2026-11-03T14:00:00+00:00')
             ->assertJsonPath('enrollment.price.amount_cents', 4500)
             ->assertJsonPath('parent_note', self::NOTE)
+            ->assertJsonPath('parent_note_at', '2026-10-28T10:00:00+00:00')
             ->assertJsonPath('history.0.type', 'enrollment.application_approved')
             ->assertJsonPath('history.0.actor', ['kind' => 'team', 'name' => $coordinator->name])
             ->assertJsonPath('history.1.type', 'enrollment.application_submitted');

@@ -3,8 +3,8 @@
 import { type MouseEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { changeErrorMessage, type ChildDetailsResponse, type DetailsTarget, loadDetails } from './api';
 import {
-  actorText, childLine, dateText, dateTimeText, historyText, pauseReasonLabels, priceText, queueText, reasonText, recordStatusText, recordTone,
-  scheduleText, scopeLabels, sessionText, shortDay, sofiaDay,
+  actorText, childLine, dateText, dateTimeText, historyText, kindLabels, pauseReasonLabels, priceText, queueText, reasonText, recordStatusText, recordTone,
+  scheduleText, sessionText, shortDay, sofiaDay,
 } from './presentation';
 import styles from './enrollments.module.css';
 
@@ -78,6 +78,19 @@ export function ChildDetailsPanel({ organizationId, target, onClose }: Props) {
   );
 }
 
+/**
+ * The child's name is the way into "Подробности" on every row: one line, a 44 px target, and the word
+ * says what it does — rows stay as short as before.
+ */
+export function DetailsName({ name, onOpen }: { name: string; onOpen: (opener: HTMLElement) => void }) {
+  return (
+    <button type="button" className={styles.nameButton} onClick={(event) => onOpen(event.currentTarget)}>
+      <span className={styles.nameText}>{name}</span>
+      <span className={styles.nameMore}>Подробности<span aria-hidden="true"> ›</span></span>
+    </button>
+  );
+}
+
 function ParentSection({ details, name }: { details: ChildDetailsResponse; name: string }) {
   if (details.contact_status === 'not_allowed') return null;
   const contact = details.contact;
@@ -92,20 +105,23 @@ function ParentSection({ details, name }: { details: ChildDetailsResponse; name:
           <dl className={styles.facts}>
             <div>
               <dt>Телефон</dt>
-              <dd>{contact.phone_display ?? 'Родителят още не е добавил телефон.'}</dd>
+              <dd className={contact.phone_display ? styles.phoneValue : undefined}>{contact.phone_display ?? 'Родителят още не е добавил телефон.'}</dd>
             </div>
             <div>
               <dt>Имейл</dt>
-              <dd>{contact.email}{contact.email_verified ? '' : <span className={styles.smallWarning}> · още не е потвърден</span>}</dd>
+              <dd>{contact.email}</dd>
             </div>
           </dl>
+          {contact.email_verified ? null : <p className={styles.contactHint}>Имейлът още не е потвърден от родителя — може да е грешен. По-сигурно е да се обадите.</p>}
           <div className={styles.actions}>
-            {contact.phone ? <a className={styles.primaryLink} href={`tel:${contact.phone}`}>Обади се<span className={styles.srOnly}> на родителя на {name}</span></a> : null}
+            {/* On a computer a phone link often does nothing: there the number is the main thing and the button is secondary (CSS). */}
+            {contact.phone ? <a className={`${styles.primaryLink} ${styles.callLink}`} href={`tel:${contact.phone}`}>Обади се<span className={styles.srOnly}> на родителя на {name}</span></a> : null}
             {contact.email ? <a className={styles.secondaryLink} href={`mailto:${contact.email}`}>Пиши<span className={styles.srOnly}> на родителя на {name}</span></a> : null}
           </div>
           {details.parent_note ? (
             <figure className={styles.parentNote}>
-              <figcaption>Бележка от родителя</figcaption>
+              {/* Written when the parent applied: for an enrolled child the date says it is not new. */}
+              <figcaption>{details.kind === 'enrollment' && details.parent_note_at ? `Бележка от родителя към заявката от ${dateText(details.parent_note_at)}` : 'Бележка от родителя'}</figcaption>
               <blockquote>{details.parent_note}</blockquote>
             </figure>
           ) : null}
@@ -129,7 +145,7 @@ function RecordSection({ details }: { details: ChildDetailsResponse }) {
         <h3 id="details-record">{waiting ? 'Чака място' : application.status === 'submitted' ? 'Нова заявка' : 'Заявка'}</h3>
         <p className={styles.recordTitle}>{application.activity.title} · {application.group.name}</p>
         <dl className={styles.facts}>
-          <Fact label="Записване">{application.visit_offer_title ?? scopeLabels[application.scope] ?? 'Записване'}{application.session_starts_at ? ` · ${dateTimeText(application.session_starts_at)}` : ''}</Fact>
+          <Fact label="Вид">{application.visit_offer_title ?? kindLabels[application.scope] ?? 'За целия период'}{application.session_starts_at ? ` · ${dateTimeText(application.session_starts_at)}` : ''}</Fact>
           {scheduleText(application.schedule) ? <Fact label="Дни и час">{scheduleText(application.schedule)}</Fact> : null}
           <Fact label="Цена">{priceText(application.price)}</Fact>
           <Fact label="Подадена">{dateText(application.submitted_at)}</Fact>
@@ -148,7 +164,7 @@ function RecordSection({ details }: { details: ChildDetailsResponse }) {
       <h3 id="details-record">Записване</h3>
       <p className={styles.recordTitle}>{enrollment.activity.title} · {enrollment.group.name}</p>
       <dl className={styles.facts}>
-        {!fullPeriod ? <Fact label="Записване">{scopeLabels[enrollment.scope] ?? 'Посещение'}{enrollment.session_starts_at ? ` · ${dateTimeText(enrollment.session_starts_at)}` : ''}</Fact> : null}
+        {!fullPeriod ? <Fact label="Вид">{kindLabels[enrollment.scope] ?? 'Посещение'}{enrollment.session_starts_at ? ` · ${dateTimeText(enrollment.session_starts_at)}` : ''}</Fact> : null}
         {scheduleText(enrollment.schedule) ? <Fact label="Дни и час">{scheduleText(enrollment.schedule)}</Fact> : null}
         {enrollment.price.amount_cents !== null && enrollment.price.unit ? (
           <Fact label="Цена">{priceText({ amount_cents: enrollment.price.amount_cents, currency: enrollment.price.currency ?? 'EUR', unit: enrollment.price.unit })}</Fact>
@@ -200,7 +216,7 @@ function HistorySection({ details }: { details: ChildDetailsResponse }) {
   const items = details.history ?? [];
   return (
     <section className={styles.detailSection} aria-labelledby="details-history">
-      <h3 id="details-history">История</h3>
+      <h3 id="details-history">{details.kind === 'application' ? 'История на заявката' : 'История на записването'}</h3>
       {items.length === 0 ? <p className={styles.muted}>Още няма записани промени.</p> : (
         <ol className={styles.history}>
           {items.map((item) => {
