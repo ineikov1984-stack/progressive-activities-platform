@@ -17,7 +17,7 @@ test('C: which requests start a new session', async () => {
   const step = async (label: string, run: () => Promise<{ status(): number; headersArray(): { name: string; value: string }[] }>) => {
     const response = await run();
     const cookies = response.headersArray().filter((h) => h.name.toLowerCase() === 'set-cookie').map((h) => h.value.split('=')[0]).join('+') || '-';
-    log.push(`${label}:${response.status()} set=${cookies} rows=${sql('select count(*) from sessions')} authed=${sql('select count(*) from sessions where user_id is not null')}`);
+    log.push(`${label}:${response.status()} set=${cookies} rows=[${sql("select left(id,6)||':'||coalesce(left(user_id::text,4),'-')||':'||length(payload)||':'||(extract(epoch from now())::int - last_activity) from sessions order by id")}]`);
   };
   log.push(`start rows=${sql('select count(*) from sessions')}`);
   await step('csrf', () => jar.get('/sanctum/csrf-cookie'));
