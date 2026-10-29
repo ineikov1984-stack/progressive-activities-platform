@@ -60,14 +60,14 @@ jobs:
       - name: Code style (Pint)
         run: |
           status=0
-          vendor/bin/pint --test --format=json > pint.json || status=$?
+          vendor/bin/pint --test --format=json > "$RUNNER_TEMP/pint-report.json" || status=$?
           php -r '
-            $r = json_decode(file_get_contents("pint.json"), true) ?: [];
+            $r = json_decode(file_get_contents(getenv("RUNNER_TEMP") . "/pint-report.json"), true) ?: [];
             foreach (($r["files"] ?? []) as $f) {
               echo "::error file=platform/apps/api/{$f["name"]},title=Code style::" . implode(", ", $f["appliedFixers"] ?? []) . "\n";
             }
           '
-          if [ "$status" != 0 ]; then echo "::group::Pint report"; cat pint.json; echo "::endgroup::"; echo "::error title=Pint raw report::$(head -c 3000 pint.json | tr '\n' ' ')"; fi
+          if [ "$status" != 0 ]; then echo "::group::Pint report"; cat "$RUNNER_TEMP/pint-report.json"; echo "::endgroup::"; echo "::error title=Pint raw report::$(head -c 3000 "$RUNNER_TEMP/pint-report.json" | tr '\n' ' ')"; fi
           exit $status
       - name: Static analysis (PHPStan)
         if: ${{ !cancelled() }}
@@ -93,9 +93,9 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           status=0
-          composer audit --locked --format=json > composer-audit.json || status=$?
+          composer audit --locked --format=json > "$RUNNER_TEMP/composer-audit.json" || status=$?
           php -r '
-            $a = json_decode(file_get_contents("composer-audit.json"), true) ?: [];
+            $a = json_decode(file_get_contents(getenv("RUNNER_TEMP") . "/composer-audit.json"), true) ?: [];
             foreach (($a["advisories"] ?? []) as $pkg => $list) {
               foreach ($list as $x) {
                 $id = $x["cve"] ?? $x["advisoryId"] ?? "";
