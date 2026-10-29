@@ -7,12 +7,15 @@ BEGIN
 END
 $$;
 
+-- The application only reads and writes rows (under RLS). It never creates objects, triggers
+-- or truncates: migrations run as the owner role (docs/process/DECISIONS.md).
 ALTER ROLE progressive_app PASSWORD 'progressive-app-local-only';
 GRANT CONNECT ON DATABASE progressive TO progressive_app;
-GRANT USAGE, CREATE ON SCHEMA public TO progressive_app;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO progressive_app;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO progressive_app;
+GRANT USAGE ON SCHEMA public TO progressive_app;
+REVOKE CREATE ON SCHEMA public FROM progressive_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO progressive_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO progressive_app;
 ALTER DEFAULT PRIVILEGES FOR ROLE progressive IN SCHEMA public
-    GRANT ALL PRIVILEGES ON TABLES TO progressive_app;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO progressive_app;
 ALTER DEFAULT PRIVILEGES FOR ROLE progressive IN SCHEMA public
-    GRANT ALL PRIVILEGES ON SEQUENCES TO progressive_app;
+    GRANT USAGE, SELECT ON SEQUENCES TO progressive_app;

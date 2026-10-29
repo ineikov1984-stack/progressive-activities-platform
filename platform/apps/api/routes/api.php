@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\V1\OrganizationController;
 use App\Http\Controllers\Api\V1\ParentChildController;
 use App\Http\Controllers\Api\V1\ParentEnrollmentController;
 use App\Http\Controllers\Api\V1\PublicCatalogController;
+use App\Http\Controllers\Api\V1\StaffEnrollmentChangeController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentController;
 use App\Http\Controllers\Api\V1\VisitOfferController;
 use Illuminate\Support\Facades\Route;
@@ -38,16 +39,16 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/me', [AuthController::class, 'me']);
             Route::get('/parent/children', [ParentChildController::class, 'index']);
             Route::post('/parent/children', [ParentChildController::class, 'store']);
-            Route::get('/parent/children/{child}', [ParentChildController::class, 'show']);
-            Route::patch('/parent/children/{child}', [ParentChildController::class, 'update']);
+            Route::get('/parent/children/{child}', [ParentChildController::class, 'show'])->whereUuid('child');
+            Route::patch('/parent/children/{child}', [ParentChildController::class, 'update'])->whereUuid('child');
             Route::get('/parent/enrollment-applications', [ParentEnrollmentController::class, 'index']);
             Route::post('/parent/enrollment-applications', [ParentEnrollmentController::class, 'store']);
-            Route::post('/parent/enrollment-applications/{application}/withdraw', [ParentEnrollmentController::class, 'withdraw']);
-            Route::post('/parent/enrollments/{enrollment}/end-from', [ParentEnrollmentController::class, 'endFrom']);
-            Route::post('/parent/enrollments/{enrollment}/exclude-session', [ParentEnrollmentController::class, 'excludeSession']);
-            Route::post('/parent/enrollments/{enrollment}/visit-outcome', [ParentEnrollmentController::class, 'visitOutcome']);
+            Route::post('/parent/enrollment-applications/{application}/withdraw', [ParentEnrollmentController::class, 'withdraw'])->whereUuid('application');
+            Route::post('/parent/enrollments/{enrollment}/end-from', [ParentEnrollmentController::class, 'endFrom'])->whereUuid('enrollment');
+            Route::post('/parent/enrollments/{enrollment}/exclude-session', [ParentEnrollmentController::class, 'excludeSession'])->whereUuid('enrollment');
+            Route::post('/parent/enrollments/{enrollment}/visit-outcome', [ParentEnrollmentController::class, 'visitOutcome'])->whereUuid('enrollment');
             Route::post('/enrollments/{enrollment}/visit-outcome', [ParentEnrollmentController::class, 'staffVisitOutcome'])
-                ->middleware(['tenant', 'organization.access:operational.write']);
+                ->middleware(['tenant', 'organization.access:operational.write'])->whereUuid('enrollment');
             Route::get('/organizations', [OrganizationController::class, 'index']);
             Route::post('/context/organization', [OrganizationContextController::class, 'select']);
             Route::get('/context/organization', [OrganizationContextController::class, 'current'])
@@ -59,10 +60,20 @@ Route::prefix('v1')->group(function (): void {
             Route::prefix('enrollment')->middleware('tenant')->group(function (): void {
                 Route::middleware('organization.access:operational.read')->group(function (): void {
                     Route::get('/applications', [StaffEnrollmentController::class, 'applications']);
-                    Route::get('/groups/{group}/roster', [StaffEnrollmentController::class, 'roster']);
+                    Route::get('/groups', [StaffEnrollmentController::class, 'groups']);
+                    Route::get('/groups/{group}/roster', [StaffEnrollmentController::class, 'roster'])->whereUuid('group');
+                    Route::get('/enrollments/{enrollment}/transfer-options', [StaffEnrollmentChangeController::class, 'transferOptions'])->whereUuid('enrollment');
                 });
-                Route::post('/applications/{application}/review', [StaffEnrollmentController::class, 'review'])
-                    ->middleware('organization.access:operational.write');
+                Route::middleware('organization.access:operational.write')->group(function (): void {
+                    Route::post('/applications/{application}/review', [StaffEnrollmentController::class, 'review'])->whereUuid('application');
+                    Route::post('/enrollments/{enrollment}/transfer', [StaffEnrollmentChangeController::class, 'transfer'])->whereUuid('enrollment');
+                    Route::post('/enrollments/{enrollment}/pauses', [StaffEnrollmentChangeController::class, 'pause'])->whereUuid('enrollment');
+                    Route::post('/enrollments/{enrollment}/pauses/{pause}/end', [StaffEnrollmentChangeController::class, 'endPause'])->whereUuid(['enrollment', 'pause']);
+                    Route::post('/enrollments/{enrollment}/end', [StaffEnrollmentChangeController::class, 'end'])->whereUuid('enrollment');
+                    Route::post('/enrollments/{enrollment}/reopen', [StaffEnrollmentChangeController::class, 'reopen'])->whereUuid('enrollment');
+                    Route::post('/enrollments/{enrollment}/skipped-sessions', [StaffEnrollmentChangeController::class, 'skipSession'])->whereUuid('enrollment');
+                    Route::delete('/enrollments/{enrollment}/skipped-sessions/{session}', [StaffEnrollmentChangeController::class, 'restoreSession'])->whereUuid(['enrollment', 'session']);
+                });
             });
             Route::prefix('catalog')->middleware('tenant')->group(function (): void {
                 Route::middleware('organization.access:operational.read')->group(function (): void {

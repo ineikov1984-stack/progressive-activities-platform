@@ -137,7 +137,8 @@ final class ReviewEnrollmentApplication
                 'session_id' => $reviewed->session_id,
                 'scope' => $reviewed->scope,
                 'status' => EnrollmentStatus::Active,
-                'starts_on' => $reviewed->session?->starts_at->setTimezone($group->schedule_pattern['timezone'] ?? 'Europe/Sofia')->toDateString() ?? now()->toDateString(),
+                // Calendar day in the group's time zone (docs/product/staff-enrollment.md, т. 9.1).
+                'starts_on' => ($reviewed->session->starts_at ?? now())->setTimezone($group->schedule_pattern['timezone'] ?? 'Europe/Sofia')->toDateString(),
             ]);
             $this->event('enrollment.application_approved', $reviewed, null);
 

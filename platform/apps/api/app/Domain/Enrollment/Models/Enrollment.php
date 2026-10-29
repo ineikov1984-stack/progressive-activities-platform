@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * @property EnrollmentScope $scope
@@ -79,6 +80,16 @@ class Enrollment extends Model
         return $this->belongsTo(self::class, 'transferred_from_id');
     }
 
+    /**
+     * The enrollment that continues this one in another group, if it was transferred.
+     *
+     * @return HasOne<Enrollment, $this>
+     */
+    public function transferredTo(): HasOne
+    {
+        return $this->hasOne(self::class, 'transferred_from_id');
+    }
+
     /** @return HasMany<EnrollmentTransition, $this> */
     public function transitions(): HasMany
     {
@@ -89,6 +100,12 @@ class Enrollment extends Model
     public function sessionExceptions(): HasMany
     {
         return $this->hasMany(EnrollmentSessionException::class);
+    }
+
+    /** @return HasMany<EnrollmentPause, $this> */
+    public function pauses(): HasMany
+    {
+        return $this->hasMany(EnrollmentPause::class);
     }
 
     /** @return array<string, string> */

@@ -3,7 +3,6 @@
 namespace Tests\Feature\Enrollment;
 
 use App\Domain\Catalog\Models\Activity;
-use App\Domain\Catalog\Models\Group;
 use App\Domain\Enrollment\Actions\ChangeEnrollment;
 use App\Domain\Enrollment\Actions\ReviewEnrollmentApplication;
 use App\Domain\Enrollment\Models\Enrollment;
@@ -92,33 +91,28 @@ class EnrollmentLifecycleTest extends TestCase
         app(ReviewEnrollmentApplication::class)->handle($actor, $third, 'approve', 1, null, null);
     }
 
-    public function test_future_end_one_date_exclusion_and_transfer_preserve_history(): void
+    public function test_future_end_and_one_date_exclusion_preserve_history(): void
     {
-        [$application, $actor, $targetGroup] = $this->fixture(withTargetGroup: true);
+        // Transfers by the team are covered in StaffEnrollmentChangesTest.
+        [$application, $actor] = $this->fixture();
         app(ReviewEnrollmentApplication::class)->handle($actor, $application, 'approve', 1, null, null);
         $enrollment = Enrollment::query()->where('application_id', $application->id)->firstOrFail();
         $session = $application->group->sessions()->firstOrFail();
 
-        app(ChangeEnrollment::class)->excludeSession($actor, $enrollment, $session, 'Семейно отсъствие');
+        app(ChangeEnrollment::class)->skipSession($actor, $enrollment, $session->id, 'Семейно отсъствие', null);
         $this->assertDatabaseHas('enrollment_session_exceptions', [
             'enrollment_id' => $enrollment->id, 'session_id' => $session->id, 'kind' => 'excluded',
         ]);
 
-        app(ChangeEnrollment::class)->endFrom($actor, $enrollment->refresh(), '2026-11-20', 'Промяна в графика');
+        app(ChangeEnrollment::class)->end($actor, $enrollment->refresh(), '2026-11-20', 'Промяна в графика', null);
         $ended = $enrollment->refresh();
         $this->assertSame('ended', $ended->status->value);
         $this->assertSame('2026-11-20', $ended->ends_on?->format('Y-m-d'));
-
-        $transferred = app(ChangeEnrollment::class)->transfer(
-            $actor, $ended, $targetGroup, '2026-11-20', 'Преместване по желание',
-        );
-        $this->assertSame($enrollment->id, $transferred->transferred_from_id);
-        $this->assertSame('2026-11-20', $enrollment->refresh()->ends_on?->format('Y-m-d'));
-        $this->assertDatabaseCount('enrollment_events', 4);
+        $this->assertDatabaseCount('enrollment_events', 3);
     }
 
-    /** @return array{EnrollmentApplication, User, Group|null} */
-    private function fixture(int $capacity = 12, bool $withTargetGroup = false): array
+    /** @return array{EnrollmentApplication, User} */
+    private function fixture(int $capacity = 12): array
     {
         $organization = Organization::query()->withoutGlobalScopes()->create([
             'name' => 'Организация', 'slug' => fake()->unique()->slug(), 'status' => 'active',
@@ -140,9 +134,6 @@ class EnrollmentLifecycleTest extends TestCase
             'starts_at' => '2026-11-02T14:00:00Z', 'ends_at' => '2026-11-02T15:00:00Z',
             'capacity' => $capacity, 'status' => 'scheduled',
         ]);
-        $targetGroup = $withTargetGroup ? $offering->groups()->create([
-            'name' => 'Група 2', 'capacity_max' => 12, 'status' => 'published',
-        ]) : null;
         $price = $offering->priceOptions()->create([
             'group_id' => $group->id, 'enrollment_mode' => 'monthly', 'unit' => 'month',
             'amount_cents' => 4500, 'currency' => 'EUR', 'is_available' => true,
@@ -155,7 +146,7 @@ class EnrollmentLifecycleTest extends TestCase
             'currency_snapshot' => 'EUR', 'unit_snapshot' => 'month',
         ]);
 
-        return [$application, $actor, $targetGroup];
+        return [$application, $actor];
     }
 
     private function anotherApplication(EnrollmentApplication $source): EnrollmentApplication

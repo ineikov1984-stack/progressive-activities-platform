@@ -26,7 +26,8 @@ final readonly class SessionAllocation
         $allocated = Enrollment::query()->where('organization_id', $session->organization_id)
             ->where('child_id', $child->id)->where('group_id', $session->group_id)
             ->whereIn('status', [EnrollmentStatus::Active, EnrollmentStatus::Paused, EnrollmentStatus::Ended])
-            ->get()->contains(fn (Enrollment $enrollment): bool => $this->applicability->sessionsFor($enrollment)->contains('id', $session->id));
+            ->with(['group', 'sessionExceptions', 'pauses'])
+            ->get()->contains(fn (Enrollment $enrollment): bool => $this->applicability->appliesTo($enrollment, $session));
         if ($pending || $allocated) {
             throw ValidationException::withMessages(['session_id' => 'Детето вече има заявка или потвърдено място за това занятие.']);
         }

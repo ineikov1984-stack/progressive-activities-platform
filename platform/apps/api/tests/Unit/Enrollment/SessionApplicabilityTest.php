@@ -7,6 +7,7 @@ use App\Domain\Catalog\Models\Session;
 use App\Domain\Enrollment\Enums\EnrollmentScope;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
+use App\Domain\Enrollment\Models\EnrollmentPause;
 use App\Domain\Enrollment\Models\EnrollmentSessionException;
 use App\Domain\Enrollment\Services\SessionApplicability;
 use App\Domain\Identity\Models\User;
@@ -61,6 +62,27 @@ class SessionApplicabilityTest extends TestCase
         $applicable = app(SessionApplicability::class)->sessionsFor($enrollment);
 
         $this->assertSame([$sessions[0]->id, $sessions[1]->id], $applicable->pluck('id')->all());
+    }
+
+    public function test_dates_are_local_days_of_the_group_for_boundaries_and_pauses(): void
+    {
+        [$enrollment] = $this->fixture(EnrollmentScope::FullPeriod, '2026-11-10', null);
+        // 22:30 UTC on 9 Nov is 00:30 on 10 Nov in Sofia: it belongs to the 10th.
+        $lateNight = Session::query()->create([
+            'group_id' => $enrollment->group_id, 'starts_at' => '2026-11-09T22:30:00Z', 'ends_at' => '2026-11-09T23:30:00Z',
+            'capacity' => 12, 'status' => 'scheduled',
+        ]);
+        $service = app(SessionApplicability::class);
+
+        $this->assertContains($lateNight->id, $service->sessionsFor($enrollment)->pluck('id')->all());
+        $this->assertTrue($service->appliesTo($enrollment, $lateNight));
+
+        EnrollmentPause::query()->create([
+            'enrollment_id' => $enrollment->id, 'starts_on' => '2026-11-10', 'ends_on' => '2026-11-10', 'reason_category' => 'holiday',
+        ]);
+        $enrollment->refresh();
+        $this->assertNotContains($lateNight->id, $service->sessionsFor($enrollment)->pluck('id')->all());
+        $this->assertFalse($service->appliesTo($enrollment, $lateNight));
     }
 
     /** @return array{Enrollment, list<Session>} */
