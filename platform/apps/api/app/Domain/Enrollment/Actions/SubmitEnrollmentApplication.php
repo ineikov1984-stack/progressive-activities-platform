@@ -178,8 +178,9 @@ final class SubmitEnrollmentApplication
                     'fee_reason_snapshot' => $offer?->fee_reason,
                     'cancellation_policy_snapshot' => $offer?->cancellation_policy,
                 ]);
+                $transition = null;
                 if ($offer !== null) {
-                    EnrollmentTransition::query()->create([
+                    $transition = EnrollmentTransition::query()->create([
                         'application_id' => $application->id,
                         'actor_user_id' => isset($metadata['eligibility_override_reason']) ? $overrideActor->id : $actor->id,
                         'to_status' => $status->value,
@@ -189,7 +190,7 @@ final class SubmitEnrollmentApplication
                 EnrollmentEvent::query()->create([
                     'type' => 'enrollment.application_submitted',
                     'application_id' => $application->id,
-                    'payload' => ['status' => $status->value, ...$metadata],
+                    'payload' => ['status' => $status->value, ...$metadata, ...($transition === null ? [] : ['transition_id' => $transition->id])],
                     'occurred_at' => now(),
                 ]);
 

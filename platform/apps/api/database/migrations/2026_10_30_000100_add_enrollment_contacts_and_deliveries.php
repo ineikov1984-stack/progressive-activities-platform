@@ -56,7 +56,8 @@ return new class extends Migration
             $table->timestamps();
             $table->unique(['event_id', 'audience', 'recipient_key']);
         });
-        DB::unprepared("CREATE INDEX enrollment_event_deliveries_pending ON enrollment_event_deliveries (organization_id, next_attempt_at) WHERE status = 'pending'");
+        // Open rows only: the sender looks for pending ones and for 'sending' ones whose lease has expired.
+        DB::unprepared("CREATE INDEX enrollment_event_deliveries_open ON enrollment_event_deliveries (organization_id, next_attempt_at) WHERE status IN ('pending', 'sending')");
 
         // Events from before this migration are not sent: their time has passed.
         DB::table('enrollment_events')->whereNull('expanded_at')->update(['expanded_at' => now()]);

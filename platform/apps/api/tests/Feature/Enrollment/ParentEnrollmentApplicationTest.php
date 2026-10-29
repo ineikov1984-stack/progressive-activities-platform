@@ -96,8 +96,9 @@ class ParentEnrollmentApplicationTest extends TestCase
 
     public function test_the_note_stays_with_the_application_and_is_never_copied_to_history(): void
     {
-        [, $parent, $child, $group, , $price] = $this->fixture('monthly');
-        $note = 'Звъннете ми, когато прегледате заявката.';
+        [$organization, $parent, $child, $group, , $price] = $this->fixture('monthly');
+        // JSON columns may keep Cyrillic escaped (\u0417…), so the search looks for an ASCII marker.
+        $note = 'Звъннете ми, когато прегледате заявката. NOTE-7f3a';
 
         $id = $this->actingAs($parent)->withHeader('Idempotency-Key', 'note-001')
             ->postJson('/api/v1/parent/enrollment-applications', [...$this->payload($child->id, $group->id, $price->id), 'parent_note' => "  {$note}  "])
@@ -107,9 +108,19 @@ class ParentEnrollmentApplicationTest extends TestCase
         $this->assertSame($note, EnrollmentApplication::query()->withoutGlobalScopes()->findOrFail($id)->parent_note);
         $this->actingAs($parent)->postJson('/api/v1/parent/enrollment-applications/'.$id.'/withdraw', ['version' => 1])->assertOk();
 
+        // The automatic path writes its own history, events and audit.
+        app(TenantContext::class)->select($organization);
+        $group->update(['enrollment_approval_mode' => 'automatic']);
+        app(TenantContext::class)->clear();
+        $this->actingAs($parent)->withHeader('Idempotency-Key', 'note-auto')
+            ->postJson('/api/v1/parent/enrollment-applications', [...$this->payload($child->id, $group->id, $price->id), 'parent_note' => $note])
+            ->assertCreated()
+            ->assertJsonPath('application.status', 'approved');
+
         // Not in the immutable history, the events or the audit log.
         foreach (['enrollment_transitions', 'enrollment_events', 'audit_events'] as $table) {
-            $this->assertStringNotContainsString('Звъннете', json_encode(DB::table($table)->get(), JSON_UNESCAPED_UNICODE) ?: '', $table);
+            $this->assertGreaterThan(0, DB::table($table)->count(), $table);
+            $this->assertStringNotContainsString('NOTE-7f3a', (string) json_encode(DB::table($table)->get()), $table);
         }
         $this->actingAs($parent)->withHeader('Idempotency-Key', 'note-002')
             ->postJson('/api/v1/parent/enrollment-applications', [...$this->payload($child->id, $group->id, $price->id), 'parent_note' => str_repeat('а', 501)])

@@ -49,7 +49,7 @@ class VisitOutcomeTest extends TestCase
         $this->assertFalse($transition->metadata['refund_performed']);
         $this->assertSame('Cannot attend', $transition->public_reason);
         $event = EnrollmentEvent::where('type', 'enrollment.visit_outcome_recorded')->firstOrFail();
-        $this->assertSame($transition->metadata, $event->payload);
+        $this->assertSame([...$transition->metadata, 'transition_id' => $transition->id], $event->payload);
         $repeat = app(RecordVisitOutcome::class)->handle($child->owner, $enrollment, 'cancelled_in_time', 'Retry');
         $this->assertSame($transition->id, $repeat->id);
         $this->assertSame(1, EnrollmentEvent::where('type', 'enrollment.visit_outcome_recorded')->count());

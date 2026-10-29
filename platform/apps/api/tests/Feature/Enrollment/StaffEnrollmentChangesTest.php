@@ -79,6 +79,9 @@ class StaffEnrollmentChangesTest extends TestCase
 
         $this->assertDatabaseHas('enrollment_transitions', ['enrollment_id' => $target->id, 'actor_user_id' => $coordinator->id, 'to_status' => 'active']);
         $this->assertDatabaseHas('enrollment_events', ['enrollment_id' => $target->id, 'type' => 'enrollment.transferred']);
+        $moved = $this->withTenant($f['organization'], fn () => EnrollmentEvent::query()->where('enrollment_id', $target->id)->where('type', 'enrollment.transferred')->sole());
+        $this->assertTrue($this->withTenant($f['organization'], fn () => EnrollmentTransition::query()
+            ->whereKey($moved->payload['transition_id'] ?? null)->where('enrollment_id', $target->id)->where('to_status', 'active')->exists()));
         $this->assertAuditWithoutPersonalData('enrollment.transferred', $source->id);
     }
 
