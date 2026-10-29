@@ -257,7 +257,7 @@ export function EnrollmentsPage() {
   const filtering = tab !== 'groups' && (query !== '' || filters.activityId !== '' || filters.groupId !== '');
   const filterKey = `${tab}|${query}|${filters.activityId}|${filters.groupId}|${listVersion}`;
   useEffect(() => {
-    if (!filtering || tab === 'groups') return;
+    if (!filtering) return;
     let active = true;
     loadApplications(organization.id, tab, { q: query, activityId: filters.activityId, groupId: filters.groupId })
       .then((page) => { if (active) setFiltered({ key: filterKey, page }); })
