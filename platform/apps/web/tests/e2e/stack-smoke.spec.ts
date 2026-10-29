@@ -146,11 +146,24 @@ test('an owner creates a draft activity and continues in the editor', async () =
   ]);
   await slow(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
 
+  // The wizard saves on its own and keeps the text after a reload.
+  const summary = 'Децата сглобяват малки роботи и ги програмират стъпка по стъпка.';
+  await page.getByLabel('Кратко описание').fill(summary);
+  await slow(page.getByRole('status').first()).toContainText('Запазено');
+  await page.getByRole('button', { name: /Напред: Аудитория/ }).click();
+  await expect(page).toHaveURL(/step=2$/);
+  await page.getByRole('button', { name: '7–10 г.' }).click();
+  await slow(page.getByRole('status').first()).toContainText('Запазено');
+  await page.reload();
+  await slow(page.getByLabel('За кого е подходяща')).toHaveValue('7–10 г.');
+  await page.getByRole('button', { name: /Основна информация/ }).click();
+  await slow(page.getByLabel('Кратко описание')).toHaveValue(summary);
+
   await page.goto('/dashboard/activities');
   const card = page.getByRole('article').filter({ has: page.getByRole('heading', { name: title }) });
   await slow(card).toBeVisible();
   await expect(card.getByText('Чернова', { exact: true })).toBeVisible();
-  await expect(card.getByText(/от \d+ стъпки/)).toBeVisible();
+  await expect(card.getByText(/\d+ от \d+ стъпки/)).toBeVisible();
 });
 
 test('a published activity is locked in the editor', async () => {
