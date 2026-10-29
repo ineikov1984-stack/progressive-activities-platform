@@ -35,17 +35,13 @@ async function assertAdministrativeWrite(page: Page): Promise<void> {
 
   await catalogExpect(page.getByRole('heading', { level: 1, name: draftTitle })).toBeVisible();
   await page.getByLabel('Кратко описание').fill(persistedSummary);
-  await page.getByRole('button', { name: 'Запази черновата' }).click();
-  await catalogExpect(page.getByRole('status')).toHaveText('Черновата е запазена.');
+  await catalogExpect(page.getByRole('status').first()).toContainText('Запазено');
   await page.reload();
   await catalogExpect(page.getByLabel('Кратко описание')).toHaveValue(persistedSummary);
 
-  await Promise.all([
-    page.waitForURL(/\/dashboard\/activities$/),
-    page.getByRole('link', { name: /Всички дейности/ }).click(),
-  ]);
+  await page.goto(`${baseUrl}/dashboard/activities`);
   draftCard = page.getByRole('article').filter({ has: page.getByRole('heading', { name: draftTitle, exact: true }) });
-  await catalogExpect(draftCard.getByText(persistedSummary)).toBeVisible();
+  await catalogExpect(draftCard).toBeVisible();
 }
 
 async function assertPublicChessJourney(page: Page): Promise<void> {

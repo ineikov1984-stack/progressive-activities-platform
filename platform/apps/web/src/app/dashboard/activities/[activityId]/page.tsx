@@ -1,5 +1,9 @@
 import type { Metadata } from 'next';
-import { ActivityEditor } from '@/features/catalog/admin/activity-editor';
+import { Suspense } from 'react';
+import { ActivityWizard } from '@/features/catalog/admin/wizard/activity-wizard';
 
-export const metadata: Metadata = { title: 'Редактор на дейност | Progressive Activities' };
-export default async function ActivityPage({ params }: { params: Promise<{ activityId: string }> }) { const { activityId } = await params; return <ActivityEditor activityId={activityId}/>; }
+export const metadata: Metadata = { title: 'Дейност | Progressive Activities' };
+export default async function ActivityPage({ params }: { params: Promise<{ activityId: string }> }) {
+  const { activityId } = await params;
+  return <Suspense><ActivityWizard activityId={activityId} /></Suspense>;
+}
