@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDashboardContext } from '@/features/dashboard/dashboard-context';
 import { type ApplicationPage, loadApplications, loadStaffGroups, reviewApplication, type ReviewDecision, type StaffApplication, type StaffGroup } from './api';
 import { GroupRosterPanel } from './group-roster';
@@ -63,6 +63,15 @@ export function EnrollmentsPage() {
   const canManage = organization.permissions.includes('enrollment.manage');
   const canView = organization.permissions.includes('enrollment.view');
   const [openGroup, setOpenGroup] = useState<string | undefined>(() => searchParams.get('group') ?? undefined);
+  // Opened from "Какво чака вас": once the groups are loaded, bring that group into view and focus it.
+  const linkedGroup = useRef(searchParams.get('group'));
+  useEffect(() => {
+    if (!groups || !linkedGroup.current) return;
+    const button = document.getElementById(`group-${linkedGroup.current}`);
+    linkedGroup.current = null;
+    button?.scrollIntoView({ block: 'start' });
+    button?.focus();
+  }, [groups]);
   const [busyId, setBusyId] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -139,8 +148,8 @@ export function EnrollmentsPage() {
 
       {canView && !canManage ? <p className={styles.muted}>Вашата роля позволява само преглед. Решенията се вземат от собственика, администратора или координатора.</p> : null}
 
-      <section aria-label={tabs.find((item) => item.id === tab)?.title} aria-busy={tab === 'groups' ? groups === undefined : list === undefined} className={styles.panel}>
-        <h2 className={styles.srOnly}>{tabs.find((item) => item.id === tab)?.title}</h2>
+      <section aria-labelledby="enrollments-view-title" aria-busy={tab === 'groups' ? groups === undefined : list === undefined} className={styles.panel}>
+        <h2 id="enrollments-view-title" className={styles.srOnly}>{tabs.find((item) => item.id === tab)?.title}</h2>
         {tab !== 'groups' ? (
           list === undefined ? <span className={styles.skeleton} aria-busy="true" /> : list.length === 0 ? (
             <div className={styles.empty}>
@@ -169,7 +178,7 @@ export function EnrollmentsPage() {
               const open = openGroup === group.id;
               return (
                 <li key={group.id} className={styles.groupItem}>
-                  <h3 className={styles.groupHeading}><button type="button" className={styles.groupButton} aria-expanded={open} onClick={() => setOpenGroup(open ? undefined : group.id)}>
+                  <h3 className={styles.groupHeading}><button id={`group-${group.id}`} type="button" className={styles.groupButton} aria-expanded={open} onClick={() => setOpenGroup(open ? undefined : group.id)}>
                     <span>
                       <strong>{group.name}</strong>
                       <span className={styles.small}>

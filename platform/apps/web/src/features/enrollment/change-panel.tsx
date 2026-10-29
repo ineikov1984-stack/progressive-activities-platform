@@ -36,12 +36,12 @@ export function ChangePanel({ organizationId, roster, enrollment, onDone, onFail
     transfer: `Премести ${name} в друга група`,
     pause: `Пауза за ${name}`,
     skip: `Пропусни занимание за ${name}`,
-    end: `Прекрати записването на ${name}`,
+    end: `Край на записването на ${name}`,
   };
   const props = { organizationId, roster, enrollment, name, onDone, onFailed, onBack: () => setChoice(undefined) };
 
   return (
-    <div className={styles.changePanel} role="group" aria-labelledby={`change-title-${enrollment.id}`}>
+    <div className={styles.changePanel}>
       <h4 id={`change-title-${enrollment.id}`} ref={heading} tabIndex={-1}>{titles[choice ?? 'choose']}</h4>
       {choice === undefined ? (
         <>
@@ -68,6 +68,8 @@ function useSubmit(onDone: (message: string) => void, onFailed: () => void) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   function fail(message: string) { setError(message); }
+  // A message about a missing field goes away as soon as the person changes something.
+  function clear() { if (!busy) setError(''); }
   async function run(action: () => Promise<unknown>, success: string, fallback: string) {
     setBusy(true); setError('');
     try {
@@ -78,7 +80,7 @@ function useSubmit(onDone: (message: string) => void, onFailed: () => void) {
       onFailed();
     } finally { setBusy(false); }
   }
-  return { busy, error, run, fail };
+  return { busy, error, run, fail, clear };
 }
 
 function FormButtons({ busy, label, danger, error, onBack }: { busy: boolean; label: string; danger?: boolean; error: string; onBack: () => void }) {
@@ -120,7 +122,7 @@ function TransferForm({ organizationId, roster, enrollment, name, onDone, onFail
   const [targetId, setTargetId] = useState('');
   const [priceId, setPriceId] = useState('');
   const [reason, setReason] = useState('');
-  const { busy, error, run, fail } = useSubmit(onDone, onFailed);
+  const { busy, error, run, fail, clear } = useSubmit(onDone, onFailed);
 
   useEffect(() => {
     if (!date) return;
@@ -132,7 +134,7 @@ function TransferForm({ organizationId, roster, enrollment, name, onDone, onFail
   }, [organizationId, enrollment.id, date]);
 
   if (options !== undefined && options.length === 0 && !loadError) {
-    return <NothingToDo text="Дейността няма друга публикувана група. Създайте я в стъпка 7 на дейността." onBack={onBack} />;
+    return <NothingToDo text="Дейността няма друга публикувана група. Помолете администратора да добави група в „Дейности“." onBack={onBack} />;
   }
 
   const target = options?.find((option) => option.id === targetId);
@@ -156,7 +158,7 @@ function TransferForm({ organizationId, roster, enrollment, name, onDone, onFail
   }
 
   return (
-    <form className={styles.form} onSubmit={submit} noValidate>
+    <form className={styles.form} onSubmit={submit} onChange={clear} noValidate>
       <div className={styles.field}>
         <label htmlFor={`move-date-${enrollment.id}`}>От коя дата е в новата група</label>
         <input id={`move-date-${enrollment.id}`} type="date" min={today} max={addDays(today, 365)} value={date} onChange={(event) => setDate(event.target.value)} />
@@ -211,16 +213,17 @@ function PauseForm({ organizationId, roster, enrollment, name, onDone, onFailed,
   const [until, setUntil] = useState(addDays(firstDay, 6));
   const [category, setCategory] = useState<PauseReason>();
   const [note, setNote] = useState('');
-  const { busy, error, run, fail } = useSubmit(onDone, onFailed);
+  const { busy, error, run, fail, clear } = useSubmit(onDone, onFailed);
   const order = from !== '' && until !== '' && until < from;
   const tooLong = from !== '' && until !== '' && until >= addDays(from, MAX_PAUSE_DAYS);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const missing = from < today ? 'Изберете начало от днес нататък.'
-      : order ? 'Изберете крайна дата след началната.'
-        : tooLong ? 'Изберете крайна дата до 6 месеца от началото.'
-          : !category ? 'Изберете причина.' : '';
+    // Wrong order or a too long pause is already explained next to the dates.
+    if (order || tooLong) return;
+    const missing = !from || from < today ? 'Изберете начало от днес нататък.'
+      : !until ? 'Изберете крайна дата.'
+        : !category ? 'Изберете причина.' : '';
     if (missing || !category) { fail(missing); return; }
     void run(
       () => pauseEnrollment(organizationId, enrollment, { startsOn: from, endsOn: until, reasonCategory: category, note }),
@@ -230,7 +233,7 @@ function PauseForm({ organizationId, roster, enrollment, name, onDone, onFailed,
   }
 
   return (
-    <form className={styles.form} onSubmit={submit} noValidate>
+    <form className={styles.form} onSubmit={submit} onChange={clear} noValidate>
       <div className={styles.fieldRow}>
         <div className={styles.field}>
           <label htmlFor={`pause-from-${enrollment.id}`}>От</label>
@@ -256,7 +259,7 @@ function PauseForm({ organizationId, roster, enrollment, name, onDone, onFailed,
         <textarea id={`pause-note-${enrollment.id}`} value={note} maxLength={300} aria-describedby={`pause-note-hint-${enrollment.id}`} onChange={(event) => setNote(event.target.value)} />
         <p id={`pause-note-hint-${enrollment.id}`} className={styles.hint}>{reasonHint}</p>
       </div>
-      {!order && !tooLong && from >= today ? <p className={styles.summary}>Заниманията от {shortDay(from)} до {shortDay(until)} няма да се броят. Мястото в групата се пази.</p> : null}
+      {until && !order && !tooLong && from >= today ? <p className={styles.summary}>Заниманията от {shortDay(from)} до {shortDay(until)} няма да се броят. Мястото в групата се пази.</p> : null}
       <FormButtons busy={busy} label="Запиши паузата" error={error} onBack={onBack} />
     </form>
   );
@@ -266,7 +269,7 @@ function SkipForm({ organizationId, roster, enrollment, name, onDone, onFailed, 
   const sessions = skippableSessions(roster, enrollment);
   const [sessionId, setSessionId] = useState('');
   const [reason, setReason] = useState('');
-  const { busy, error, run, fail } = useSubmit(onDone, onFailed);
+  const { busy, error, run, fail, clear } = useSubmit(onDone, onFailed);
   const selected = sessions.find((session) => session.id === sessionId);
 
   if (sessions.length === 0) return <NothingToDo text="Няма предстоящи занимания, които детето посещава и могат да се пропуснат." onBack={onBack} />;
@@ -283,7 +286,7 @@ function SkipForm({ organizationId, roster, enrollment, name, onDone, onFailed, 
   }
 
   return (
-    <form className={styles.form} onSubmit={submit} noValidate>
+    <form className={styles.form} onSubmit={submit} onChange={clear} noValidate>
       <fieldset className={styles.fieldset}>
         <legend>Кое занимание</legend>
         {sessions.map((session) => (
@@ -294,7 +297,7 @@ function SkipForm({ organizationId, roster, enrollment, name, onDone, onFailed, 
         ))}
       </fieldset>
       <ReasonField id={`skip-reason-${enrollment.id}`} value={reason} onChange={setReason} />
-      {selected ? <p className={styles.summary}>{name} няма да дойде на {sessionText(selected.starts_at)}. Заниманието няма да се брои.</p> : null}
+      {selected ? <p className={styles.summary}>Заниманието {sessionText(selected.starts_at)} няма да се брои за {name}.</p> : null}
       <FormButtons busy={busy} label="Пропусни заниманието" error={error} onBack={onBack} />
     </form>
   );
@@ -304,7 +307,7 @@ function EndForm({ organizationId, enrollment, name, onDone, onFailed, onBack }:
   const today = sofiaDay();
   const [lastDay, setLastDay] = useState(lastDayOfMonth(today));
   const [reason, setReason] = useState('');
-  const { busy, error, run, fail } = useSubmit(onDone, onFailed);
+  const { busy, error, run, fail, clear } = useSubmit(onDone, onFailed);
   const notStarted = lastDay !== '' && lastDay < enrollment.starts_on;
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -319,7 +322,7 @@ function EndForm({ organizationId, enrollment, name, onDone, onFailed, onBack }:
   }
 
   return (
-    <form className={styles.form} onSubmit={submit} noValidate>
+    <form className={styles.form} onSubmit={submit} onChange={clear} noValidate>
       <div className={styles.field}>
         <label htmlFor={`end-day-${enrollment.id}`}>Последен ден, в който детето посещава</label>
         <input id={`end-day-${enrollment.id}`} type="date" min={today} max={enrollment.ends_on ?? addDays(today, 365)} value={lastDay} onChange={(event) => setLastDay(event.target.value)} />

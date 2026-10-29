@@ -35,7 +35,7 @@ export function buildTasks(activities: ActivityDraft[], invitations: DashboardIn
       title: freed.length === 1
         ? `Свободно място в „${freed[0].name}“ — ${plural(freed[0].waiting, 'дете чака', 'деца чакат')}`
         : `Свободни места в ${freed.length} групи с чакащи деца`,
-      detail: 'Одобрете дете от чакащите в групата',
+      detail: 'Отворете групата и одобрете дете от чакащите',
       href: freed.length === 1 ? `/dashboard/enrollments?view=groups&group=${encodeURIComponent(freed[0].id)}` : '/dashboard/enrollments?view=groups',
     });
   }

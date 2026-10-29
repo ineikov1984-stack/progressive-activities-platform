@@ -1,7 +1,10 @@
 'use client';
 
-import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { changeErrorMessage, endPause, type GroupRoster, loadRoster, reopenEnrollment, restoreSession, type RosterEnrollment } from './api';
+import { type FormEvent, type MouseEvent, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  changeErrorMessage, endPause, type GroupRoster, loadRoster, reopenEnrollment, restoreSession, reviewApplication,
+  type RosterEnrollment, type StaffApplication,
+} from './api';
 import { ChangePanel } from './change-panel';
 import { addDays, dateText, placesText, type RosterNote, rosterNotes, scopeLabels, shortDay, sofiaDay } from './presentation';
 import styles from './enrollments.module.css';
@@ -25,6 +28,8 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
   const [notice, setNotice] = useState<Notice>();
   const [openId, setOpenId] = useState<string>();
   const [reloadKey, setReloadKey] = useState(0);
+  const [approving, setApproving] = useState('');
+  const topNotice = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -44,13 +49,34 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
   // After a refused change the form keeps its message; the reload brings the latest version for a retry.
   const failed = useCallback(() => { setNotice(undefined); reload(); }, [reload]);
 
+  // A message without a row (the enrollment was cancelled, or a waiting child was approved) is shown and focused above the list.
+  const topText = notice && roster && !roster.enrollments.some((item) => item.id === notice.enrollmentId) ? notice.text : '';
+  const topToken = topText ? notice?.token : undefined;
+  useEffect(() => {
+    if (topToken === undefined) return;
+    topNotice.current?.scrollIntoView({ block: 'nearest' });
+    topNotice.current?.focus();
+  }, [topToken]);
+
+  async function approve(application: StaffApplication) {
+    setApproving(application.id); setError('');
+    const name = application.child.name ?? 'Детето';
+    try {
+      const result = await reviewApplication(organizationId, application, 'approve');
+      done(`waitlist-${application.id}`, result.status === 'approved'
+        ? `${name} е записано в групата. Родителят ще види решението в профила си.`
+        : `${name} остава в чакащите — все още няма свободно място.`);
+    } catch (reason) {
+      setError(changeErrorMessage(reason, 'Решението не беше запазено.'));
+      reload();
+    } finally { setApproving(''); }
+  }
+
   const retry = <button type="button" className={styles.secondary} onClick={reload}>Опитай отново</button>;
   if (error && !roster) return <div className={styles.roster}><p className={styles.error} role="alert">{error}</p>{retry}</div>;
   if (!roster) return <span className={styles.skeleton} aria-busy="true" />;
   const today = sofiaDay();
   const fullPeriodCount = roster.enrollments.filter((item) => item.scope === 'full_period').length;
-  // A cancelled enrollment leaves the list; its message then shows above the list.
-  const orphanNotice = notice && !roster.enrollments.some((item) => item.id === notice.enrollmentId) ? notice.text : '';
 
   return (
     <div className={styles.roster}>
@@ -58,7 +84,7 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
         Заети места: <strong>{roster.group.enrolled_for_period}</strong>{roster.group.capacity_max ? ` от ${roster.group.capacity_max}` : ''} · {placesText(roster.group.remaining)}
         {roster.enrollments.length > fullPeriodCount ? ` · ${roster.enrollments.length - fullPeriodCount} с еднократно или пробно посещение` : ''}
       </p>
-      <p className={orphanNotice ? styles.success : styles.srOnly} role="status">{orphanNotice}</p>
+      <p ref={topNotice} tabIndex={-1} className={topText ? styles.rowNotice : styles.srOnly}>{topText}</p>
       {error ? <div className={styles.actions}><p className={styles.error} role="alert">{error}</p>{retry}</div> : null}
       {roster.enrollments.length === 0 ? <p className={styles.muted}>Все още няма записани деца.</p> : (
         <ul className={styles.rows}>
@@ -83,8 +109,17 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
       {roster.waitlist.length > 0 ? (
         <>
           <h4 className={styles.subTitle}>Чакащи</h4>
-          <ol className={styles.list}>
-            {roster.waitlist.map((item) => <li key={item.id}><span className={styles.listName}>{item.child.name}</span><span className={styles.small}>от {dateText(item.submitted_at)}</span></li>)}
+          <ol className={styles.waitList}>
+            {roster.waitlist.map((item) => (
+              <li key={item.id}>
+                <span><span className={styles.listName}>{item.child.name}</span> <span className={styles.small}>от {dateText(item.submitted_at)}</span></span>
+                {canManage ? (
+                  <button type="button" className={styles.secondary} disabled={approving !== ''} onClick={() => void approve(item)}>
+                    {approving === item.id ? 'Запазване…' : 'Одобри'}<span className={styles.srOnly}> {item.child.name}</span>
+                  </button>
+                ) : null}
+              </li>
+            ))}
           </ol>
         </>
       ) : null}
@@ -115,19 +150,31 @@ function RosterRow({ organizationId, roster, enrollment, today, canManage, open,
   const [confirm, setConfirm] = useState<Confirm>();
   const row = useRef<HTMLLIElement>(null);
   const noticeRef = useRef<HTMLParagraphElement>(null);
+  const confirmText = useRef<HTMLParagraphElement>(null);
+  const resumeInput = useRef<HTMLInputElement>(null);
   const changeButton = useRef<HTMLButtonElement>(null);
+  const opener = useRef<HTMLButtonElement | null>(null);
   const name = enrollment.child.name ?? 'Детето';
   const notes = rosterNotes(enrollment, today);
   const fullPeriod = enrollment.scope === 'full_period';
   // A transfer is undone by moving back, so a child who moves has nothing more to change here.
   const changeable = canManage && fullPeriod && !enrollment.moves_to;
+  const todayAhead = (roster.upcoming_sessions ?? []).some((session) => sofiaDay(session.starts_at) === today);
 
-  // After a change the confirmation is in this row: bring it into view and give it focus (phones, screen readers).
+  // After a change the confirmation is in this row: bring it into view and focus it (it is read once, on focus).
   useEffect(() => {
     if (!notice) return;
     row.current?.scrollIntoView({ block: 'nearest' });
     noticeRef.current?.focus();
   }, [notice]);
+  useEffect(() => { if (confirm) confirmText.current?.focus(); }, [confirm]);
+  useEffect(() => { if (resuming) resumeInput.current?.focus(); }, [resuming]);
+
+  function remember(event: MouseEvent<HTMLButtonElement>) { opener.current = event.currentTarget; }
+  function back(close: () => void) {
+    close();
+    requestAnimationFrame(() => opener.current?.focus());
+  }
 
   async function quick(action: () => Promise<unknown>, success: string) {
     setBusy(true); setError('');
@@ -154,6 +201,8 @@ function RosterRow({ organizationId, roster, enrollment, today, canManage, open,
     requestAnimationFrame(() => changeButton.current?.focus());
   }
 
+  const resumingPause = enrollment.pauses?.find((pause) => pause.id === resuming);
+
   return (
     <li className={styles.row} ref={row}>
       <div className={styles.rowMain}>
@@ -174,19 +223,20 @@ function RosterRow({ organizationId, roster, enrollment, today, canManage, open,
                   </button>
                 ) : null}
                 {canManage && note.kind === 'pause' ? (
-                  <button type="button" className={styles.linkButton} disabled={busy}
-                    onClick={() => setConfirm({ kind: 'pause', pauseId: note.pauseId, startsOn: note.startsOn, text: `Паузата ${shortDay(note.startsOn)} – ${shortDay(note.endsOn)} ще бъде отменена и заниманията ще се броят.` })}>
+                  <button type="button" className={styles.linkButton} disabled={busy} aria-expanded={confirm?.kind === 'pause' && confirm.pauseId === note.pauseId}
+                    onClick={(event) => { remember(event); setConfirm({ kind: 'pause', pauseId: note.pauseId, startsOn: note.startsOn, text: `Паузата ${shortDay(note.startsOn)} – ${shortDay(note.endsOn)} ще бъде отменена и заниманията ще се броят.` }); }}>
                     Отмени паузата<span className={styles.srOnly}> за {name}</span>
                   </button>
                 ) : null}
-                {canManage && note.kind === 'paused' && note.endsOn > today && resuming !== note.pauseId ? (
-                  <button type="button" className={styles.linkButton} disabled={busy} onClick={() => setResuming(note.pauseId)}>
+                {canManage && note.kind === 'paused' && note.endsOn >= today ? (
+                  <button type="button" className={styles.linkButton} disabled={busy} aria-expanded={resuming === note.pauseId}
+                    onClick={(event) => { remember(event); setResuming(note.pauseId); }}>
                     Върни по-рано<span className={styles.srOnly}> {name}</span>
                   </button>
                 ) : null}
                 {canManage && note.kind === 'ends' ? (
-                  <button type="button" className={styles.linkButton} disabled={busy}
-                    onClick={() => setConfirm({ kind: 'reopen', text: `Прекратяването ще бъде отменено и ${name} продължава в групата.` })}>
+                  <button type="button" className={styles.linkButton} disabled={busy} aria-expanded={confirm?.kind === 'reopen'}
+                    onClick={(event) => { remember(event); setConfirm({ kind: 'reopen', text: `Прекратяването ще бъде отменено и ${name} продължава в групата.` }); }}>
                     Отмени прекратяването<span className={styles.srOnly}> за {name}</span>
                   </button>
                 ) : null}
@@ -195,8 +245,8 @@ function RosterRow({ organizationId, roster, enrollment, today, canManage, open,
           </ul>
         ) : null}
         {confirm ? (
-          <div className={styles.confirm} role="group" aria-label="Потвърждение">
-            <p>{confirm.text}</p>
+          <div className={styles.confirm}>
+            <p ref={confirmText} tabIndex={-1}>{confirm.text}</p>
             <div className={styles.actions}>
               <button type="button" className={styles.primary} disabled={busy}
                 onClick={() => void (confirm.kind === 'pause'
@@ -204,20 +254,20 @@ function RosterRow({ organizationId, roster, enrollment, today, canManage, open,
                   : quick(() => reopenEnrollment(organizationId, enrollment), `Прекратяването за ${name} е отменено.`))}>
                 {confirm.kind === 'pause' ? 'Отмени паузата' : 'Отмени прекратяването'}
               </button>
-              <button type="button" className={styles.quiet} disabled={busy} onClick={() => setConfirm(undefined)}>Не</button>
+              <button type="button" className={styles.quiet} disabled={busy} onClick={() => back(() => setConfirm(undefined))}>Назад</button>
             </div>
           </div>
         ) : null}
         {resuming ? (
           <form className={styles.actions} onSubmit={(event) => resume(event, resuming)} noValidate>
             <label className={styles.small} htmlFor={`resume-${enrollment.id}`}>Връща се на</label>
-            <input id={`resume-${enrollment.id}`} className={styles.inlineDate} name="resume_on" type="date" min={today}
-              max={enrollment.pauses?.find((pause) => pause.id === resuming)?.ends_on} defaultValue={addDays(today, 1)} />
+            <input ref={resumeInput} id={`resume-${enrollment.id}`} className={styles.inlineDate} name="resume_on" type="date" min={today}
+              max={resumingPause?.ends_on} defaultValue={resumingPause?.ends_on === today || todayAhead ? today : addDays(today, 1)} />
             <button type="submit" className={styles.secondary} disabled={busy}>Върни</button>
-            <button type="button" className={styles.quiet} disabled={busy} onClick={() => setResuming(undefined)}>Отказ</button>
+            <button type="button" className={styles.quiet} disabled={busy} onClick={() => back(() => setResuming(undefined))}>Отказ</button>
           </form>
         ) : null}
-        <p ref={noticeRef} tabIndex={-1} className={notice ? styles.rowNotice : styles.srOnly} role="status">{notice?.text ?? ''}</p>
+        <p ref={noticeRef} tabIndex={-1} className={notice ? styles.rowNotice : styles.srOnly}>{notice?.text ?? ''}</p>
         {error ? <p className={styles.error} role="alert">{error}</p> : null}
       </div>
       {changeable ? (
