@@ -6,15 +6,16 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Качените снимки да не се губят при rebuild (volume за API storage) | Claude | claude/api-storage-volume | `platform/compose.yaml` (горещ) | PR отворен |
+| Заключване на публикувани дейности в редактора + спецификация за „чернова на промените“ | Claude | claude/published-edit-spec | `features/catalog/admin/activity-editor*`, `catalog/admin/api.ts`, `docs/product/published-activity-changes.md` | PR отворен |
 
 ## Опашка (по приоритет)
 
 1. **Защита на `main`** — ruleset „PR задължителен, без force push и изтриване“. Claude не може да го включи през API; прави се от собственика в GitHub → Settings → Rules (за private хранилище изисква GitHub Pro). Дотогава правилото се спазва чрез AGENTS.md. *Собственик.*
-2. **e2e тест „вход → табло → дейности“ в CI** срещу истинско API и база (строга). *Claude.*
-3. **Задача 9: OpenAPI 3.1 + генериран TypeScript клиент** (строга) — contract test, `packages/api-client`, замяна на ръчните `api.ts`. *Codex пише, Claude review.*
-4. **Актуализация на плана** — `outputs/` и roadmap-ът да отразяват реалния код (Activity/VisitOffer вместо Service/ServiceVersion, вече направеното по записванията). *Claude + собственик.*
-5. **Задача 10: staging** (строга) — само след одобрение на разходите. *Codex.*
+2. **Чернова на промените за публикувана дейност** (строга) — по `docs/product/published-activity-changes.md`: миграция + RLS, действия, API, тестове. *Codex пише backend, Claude UI и review.*
+3. **e2e тест „вход → табло → дейности“ в CI** срещу истинско API и база (строга). *Claude.*
+4. **Задача 9: OpenAPI 3.1 + генериран TypeScript клиент** (строга) — contract test, `packages/api-client`, замяна на ръчните `api.ts`. *Codex пише, Claude review.*
+5. **Актуализация на плана** — `outputs/` и roadmap-ът да отразяват реалния код (Activity/VisitOffer вместо Service/ServiceVersion, вече направеното по записванията). *Claude + собственик.*
+6. **Задача 10: staging** (строга) — само след одобрение на разходите. *Codex.*
 
 Продуктовите етапи след това (wizard, отворени врати, публичен каталог, единична страница, родители, кемпове, лагери): `docs/product/ROADMAP.md`.
 
@@ -29,6 +30,7 @@
 
 ## Въпроси към собственика
 
+- Юрист да прегледа сроковете за промяна на цени и график (14/7 дни, право на отказ) преди пилота.
 - Името и домейнът на marketplace-а (от плана, т. 4).
 
 ## Наскоро завършено
