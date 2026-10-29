@@ -108,6 +108,9 @@ test('the session survives navigation, reloads and many API calls', async () => 
 });
 
 test('the organization can be selected', async () => {
+  // Session writes are last-writer-wins: let the page's own requests finish first, otherwise
+  // one of them can write the older session back (the web app sends X-Organization-Id anyway).
+  await page.waitForLoadState('networkidle');
   expect(await apiStatus(page, 'context/organization', { method: 'POST', body: { organization_id: demo.organizationId } })).toBe(200);
 });
 
