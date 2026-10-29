@@ -1,0 +1,11 @@
+# Build context for the web image is platform/; keep it small and secret-free.
+**/node_modules
+**/.next
+**/test-results
+**/playwright-report
+**/.env
+**/.env.*
+!**/.env.example
+apps/api
+docs
+infra
