@@ -19,6 +19,8 @@ export type DashboardNavItem = {
   href?: string;
   isAvailable: boolean;
   isActive: boolean;
+  /** Shown only to members whose role has this permission. */
+  requires?: string;
 };
 
 export type DashboardNavGroup = {
@@ -37,7 +39,7 @@ const navigationGroups: Array<Omit<DashboardNavGroup, 'items'> & { items: Naviga
       { id: 'home', label: 'Начало', icon: 'home', href: '/dashboard', isAvailable: true },
       { id: 'activities', label: 'Дейности', icon: 'activities', href: '/dashboard/activities', isAvailable: true },
       { id: 'groups', label: 'Групи и графици', icon: 'calendar', isAvailable: false },
-      { id: 'enrollments', label: 'Записвания', icon: 'enrollments', href: '/dashboard/enrollments', isAvailable: true },
+      { id: 'enrollments', label: 'Записвания', icon: 'enrollments', href: '/dashboard/enrollments', isAvailable: true, requires: 'enrollment.view' },
       { id: 'open-days', label: 'Отворени врати', icon: 'open-days', href: '/dashboard/open-days', isAvailable: true },
     ],
   },
@@ -73,12 +75,13 @@ function isActivePath(pathname: string, href?: string): boolean {
  * The navigation shows only destinations that work today: an unfinished area
  * appears when it ships, so the menu never leads to an empty or fake page.
  */
-export function dashboardNavigation(pathname: string): DashboardNavGroup[] {
+export function dashboardNavigation(pathname: string, permissions?: string[]): DashboardNavGroup[] {
   return navigationGroups
     .map((group) => ({
       ...group,
       items: group.items
         .filter((item) => item.isAvailable && item.href)
+        .filter((item) => !item.requires || !permissions || permissions.includes(item.requires))
         .map((item) => ({ ...item, isActive: isActivePath(pathname, item.href) })),
     }))
     .filter((group) => group.items.length > 0);

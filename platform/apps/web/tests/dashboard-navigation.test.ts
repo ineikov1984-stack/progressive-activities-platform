@@ -18,6 +18,12 @@ describe('dashboard navigation', () => {
     expect(groups.flatMap((group) => group.items).every((item) => item.isAvailable && item.href)).toBe(true);
   });
 
+  it('hides destinations the role cannot use', () => {
+    const labels = (permissions: string[]) => dashboardNavigation('/dashboard', permissions).flatMap((group) => group.items).map((item) => item.label);
+    expect(labels(['view', 'catalog.view'])).not.toContain('Записвания');
+    expect(labels(['view', 'catalog.view', 'enrollment.view'])).toContain('Записвания');
+  });
+
   it('marks exactly one destination active, including nested routes', () => {
     const active = (pathname: string) => dashboardNavigation(pathname)
       .flatMap((group) => group.items)

@@ -4,14 +4,14 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { useDashboardContext } from '@/features/dashboard/dashboard-context';
 import { type ActivityGroup, loadCatalogWorkspace, loadGroups } from '@/features/catalog/admin/api';
-import { type GroupRoster, loadApplications, loadRoster, reviewApplication, type ReviewDecision, type StaffApplication } from './api';
+import { type ApplicationPage, type GroupRoster, loadApplications, loadRoster, reviewApplication, type ReviewDecision, type StaffApplication } from './api';
 import { dateText, dateTimeText, placesText, priceText, scopeLabels } from './presentation';
 import styles from './enrollments.module.css';
 
 type Tab = 'submitted' | 'waitlisted' | 'groups';
 type GroupEntry = { group: ActivityGroup; activityTitle: string };
 
-function ApplicationCard({ application, busy, onDecide }: { application: StaffApplication; busy: boolean; onDecide: (decision: ReviewDecision, reason?: string) => void }) {
+function ApplicationCard({ application, busy, canManage, onDecide }: { application: StaffApplication; busy: boolean; canManage: boolean; onDecide: (decision: ReviewDecision, reason?: string) => void }) {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const waiting = application.status === 'waitlisted';
@@ -28,7 +28,7 @@ function ApplicationCard({ application, busy, onDecide }: { application: StaffAp
         <p className={styles.small}>Заявка от {dateText(application.submitted_at)}{application.child.class_label ? ` · ${application.child.class_label}` : ''}</p>
         {waiting && application.public_reason ? <p className={styles.small}>Казахме на родителя: „{application.public_reason}“</p> : null}
       </div>
-      {rejecting ? (
+      {!canManage ? null : rejecting ? (
         <form className={styles.reject} onSubmit={(event) => { event.preventDefault(); onDecide('reject', reason); }}>
           <label htmlFor={`reason-${application.id}`}>Обяснение за родителя</label>
           <textarea id={`reason-${application.id}`} value={reason} required maxLength={1000} placeholder="Например: групата е за по-големи деца. Предлагаме ви групата в четвъртък." onChange={(event) => setReason(event.target.value)} />
@@ -63,7 +63,10 @@ function RosterPanel({ organizationId, entry }: { organizationId: string; entry:
   if (!roster) return <span className={styles.skeleton} aria-busy="true" />;
   return (
     <div className={styles.roster}>
-      <p className={styles.places}><strong>{roster.enrollments.length}</strong> записани от {roster.group.capacity_max} · {placesText(roster.group.remaining)}</p>
+      <p className={styles.places}>
+        <strong>{roster.group.enrolled_for_period}</strong> записани за периода{roster.group.capacity_max ? ` от ${roster.group.capacity_max}` : ''} · {placesText(roster.group.remaining)}
+        {roster.enrollments.length > roster.group.enrolled_for_period ? ` · ${roster.enrollments.length - roster.group.enrolled_for_period} с еднократно или пробно посещение` : ''}
+      </p>
       {roster.enrollments.length === 0 ? <p className={styles.muted}>Все още няма записани деца.</p> : (
         <ul className={styles.list}>
           {roster.enrollments.map((item) => (
@@ -91,9 +94,11 @@ function RosterPanel({ organizationId, entry }: { organizationId: string; entry:
 export function EnrollmentsPage() {
   const { organization } = useDashboardContext();
   const [tab, setTab] = useState<Tab>('submitted');
-  const [submitted, setSubmitted] = useState<StaffApplication[]>();
-  const [waitlisted, setWaitlisted] = useState<StaffApplication[]>();
+  const [submitted, setSubmitted] = useState<ApplicationPage>();
+  const [waitlisted, setWaitlisted] = useState<ApplicationPage>();
   const [groups, setGroups] = useState<GroupEntry[]>();
+  const [groupsError, setGroupsError] = useState('');
+  const canManage = organization.permissions.includes('enrollment.manage');
   const [openGroup, setOpenGroup] = useState<string>();
   const [busyId, setBusyId] = useState('');
   const [error, setError] = useState('');
@@ -119,10 +124,10 @@ export function EnrollmentsPage() {
     loadCatalogWorkspace(organization.id)
       .then(async (workspace) => {
         const activities = workspace.activities.filter((activity) => activity.status !== 'archived');
-        const lists = await Promise.all(activities.map((activity) => loadGroups(organization.id, activity.id).then((items) => items.map((group) => ({ group, activityTitle: activity.title }))).catch(() => [] as GroupEntry[])));
+        const lists = await Promise.all(activities.map((activity) => loadGroups(organization.id, activity.id).then((items) => items.map((group) => ({ group, activityTitle: activity.title })))));
         if (active) setGroups(lists.flat());
       })
-      .catch(() => { if (active) setGroups([]); });
+      .catch(() => { if (active) { setGroupsError('Групите не се заредиха. Проверете връзката и опитайте отново.'); setGroups([]); } });
     return () => { active = false; };
   }, [tab, groups, organization.id]);
 
@@ -131,7 +136,7 @@ export function EnrollmentsPage() {
     try {
       const result = await reviewApplication(organization.id, application, decision, reason);
       const name = application.child.name ?? 'Детето';
-      setNotice(result.status === 'approved' ? `${name} е записано в „${application.group.name}“. Родителят ще получи известие.`
+      setNotice(result.status === 'approved' ? `${name} е записано в „${application.group.name}“. Родителят ще види решението в профила си.`
         : result.status === 'waitlisted' ? `${name} е в списъка на чакащите за „${application.group.name}“.`
           : `Заявката за ${name} е отказана. Родителят ще види обяснението.`);
       await refresh();
@@ -142,11 +147,12 @@ export function EnrollmentsPage() {
   }
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
-    { id: 'submitted', label: 'Чакат решение', count: submitted?.length },
-    { id: 'waitlisted', label: 'Списък на чакащите', count: waitlisted?.length },
+    { id: 'submitted', label: 'Чакат решение', count: submitted?.total },
+    { id: 'waitlisted', label: 'Списък на чакащите', count: waitlisted?.total },
     { id: 'groups', label: 'Групи' },
   ];
-  const list = tab === 'submitted' ? submitted : waitlisted;
+  const page = tab === 'submitted' ? submitted : waitlisted;
+  const list = page?.applications;
 
   return (
     <div className={styles.page}>
@@ -156,9 +162,9 @@ export function EnrollmentsPage() {
         <p className={styles.muted}>Решете заявките на родителите и вижте кой е във всяка група.</p>
       </header>
 
-      <div className={styles.tabs} role="tablist" aria-label="Изглед">
+      <div className={styles.tabs} role="group" aria-label="Изглед">
         {tabs.map((item) => (
-          <button key={item.id} type="button" role="tab" id={`tab-${item.id}`} aria-selected={tab === item.id} aria-controls="enrollments-panel" className={`${styles.tab} ${tab === item.id ? styles.tabOn : ''}`} onClick={() => setTab(item.id)}>
+          <button key={item.id} type="button" aria-pressed={tab === item.id} className={`${styles.tab} ${tab === item.id ? styles.tabOn : ''}`} onClick={() => setTab(item.id)}>
             {item.label}{item.count !== undefined ? <span className={styles.count}>{item.count}</span> : null}
           </button>
         ))}
@@ -167,7 +173,9 @@ export function EnrollmentsPage() {
       {notice ? <p className={styles.success} role="status">{notice}</p> : null}
       {error ? <p className={styles.error} role="alert">{error}</p> : null}
 
-      <section id="enrollments-panel" role="tabpanel" aria-labelledby={`tab-${tab}`} className={styles.panel}>
+      {!canManage ? <p className={styles.muted}>Вашата роля позволява само преглед. Решенията се вземат от собственика, администратора или координатора.</p> : null}
+
+      <section aria-label={tabs.find((item) => item.id === tab)?.label} aria-busy={tab === 'groups' ? groups === undefined : list === undefined} className={styles.panel}>
         {tab !== 'groups' ? (
           list === undefined ? <span className={styles.skeleton} aria-busy="true" /> : list.length === 0 ? (
             <div className={styles.empty}>
@@ -176,10 +184,11 @@ export function EnrollmentsPage() {
             </div>
           ) : (
             <div className={styles.cards}>
-              {list.map((application) => <ApplicationCard key={application.id} application={application} busy={busyId === application.id} onDecide={(decision, reason) => decide(application, decision, reason)} />)}
+              {list.map((application) => <ApplicationCard key={application.id} application={application} canManage={canManage} busy={busyId === application.id} onDecide={(decision, reason) => decide(application, decision, reason)} />)}
+              {page?.has_more ? <p className={styles.muted}>Показани са първите {list.length} от {page.total}. Решете тези и списъкът ще продължи.</p> : null}
             </div>
           )
-        ) : groups === undefined ? <span className={styles.skeleton} aria-busy="true" /> : groups.length === 0 ? (
+        ) : groups === undefined ? <span className={styles.skeleton} aria-busy="true" /> : groupsError ? <p className={styles.error} role="alert">{groupsError}</p> : groups.length === 0 ? (
           <div className={styles.empty}>
             <strong>Все още няма групи</strong>
             <p>Групите се създават в стъпка 7 на всяка дейност. <Link href="/dashboard/activities">Към дейностите</Link></p>
@@ -191,7 +200,7 @@ export function EnrollmentsPage() {
               return (
                 <li key={entry.group.id} className={styles.groupItem}>
                   <button type="button" className={styles.groupButton} aria-expanded={open} onClick={() => setOpenGroup(open ? undefined : entry.group.id)}>
-                    <span><strong>{entry.group.name}</strong><span className={styles.small}>{entry.activityTitle} · до {entry.group.capacity_max} деца</span></span>
+                    <span><strong>{entry.group.name}</strong><span className={styles.small}>{entry.activityTitle}{entry.group.capacity_max ? ` · до ${entry.group.capacity_max} деца` : ''}</span></span>
                     <span aria-hidden="true">{open ? '−' : '+'}</span>
                   </button>
                   {open ? <RosterPanel organizationId={organization.id} entry={entry} /> : null}

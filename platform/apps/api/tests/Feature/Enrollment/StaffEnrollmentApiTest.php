@@ -12,6 +12,7 @@ use App\Domain\Organizations\Tenancy\TenantContext;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group as TestGroup;
 use Tests\TestCase;
 
 class StaffEnrollmentApiTest extends TestCase
@@ -39,8 +40,14 @@ class StaffEnrollmentApiTest extends TestCase
             ->assertJsonPath('applications.0.activity.title', 'Шах')
             ->assertJsonPath('applications.0.group.name', $group->name)
             ->assertJsonPath('applications.0.price.amount_cents', 4500)
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('has_more', false)
             ->assertJsonMissingPath('applications.0.parent_user_id')
             ->assertJsonMissingPath('applications.0.internal_note');
+        // Only what the team needs about the child; never birth date, school or parent data.
+        $child = $this->getJson('/api/v1/enrollment/applications')->json('applications.0.child');
+        $this->assertSame(['id', 'name', 'class_label'], array_keys($child));
+        $this->getJson('/api/v1/enrollment/applications?status=approved')->assertUnprocessable();
     }
 
     public function test_coordinator_approves_and_the_child_appears_in_the_group(): void
@@ -116,9 +123,35 @@ class StaffEnrollmentApiTest extends TestCase
         $this->assertDatabaseCount('enrollments', 0);
     }
 
+    public function test_waitlist_rules_and_rejecting_a_waiting_application(): void
+    {
+        [$organization, $group, $application] = $this->organizationWithApplication();
+        $owner = $this->member($organization, 'organization_owner');
+        $this->actAs($owner, $organization);
+
+        $this->postJson("/api/v1/enrollment/applications/{$application->id}/review", ['decision' => 'waitlist', 'version' => 1])->assertOk();
+        $this->postJson("/api/v1/enrollment/applications/{$application->id}/review", ['decision' => 'waitlist', 'version' => 2])
+            ->assertUnprocessable()->assertJsonValidationErrors('decision');
+        $this->postJson("/api/v1/enrollment/applications/{$application->id}/review", [
+            'decision' => 'reject', 'version' => 2, 'public_reason' => 'Групата се закрива.',
+        ])->assertOk()->assertJsonPath('application.status', 'rejected');
+        $this->assertDatabaseHas('enrollment_transitions', [
+            'application_id' => $application->id, 'from_status' => 'waitlisted', 'to_status' => 'rejected',
+        ]);
+
+        $second = $this->anotherApplication($organization, $application);
+        app(TenantContext::class)->select($organization);
+        Group::query()->whereKey($group->id)->update(['waitlist_enabled' => false]);
+        app(TenantContext::class)->clear();
+        $this->postJson("/api/v1/enrollment/applications/{$second->id}/review", ['decision' => 'waitlist', 'version' => 1])
+            ->assertUnprocessable()->assertJsonValidationErrors('decision');
+        $this->assertSame('submitted', $second->refresh()->status->value);
+    }
+
     /** @return iterable<string, array{string, int, int}> */
     public static function roles(): iterable
     {
+        yield 'platform administrator' => ['platform_admin', 200, 200];
         yield 'administrator' => ['organization_admin', 200, 200];
         yield 'finance' => ['finance', 200, 403];
         yield 'viewer' => ['viewer', 200, 403];
@@ -128,14 +161,16 @@ class StaffEnrollmentApiTest extends TestCase
     #[DataProvider('roles')]
     public function test_roles_decide_who_may_see_and_who_may_decide(string $role, int $listStatus, int $reviewStatus): void
     {
-        [$organization, , $application] = $this->organizationWithApplication();
+        [$organization, $group, $application] = $this->organizationWithApplication();
         $member = $this->member($organization, $role);
 
         $this->actAs($member, $organization)->getJson('/api/v1/enrollment/applications')->assertStatus($listStatus);
+        $this->getJson("/api/v1/enrollment/groups/{$group->id}/roster")->assertStatus($listStatus);
         $this->postJson("/api/v1/enrollment/applications/{$application->id}/review", ['decision' => 'approve', 'version' => 1])
             ->assertStatus($reviewStatus);
     }
 
+    #[TestGroup('tenant-isolation')]
     public function test_another_organizations_applications_and_groups_are_not_reachable(): void
     {
         [$organization] = $this->organizationWithApplication();

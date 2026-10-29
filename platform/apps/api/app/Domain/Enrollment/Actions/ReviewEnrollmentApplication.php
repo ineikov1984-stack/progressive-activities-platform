@@ -44,9 +44,11 @@ final class ReviewEnrollmentApplication
             }
             $current = EnrollmentApplication::query()->lockForUpdate()->findOrFail($application->id);
 
+            if ($current->status === EnrollmentApplicationStatus::Waitlisted && $decision === 'waitlist') {
+                throw ValidationException::withMessages(['decision' => 'Заявката вече е в списъка на чакащите.']);
+            }
             // Waiting applications can still be approved or rejected when a place frees up.
-            $reviewable = $current->status === EnrollmentApplicationStatus::Submitted
-                || ($current->status === EnrollmentApplicationStatus::Waitlisted && $decision !== 'waitlist');
+            $reviewable = in_array($current->status, [EnrollmentApplicationStatus::Submitted, EnrollmentApplicationStatus::Waitlisted], true);
             if (! $reviewable || $current->version !== $expectedVersion) {
                 throw ValidationException::withMessages([
                     'version' => 'Заявлението е променено междувременно или вече е обработено.',

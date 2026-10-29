@@ -1,4 +1,4 @@
-import { catalogErrorMessage } from '@/features/catalog/admin/api';
+import { catalogErrorMessage } from '../catalog/admin/api';
 
 export type StaffChild = { id: string | null; name: string | null; class_label: string | null };
 export type StaffApplication = {
@@ -18,7 +18,7 @@ export type StaffApplication = {
 };
 export type RosterEnrollment = { id: string; child: StaffChild; scope: string; status: 'active' | 'paused' | string; starts_on: string; ends_on: string | null; version: number };
 export type GroupRoster = {
-  group: { id: string; name: string; activity_id: string | null; activity_title: string | null; capacity_max: number; remaining: number | null; waitlist_enabled: boolean };
+  group: { id: string; name: string; activity_id: string | null; activity_title: string | null; capacity_max: number | null; enrolled_for_period: number; remaining: number | null; waitlist_enabled: boolean };
   enrollments: RosterEnrollment[];
   waitlist: StaffApplication[];
 };
@@ -59,8 +59,10 @@ async function request<T>(organizationId: string, path: string, init: RequestIni
   return response.json() as Promise<T>;
 }
 
+export type ApplicationPage = { applications: StaffApplication[]; total: number; has_more: boolean };
+
 export const loadApplications = (organizationId: string, status: 'submitted' | 'waitlisted' = 'submitted') =>
-  request<{ applications: StaffApplication[] }>(organizationId, `/applications?status=${status}`).then((x) => x.applications);
+  request<ApplicationPage>(organizationId, `/applications?status=${status}`);
 
 export const reviewApplication = (organizationId: string, application: StaffApplication, decision: ReviewDecision, publicReason?: string) =>
   request<{ application: StaffApplication }>(organizationId, `/applications/${application.id}/review`, {

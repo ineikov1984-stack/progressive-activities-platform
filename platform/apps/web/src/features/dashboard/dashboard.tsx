@@ -97,7 +97,7 @@ export function Dashboard() {
       loadWorkspaceOverview(organization.id),
       loadCatalogWorkspace(organization.id).then((workspace) => workspace.activities).catch(() => [] as ActivityDraft[]),
       // Roles without access to enrollments simply see no such task.
-      loadApplications(organization.id).then((items) => items.length).catch(() => 0),
+      loadApplications(organization.id).then((page) => page.total).catch(() => 0),
     ]).then(([overview, catalogActivities, pending]) => {
       if (!active) return;
       setPendingApplications(pending);

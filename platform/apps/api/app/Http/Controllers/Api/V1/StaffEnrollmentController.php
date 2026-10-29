@@ -25,6 +25,8 @@ use Illuminate\Validation\Rule;
  */
 final class StaffEnrollmentController extends Controller
 {
+    private const PAGE_SIZE = 200;
+
     public function __construct(private readonly TenantContext $context) {}
 
     public function applications(Request $request): JsonResponse
@@ -34,14 +36,19 @@ final class StaffEnrollmentController extends Controller
             'status' => ['sometimes', Rule::in(['submitted', 'waitlisted'])],
         ]);
 
-        $applications = EnrollmentApplication::query()
-            ->where('status', $validated['status'] ?? 'submitted')
-            ->with(['child', 'group.offering.activity', 'session'])
+        $query = EnrollmentApplication::query()->where('status', $validated['status'] ?? 'submitted');
+        $total = (clone $query)->count();
+        // Oldest first: the team works through the queue in the order parents applied.
+        $applications = $query->with(['child', 'group.offering.activity', 'session'])
             ->oldest()
-            ->limit(200)
+            ->limit(self::PAGE_SIZE)
             ->get();
 
-        return response()->json(['applications' => $applications->map($this->presentApplication(...))->all()]);
+        return response()->json([
+            'applications' => $applications->map($this->presentApplication(...))->all(),
+            'total' => $total,
+            'has_more' => $total > $applications->count(),
+        ]);
     }
 
     public function review(Request $request, string $application, ReviewEnrollmentApplication $review): JsonResponse
@@ -94,6 +101,8 @@ final class StaffEnrollmentController extends Controller
                 'activity_id' => $record->offering?->activity?->id,
                 'activity_title' => $record->offering?->activity?->title,
                 'capacity_max' => $record->capacity_max,
+                // Same rule as capacity: current full-period enrollments take a place.
+                'enrolled_for_period' => $enrollments->filter(fn (Enrollment $enrollment): bool => $enrollment->scope->value === 'full_period')->count(),
                 'remaining' => $capacity->remainingForGroup($record),
                 'waitlist_enabled' => $record->waitlist_enabled,
             ],

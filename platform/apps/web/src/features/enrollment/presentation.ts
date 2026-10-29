@@ -1,4 +1,4 @@
-import { formatEur } from '@/features/catalog/admin/presentation';
+import { formatEur } from '../catalog/admin/presentation';
 import type { StaffApplication } from './api';
 
 export const scopeLabels: Record<string, string> = {
@@ -25,7 +25,7 @@ export function dateTimeText(value: string | null | undefined): string {
   return value ? dateTimeFormat.format(new Date(value)) : '';
 }
 
-/** "1 свободно място", "Няма свободни места", "Без ограничение". */
+/** "1 свободно място", "Няма свободни места", "Без ограничение на местата". */
 export function placesText(remaining: number | null): string {
   if (remaining === null) return 'Без ограничение на местата';
   if (remaining <= 0) return 'Няма свободни места';

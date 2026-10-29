@@ -25,7 +25,7 @@
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
 | Wizard: завършване (стъпка А) | Claude | claude/wizard-complete | `features/catalog/admin/wizard/**` | PR #24 |
-| Записвания от екипа — Б1: входящи, решение, списък на групата | Claude | claude/staff-enrollment-inbox | `routes/api.php` (горещ), `app/Domain/Enrollment/**`, нов раздел „Записвания“ в web | започва след спецификацията |
+| Записвания от екипа — Б1: входящи, решение, списък на групата | Claude | claude/staff-enrollment-inbox | `routes/api.php` (горещ), `app/Domain/Enrollment/**`, нов раздел „Записвания“ в web | PR #26; review: поправки направени |
 
 ## Опашка (по приоритет)
 
