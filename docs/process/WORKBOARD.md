@@ -24,7 +24,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Wizard за създаване на дейност (стъпка по стъпка) по одобрените макети | Claude | claude/activity-wizard | `apps/web/src/features/catalog/admin/**`, `app/dashboard/activities/[activityId]/**` (без API) | част 1: рамка + стъпки 1–4 и 9 в PR; следват стъпки 5–7 |
+| Wizard за създаване на дейност — част 2 (стъпки 5–7) | Claude | claude/wizard-part-2 | `apps/web/src/features/catalog/admin/wizard/**` (без API) | PR отворен; после: махане на `/classic` |
 
 ## Опашка (по приоритет)
 

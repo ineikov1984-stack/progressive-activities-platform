@@ -2,56 +2,21 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { type ChangeEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { type ChangeEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useDashboardContext } from '@/features/dashboard/dashboard-context';
 import { CategoryIllustration } from '@/features/catalog/public/category-illustration';
-import { type ActivityDraft, type ActivityGroup, type ActivitySections, loadActivity, loadGroups, publishActivity, updateActivity, uploadCatalogMedia } from '../api';
+import { type ActivityDraft, type ActivityGroup, type ActivitySections, type InstructorProfile, loadActivity, loadCatalogWorkspace, loadGroups, type Location, publishActivity, updateActivity, uploadCatalogMedia } from '../api';
 import { activityCategories, activityCompleteness, formatEur } from '../presentation';
 import { PrivateImage, usePrivateMedia } from '../private-image';
 import { Autosave, type AutosaveState } from './autosave';
-import { agePresets, completedSteps, contentBlocker, contentFromActivity, savedAgo, sectionsPayload, stepByNumber, storedBasics, summaryLimit, type WizardContent, type WizardStep, wizardSteps } from './steps';
+import { checkOffering, type OfferingDraft } from './offering';
+import { StepGroups } from './step-groups';
+import { StepPeople } from './step-people';
+import { StepPrice } from './step-price';
+import { agePresets, completedSteps, contentBlocker, contentFromActivity, draftActivity, savedAgo, sectionsPayload, stepByNumber, storedBasics, summaryLimit, type WizardContent, type WizardStep, wizardSteps } from './steps';
+import { Field, Icon, icons, ListEditor } from './ui';
 import styles from './wizard.module.css';
-
-const icons = {
-  back: 'M19 12H5M11 6l-6 6 6 6',
-  next: 'M5 12h14M13 6l6 6-6 6',
-  eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
-  check: 'M5 12l5 5 9-10',
-  plus: 'M12 5v14M5 12h14',
-  trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
-  info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M12 11v5M12 8v.01',
-  warn: 'M12 3l10 18H2z M12 10v4M12 17v.01',
-};
-
-function Icon({ path }: { path: string }) {
-  return <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden="true">{path.split(' M').map((part, index) => <path key={index} d={index === 0 ? part : `M${part}`} />)}</svg>;
-}
-
-function Field({ id, label, hint, children, aside }: { id: string; label: string; hint?: ReactNode; children: ReactNode; aside?: ReactNode }) {
-  return (
-    <div className={styles.field}>
-      <div className={styles.fieldHead}><label className={styles.label} htmlFor={id}>{label}</label>{aside}</div>
-      {children}
-      {hint ? <span className={styles.hint} id={`${id}-hint`}>{hint}</span> : null}
-    </div>
-  );
-}
-
-function ListEditor({ id, label, items, placeholder, onChange, disabled, addLabel }: { id: string; label: string; items: string[]; placeholder: string; onChange: (items: string[]) => void; disabled: boolean; addLabel: string }) {
-  return (
-    <fieldset className={styles.fieldset} disabled={disabled}>
-      <legend className={styles.label}>{label}</legend>
-      {items.map((item, index) => (
-        <div className={styles.listRow} key={index}>
-          <input id={`${id}-${index}`} className={styles.input} value={item} placeholder={placeholder} aria-label={`${label} ${index + 1}`} onChange={(event) => onChange(items.map((value, at) => at === index ? event.target.value : value))} />
-          <button type="button" className={styles.iconButton} aria-label={`Премахни ред ${index + 1}`} onClick={() => onChange(items.filter((_, at) => at !== index))}><Icon path={icons.trash} /></button>
-        </div>
-      ))}
-      <button type="button" className={styles.quiet} onClick={() => onChange([...items, ''])}><Icon path={icons.plus} />{addLabel}</button>
-    </fieldset>
-  );
-}
 
 function PreviewCard({ content, cover, organizationName, activity }: { content: WizardContent; cover?: string; organizationName: string; activity: ActivityDraft }) {
   const prices = activity.offering?.price_options ?? [];
@@ -85,6 +50,8 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
 
   const [activity, setActivity] = useState<ActivityDraft>();
   const [groups, setGroups] = useState<ActivityGroup[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [instructors, setInstructors] = useState<InstructorProfile[]>([]);
   const [content, setContent] = useState<WizardContent>();
   const [loadError, setLoadError] = useState('');
   const [saveState, setSaveState] = useState<AutosaveState>('idle');
@@ -97,18 +64,26 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
   const version = useRef(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const contentRef = useRef<WizardContent | undefined>(undefined);
+  const savedOffering = useRef('');
 
   const locked = activity !== undefined && activity.status !== 'draft';
   const cover = usePrivateMedia(organization.id, activity?.hero_image_path);
 
   useEffect(() => {
     let active = true;
-    Promise.all([loadActivity(organization.id, activityId), loadGroups(organization.id, activityId).catch(() => [] as ActivityGroup[])])
-      .then(([loaded, loadedGroups]) => {
+    Promise.all([
+      loadActivity(organization.id, activityId),
+      loadGroups(organization.id, activityId).catch(() => [] as ActivityGroup[]),
+      loadCatalogWorkspace(organization.id).catch(() => undefined),
+    ])
+      .then(([loaded, loadedGroups, workspace]) => {
         if (!active) return;
+        setLocations(workspace?.locations ?? []);
+        setInstructors(workspace?.instructors ?? []);
         version.current = loaded.version;
         setActivity(loaded);
         const initial = contentFromActivity(loaded);
+        savedOffering.current = initial.offering ? JSON.stringify(checkOffering(initial.offering).payload) : '';
         contentRef.current = initial;
         setContent(initial);
         setGroups(loadedGroups);
@@ -127,11 +102,16 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
     const autosave = new Autosave<WizardContent>({
       delayMs: 1200,
       save: async (value) => {
+        // The offering (prices replace the old ones) is sent only when it changed.
+        const checked = value.offering ? checkOffering(value.offering).payload : undefined;
+        const offeringPayload = checked && JSON.stringify(checked) !== savedOffering.current ? checked : undefined;
         const updated = await updateActivity(organization.id, activityId, {
           version: version.current,
           ...storedBasics(value),
           sections: sectionsPayload(value.sections),
+          ...(offeringPayload ? { offering: offeringPayload } : {}),
         });
+        if (offeringPayload) savedOffering.current = JSON.stringify(offeringPayload);
         version.current = updated.version;
         setActivity(updated);
         setSavedAt(Date.now());
@@ -159,6 +139,11 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
   const changeSections = useCallback((changes: ActivitySections) => {
     const current = contentRef.current;
     if (current) commit({ ...current, sections: { ...current.sections, ...changes } });
+  }, [commit]);
+
+  const changeOffering = useCallback((changes: Partial<OfferingDraft>) => {
+    const current = contentRef.current;
+    if (current?.offering) commit({ ...current, offering: { ...current.offering, ...changes } });
   }, [commit]);
 
   function goTo(target: WizardStep) {
@@ -231,14 +216,15 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
   if (loadError) return <div className={styles.page}><p className={styles.error} role="alert">{loadError}</p><Link href="/dashboard/activities">← Към дейностите</Link></div>;
   if (!activity || !content) return <div className={styles.page} aria-busy="true"><span className={styles.skeleton} /><span className={styles.skeletonTall} /></div>;
 
-  const done = completedSteps({ ...activity, ...content, sections: content.sections }, groups);
+  const draft = draftActivity(activity, content);
+  const done = completedSteps(draft, groups);
+  const offeringProblems = content.offering ? checkOffering(content.offering).problems : {};
   const blocker = contentBlocker(content);
   const index = wizardSteps.findIndex((item) => item.id === step.id);
   const previous = wizardSteps[index - 1];
   const next = wizardSteps[index + 1];
   const statusText = saveState === 'saving' || saveState === 'pending' ? 'Запазване…' : saveState === 'error' ? 'Не е запазено' : savedAt === undefined ? 'промените се пазят автоматично' : savedAgo(savedAt, now);
   const publicHref = `/o/${organization.slug}/activities/${activity.slug}`;
-  const classicHref = (anchor?: string) => `/dashboard/activities/${activityId}/classic${anchor ? `#${anchor}` : ''}`;
 
   return (
     <div className={styles.page}>
@@ -396,11 +382,44 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
               ) : null}
             </fieldset>
 
-            {step.classicAnchor && step.id !== 'review' ? (
+            {(step.id === 'people' || step.id === 'price') && !content.offering ? (
               <div className={styles.classic}>
-                <p>Тази стъпка все още е в досегашния редактор. Скоро ще бъде тук, със същото удобство като първите стъпки.</p>
-                <Link className={styles.secondary} href={classicHref(step.classicAnchor)}>Отвори „{step.title}“</Link>
+                <p>Тази дейност е създадена по стария начин и няма данни за място и цени. Отворете досегашния редактор, за да ги добавите.</p>
+                <Link className={styles.secondary} href={`/dashboard/activities/${activityId}/classic`}>Отвори досегашния редактор</Link>
               </div>
+            ) : null}
+
+            {step.id === 'people' && content.offering ? (
+              <StepPeople
+                organizationId={organization.id}
+                offering={content.offering}
+                locations={locations}
+                instructors={instructors}
+                instructorIntro={content.sections.instructor_intro ?? ''}
+                locked={locked}
+                onOffering={changeOffering}
+                onIntro={(instructor_intro) => changeSections({ instructor_intro })}
+                onLocation={(location) => setLocations((items) => [...items, location])}
+                onInstructor={(instructor) => setInstructors((items) => [...items, instructor])}
+              />
+            ) : null}
+
+            {step.id === 'price' && content.offering ? (
+              <StepPrice offering={content.offering} problems={offeringProblems} locked={locked} onOffering={changeOffering} />
+            ) : null}
+
+            {step.id === 'groups' ? (
+              <StepGroups
+                organizationId={organization.id}
+                activityId={activityId}
+                ageLabel={content.age_label.trim() || activity.age_label}
+                groups={groups}
+                locations={locations}
+                instructors={instructors}
+                defaultLocationId={content.offering?.location_id ?? null}
+                locked={locked}
+                onGroup={(group) => setGroups((items) => items.some((item) => item.id === group.id) ? items.map((item) => item.id === group.id ? group : item) : [...items, group])}
+              />
             ) : null}
 
             {step.id === 'trials' ? (
@@ -411,7 +430,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
             ) : null}
 
             {step.id === 'review' ? (
-              <ReviewStep activity={activity} content={content} groupsCount={groups.length} onPublish={publish} publishing={busy === 'publish'} message={publishMessage} classicHref={classicHref('review')} onGo={goTo} />
+              <ReviewStep activity={draft} groups={groups} onPublish={publish} publishing={busy === 'publish'} message={publishMessage} onGo={goTo} />
             ) : null}
           </section>
 
@@ -424,7 +443,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
 
         <aside className={styles.preview} aria-label="Както ще го види родителят">
           <span className={styles.previewLabel}><Icon path={icons.eye} />Както ще го види родителят</span>
-          <PreviewCard content={content} cover={cover} organizationName={organization.name} activity={activity} />
+          <PreviewCard content={content} cover={cover} organizationName={organization.name} activity={draft} />
           {!activity.hero_image_path ? (
             <div className={styles.tip}><Icon path={icons.info} /><span>Без снимка картата използва илюстрацията на категорията. Истинска снимка от заниманията вдъхва повече доверие на родителите.</span></div>
           ) : null}
@@ -434,11 +453,13 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
   );
 }
 
-function ReviewStep({ activity, content, groupsCount, onPublish, publishing, message, classicHref, onGo }: { activity: ActivityDraft; content: WizardContent; groupsCount: number; onPublish: () => void; publishing: boolean; message: string; classicHref: string; onGo: (step: WizardStep) => void }) {
-  const completeness = activityCompleteness({ ...activity, ...content, sections: content.sections });
+function ReviewStep({ activity, groups, onPublish, publishing, message, onGo }: { activity: ActivityDraft; groups: ActivityGroup[]; onPublish: () => void; publishing: boolean; message: string; onGo: (step: WizardStep) => void }) {
+  const completeness = activityCompleteness(activity);
   const missing = completeness.steps.filter((item) => !item.done);
   const stepFor: Record<string, WizardStep> = Object.fromEntries(wizardSteps.map((item) => [item.id, item]));
-  const ready = missing.length === 0 && groupsCount > 0;
+  stepFor.terms = stepFor.price;
+  const blocking = groups.flatMap((group) => group.conflicts).filter((conflict) => conflict.severity === 'blocking');
+  const ready = missing.length === 0 && groups.length > 0 && blocking.length === 0;
   return (
     <div className={styles.review}>
       <ul className={styles.checklist}>
@@ -449,11 +470,18 @@ function ReviewStep({ activity, content, groupsCount, onPublish, publishing, mes
             {!item.done && stepFor[item.id] ? <button type="button" className={styles.linkButton} onClick={() => onGo(stepFor[item.id])}>Попълни</button> : null}
           </li>
         ))}
-        <li className={groupsCount > 0 ? styles.checkDone : styles.checkMissing}>
-          <Icon path={groupsCount > 0 ? icons.check : icons.warn} />
+        <li className={groups.length > 0 ? styles.checkDone : styles.checkMissing}>
+          <Icon path={groups.length > 0 ? icons.check : icons.warn} />
           <span>Поне една група с график</span>
-          {groupsCount === 0 ? <button type="button" className={styles.linkButton} onClick={() => onGo(stepFor.groups)}>Добави</button> : null}
+          {groups.length === 0 ? <button type="button" className={styles.linkButton} onClick={() => onGo(stepFor.groups)}>Добави</button> : null}
         </li>
+        {blocking.length > 0 ? (
+          <li className={styles.checkMissing}>
+            <Icon path={icons.warn} />
+            <span>Графикът се застъпва с друго занимание</span>
+            <button type="button" className={styles.linkButton} onClick={() => onGo(stepFor.groups)}>Провери</button>
+          </li>
+        ) : null}
       </ul>
       {message ? <p className={styles.success} role="status">{message}</p> : null}
       {activity.status === 'draft' ? (
@@ -462,7 +490,6 @@ function ReviewStep({ activity, content, groupsCount, onPublish, publishing, mes
           <span className={styles.hint} id="publish-hint">{ready ? 'След публикуване родителите ще я видят в каталога.' : 'Попълнете липсващите стъпки, за да публикувате.'}</span>
         </div>
       ) : null}
-      <p className={styles.hint}>Условията и политиката за отказ засега се редактират в <Link href={classicHref}>досегашния редактор</Link>.</p>
     </div>
   );
 }

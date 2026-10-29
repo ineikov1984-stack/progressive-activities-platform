@@ -22,10 +22,10 @@ describe('wizard steps', () => {
   });
 
   it('explains in Bulgarian why content cannot be saved yet', () => {
-    expect(contentBlocker({ title: ' ', category: 'x', summary: 'y', age_label: 'z', sections: {} })).toMatch(/име/);
-    expect(contentBlocker({ title: 'a', category: 'x', summary: 'y'.repeat(221), age_label: 'z', sections: {} })).toMatch(/220/);
-    expect(contentBlocker({ title: 'a', category: 'x', summary: 'y', age_label: 'z', sections: {} })).toBeUndefined();
-    expect(contentBlocker({ title: 'a', category: 'x', summary: '', age_label: '', sections: {} })).toBeUndefined();
+    expect(contentBlocker({ title: ' ', category: 'x', summary: 'y', age_label: 'z', sections: {}, offering: null })).toMatch(/име/);
+    expect(contentBlocker({ title: 'a', category: 'x', summary: 'y'.repeat(221), age_label: 'z', sections: {}, offering: null })).toMatch(/220/);
+    expect(contentBlocker({ title: 'a', category: 'x', summary: 'y', age_label: 'z', sections: {}, offering: null })).toBeUndefined();
+    expect(contentBlocker({ title: 'a', category: 'x', summary: '', age_label: '', sections: {}, offering: null })).toBeUndefined();
   });
 
   it('describes when the draft was saved', () => {

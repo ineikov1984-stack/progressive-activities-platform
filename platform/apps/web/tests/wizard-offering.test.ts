@@ -1,0 +1,32 @@
+import { describe, expect, it } from 'vitest';
+import { amountText, blankPrice, checkOffering, type OfferingDraft } from '../src/features/catalog/admin/wizard/offering';
+
+const draft = (changes: Partial<OfferingDraft> = {}): OfferingDraft => ({
+  location_id: null, lead_instructor_profile_id: null, contact_email: '', enrollment_instructions: '', cancellation_policy: '', terms: '',
+  prices: [{ ...blankPrice(), amount: '30,00' }], ...changes,
+});
+
+describe('checkOffering', () => {
+  it('sends valid prices in euro cents with only the fields the API accepts', () => {
+    const { payload, problems } = checkOffering(draft({ prices: [{ ...blankPrice(), id: 'x', amount: '30,5', terms: ' ' }] }));
+    expect(problems).toEqual({});
+    expect(payload.price_options).toEqual([{ enrollment_mode: 'monthly', unit: 'month', amount_cents: 3050, currency: 'EUR', terms: null, is_available: true }]);
+  });
+
+  it('keeps saving other fields when a price or the email is wrong', () => {
+    const { payload, problems } = checkOffering(draft({ contact_email: 'не-е-имейл', enrollment_instructions: ' Пишете ни ', prices: [{ ...blankPrice(), amount: 'abc' }] }));
+    expect(Object.keys(problems).sort()).toEqual(['contact_email', 'price_0']);
+    expect(payload.price_options).toBeUndefined();
+    expect(payload.contact_email).toBeUndefined();
+    expect(payload.enrollment_instructions).toBe('Пишете ни');
+  });
+
+  it('rejects the same way of enrolling twice', () => {
+    const { problems } = checkOffering(draft({ prices: [{ ...blankPrice(), amount: '30' }, { ...blankPrice(), amount: '40' }] }));
+    expect(problems.price_1).toMatch(/вече има цена/);
+  });
+
+  it('formats cents for the input field', () => {
+    expect(amountText(1500)).toBe('15,00');
+  });
+});
