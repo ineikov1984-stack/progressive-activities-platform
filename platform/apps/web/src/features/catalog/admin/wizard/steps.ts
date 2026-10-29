@@ -63,7 +63,7 @@ export function contentBlocker(content: WizardContent): string | undefined {
 export const agePresets = ['3–5 г.', '5–7 г.', '7–10 г.', '10–14 г.', '1.–4. клас', '5.–7. клас', '8.–12. клас'] as const;
 
 export function savedAgo(savedAt: number | undefined, now: number): string {
-  if (!savedAt) return 'Чернова';
+  if (savedAt === undefined) return 'Чернова';
   const seconds = Math.max(0, Math.round((now - savedAt) / 1000));
   if (seconds < 5) return 'Запазено току-що';
   if (seconds < 60) return `Запазено преди ${seconds} сек.`;
