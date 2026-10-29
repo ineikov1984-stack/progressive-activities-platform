@@ -140,3 +140,22 @@ jobs:
         run: docker build --target development -t progressive-api platform/apps/api
       - name: Build web image
         run: docker build --target development -f platform/apps/web/Dockerfile -t progressive-web platform
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          # The scanner image gets the working tree; keep the GitHub token out of it.
+          persist-credentials: false
+      - name: Scan the full history for committed secrets (gitleaks)
+        run: |
+          status=0
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            git /repo --config /repo/.gitleaks.toml --redact --no-banner \
+            --report-format json --report-path /repo/gitleaks-report.json || status=$?
+          if [ -s gitleaks-report.json ]; then
+            jq -r '.[] | "::error file=\(.File),line=\(.StartLine),title=Possible secret (\(.RuleID))::commit \(.Commit[0:8]) by \(.Author)"' gitleaks-report.json
+          fi
+          exit $status
