@@ -6,7 +6,7 @@ Requirements: Docker Desktop and pnpm 11.
 
 ```bash
 docker compose up --build
-docker compose exec api php artisan migrate --force
+docker compose exec api php artisan migrate --database=pgsql_admin --force
 docker compose exec api php artisan db:seed --class='Database\Seeders\LocalDemoSeeder' --force
 ```
 
