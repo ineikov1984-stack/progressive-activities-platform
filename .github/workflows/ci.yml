@@ -127,10 +127,98 @@ jobs:
       - run: pnpm audit --audit-level high
       - run: pnpm verify
       - run: pnpm --filter @progressive/web exec playwright install --with-deps chromium
-      # Browser suites that use synthetic API fixtures. Suites that need the seeded
-      # demo database run locally against the Docker stack (see docs/process/WORKFLOW.md).
+      # Browser suites that use synthetic API fixtures. The smoke suite against the real
+      # API and database runs in the e2e-stack job; the remaining demo-database suites
+      # run locally against the Docker stack (see docs/process/WORKFLOW.md).
       - name: Browser tests (synthetic fixtures)
         run: pnpm --filter @progressive/web exec playwright test --config=playwright.isolated.config.ts --reporter=github,line
+
+  e2e-stack:
+    name: e2e (real API + database)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: progressive
+          POSTGRES_USER: progressive
+          POSTGRES_PASSWORD: progressive-local-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U progressive -d progressive"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    # Same values as platform/compose.yaml (local-only, synthetic demo data).
+    env:
+      APP_ENV: local
+      APP_DEBUG: "false"
+      APP_URL: http://127.0.0.1:8080
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: progressive
+      DB_PGSQL_DATABASE: progressive
+      DB_USERNAME: progressive_app
+      DB_PASSWORD: progressive-app-local-only
+      DB_ADMIN_USERNAME: progressive
+      DB_ADMIN_PASSWORD: progressive-local-only
+      DEMO_USER_EMAIL: owner@demo.progressive.local
+      DEMO_USER_PASSWORD: progressive-demo-local-only
+      SESSION_DRIVER: database
+      SESSION_SECURE_COOKIE: "false"
+      SANCTUM_STATEFUL_DOMAINS: localhost:3000,127.0.0.1:3000
+      MAIL_MAILER: log
+      API_BASE_URL: http://127.0.0.1:8080
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          coverage: none
+          ini-values: upload_max_filesize=8M, post_max_size=10M
+      - uses: ramsey/composer-install@v4
+        with:
+          working-directory: platform/apps/api
+      - name: Create restricted application database role
+        run: >-
+          docker run --rm --network host
+          -v "${{ github.workspace }}/platform/infra/docker/postgres-init:/init:ro"
+          -e PGPASSWORD=progressive-local-only postgres:17-alpine
+          psql -h 127.0.0.1 -U progressive -d progressive
+          -v ON_ERROR_STOP=1 -f /init/01-app-role.sql
+      - name: Prepare and start the API
+        working-directory: platform/apps/api
+        run: |
+          cp .env.example .env && php artisan key:generate --ansi
+          php artisan migrate --force --ansi
+          php artisan db:seed --class='Database\Seeders\LocalDemoSeeder' --force --ansi
+          nohup php artisan serve --host=127.0.0.1 --port=8080 --no-reload > "$RUNNER_TEMP/api.log" 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/up >/dev/null && exit 0; sleep 1; done
+          echo "::error title=API did not start::$(tail -c 2000 "$RUNNER_TEMP/api.log" | tr '\n' ' ')"; exit 1
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: platform/pnpm-lock.yaml
+      - working-directory: platform
+        run: pnpm install --frozen-lockfile
+      - working-directory: platform
+        run: pnpm --filter @progressive/web build
+      - working-directory: platform
+        run: pnpm --filter @progressive/web exec playwright install --with-deps chromium
+      - name: Browser tests against the real stack
+        working-directory: platform
+        run: pnpm --filter @progressive/web exec playwright test --config=playwright.stack.config.ts --reporter=github,line
+      - name: API log on failure
+        if: ${{ failure() }}
+        run: |
+          grep -E "ERROR|Exception| 5[0-9]{2} " "$RUNNER_TEMP/api.log" | tail -n 40 | while IFS= read -r line; do echo "::warning title=API log::${line:0:900}"; done || true
+          tail -n 40 platform/apps/api/storage/logs/laravel.log 2>/dev/null | grep -E "ERROR|Exception" | while IFS= read -r line; do echo "::warning title=Laravel log::${line:0:900}"; done || true
 
   docker:
     runs-on: ubuntu-latest
