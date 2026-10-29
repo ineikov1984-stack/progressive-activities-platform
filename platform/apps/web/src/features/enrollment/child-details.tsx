@@ -3,7 +3,7 @@
 import { type MouseEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { changeErrorMessage, type ChildDetailsResponse, type DetailsTarget, loadDetails } from './api';
 import {
-  actorText, childLine, dateText, dateTimeText, historyText, pauseReasonLabels, priceText, queueText, recordStatusText,
+  actorText, childLine, dateText, dateTimeText, historyText, pauseReasonLabels, priceText, queueText, reasonText, recordStatusText, recordTone,
   scheduleText, scopeLabels, sessionText, shortDay, sofiaDay,
 } from './presentation';
 import styles from './enrollments.module.css';
@@ -172,6 +172,8 @@ function RecordSection({ details }: { details: ChildDetailsResponse }) {
   );
 }
 
+const toneStyle = { active: styles.recordStatus, waiting: styles.recordWaiting, paused: styles.recordWaiting, ending: styles.recordEnding };
+
 function HereSection({ details }: { details: ChildDetailsResponse }) {
   const today = sofiaDay();
   return (
@@ -182,7 +184,7 @@ function HereSection({ details }: { details: ChildDetailsResponse }) {
           {details.records.map((record) => (
             <li key={`${record.kind}-${record.id}`}>
               <strong>{record.activity_title} · {record.group_name}</strong>
-              <span className={record.kind === 'application' ? styles.recordWaiting : styles.recordStatus}>{recordStatusText(record, today)}</span>
+              <span className={toneStyle[recordTone(record, today)]}>{recordStatusText(record, today)}</span>
               {scheduleText(record.schedule) ? <span className={styles.small}>{scheduleText(record.schedule)}</span> : null}
               {record.kind === 'enrollment' && record.next_session_at ? <span className={styles.small}>Следващо: {sessionText(record.next_session_at)}</span> : null}
               {record.kind === 'enrollment' && record.next_pause ? <span className={styles.small}>Пауза {shortDay(record.next_pause.starts_on)} – {shortDay(record.next_pause.ends_on)}</span> : null}
@@ -207,7 +209,7 @@ function HistorySection({ details }: { details: ChildDetailsResponse }) {
               <li key={item.id}>
                 <span className={styles.small}>{dateTimeText(item.occurred_at)}{who ? ` · ${who}` : ''}</span>
                 <strong>{historyText(item)}</strong>
-                {item.public_reason ? <span>Казахме на родителя: „{item.public_reason}“</span> : null}
+                {reasonText(item) ? <span>{reasonText(item)}</span> : null}
                 {item.internal_note ? <span className={styles.internalNote}>Само за екипа: {item.internal_note}</span> : null}
               </li>
             );

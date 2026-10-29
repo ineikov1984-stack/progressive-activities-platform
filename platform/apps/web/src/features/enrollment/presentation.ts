@@ -286,6 +286,20 @@ export function recordStatusText(record: ChildRecord, today: string): string {
   return `Записано от ${shortDay(record.starts_on)}`;
 }
 
+/** The kind of state, for its colour — the text always says it too. */
+export function recordTone(record: ChildRecord, today: string): 'active' | 'waiting' | 'paused' | 'ending' {
+  if (record.kind === 'application') return 'waiting';
+  if (record.moves_to || record.status === 'ended') return 'ending';
+  if (record.paused_until) return 'paused';
+  return record.starts_on > today ? 'waiting' : 'active';
+}
+
+/** The reason on a history line: the parent's own words, or what the team told the parent. */
+export function reasonText(item: HistoryItem): string {
+  if (!item.public_reason) return '';
+  return item.actor?.kind === 'parent' ? `Причина от родителя: „${item.public_reason}“` : `Казахме на родителя: „${item.public_reason}“`;
+}
+
 const visitOutcomes: Record<string, string> = {
   attended: 'Посети заниманието',
   cancelled_in_time: 'Отказа посещението навреме',

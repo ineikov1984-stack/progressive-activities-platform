@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ChildRecord, GroupRoster, HistoryItem, RosterEnrollment, StaffGroup } from '../src/features/enrollment/api';
 import {
-  activitySummary, actorText, addDays, ageText, applicationPlaces, childLine, historyText, ordinalText, queueText, recordStatusText, needsGroupPlace, waitingQueues, groupFill, groupsByActivity, hasPlaceForWaiting, lastDayOfMonth, matchesGroupFilter, matchesGroupSearch, moveInSummary,
+  activitySummary, actorText, addDays, ageText, applicationPlaces, childLine, historyText, ordinalText, queueText, reasonText, recordStatusText, recordTone, needsGroupPlace, waitingQueues, groupFill, groupsByActivity, hasPlaceForWaiting, lastDayOfMonth, matchesGroupFilter, matchesGroupSearch, moveInSummary,
   placesText, priceText, rosterNotes, scheduleText, skippableSessions, sofiaDay, waitingText, weekdayDay,
 } from '../src/features/enrollment/presentation';
 
@@ -154,6 +154,10 @@ describe('enrollment presentation', () => {
       .toBe('Премества се в „Група 3“ от 12 ноември');
     expect(recordStatusText({ ...base, kind: 'application', status: 'waitlisted', submitted_at: '2026-10-20T10:00:00Z', queue_position: 3 }, today)).toBe('Чака място · 3-то в реда');
     expect(recordStatusText({ ...base, kind: 'application', status: 'submitted', submitted_at: '2026-10-20T10:00:00Z', queue_position: null }, today)).toBe('Нова заявка от 20 октомври');
+    expect(recordTone(enrolled(), today)).toBe('active');
+    expect(recordTone(enrolled({ status: 'ended', ends_on: '2026-11-30' }), today)).toBe('ending');
+    expect(recordTone(enrolled({ paused_until: '2026-11-10' }), today)).toBe('paused');
+    expect(recordTone(enrolled({ starts_on: '2026-11-01' }), today)).toBe('waiting');
   });
 
   it('tells the history in words and says who did it', () => {
@@ -173,5 +177,8 @@ describe('enrollment presentation', () => {
     expect(actorText({ kind: 'automatic', name: null })).toBe('автоматично');
     expect(actorText({ kind: 'team', name: 'Петя Колева' })).toBe('Петя Колева');
     expect(actorText(null)).toBe('');
+    expect(reasonText(item({ public_reason: 'Рожден ден', actor: { kind: 'parent', name: null } }))).toBe('Причина от родителя: „Рожден ден“');
+    expect(reasonText(item({ public_reason: 'Групата е пълна', actor: { kind: 'team', name: 'Петя' } }))).toBe('Казахме на родителя: „Групата е пълна“');
+    expect(reasonText(item({}))).toBe('');
   });
 });

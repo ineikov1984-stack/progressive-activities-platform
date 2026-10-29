@@ -226,6 +226,7 @@ ol.list { padding-left: var(--space-6); list-style: decimal; }
 .history li > span:not(.small) { color: var(--ink-body); font-size: 14px; }
 .recordStatus { color: var(--status-available); font-size: 14px; font-weight: 600; }
 .recordWaiting { color: var(--status-limited); font-size: 14px; font-weight: 600; }
+.recordEnding { color: var(--status-full); font-size: 14px; font-weight: 600; }
 .history .internalNote { justify-self: start; padding: 2px var(--space-2); border-radius: var(--radius-sm); color: var(--ink); background: var(--surface-sunken); font-size: 13px; }
 @media (max-width: 560px) {
   .drawer { width: 100vw; border-left: 0; }
