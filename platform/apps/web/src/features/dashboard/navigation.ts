@@ -63,20 +63,25 @@ const navigationGroups: Array<Omit<DashboardNavGroup, 'items'> & { items: Naviga
 ];
 
 function isActivePath(pathname: string, href?: string): boolean {
-  if (!href) return false;
-  const hrefPath = href.split('#')[0];
-  if (hrefPath === '/dashboard') return pathname === hrefPath;
-  return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
+  // A link to a section of another page (`/dashboard#team`) is never the current page.
+  if (!href || href.includes('#')) return false;
+  if (href === '/dashboard') return pathname === href;
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/**
+ * The navigation shows only destinations that work today: an unfinished area
+ * appears when it ships, so the menu never leads to an empty or fake page.
+ */
 export function dashboardNavigation(pathname: string): DashboardNavGroup[] {
-  return navigationGroups.map((group) => ({
-    ...group,
-    items: group.items.map((item) => ({
-      ...item,
-      isActive: isActivePath(pathname, item.href),
-    })),
-  }));
+  return navigationGroups
+    .map((group) => ({
+      ...group,
+      items: group.items
+        .filter((item) => item.isAvailable && item.href)
+        .map((item) => ({ ...item, isActive: isActivePath(pathname, item.href) })),
+    }))
+    .filter((group) => group.items.length > 0);
 }
 
 export function dashboardNavigationStorageKey(userId: string, organizationId: string): string {

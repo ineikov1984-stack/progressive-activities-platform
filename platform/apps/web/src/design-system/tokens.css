@@ -1,0 +1,58 @@
+/* Progressive Activities design tokens — mirror of the approved design system (docs/product/ROADMAP.md). Change values there first. */
+:root, [data-theme="light"] {
+  --ink: #173F5F;
+  --ink-body: #344054;
+  --ink-muted: #5B6878;
+  --ink-inverse: #FFFFFF;
+  --action: #B8561A;
+  --action-hover: #9E4914;
+  --brand: #E3823F;
+  --brand-soft: #FFF1E7;
+  --nav: #0F2A40;
+  --nav-muted: #AFC0CF;
+  --nav-active: #1B3A55;
+  --surface: #FFFFFF;
+  --surface-page: #F6F4EF;
+  --surface-warm: #FFF9F4;
+  --surface-sunken: #F2F4F5;
+  --border: #E2E6EA;
+  --border-control: #808D99;
+  --focus: #1F5FAD;
+  --focus-on-dark: #F2A365;
+  --status-available: #1E7354;
+  --status-available-soft: #E6F3EC;
+  --status-limited: #8A5A0B;
+  --status-limited-soft: #FCF1D8;
+  --status-last: #B3401E;
+  --status-last-soft: #FCE9E2;
+  --status-full: #A12D2D;
+  --status-full-soft: #FBE7E7;
+  --status-info: #3D5A80;
+  --status-info-soft: #E8EEF6;
+  --cat-art: #F1ECF8;
+  --cat-science: #E7F2F0;
+  --cat-sport: #FDEFE3;
+  --cat-music: #EEF0FA;
+  --cat-language: #F4F2E4;
+  --shadow-card: 0 1px 2px rgba(15, 42, 64, 0.06), 0 8px 24px rgba(15, 42, 64, 0.06);
+  --shadow-raised: 0 2px 4px rgba(15, 42, 64, 0.08), 0 16px 40px rgba(15, 42, 64, 0.12);
+}
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-20: 80px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
+  --control-height: 44px;
+  --content-max: 1180px;
+  --sidebar-width: 264px;
+  --font-sans: var(--font-onest, "Onest"), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}

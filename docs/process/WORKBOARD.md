@@ -6,7 +6,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Пътна карта: лагери и кемпове, одобрен дизайн | Claude | claude/roadmap-camps | `docs/product/**`, `docs/process/**` | PR отворен |
+| Дизайн системата в кода: tokens, Onest, рамка на администрацията, вход | Claude | claude/design-system | `apps/web/src/app/globals.css`, `apps/web/src/design-system/**`, `features/dashboard/**`, вход | PR отворен; после Етап 1 екрани |
 
 ## Опашка (по приоритет)
 

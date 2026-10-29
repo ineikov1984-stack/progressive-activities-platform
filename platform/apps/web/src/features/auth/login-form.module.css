@@ -10,18 +10,19 @@
 }
 
 .field label {
-  color: #17233d;
+  color: var(--ink);
   font-size: 0.9rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .field input {
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid #c9d2e3;
-  border-radius: 0.8rem;
-  background: #fff;
-  color: #101828;
+  min-height: var(--control-height);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
   font: inherit;
   padding: 0.85rem 1rem;
   transition: border-color 150ms ease, box-shadow 150ms ease;
@@ -29,13 +30,13 @@
 
 .field input:focus-visible,
 .submit:focus-visible {
-  outline: 3px solid #f6b84b;
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
 .field input:focus {
-  border-color: #2458c6;
-  box-shadow: 0 0 0 4px rgb(36 88 198 / 10%);
+  border-color: var(--focus);
+  box-shadow: 0 0 0 1px var(--focus);
 }
 
 .labelRow {
@@ -46,25 +47,25 @@
 }
 
 .comingSoon {
-  color: #667085;
-  font-size: 0.75rem;
+  color: var(--ink-muted);
+  font-size: 0.8rem;
 }
 
 .error {
   margin: 0;
   border-radius: 0.75rem;
-  background: #fff1f0;
-  color: #9f241e;
+  background: var(--status-full-soft);
+  color: var(--status-full);
   font-size: 0.9rem;
   padding: 0.8rem 1rem;
 }
 
 .submit {
-  min-height: 3rem;
+  min-height: var(--control-height);
   border: 0;
-  border-radius: 0.8rem;
-  background: #1746a2;
-  color: #fff;
+  border-radius: var(--radius-md);
+  background: var(--action);
+  color: var(--ink-inverse);
   cursor: pointer;
   font: inherit;
   font-weight: 750;
@@ -73,8 +74,7 @@
 }
 
 .submit:hover:not(:disabled) {
-  background: #10377f;
-  transform: translateY(-1px);
+  background: var(--action-hover);
 }
 
 .submit:disabled {
