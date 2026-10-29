@@ -14,6 +14,15 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Migrations run as the database owner (docs/process/DECISIONS.md, "Миграции с ролята-собственик"):
+        // with the restricted application role the SECURITY DEFINER checks would see no rows.
+        if (DB::getDriverName() === 'pgsql') {
+            $role = DB::selectOne('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user');
+            if ($role === null || (! $role->rolsuper && ! $role->rolbypassrls)) {
+                throw new RuntimeException('Run migrations as the database owner: php artisan migrate --database=pgsql_admin --force');
+            }
+        }
+
         Schema::create('enrollment_pauses', function (Blueprint $table): void {
             $table->uuid('id')->primary();
             $table->foreignUuid('organization_id')->constrained()->cascadeOnDelete();

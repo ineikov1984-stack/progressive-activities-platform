@@ -186,6 +186,8 @@ class StaffEnrollmentChangesTest extends TestCase
         $this->assertDatabaseHas('enrollment_events', ['enrollment_id' => $enrollment->id, 'type' => 'enrollment.paused']);
         $this->assertDatabaseHas('enrollment_events', ['enrollment_id' => $enrollment->id, 'type' => 'enrollment.pause_ended']);
         $this->assertAuditWithoutPersonalData('enrollment.paused', $enrollment->id, ['Болест']);
+        $this->assertDatabaseMissing('enrollment_transitions', ['public_reason' => 'Болест']);
+        $this->assertSame(0, DB::table('enrollment_transitions')->where('metadata', 'like', '%Болест%')->count());
     }
 
     public function test_end_sets_the_last_day_or_cancels_an_enrollment_that_has_not_started(): void
@@ -411,6 +413,10 @@ class StaffEnrollmentChangesTest extends TestCase
         // Tuesday sessions continue without a gap: the old enrollment until 11.11, the new one from 12.11.
         $this->assertSame(['2026-11-17', '2026-11-24'], $this->sessionDates($f['organization'], $returned['id']));
         $this->assertSame(['2026-10-27', '2026-11-03', '2026-11-10'], $this->sessionDates($f['organization'], $f['enrollment']->id));
+
+        // The first enrollment cannot be reopened as well: the child already continues in the group.
+        $this->postJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/reopen", ['version' => 2])
+            ->assertUnprocessable()->assertJsonValidationErrors('enrollment');
     }
 
     public function test_a_cancelled_move_lets_the_old_enrollment_continue(): void
@@ -426,6 +432,22 @@ class StaffEnrollmentChangesTest extends TestCase
         $this->postJson("{$source}/reopen", ['version' => 2])->assertOk()->assertJsonPath('enrollment.status', 'active');
         $this->getJson("/api/v1/enrollment/groups/{$f['tuesday']->id}/roster")->assertOk()->assertJsonPath('enrollments.0.moves_to', null);
         $this->postJson("{$source}/transfer", [...$this->transferPayload($f, '2026-11-19'), 'version' => 3])->assertOk();
+    }
+
+    public function test_reopening_after_a_cancelled_move_restores_the_original_end(): void
+    {
+        $f = $this->fixture();
+        $this->withTenant($f['organization'], fn () => Enrollment::query()->whereKey($f['enrollment']->id)->update(['ends_on' => '2026-12-31']));
+        $owner = $this->member($f['organization'], 'organization_owner');
+        $this->actAs($owner, $f['organization']);
+        $source = "/api/v1/enrollment/enrollments/{$f['enrollment']->id}";
+        $movedId = $this->postJson("{$source}/transfer", $this->transferPayload($f))->assertOk()->json('enrollment.id');
+        $this->postJson("/api/v1/enrollment/enrollments/{$movedId}/end", ['last_day' => '2026-11-01', 'reason' => self::REASON, 'version' => 1])->assertOk();
+        // A pause after the end adds a later "ended → ended" step to the history.
+        $this->postJson("{$source}/pauses", ['starts_on' => '2026-11-02', 'ends_on' => '2026-11-03', 'reason_category' => 'family', 'version' => 2])->assertCreated();
+
+        $this->postJson("{$source}/reopen", ['version' => 3])
+            ->assertOk()->assertJsonPath('enrollment.status', 'active')->assertJsonPath('enrollment.ends_on', '2026-12-31');
     }
 
     public function test_pauses_after_the_new_last_day_are_shortened_or_cancelled(): void
@@ -590,7 +612,8 @@ class StaffEnrollmentChangesTest extends TestCase
                     ."VALUES (gen_random_uuid(), :organization, :enrollment, '2026-11-09', '2026-11-10', 'other', NOW(), NOW())"
                 )->execute(['organization' => $selected['organization'], 'enrollment' => $foreign['enrollment']]);
                 $this->fail('A pause must not point at another organization\'s enrollment.');
-            } catch (\PDOException) {
+            } catch (\PDOException $exception) {
+                $this->assertSame('23503', $exception->getCode(), 'Expected the tenant foreign key to refuse the row.');
                 $pdo->exec('ROLLBACK TO SAVEPOINT mixed_tenant');
             }
 

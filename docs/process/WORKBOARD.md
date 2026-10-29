@@ -17,14 +17,15 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Записвания Б2а — промени от екипа (API) | Claude | claude/staff-enrollment-actions | `database/migrations/**`, `routes/api.php`, `.github/workflows/ci.yml`, `AGENTS.md` (горещи), `app/Domain/Enrollment/**`, `StaffEnrollmentController`, `docs/product/staff-enrollment.md` | PR #30: ревю архитект и сигурност — поправено; CI |
-| Записвания Б2б — екран за промените | Claude | claude/staff-enrollment-ui (върху Б2а) | `apps/web/src/features/enrollment/**`, начален екран (задачи), e2e | PR #31 след #30; UX ревю — поправки |
+| Записвания Б2а — промени от екипа (API) | Claude | claude/staff-enrollment-actions | `database/migrations/**`, `routes/api.php`, `.github/workflows/ci.yml`, `AGENTS.md` (горещи), `platform/infra/docker/postgres-init/**`, `app/Domain/Enrollment/**`, `StaffEnrollmentController`, `docs/product/staff-enrollment.md` | PR #30: ревюта архитект и сигурност (2 кръга) — поправено; CI |
+| Записвания Б2б — екран за промените | Claude | claude/staff-enrollment-ui (върху Б2а) | `apps/web/src/features/enrollment/**`, начален екран (задачи), e2e | PR #31 след #30; UX ревю (2 кръга) — поправки |
 
 ## Опашка (по приоритет)
 
 - **Лимитът за вход** брои успешните опити и е практически само по имейл (виж „IP на клиента към API-то“) (строга). *Claude.*
 - **Записвания Б2в** — преподаватели виждат своите групи (свързване на профила с член на екипа, заместници) (строга). *Claude.*
 - **Капацитет — производителност** (стандартна): `remainingForGroup` още пресмята занимание по занимание; при големи групи — една заявка за група и тест за броя заявки (находка от ревюто на Б2а). *Claude.*
+- **`composer setup`** (`apps/api/composer.json`) още мигрира без `--database=pgsql_admin` — да се поправи в отделен PR за скриптове/зависимости (бърза). *Claude.*
 - **Присъствия** (учителят отбелязва) → основа за плащанията; после **счетоводна основа без доставчик на плащания** (начисления, ръчно отбелязани плащания, извлечение). Чака отговор на собственика за модела на плащане (строга). *Claude.*
 - **Чернова на промените за публикувана дейност** — по `docs/product/published-activity-changes.md` (строга). *Claude.*
 - **Записвания от екипа Б2–Б4** и **цени В1–В4** — по `docs/product/staff-enrollment.md` и `docs/product/pricing-models.md` (строга). *Claude, независим review.*
