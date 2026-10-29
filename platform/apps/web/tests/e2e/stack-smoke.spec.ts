@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 // Runs in CI against the real Laravel API, PostgreSQL with RLS and the seeded demo
 // organization (job "e2e-stack"). Values are local demo seed data, never real accounts.
@@ -38,10 +38,24 @@ async function apiStatus(page: Page, path: string, init?: { method?: string; bod
   }, { path, init, organizationId: demo.organizationId });
 }
 
+// One sign-in for the whole suite: the API allows 5 login attempts per minute per
+// email and IP, and every test here runs from the same IP.
 test.describe.configure({ mode: 'serial' });
 test.setTimeout(90_000);
 
-test('sign in leads to the home screen with tasks', async ({ page }) => {
+let context: BrowserContext;
+let page: Page;
+
+test.beforeAll(async ({ browser }) => {
+  context = await browser.newContext();
+  page = await context.newPage();
+});
+
+test.afterAll(async () => {
+  await context.close();
+});
+
+test('sign in leads to the home screen with tasks', async () => {
   await signIn(page);
   await slow(page.getByRole('heading', { level: 1, name: 'Progressive Academy Demo' })).toBeVisible();
   await slow(page.getByRole('heading', { name: 'Какво чака вас' })).toBeVisible();
@@ -49,8 +63,7 @@ test('sign in leads to the home screen with tasks', async ({ page }) => {
   await expect(page.getByText(/catalog\.|tenant|organization_id/)).toHaveCount(0);
 });
 
-test('the session survives navigation, reloads and many API calls', async ({ page }) => {
-  await signIn(page);
+test('the session survives navigation, reloads and many API calls', async () => {
   for (const path of ['/dashboard/activities', '/dashboard', '/dashboard/open-days', '/dashboard/activities']) {
     await page.goto(path);
     await slow(page.getByRole('navigation').first()).toBeVisible();
@@ -65,18 +78,16 @@ test('the session survives navigation, reloads and many API calls', async ({ pag
   await expect(page).toHaveURL(/\/dashboard$/);
 });
 
-test('the selected organization is kept in the session', async ({ page }) => {
+test('the selected organization is kept in the session', async () => {
   // Known issue (docs/process/WORKBOARD.md): the API answers 200 but the next request
   // still has no organization. Marked as expected to fail until the API is fixed;
   // when it starts passing, Playwright reports it so the marker can be removed.
   test.fail();
-  await signIn(page);
   expect(await apiStatus(page, 'context/organization', { method: 'POST', body: { organization_id: demo.organizationId } })).toBe(200);
   expect(await apiStatus(page, 'context/organization')).toBe(200);
 });
 
-test('another organization is not reachable', async ({ page }) => {
-  await signIn(page);
+test('another organization is not reachable', async () => {
   const status = await page.evaluate(async () => {
     const response = await fetch('/backend/api/v1/catalog/activities', {
       credentials: 'include',
@@ -87,8 +98,7 @@ test('another organization is not reachable', async ({ page }) => {
   expect(status).toBe(404);
 });
 
-test('an owner creates a draft activity and continues in the editor', async ({ page }) => {
-  await signIn(page);
+test('an owner creates a draft activity and continues in the editor', async () => {
   await page.goto('/dashboard/activities');
   await slow(page.getByRole('heading', { level: 1, name: 'Дейности' })).toBeVisible();
   await page.getByRole('button', { name: 'Създай нова дейност' }).first().click();
@@ -108,8 +118,7 @@ test('an owner creates a draft activity and continues in the editor', async ({ p
   await expect(card.getByText(/от 7 стъпки/)).toBeVisible();
 });
 
-test('a published activity is locked in the editor', async ({ page }) => {
-  await signIn(page);
+test('a published activity is locked in the editor', async () => {
   await page.goto('/dashboard/activities/00000000-0000-4000-8000-000000000201');
   await slow(page.getByRole('note')).toContainText('публикувана');
   await expect(page.getByLabel('Кратко описание')).toBeDisabled();
