@@ -8,6 +8,10 @@ const demo = {
   organizationId: '00000000-0000-4000-8000-000000000101',
   // LocalDemoSeeder::ACTIVITY_ID — the published "Шахмат" activity.
   publishedActivityId: '00000000-0000-4000-8000-000000000201',
+  // Its first group and the monthly price of that group.
+  groupId: '00000000-0000-4000-8000-000000000206',
+  groupName: 'Група 1 · 1.–2. клас',
+  monthlyPriceId: '00000000-0000-4000-8000-000000000208',
 };
 
 // E2eForeignTenantSeeder: an organization the demo owner does not belong to.
@@ -28,7 +32,7 @@ async function signIn(page: Page): Promise<void> {
   ]);
 }
 
-type ApiCall = { method?: string; body?: unknown; organizationId?: string };
+type ApiCall = { method?: string; body?: unknown; organizationId?: string; headers?: Record<string, string> };
 
 async function api(page: Page, path: string, call: ApiCall = {}): Promise<{ status: number; body: string }> {
   return page.evaluate(async ({ path, call }) => {
@@ -41,6 +45,7 @@ async function api(page: Page, path: string, call: ApiCall = {}): Promise<{ stat
         ...(call.body ? { 'Content-Type': 'application/json' } : {}),
         ...(xsrf ? { 'X-XSRF-TOKEN': decodeURIComponent(xsrf) } : {}),
         ...(call.organizationId ? { 'X-Organization-Id': call.organizationId } : {}),
+        ...(call.headers ?? {}),
       },
       body: call.body ? JSON.stringify(call.body) : undefined,
     });
@@ -218,13 +223,47 @@ test('an owner creates, fills in and publishes an activity with the wizard', asy
 test('the team opens enrollments: inbox and group rosters', async () => {
   await page.goto('/dashboard/enrollments');
   await slow(page.getByRole('heading', { level: 1, name: 'Записвания' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Чакат решение/ })).toHaveAttribute('aria-pressed', 'true');
-  await slow(page.getByRole('region', { name: 'Чакат решение' })).toHaveAttribute('aria-busy', 'false');
+  await expect(page.getByRole('button', { name: /^Заявки/ })).toHaveAttribute('aria-pressed', 'true');
+  await slow(page.getByRole('region', { name: 'Заявки, които чакат решение' })).toHaveAttribute('aria-busy', 'false');
   await page.getByRole('button', { name: 'Групи', exact: true }).click();
   const firstGroup = page.getByRole('button', { name: /Група/ }).first();
   await slow(firstGroup).toBeVisible();
   await firstGroup.click();
-  await slow(page.getByText(/записани за периода/)).toBeVisible();
+  await slow(page.getByText(/Заети места:/)).toBeVisible();
+});
+
+test('the team pauses a child from the group roster and undoes it', async () => {
+  // The demo owner applies for a synthetic child as a parent, then decides as the team.
+  const childName = `Тест Пауза ${Date.now().toString(36)}`;
+  const [firstName, ...rest] = childName.split(' ');
+  const child = await api(page, 'parent/children', { method: 'POST', body: { first_name: firstName, last_name: rest.join(' ') } });
+  expect(child.status).toBe(201);
+  const application = await api(page, 'parent/enrollment-applications', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': `e2e-pause-${Date.now()}` },
+    body: { child_id: JSON.parse(child.body).child.id, group_id: demo.groupId, price_option_id: demo.monthlyPriceId, accepted_terms_version: 'e2e' },
+  });
+  expect(application.status).toBe(201);
+  const review = await api(page, `enrollment/applications/${JSON.parse(application.body).application.id}/review`, {
+    method: 'POST', organizationId: demo.organizationId, body: { decision: 'approve', version: 1 },
+  });
+  expect(review.status).toBe(200);
+
+  await page.goto('/dashboard/enrollments?view=groups');
+  await page.getByRole('button', { name: new RegExp(demo.groupName) }).click();
+  // The innermost list item with the name is the child's row (the group's item contains it too).
+  const row = page.getByRole('listitem').filter({ has: page.getByText(childName, { exact: true }) }).last();
+  await slow(row).toBeVisible();
+  await row.getByRole('button', { name: 'Промени' }).click();
+  await row.getByRole('button', { name: /^Пауза/ }).click();
+  await row.getByRole('radio', { name: 'Ваканция или пътуване' }).check();
+  await row.getByRole('button', { name: 'Пусни паузата' }).click();
+  await slow(page.getByText(new RegExp(`^Пауза за ${childName}`))).toBeVisible();
+  await slow(row.getByText(/^Пауза \d/)).toBeVisible();
+
+  await row.getByRole('button', { name: 'Отмени паузата' }).click();
+  await slow(page.getByText(`Паузата за ${childName} е отменена.`)).toBeVisible();
+  await expect(row.getByText(/^Пауза \d/)).toHaveCount(0);
 });
 
 test('a published activity is locked in the editor', async () => {

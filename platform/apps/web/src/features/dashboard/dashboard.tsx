@@ -12,8 +12,8 @@ import {
 } from './api';
 import { useDashboardContext } from './dashboard-context';
 import { type ActivityDraft, loadCatalogWorkspace } from '@/features/catalog/admin/api';
-import { buildTasks, greeting, plural, type Task } from './tasks';
-import { loadApplications } from '@/features/enrollment/api';
+import { buildTasks, type FreedPlace, freedPlaces, greeting, plural, type Task } from './tasks';
+import { loadApplications, loadStaffGroups } from '@/features/enrollment/api';
 import { OrganizationStatusCard } from '@/features/organizations/application/status-card';
 import styles from './home.module.css';
 
@@ -89,6 +89,7 @@ export function Dashboard() {
   const { user, organization } = useDashboardContext();
   const [activities, setActivities] = useState<ActivityDraft[]>();
   const [pendingApplications, setPendingApplications] = useState(0);
+  const [freed, setFreed] = useState<FreedPlace[]>([]);
   const [invitations, setInvitations] = useState<DashboardInvitation[]>();
   const [auditEvents, setAuditEvents] = useState<DashboardAuditEvent[]>();
   const [loadError, setLoadError] = useState<string>();
@@ -103,9 +104,11 @@ export function Dashboard() {
       loadCatalogWorkspace(organization.id).then((workspace) => workspace.activities).catch(() => [] as ActivityDraft[]),
       // Roles without access to enrollments simply see no such task.
       loadApplications(organization.id).then((page) => page.total).catch(() => 0),
-    ]).then(([overview, catalogActivities, pending]) => {
+      loadStaffGroups(organization.id).then(freedPlaces).catch(() => [] as FreedPlace[]),
+    ]).then(([overview, catalogActivities, pending, freedGroups]) => {
       if (!active) return;
       setPendingApplications(pending);
+      setFreed(freedGroups);
       setInvitations(overview.invitations);
       setAuditEvents(overview.auditEvents);
       setActivities(catalogActivities);
@@ -137,7 +140,7 @@ export function Dashboard() {
   }
 
   const isLoaded = activities !== undefined && invitations !== undefined;
-  const tasks = isLoaded ? buildTasks(activities, invitations, pendingApplications) : [];
+  const tasks = isLoaded ? buildTasks(activities, invitations, pendingApplications, freed) : [];
   const published = activities?.filter((activity) => activity.status === 'published').length ?? 0;
   const firstName = user.name.split(/\s+/)[0];
 
