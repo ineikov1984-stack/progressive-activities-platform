@@ -8,8 +8,17 @@ export function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
-export function buildTasks(activities: ActivityDraft[], invitations: DashboardInvitation[]): Task[] {
+export function buildTasks(activities: ActivityDraft[], invitations: DashboardInvitation[], pendingApplications = 0): Task[] {
   const tasks: Task[] = [];
+  if (pendingApplications > 0) {
+    tasks.push({
+      id: 'applications',
+      tone: 'action',
+      title: `${plural(pendingApplications, 'нова заявка чака', 'нови заявки чакат')} решение`,
+      detail: 'Одобрете, поставете в чакащи или откажете',
+      href: '/dashboard/enrollments',
+    });
+  }
   const drafts = activities
     .filter((activity) => activity.status === 'draft')
     .map((activity) => ({ activity, completeness: activityCompleteness(activity) }))

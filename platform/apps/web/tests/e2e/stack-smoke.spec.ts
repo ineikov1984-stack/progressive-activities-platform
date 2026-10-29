@@ -188,6 +188,18 @@ test('an owner creates, fills in and publishes an activity with the wizard', asy
   await expect(card.getByRole('link', { name: 'Преглед като родител' })).toBeVisible();
 });
 
+test('the team opens enrollments: inbox and group rosters', async () => {
+  await page.goto('/dashboard/enrollments');
+  await slow(page.getByRole('heading', { level: 1, name: 'Записвания' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /Чакат решение/ })).toHaveAttribute('aria-selected', 'true');
+  await slow(page.getByRole('tabpanel')).not.toHaveAttribute('aria-busy', 'true');
+  await page.getByRole('tab', { name: 'Групи' }).click();
+  const firstGroup = page.getByRole('button', { name: /Група/ }).first();
+  await slow(firstGroup).toBeVisible();
+  await firstGroup.click();
+  await slow(page.getByText(/записани от \d+/)).toBeVisible();
+});
+
 test('a published activity is locked in the editor', async () => {
   await page.goto(`/dashboard/activities/${demo.publishedActivityId}`);
   await slow(page.getByRole('note')).toContainText('публикувана');

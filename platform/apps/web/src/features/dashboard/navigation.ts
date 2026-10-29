@@ -37,7 +37,7 @@ const navigationGroups: Array<Omit<DashboardNavGroup, 'items'> & { items: Naviga
       { id: 'home', label: 'Начало', icon: 'home', href: '/dashboard', isAvailable: true },
       { id: 'activities', label: 'Дейности', icon: 'activities', href: '/dashboard/activities', isAvailable: true },
       { id: 'groups', label: 'Групи и графици', icon: 'calendar', isAvailable: false },
-      { id: 'enrollments', label: 'Записвания', icon: 'enrollments', isAvailable: false },
+      { id: 'enrollments', label: 'Записвания', icon: 'enrollments', href: '/dashboard/enrollments', isAvailable: true },
       { id: 'open-days', label: 'Отворени врати', icon: 'open-days', href: '/dashboard/open-days', isAvailable: true },
     ],
   },

@@ -43,3 +43,10 @@ describe('greeting', () => {
     expect(greeting(new Date('2026-10-29T18:30:00Z'))).toBe('Добър вечер');
   });
 });
+
+describe('pending applications', () => {
+  it('puts new applications first', () => {
+    const tasks = buildTasks([], [], 3);
+    expect(tasks[0]).toMatchObject({ id: 'applications', title: '3 нови заявки чакат решение', href: '/dashboard/enrollments' });
+  });
+});
