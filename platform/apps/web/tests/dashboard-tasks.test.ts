@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ActivityDraft } from '../src/features/catalog/admin/api';
 import type { DashboardInvitation } from '../src/features/dashboard/api';
-import { buildTasks, greeting } from '../src/features/dashboard/tasks';
+import { buildTasks, freedPlaces, greeting } from '../src/features/dashboard/tasks';
 
 const draft = (id: string, title: string, extra: Partial<ActivityDraft> = {}): ActivityDraft => ({
   id, slug: id, status: 'draft', version: 1, title, category: 'Друго',
@@ -48,5 +48,16 @@ describe('pending applications', () => {
   it('puts new applications first', () => {
     const tasks = buildTasks([], [], 3);
     expect(tasks[0]).toMatchObject({ id: 'applications', title: '3 нови заявки чакат решение', href: '/dashboard/enrollments' });
+  });
+
+  it('points to waiting children when a group has a free place', () => {
+    const freed = freedPlaces([
+      { id: 'g1', name: 'Вторник', capacity_max: 10, enrolled_for_period: 9, waitlist_count: 2 },
+      { id: 'g2', name: 'Четвъртък', capacity_max: 10, enrolled_for_period: 10, waitlist_count: 3 },
+      { id: 'g3', name: 'Събота', capacity_max: null, enrolled_for_period: 4, waitlist_count: 0 },
+    ]);
+    expect(freed).toEqual([{ id: 'g1', name: 'Вторник', waiting: 2 }]);
+    const tasks = buildTasks([draft('a', 'Шахмат', { status: 'published' })], [], 0, freed);
+    expect(tasks[0]).toMatchObject({ id: 'freed-places', title: 'Свободно място в „Вторник“ — 2 деца чакат', href: '/dashboard/enrollments?view=groups&group=g1' });
   });
 });

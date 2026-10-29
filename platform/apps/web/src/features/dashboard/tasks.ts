@@ -8,7 +8,16 @@ export function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
-export function buildTasks(activities: ActivityDraft[], invitations: DashboardInvitation[], pendingApplications = 0): Task[] {
+/** A group with a free place and children on its waiting list. */
+export type FreedPlace = { id: string; name: string; waiting: number };
+
+export function freedPlaces(groups: { id: string; name: string; capacity_max: number | null; enrolled_for_period: number; waitlist_count: number }[]): FreedPlace[] {
+  return groups
+    .filter((group) => group.waitlist_count > 0 && (group.capacity_max === null || group.enrolled_for_period < group.capacity_max))
+    .map((group) => ({ id: group.id, name: group.name, waiting: group.waitlist_count }));
+}
+
+export function buildTasks(activities: ActivityDraft[], invitations: DashboardInvitation[], pendingApplications = 0, freed: FreedPlace[] = []): Task[] {
   const tasks: Task[] = [];
   if (pendingApplications > 0) {
     tasks.push({
@@ -17,6 +26,17 @@ export function buildTasks(activities: ActivityDraft[], invitations: DashboardIn
       title: `${plural(pendingApplications, 'нова заявка чака', 'нови заявки чакат')} решение`,
       detail: 'Одобрете, поставете в чакащи или откажете',
       href: '/dashboard/enrollments',
+    });
+  }
+  if (freed.length > 0) {
+    tasks.push({
+      id: 'freed-places',
+      tone: 'action',
+      title: freed.length === 1
+        ? `Свободно място в „${freed[0].name}“ — ${plural(freed[0].waiting, 'дете чака', 'деца чакат')}`
+        : `Свободни места в ${freed.length} групи с чакащи деца`,
+      detail: 'Отворете групата и одобрете дете от чакащите',
+      href: freed.length === 1 ? `/dashboard/enrollments?view=groups&group=${encodeURIComponent(freed[0].id)}` : '/dashboard/enrollments?view=groups',
     });
   }
   const drafts = activities
