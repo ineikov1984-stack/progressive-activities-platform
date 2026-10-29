@@ -68,7 +68,7 @@ final class StaffEnrollmentDetailsController extends Controller
             ],
             ...$this->childAndParent($record, $access['contacts'], $contact),
             'records' => $this->records($record->child_id, $record->id, $enrollmentId),
-            'history' => $access['manage'] ? $this->history([$record->id], array_values(array_filter([$enrollmentId]))) : null,
+            'history' => $access['manage'] ? $this->history([$record->id], $enrollmentId === null ? [] : [$enrollmentId]) : null,
         ];
         if ($contact) {
             $this->recordView($request, 'enrollment_application', $record->id);

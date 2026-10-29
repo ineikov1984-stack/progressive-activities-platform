@@ -1,5 +1,5 @@
 import { formatEur } from '../catalog/admin/presentation';
-import type { GroupRoster, MoveInDay, RosterEnrollment, StaffApplication, StaffGroup, WeeklySchedule } from './api';
+import type { ChildDetails, ChildRecord, GroupRoster, HistoryActor, HistoryItem, MoveInDay, RosterEnrollment, StaffApplication, StaffGroup, WeeklySchedule } from './api';
 
 export const scopeLabels: Record<string, string> = {
   full_period: 'Записване за периода',
@@ -241,4 +241,106 @@ export function moveInSummary(starts: MoveInDay[] | undefined): { text: string; 
   if (!first) return { text: `Няма място в следващите ${starts.length} занимания`, possible: false };
   if (first === starts[0]) return { text: first.remaining === null ? 'Има място от следващото занимание' : `Има място от следващото занимание · ${placesText(first.remaining)}`, possible: true };
   return { text: `Свободно място от ${shortDay(first.date)}`, possible: true };
+}
+
+/** "1 година", "8 години". */
+export function ageText(age: number | null | undefined): string {
+  if (age === null || age === undefined) return '';
+  return age === 1 ? '1 година' : `${age} години`;
+}
+
+/** "2 клас · 120 СУ · 8 години" — what the team knows about the child, without empty parts. */
+export function childLine(child: ChildDetails): string {
+  return [child.class_label, child.school_name, child.institution_group, ageText(child.age)].filter(Boolean).join(' · ');
+}
+
+/** Bulgarian ordinal for a place in a queue: "1-во", "2-ро", "3-то", "7-мо", "11-то", "21-во". */
+export function ordinalText(value: number): string {
+  const lastTwo = value % 100;
+  const last = value % 10;
+  const ending = lastTwo >= 11 && lastTwo <= 19 ? 'то' : last === 1 ? 'во' : last === 2 ? 'ро' : last === 7 || last === 8 ? 'мо' : 'то';
+  return `${value}-${ending}`;
+}
+
+/** "Чака място · 2-ро в реда". */
+export function queueText(position: number | null | undefined): string {
+  return position ? `Чака място · ${ordinalText(position)} в реда` : 'Чака място';
+}
+
+/** One line for another group of the child here: where it stands today, in words. */
+export function recordStatusText(record: ChildRecord, today: string): string {
+  if (record.kind === 'application') {
+    if (record.status === 'waitlisted') return queueText(record.queue_position);
+    return record.submitted_at ? `Нова заявка от ${dateText(record.submitted_at)}` : 'Нова заявка';
+  }
+  if (record.scope !== 'full_period') {
+    const label = scopeLabels[record.scope] ?? 'Посещение';
+    return record.session_starts_at ? `${label} · ${dateTimeText(record.session_starts_at)}` : label;
+  }
+  if (record.moves_to) return `Премества се в „${record.moves_to.group_name ?? 'друга група'}“ от ${shortDay(record.moves_to.starts_on)}`;
+  if (record.status === 'ended' && record.ends_on) {
+    return record.ends_on >= today ? `Последен ден ${shortDay(record.ends_on)}` : `Приключило на ${shortDay(record.ends_on)}`;
+  }
+  if (record.paused_until) return `В пауза до ${shortDay(record.paused_until)}`;
+  if (record.starts_on > today) return `Записано · започва на ${shortDay(record.starts_on)}`;
+  return `Записано от ${shortDay(record.starts_on)}`;
+}
+
+const visitOutcomes: Record<string, string> = {
+  attended: 'Посети заниманието',
+  cancelled_in_time: 'Отказа посещението навреме',
+  late_cancelled: 'Отказа посещението късно',
+  no_show: 'Не дойде на заниманието',
+};
+
+/** What happened, in words (docs/product/enrollment-contacts-and-emails.md, т. 9.1). */
+export function historyText(item: HistoryItem): string {
+  const d = item.details;
+  const text = (key: string) => (typeof d[key] === 'string' ? d[key] as string : '');
+  const automatic = item.actor?.kind === 'automatic';
+  switch (item.type) {
+    case 'enrollment.application_submitted':
+      return text('status') === 'waitlisted' ? 'Подадена заявка — групата беше пълна, детето е в чакащите' : 'Подадена заявка';
+    case 'enrollment.application_approved':
+      return automatic ? 'Одобрена автоматично — имаше място' : 'Заявката е одобрена';
+    case 'enrollment.application_waitlisted':
+      return automatic ? 'В чакащите — групата беше пълна' : 'Преместена в чакащите';
+    case 'enrollment.application_rejected':
+      return 'Заявката е отказана';
+    case 'enrollment.application_withdrawn':
+      return 'Родителят оттегли заявката';
+    case 'enrollment.transferred': {
+      const from = text('from_group_name');
+      const day = text('effective_date');
+      return `Преместено${from ? ` от „${from}“` : ''}${day ? ` от ${shortDay(day)}` : ''}`;
+    }
+    case 'enrollment.paused': {
+      const reason = pauseReasonLabels[text('reason_category')];
+      return `Пауза ${shortDay(text('starts_on'))} – ${shortDay(text('ends_on'))}${reason ? ` · ${reason}` : ''}`;
+    }
+    case 'enrollment.pause_ended':
+      return d.cancelled === true ? 'Паузата е отменена' : `Връща се от паузата на ${shortDay(text('resume_on'))}`;
+    case 'enrollment.ended':
+      return `Прекратено — последен ден ${shortDay(text('last_day'))}`;
+    case 'enrollment.cancelled':
+      return 'Записването е отменено преди началото';
+    case 'enrollment.reopened':
+      return 'Прекратяването е отменено';
+    case 'enrollment.session_excluded':
+      return text('session_starts_at') ? `Пропуска заниманието на ${dateText(text('session_starts_at'))}` : 'Пропуска занимание';
+    case 'enrollment.session_restored':
+      return text('session_starts_at') ? `Заниманието на ${dateText(text('session_starts_at'))} отново се брои` : 'Заниманието отново се брои';
+    case 'enrollment.visit_outcome_recorded':
+      return visitOutcomes[text('outcome')] ?? 'Отбелязано посещение';
+    default:
+      return 'Промяна в записването';
+  }
+}
+
+/** Who did it: "родителят", "автоматично", the team member's name; '' when not known. */
+export function actorText(actor: HistoryActor | null): string {
+  if (!actor) return '';
+  if (actor.kind === 'parent') return 'родителят';
+  if (actor.kind === 'automatic') return 'автоматично';
+  return actor.name ?? 'екипът';
 }

@@ -190,6 +190,50 @@ ol.list { padding-left: var(--space-6); list-style: decimal; }
 .changePanel h5:focus { outline: none; }
 .summary { margin: 0; padding: var(--space-3) var(--space-4); border-left: 4px solid var(--action); border-radius: var(--radius-sm); color: var(--ink); background: var(--surface); font-size: 15px; }
 
+/* "Подробности" for a child: a side panel over the page; on a phone it takes the whole screen. */
+.detailsLink { justify-self: start; padding-inline: 0; font-size: 14px; }
+.waitWho { display: grid; gap: 0; min-width: 0; }
+.drawer { position: fixed; inset: 0 0 0 auto; width: min(36rem, 100vw); max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0 0 0 auto; padding: 0; border: 0; border-left: 1px solid var(--border); color: var(--ink); background: var(--surface-page); box-shadow: var(--shadow-raised); box-sizing: border-box; overflow: hidden; }
+.drawer::backdrop { background: color-mix(in srgb, var(--nav) 48%, transparent); }
+.drawerInner { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; }
+.drawerHead { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding: var(--space-4) var(--space-6); border-bottom: 1px solid var(--border); background: var(--surface); }
+.drawerTitle { display: grid; gap: 2px; min-width: 0; }
+.drawerTitle h2 { margin: 0; color: var(--ink); font-size: 22px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.drawerTitle h2:focus { outline: none; }
+.drawerTitle h2:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.drawerBody { display: grid; align-content: start; gap: var(--space-4); padding: var(--space-4) var(--space-6) var(--space-8); overflow-y: auto; overscroll-behavior: contain; }
+.drawerBody .skeleton { height: 9rem; }
+.detailSection { display: grid; gap: var(--space-2); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.detailSection h3 { margin: 0; color: var(--ink); font-size: 16px; font-weight: 700; }
+.contactName { margin: 0; color: var(--ink); font-size: 17px; font-weight: 650; }
+.recordTitle { margin: 0; color: var(--ink); font-size: 16px; font-weight: 600; }
+.facts { display: grid; gap: var(--space-2); margin: 0; }
+.facts > div { display: grid; grid-template-columns: minmax(8rem, auto) minmax(0, 1fr); gap: var(--space-3); }
+.facts dt { color: var(--ink-muted); font-size: 14px; }
+.facts dd { margin: 0; color: var(--ink); font-size: 15px; overflow-wrap: anywhere; }
+.primaryLink, .secondaryLink { display: inline-flex; align-items: center; justify-content: center; min-height: var(--control-height); padding: 0 var(--space-6); border: 1px solid transparent; border-radius: var(--radius-md); font-size: 15px; font-weight: 600; text-decoration: none; }
+.primaryLink { color: var(--ink-inverse); background: var(--action); }
+.primaryLink:hover { background: var(--action-hover); }
+.secondaryLink { color: var(--ink); background: var(--surface); border-color: var(--border-control); }
+.secondaryLink:hover { background: var(--surface-sunken); }
+.parentNote { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; padding: var(--space-3) var(--space-4); border-left: 4px solid var(--status-info); border-radius: var(--radius-sm); background: var(--status-info-soft); }
+.parentNote figcaption { color: var(--ink); font-size: 13px; font-weight: 700; }
+.parentNote blockquote { margin: 0; color: var(--ink); font-size: 15px; white-space: pre-line; overflow-wrap: anywhere; }
+.records, .history { display: grid; margin: 0; padding: 0; list-style: none; }
+.records li, .history li { display: grid; gap: 2px; padding: var(--space-2) 0; border-top: 1px solid var(--border); }
+.records li:first-child, .history li:first-child { border-top: 0; }
+.records strong, .history strong { color: var(--ink); font-size: 15px; font-weight: 600; }
+.history li > span:not(.small) { color: var(--ink-body); font-size: 14px; }
+.recordStatus { color: var(--status-available); font-size: 14px; font-weight: 600; }
+.recordWaiting { color: var(--status-limited); font-size: 14px; font-weight: 600; }
+.history .internalNote { justify-self: start; padding: 2px var(--space-2); border-radius: var(--radius-sm); color: var(--ink); background: var(--surface-sunken); font-size: 13px; }
+@media (max-width: 560px) {
+  .drawer { width: 100vw; border-left: 0; }
+  .drawerHead, .drawerBody { padding-inline: var(--space-4); }
+  .facts > div { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .drawer .actions > a { flex: 1 1 auto; }
+}
+
 @container enrollments (max-width: 760px) {
   .appRow { grid-template-columns: minmax(0, 1fr); padding-inline: var(--space-4); }
   .appActions { justify-content: flex-start; }

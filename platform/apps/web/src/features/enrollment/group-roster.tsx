@@ -2,7 +2,7 @@
 
 import { type FormEvent, type MouseEvent, useCallback, useEffect, useRef, useState } from 'react';
 import {
-  changeErrorMessage, endPause, type GroupRoster, loadRoster, reopenEnrollment, restoreSession, reviewApplication,
+  changeErrorMessage, type DetailsTarget, endPause, type GroupRoster, loadRoster, reopenEnrollment, restoreSession, reviewApplication,
   type RosterEnrollment, type StaffApplication,
 } from './api';
 import { ApprovalSetting } from './approval-setting';
@@ -10,7 +10,7 @@ import { ChangePanel } from './change-panel';
 import { addDays, dateText, needsGroupPlace, placesText, type RosterNote, rosterNotes, scopeLabels, shortDay, sofiaDay } from './presentation';
 import styles from './enrollments.module.css';
 
-type Props = { organizationId: string; groupId: string; canManage: boolean; onChanged?: () => void };
+type Props = { organizationId: string; groupId: string; canManage: boolean; onChanged?: () => void; onDetails?: (target: DetailsTarget, opener: HTMLElement) => void };
 type Notice = { enrollmentId: string; text: string; token: number };
 /** More children than this and the group gets a search by name. */
 const SEARCH_FROM = 10;
@@ -25,7 +25,7 @@ const noteStyle: Record<RosterNote['kind'], string> = {
 };
 
 /** Children in a group, what is special about each, and the team's changes (docs/product/staff-enrollment.md, т. 9.7). */
-export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged }: Props) {
+export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged, onDetails }: Props) {
   const [roster, setRoster] = useState<GroupRoster>();
   const [error, setError] = useState('');
   const [notice, setNotice] = useState<Notice>();
@@ -125,6 +125,7 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
               onClose={() => setOpenId(undefined)}
               onDone={done}
               onFailed={failed}
+              onDetails={onDetails ? (opener) => onDetails({ kind: 'enrollment', id: item.id }, opener) : undefined}
             />
           ))}
         </ul>
@@ -136,7 +137,14 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
           <ol className={styles.waitList}>
             {roster.waitlist.map((item) => (
               <li key={item.id}>
-                <span><span className={styles.listName}>{item.child.name}</span> <span className={styles.small}>от {dateText(item.submitted_at)}</span></span>
+                <span className={styles.waitWho}>
+                  <span><span className={styles.listName}>{item.child.name}</span> <span className={styles.small}>от {dateText(item.submitted_at)}{item.parent_name ? ` · родител: ${item.parent_name}` : ''}</span></span>
+                  {onDetails ? (
+                    <button type="button" className={`${styles.linkButton} ${styles.detailsLink}`} onClick={(event) => onDetails({ kind: 'application', id: item.id }, event.currentTarget)}>
+                      Подробности<span className={styles.srOnly}> за {item.child.name}</span>
+                    </button>
+                  ) : null}
+                </span>
                 {canManage ? (
                   <span className={styles.actions}>
                     <button type="button" className={blockedByGroup(item) ? styles.secondary : styles.primary} disabled={approving !== '' || blockedByGroup(item)} aria-describedby={blockedByGroup(item) ? `roster-full-${groupId}` : undefined} onClick={() => void approve(item)}>
@@ -166,11 +174,12 @@ type RowProps = {
   onClose: () => void;
   onDone: (enrollmentId: string, message: string) => void;
   onFailed: () => void;
+  onDetails?: (opener: HTMLElement) => void;
 };
 
 type Confirm = { kind: 'pause'; pauseId: string; startsOn: string; text: string } | { kind: 'reopen'; text: string };
 
-function RosterRow({ onActivity, organizationId, roster, enrollment, today, canManage, open, notice, onOpen, onClose, onDone, onFailed }: RowProps) {
+function RosterRow({ onActivity, organizationId, roster, enrollment, today, canManage, open, notice, onOpen, onClose, onDone, onFailed, onDetails }: RowProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [resuming, setResuming] = useState<string>();
@@ -239,6 +248,11 @@ function RosterRow({ onActivity, organizationId, roster, enrollment, today, canM
           {enrollment.child.class_label ? `${enrollment.child.class_label} · ` : ''}
           {fullPeriod ? `от ${dateText(enrollment.starts_on)}` : scopeLabels[enrollment.scope] ?? 'Записване'}
         </span>
+        {onDetails ? (
+          <button type="button" className={`${styles.linkButton} ${styles.detailsLink}`} onClick={(event) => onDetails(event.currentTarget)}>
+            Подробности<span className={styles.srOnly}> за {name}</span>
+          </button>
+        ) : null}
         {notes.length > 0 ? (
           <ul className={styles.notes} aria-label={`Бележки за ${name}`}>
             {notes.map((note) => (

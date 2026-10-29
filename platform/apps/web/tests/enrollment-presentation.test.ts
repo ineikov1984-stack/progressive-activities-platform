@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { GroupRoster, RosterEnrollment, StaffGroup } from '../src/features/enrollment/api';
+import type { ChildRecord, GroupRoster, HistoryItem, RosterEnrollment, StaffGroup } from '../src/features/enrollment/api';
 import {
-  activitySummary, addDays, applicationPlaces, needsGroupPlace, waitingQueues, groupFill, groupsByActivity, hasPlaceForWaiting, lastDayOfMonth, matchesGroupFilter, matchesGroupSearch, moveInSummary,
+  activitySummary, actorText, addDays, ageText, applicationPlaces, childLine, historyText, ordinalText, queueText, recordStatusText, needsGroupPlace, waitingQueues, groupFill, groupsByActivity, hasPlaceForWaiting, lastDayOfMonth, matchesGroupFilter, matchesGroupSearch, moveInSummary,
   placesText, priceText, rosterNotes, scheduleText, skippableSessions, sofiaDay, waitingText, weekdayDay,
 } from '../src/features/enrollment/presentation';
 
@@ -128,5 +128,50 @@ describe('enrollment presentation', () => {
     expect(moveInSummary([{ date: '2026-11-05', starts_at: '2026-11-05T14:00:00Z', remaining: 3 }]))
       .toEqual({ text: 'Има място от следващото занимание · 3 свободни места', possible: true });
     expect(weekdayDay('2026-11-26')).toMatch(/^чт.*26 ноември$/);
+  });
+
+  it('describes the child, the queue and the other groups in words', () => {
+    expect(ageText(1)).toBe('1 година');
+    expect(ageText(8)).toBe('8 години');
+    expect(ageText(null)).toBe('');
+    expect(childLine({ id: 'c1', name: 'Ани', class_label: '2 клас', school_name: '120 СУ', age: 8 })).toBe('2 клас · 120 СУ · 8 години');
+    expect(childLine({ id: 'c1', name: 'Ани', class_label: null })).toBe('');
+    expect([1, 2, 3, 7, 8, 11, 12, 21, 22, 100].map(ordinalText)).toEqual(['1-во', '2-ро', '3-то', '7-мо', '8-мо', '11-то', '12-то', '21-во', '22-ро', '100-то']);
+    expect(queueText(2)).toBe('Чака място · 2-ро в реда');
+    expect(queueText(null)).toBe('Чака място');
+
+    const base = { id: 'r1', scope: 'full_period', activity_title: 'Шах', group_id: 'g1', group_name: 'Група 2', session_starts_at: null };
+    const enrolled = (patch: Partial<Extract<ChildRecord, { kind: 'enrollment' }>> = {}): ChildRecord => ({
+      ...base, kind: 'enrollment', status: 'active', starts_on: '2026-10-01', ends_on: null, paused_until: null, next_pause: null, moves_to: null, next_session_at: null, ...patch,
+    });
+    const today = '2026-10-28';
+    expect(recordStatusText(enrolled(), today)).toBe('Записано от 1 октомври');
+    expect(recordStatusText(enrolled({ starts_on: '2026-11-01' }), today)).toBe('Записано · започва на 1 ноември');
+    expect(recordStatusText(enrolled({ paused_until: '2026-11-10' }), today)).toBe('В пауза до 10 ноември');
+    expect(recordStatusText(enrolled({ status: 'ended', ends_on: '2026-11-30' }), today)).toBe('Последен ден 30 ноември');
+    expect(recordStatusText(enrolled({ status: 'ended', ends_on: '2026-09-30' }), today)).toBe('Приключило на 30 септември');
+    expect(recordStatusText(enrolled({ status: 'ended', ends_on: '2026-11-11', moves_to: { group_name: 'Група 3', starts_on: '2026-11-12' } }), today))
+      .toBe('Премества се в „Група 3“ от 12 ноември');
+    expect(recordStatusText({ ...base, kind: 'application', status: 'waitlisted', submitted_at: '2026-10-20T10:00:00Z', queue_position: 3 }, today)).toBe('Чака място · 3-то в реда');
+    expect(recordStatusText({ ...base, kind: 'application', status: 'submitted', submitted_at: '2026-10-20T10:00:00Z', queue_position: null }, today)).toBe('Нова заявка от 20 октомври');
+  });
+
+  it('tells the history in words and says who did it', () => {
+    const item = (patch: Partial<HistoryItem>): HistoryItem => ({
+      id: 'h1', type: 'enrollment.application_submitted', occurred_at: '2026-10-28T10:00:00Z', actor: null, public_reason: null, internal_note: null, details: {}, ...patch,
+    });
+    expect(historyText(item({ details: { status: 'waitlisted' } }))).toBe('Подадена заявка — групата беше пълна, детето е в чакащите');
+    expect(historyText(item({ type: 'enrollment.application_approved', actor: { kind: 'automatic', name: null } }))).toBe('Одобрена автоматично — имаше място');
+    expect(historyText(item({ type: 'enrollment.application_approved', actor: { kind: 'team', name: 'Петя' } }))).toBe('Заявката е одобрена');
+    expect(historyText(item({ type: 'enrollment.paused', details: { starts_on: '2026-11-03', ends_on: '2026-11-10', reason_category: 'holiday' } })))
+      .toBe('Пауза 3 ноември – 10 ноември · Ваканция или пътуване');
+    expect(historyText(item({ type: 'enrollment.pause_ended', details: { cancelled: true } }))).toBe('Паузата е отменена');
+    expect(historyText(item({ type: 'enrollment.transferred', details: { from_group_name: 'Група 1', effective_date: '2026-11-12' } }))).toBe('Преместено от „Група 1“ от 12 ноември');
+    expect(historyText(item({ type: 'enrollment.ended', details: { last_day: '2026-11-30' } }))).toBe('Прекратено — последен ден 30 ноември');
+    expect(historyText(item({ type: 'something.new' }))).toBe('Промяна в записването');
+    expect(actorText({ kind: 'parent', name: null })).toBe('родителят');
+    expect(actorText({ kind: 'automatic', name: null })).toBe('автоматично');
+    expect(actorText({ kind: 'team', name: 'Петя Колева' })).toBe('Петя Колева');
+    expect(actorText(null)).toBe('');
   });
 });

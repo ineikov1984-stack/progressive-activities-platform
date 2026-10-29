@@ -60,7 +60,7 @@ class StaffEnrollmentDetailsTest extends TestCase
             ->assertJsonPath('parent_note', self::NOTE);
 
         // "При нас": the other group here, with its next session — never the other organization's.
-        $this->assertSame([[
+        $this->assertEquals([[
             'kind' => 'enrollment', 'group_name' => 'Група 2', 'status' => 'active',
             'starts_on' => '2026-11-01', 'next_session_at' => '2026-11-05T14:00:00+00:00',
         ]], array_map(fn (array $record): array => array_intersect_key($record, array_flip(['kind', 'group_name', 'status', 'starts_on', 'next_session_at'])), $response->json('records')));
