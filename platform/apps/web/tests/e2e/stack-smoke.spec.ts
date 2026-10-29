@@ -133,7 +133,7 @@ test('another organization\'s activity is not reachable from our own organizatio
   expect(list.body).not.toContain(foreign.activityId);
 });
 
-test('an owner creates a draft activity and continues in the editor', async () => {
+test('an owner creates, fills in and publishes an activity with the wizard', async () => {
   await page.goto('/dashboard/activities');
   await slow(page.getByRole('heading', { level: 1, name: 'Дейности' })).toBeVisible();
   await page.getByRole('button', { name: 'Създай нова дейност' }).first().click();
@@ -176,11 +176,16 @@ test('an owner creates a draft activity and continues in the editor', async () =
   await page.getByRole('button', { name: 'Създай групата' }).click();
   await slow(page.getByText(/е създадена с \d+ занятия/)).toBeVisible();
 
+  // Step 9: publish once everything required is in place.
+  await page.getByRole('navigation', { name: 'Стъпки' }).getByRole('button', { name: /Преглед и публикуване/ }).click();
+  await page.getByRole('button', { name: 'Публикувай дейността' }).click();
+  await slow(page.getByText('Дейността е публикувана.', { exact: false })).toBeVisible();
+
   await page.goto('/dashboard/activities');
   const card = page.getByRole('article').filter({ has: page.getByRole('heading', { name: title }) });
   await slow(card).toBeVisible();
-  await expect(card.getByText('Чернова', { exact: true })).toBeVisible();
-  await expect(card.getByText(/\d+ от \d+ стъпки/)).toBeVisible();
+  await expect(card.getByText('Публикувана', { exact: true })).toBeVisible();
+  await expect(card.getByRole('link', { name: 'Преглед като родител' })).toBeVisible();
 });
 
 test('a published activity is locked in the editor', async () => {

@@ -63,7 +63,7 @@ test('group setup detour restores unfinished fields while normal dirty navigatio
   await expect(page).toHaveURL(/visit-offers$/);
   await page.getByRole('button', { name: '2. Група и занятия', exact: true }).click();
   await page.getByRole('link', { name: 'Добавете група и график в редактора на дейността.' }).click();
-  await expect(page).toHaveURL(/activities\/activity-1\/classic#schedule$/);
+  await expect(page).toHaveURL(/activities\/activity-1\?step=7$/);
   state.groups = [group];
   await page.getByRole('link', { name: 'Предложения за посещение', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Група и занятия', exact: true })).toBeVisible();

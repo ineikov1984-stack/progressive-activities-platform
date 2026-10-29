@@ -29,6 +29,15 @@ export const priceUnits = [
   { value: 'package', label: 'за пакета' },
 ] as const;
 
+/** One sentence per way of enrolling, so people pick the right one without guessing. */
+export const modeHints: Record<string, string> = {
+  monthly: 'Родителят плаща всеки месец, докато детето посещава.',
+  full_period: 'Една цена за целия период на групата — например учебен срок или сезон.',
+  package: 'Определен брой посещения за фиксирана цена. Напишете броя и срока в условията.',
+  single: 'Плащане за едно посещение, без записване за период.',
+  trial: 'Първо посещение, за да опитат. Безплатни пробни посещения се правят в стъпка 8.',
+};
+
 /** A sensible unit for each way of enrolling, so most people never touch the unit. */
 export const defaultUnit: Record<string, string> = { monthly: 'month', full_period: 'period', package: 'package', single: 'session', trial: 'session' };
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { formatEur, parseEuroCents } from '../presentation';
-import { blankPrice, defaultUnit, enrollmentModes, type OfferingDraft, type PriceDraft, priceUnits } from './offering';
+import { blankPrice, defaultUnit, enrollmentModes, modeHints, type OfferingDraft, type PriceDraft, priceUnits } from './offering';
 import { Field, Icon, icons } from './ui';
 import styles from './wizard.module.css';
 
@@ -34,7 +34,7 @@ export function StepPrice({ offering, problems, locked, onOffering }: Props) {
         return (
           <div key={index} className={styles.priceCard}>
             <div className={styles.twoFields}>
-              <Field id={`price-mode-${index}`} label="Начин на записване">
+              <Field id={`price-mode-${index}`} label="Начин на записване" hint={modeHints[price.enrollment_mode]}>
                 <select id={`price-mode-${index}`} className={styles.input} value={price.enrollment_mode} onChange={(event) => setPrice(index, { enrollment_mode: event.target.value, unit: defaultUnit[event.target.value] ?? price.unit })}>
                   {enrollmentModes.map((mode) => <option key={mode.value} value={mode.value}>{mode.label}</option>)}
                 </select>
