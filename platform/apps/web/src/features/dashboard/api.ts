@@ -96,7 +96,6 @@ export async function loadOrganizationContext(): Promise<Pick<DashboardData, 'us
   ]);
   const organization = organizations.find((item) => item.role === 'organization_owner') ?? organizations[0];
   if (!organization) throw new Error('Профилът няма активна организация.');
-  await rememberOrganizationInSession(organization.id);
   return { user, organization, organizations };
 }
 
@@ -105,9 +104,9 @@ const rememberedOrganizations = new Map<string, Promise<void>>();
 /**
  * Requests that cannot carry the X-Organization-Id header (for example <img> tags
  * for private catalog media) rely on the organization stored in the server session.
- * Store it once per page load; a failure only means such images will not show.
+ * The dashboard frame stores it once per page load; a failure only means such images will not show.
  */
-function rememberOrganizationInSession(organizationId: string): Promise<void> {
+export function rememberOrganizationInSession(organizationId: string): Promise<void> {
   let pending = rememberedOrganizations.get(organizationId);
   if (!pending) {
     pending = ensureCsrfToken()
