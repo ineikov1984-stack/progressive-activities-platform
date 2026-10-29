@@ -42,9 +42,19 @@ export function buildTasks(activities: ActivityDraft[], invitations: DashboardIn
       tone: 'info',
       title: 'Създайте първата си дейност',
       detail: 'Ще ви преведем стъпка по стъпка',
-      href: '/dashboard/activities',
+      href: '/dashboard/activities?new=1',
     });
   }
   return tasks;
 }
 
+/** Greeting by the hour in Bulgaria, independent of the browser time zone. */
+export function greeting(now: Date): string {
+  const hourPart = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hourCycle: 'h23', timeZone: 'Europe/Sofia' })
+    .formatToParts(now)
+    .find((part) => part.type === 'hour');
+  const hour = Number(hourPart?.value ?? 12);
+  if (hour >= 4 && hour < 11) return 'Добро утро';
+  if (hour >= 11 && hour < 18) return 'Добър ден';
+  return 'Добър вечер';
+}
