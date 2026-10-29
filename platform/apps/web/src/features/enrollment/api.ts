@@ -34,17 +34,20 @@ export type RosterEnrollment = {
   skipped_sessions?: { session_id: string; starts_at: string | null }[];
 };
 export type GroupRoster = {
-  group: { id: string; name: string; activity_id: string | null; activity_title: string | null; capacity_max: number | null; enrolled_for_period: number; remaining: number | null; waitlist_enabled: boolean };
+  group: { id: string; name: string; activity_id: string | null; activity_title: string | null; capacity_max: number | null; enrolled_for_period: number; remaining: number | null; waitlist_enabled: boolean; enrollment_approval_mode?: ApprovalMode | string };
   enrollments: RosterEnrollment[];
   waitlist: StaffApplication[];
   upcoming_sessions?: { id: string; starts_at: string }[];
 };
 /** The weekly days and times of a group (weekday 1 = Monday). */
 export type WeeklySchedule = { frequency: 'weekly' | 'biweekly' | string; slots: { weekday: number; starts_at: string; duration_minutes: number }[] };
+/** How applications to a group are decided: by the team, or at once when there is a place. */
+export type ApprovalMode = 'manual' | 'automatic';
 export type StaffGroup = {
   id: string;
   name: string;
   status: string;
+  enrollment_approval_mode?: ApprovalMode | string;
   capacity_max: number | null;
   activity_id: string | null;
   activity_title: string | null;
@@ -134,6 +137,11 @@ export const reviewApplication = (organizationId: string, application: StaffAppl
 
 export const loadRoster = (organizationId: string, groupId: string) =>
   request<GroupRoster>(organizationId, `/groups/${groupId}/roster`);
+
+export const saveGroupApproval = (organizationId: string, groupId: string, mode: ApprovalMode) =>
+  request<{ group: { id: string; enrollment_approval_mode: ApprovalMode } }>(organizationId, `/groups/${groupId}/approval`, {
+    method: 'PATCH', body: JSON.stringify({ enrollment_approval_mode: mode }),
+  }).then((x) => x.group);
 
 export const loadStaffGroups = (organizationId: string) =>
   request<{ groups: StaffGroup[] }>(organizationId, '/groups').then((x) => x.groups);

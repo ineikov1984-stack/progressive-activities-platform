@@ -73,6 +73,24 @@ class ParentEnrollmentApplicationTest extends TestCase
         $this->assertNotNull(EnrollmentApplication::query()->withoutGlobalScopes()->firstOrFail()->accepted_terms_at);
     }
 
+    public function test_automatic_approval_enrolls_at_once_and_a_full_group_waits(): void
+    {
+        [$organization, $parent, $child, $group, , $price] = $this->fixture('monthly');
+        app(TenantContext::class)->select($organization);
+        $group->update(['enrollment_approval_mode' => 'automatic', 'capacity_max' => 1]);
+        $sibling = $parent->children()->create(['first_name' => 'Боби', 'last_name' => 'Иванов']);
+        app(TenantContext::class)->clear();
+
+        // A free place: approved without the team.
+        $first = $this->submit($parent, $child->id, $group->id, $price->id, 'auto-001');
+        $this->assertSame('approved', $first->status->value);
+        $this->assertDatabaseHas('enrollments', ['application_id' => $first->id, 'status' => 'active']);
+        // The group is full now: the next one waits for a place.
+        $second = $this->submit($parent, $sibling->id, $group->id, $price->id, 'auto-002');
+        $this->assertSame('waitlisted', $second->status->value);
+        $this->assertDatabaseMissing('enrollments', ['application_id' => $second->id]);
+    }
+
     public function test_legacy_trial_and_single_prices_require_a_published_visit_offer(): void
     {
         [, $parent, $child, $group, $session, $trialPrice] = $this->fixture('trial');

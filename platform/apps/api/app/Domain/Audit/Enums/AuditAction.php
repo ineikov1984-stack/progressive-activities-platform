@@ -35,4 +35,5 @@ enum AuditAction: string
     case EnrollmentReopened = 'enrollment.reopened';
     case EnrollmentSessionExcluded = 'enrollment.session_excluded';
     case EnrollmentSessionRestored = 'enrollment.session_restored';
+    case EnrollmentGroupApprovalChanged = 'enrollment.group_approval_changed';
 }

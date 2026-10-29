@@ -54,7 +54,7 @@ final readonly class SaveGroupSchedule
                 'location_id' => $group->location_id, 'capacity' => $group->capacity_max,
                 'instructor_ids' => $group->instructors()->pluck('instructor_profiles.id')->all(),
             ] : null;
-            $group->fill(Arr::only($data, ['name', 'age_label', 'capacity_min', 'capacity_max', 'location_id']));
+            $group->fill(Arr::only($data, ['name', 'age_label', 'capacity_min', 'capacity_max', 'location_id', 'enrollment_approval_mode']));
             if (! $group->exists) {
                 $group->offering_id = $offering->id;
                 $group->capacity_min ??= 1;
@@ -174,6 +174,8 @@ final readonly class SaveGroupSchedule
             'age_label' => ['sometimes', 'nullable', 'string', 'max:100'],
             'capacity_min' => ['sometimes', 'integer', 'min:1', 'max:100000'],
             'capacity_max' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:100000'],
+            // Automatic: an application with a free place is approved at once; a full group puts it on the waiting list.
+            'enrollment_approval_mode' => ['sometimes', Rule::in(['manual', 'automatic'])],
             'location_id' => ['sometimes', ...$location],
             'instructor_ids' => ['sometimes', 'array', 'max:100'],
             'instructor_ids.*' => $instructor,

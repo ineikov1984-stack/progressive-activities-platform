@@ -31,6 +31,8 @@ class ActivityGroupTest extends TestCase
             'organization_id' => Str::uuid()->toString(), 'status' => 'published',
         ])->assertCreated()->assertJsonPath('group.status', 'draft')
             ->assertJsonPath('group.capacity_min', 3)->assertJsonPath('group.capacity_max', 12)
+            // New groups wait for the team unless the organization chooses otherwise.
+            ->assertJsonPath('group.enrollment_approval_mode', 'manual')
             ->assertJsonPath('group.location_id', $location->id)
             ->assertJsonCount(2, 'group.instructor_ids')->assertJsonCount(2, 'group.sessions')
             ->assertJsonPath('group.sessions.0.starts_at', '2026-10-27T17:00:00+02:00')
@@ -58,8 +60,13 @@ class ActivityGroupTest extends TestCase
             ['weekday' => 7, 'starts_at' => '03:30', 'duration_minutes' => 60],
         ]];
         $this->postJson($this->url($activity), $payload)->assertUnprocessable()->assertJsonValidationErrors('schedule_pattern');
+        $this->postJson($this->url($activity), [...$this->payload(), 'enrollment_approval_mode' => 'always'])
+            ->assertUnprocessable()->assertJsonValidationErrors('enrollment_approval_mode');
         $this->assertDatabaseCount('activity_groups', 0);
         $this->assertDatabaseCount('activity_sessions', 0);
+        // The team can choose automatic approval when it creates the group.
+        $this->postJson($this->url($activity), [...$this->payload(), 'enrollment_approval_mode' => 'automatic'])
+            ->assertCreated()->assertJsonPath('group.enrollment_approval_mode', 'automatic');
     }
 
     public function test_single_session_override_preserves_other_sessions_and_survives_metadata_update(): void

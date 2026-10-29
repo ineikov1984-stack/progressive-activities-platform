@@ -183,12 +183,34 @@ final class StaffEnrollmentController extends Controller
                 'activity_id' => $group->offering?->activity?->id,
                 'activity_title' => $group->offering?->activity?->title,
                 'activity_category' => $group->offering?->activity?->category,
+                'enrollment_approval_mode' => $group->enrollment_approval_mode,
                 'schedule' => $group->weeklySlots(),
                 'location_name' => $group->location->name ?? $group->offering?->location?->name,
                 'enrolled_for_period' => (int) ($taken[$group->id] ?? 0),
                 'waitlist_count' => (int) ($waiting[$group->id] ?? 0),
             ])->all(),
         ]);
+    }
+
+    /**
+     * How the group's applications are decided: by the team, or at once when there is a place
+     * (a full group puts the application on the waiting list). An operational setting, so it can
+     * change on a published group too; it applies to applications from now on.
+     */
+    public function updateApproval(Request $request, string $group, AuditRecorder $audit): JsonResponse
+    {
+        $this->authorizeAbility($request, 'enrollment.manage');
+        $validated = $request->validate([
+            'enrollment_approval_mode' => ['required', Rule::in(['manual', 'automatic'])],
+        ], ['required' => 'Изберете как се одобряват заявките.', 'in' => 'Изберете как се одобряват заявките.']);
+        $record = Group::query()->findOrFail($group);
+        $record->forceFill(['enrollment_approval_mode' => $validated['enrollment_approval_mode']])->save();
+        // Identifiers and the new mode only.
+        $audit->record(AuditAction::EnrollmentGroupApprovalChanged, new AuditableReference('activity_group', $record->id), [
+            'enrollment_approval_mode' => $record->enrollment_approval_mode,
+        ]);
+
+        return response()->json(['group' => ['id' => $record->id, 'enrollment_approval_mode' => $record->enrollment_approval_mode]]);
     }
 
     public function roster(Request $request, string $group, EnrollmentCapacity $capacity): JsonResponse
@@ -230,6 +252,7 @@ final class StaffEnrollmentController extends Controller
                 'enrolled_for_period' => $capacity->placesTaken($record, $today),
                 'remaining' => $capacity->remainingForGroup($record),
                 'waitlist_enabled' => $record->waitlist_enabled,
+                'enrollment_approval_mode' => $record->enrollment_approval_mode,
             ],
             'enrollments' => $enrollments->map(fn (Enrollment $enrollment): array => $this->presentRosterEnrollment($enrollment, $today, $canManage))->all(),
             'waitlist' => $waiting->map($this->presentApplication(...))->all(),

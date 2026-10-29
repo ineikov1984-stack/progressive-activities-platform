@@ -239,7 +239,7 @@ function GroupsView({ groups, organizationId, canManage, openGroup, onToggleGrou
                     {shown.map((group) => {
                       const expanded = openGroup === group.id;
                       const fill = groupFill(group);
-                      const details = [scheduleText(group.schedule), group.location_name].filter(Boolean).join(' · ');
+                      const details = [scheduleText(group.schedule), group.location_name, group.enrollment_approval_mode === 'automatic' ? 'автоматично одобрение' : ''].filter(Boolean).join(' · ');
                       return (
                         <li key={group.id} className={styles.groupItem}>
                           <h4 className={`${styles.groupHeading} ${expanded ? styles.groupHeadingOpen : ''}`}>

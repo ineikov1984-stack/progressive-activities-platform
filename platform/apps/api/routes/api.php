@@ -66,6 +66,7 @@ Route::prefix('v1')->group(function (): void {
                 });
                 Route::middleware('organization.access:operational.write')->group(function (): void {
                     Route::post('/applications/{application}/review', [StaffEnrollmentController::class, 'review'])->whereUuid('application');
+                    Route::patch('/groups/{group}/approval', [StaffEnrollmentController::class, 'updateApproval'])->whereUuid('group');
                     Route::post('/enrollments/{enrollment}/transfer', [StaffEnrollmentChangeController::class, 'transfer'])->whereUuid('enrollment');
                     Route::post('/enrollments/{enrollment}/pauses', [StaffEnrollmentChangeController::class, 'pause'])->whereUuid('enrollment');
                     Route::post('/enrollments/{enrollment}/pauses/{pause}/end', [StaffEnrollmentChangeController::class, 'endPause'])->whereUuid(['enrollment', 'pause']);
