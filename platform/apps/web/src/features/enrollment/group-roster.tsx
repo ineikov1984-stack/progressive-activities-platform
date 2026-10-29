@@ -6,11 +6,13 @@ import {
   type RosterEnrollment, type StaffApplication,
 } from './api';
 import { ChangePanel } from './change-panel';
-import { addDays, dateText, placesText, type RosterNote, rosterNotes, scopeLabels, shortDay, sofiaDay } from './presentation';
+import { addDays, dateText, needsGroupPlace, placesText, type RosterNote, rosterNotes, scopeLabels, shortDay, sofiaDay } from './presentation';
 import styles from './enrollments.module.css';
 
 type Props = { organizationId: string; groupId: string; canManage: boolean; onChanged?: () => void };
 type Notice = { enrollmentId: string; text: string; token: number };
+/** More children than this and the group gets a search by name. */
+const SEARCH_FROM = 10;
 
 const noteStyle: Record<RosterNote['kind'], string> = {
   starts: styles.noteInfo,
@@ -29,6 +31,7 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
   const [openId, setOpenId] = useState<string>();
   const [reloadKey, setReloadKey] = useState(0);
   const [approving, setApproving] = useState('');
+  const [search, setSearch] = useState('');
   const topNotice = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
@@ -77,6 +80,14 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
   if (!roster) return <span className={styles.skeleton} aria-busy="true" />;
   const today = sofiaDay();
   const fullPeriodCount = roster.enrollments.filter((item) => item.scope === 'full_period').length;
+  const groupFull = roster.group.remaining !== null && roster.group.remaining <= 0;
+  // Only a place for the whole period waits for the group; a trial or one-off visit has its own session.
+  const blockedByGroup = (item: StaffApplication) => groupFull && needsGroupPlace(item);
+  // A long group gets a search by name; the row with an open change or a fresh message always stays.
+  const searchable = roster.enrollments.length > SEARCH_FROM;
+  const needle = search.trim().toLocaleLowerCase('bg');
+  const shown = !searchable || !needle ? roster.enrollments : roster.enrollments.filter((item) =>
+    item.id === openId || item.id === notice?.enrollmentId || (item.child.name ?? '').toLocaleLowerCase('bg').includes(needle));
 
   return (
     <div className={styles.roster}>
@@ -86,9 +97,17 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
       </p>
       <p ref={topNotice} tabIndex={-1} className={topText ? styles.rowNotice : styles.srOnly}>{topText}</p>
       {error ? <div className={styles.actions}><p className={styles.error} role="alert">{error}</p>{retry}</div> : null}
-      {roster.enrollments.length === 0 ? <p className={styles.muted}>Все още няма записани деца.</p> : (
+      {searchable ? (
+        <div className={styles.rosterSearch}>
+          <label htmlFor={`roster-search-${groupId}`}>Търси дете в групата</label>
+          <input id={`roster-search-${groupId}`} type="search" value={search} maxLength={100} onChange={(event) => setSearch(event.target.value)} />
+          <span className={styles.small} role="status">{needle ? `Показани: ${shown.length} от ${roster.enrollments.length}` : ''}</span>
+        </div>
+      ) : null}
+      <h5 className={styles.subTitle}>Записани деца ({roster.enrollments.length})</h5>
+      {roster.enrollments.length === 0 ? <p className={styles.muted}>Все още няма записани деца.</p> : shown.length === 0 ? <p className={styles.muted}>Няма дете с това име в групата.</p> : (
         <ul className={styles.rows}>
-          {roster.enrollments.map((item) => (
+          {shown.map((item) => (
             <RosterRow
               key={item.id}
               organizationId={organizationId}
@@ -109,15 +128,18 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
       )}
       {roster.waitlist.length > 0 ? (
         <>
-          <h4 className={styles.subTitle}>Чакащи</h4>
+          <h5 className={styles.subTitle}>Чакащи ({roster.waitlist.length})</h5>
+          {canManage && roster.waitlist.some(blockedByGroup) ? <p id={`roster-full-${groupId}`} className={styles.smallWarning}>Няма свободно място — записване за периода ще е възможно, когато място се освободи.</p> : null}
           <ol className={styles.waitList}>
             {roster.waitlist.map((item) => (
               <li key={item.id}>
                 <span><span className={styles.listName}>{item.child.name}</span> <span className={styles.small}>от {dateText(item.submitted_at)}</span></span>
                 {canManage ? (
-                  <button type="button" className={styles.secondary} disabled={approving !== ''} onClick={() => void approve(item)}>
-                    {approving === item.id ? 'Запазване…' : 'Одобри'}<span className={styles.srOnly}> {item.child.name}</span>
-                  </button>
+                  <span className={styles.actions}>
+                    <button type="button" className={blockedByGroup(item) ? styles.secondary : styles.primary} disabled={approving !== '' || blockedByGroup(item)} aria-describedby={blockedByGroup(item) ? `roster-full-${groupId}` : undefined} onClick={() => void approve(item)}>
+                      {approving === item.id ? 'Запазване…' : 'Одобри'}<span className={styles.srOnly}> {item.child.name}</span>
+                    </button>
+                  </span>
                 ) : null}
               </li>
             ))}
@@ -222,7 +244,7 @@ function RosterRow({ onActivity, organizationId, roster, enrollment, today, canM
                 {canManage && note.kind === 'skips' ? (
                   <button type="button" className={styles.linkButton} disabled={busy}
                     onClick={() => { onActivity(); void quick(() => restoreSession(organizationId, enrollment, note.sessionId), `Заниманието отново се брои за ${name}.`); }}>
-                    Върни<span className={styles.srOnly}> заниманието за {name}</span>
+                    Отмени пропуска<span className={styles.srOnly}> за {name}</span>
                   </button>
                 ) : null}
                 {canManage && note.kind === 'pause' ? (

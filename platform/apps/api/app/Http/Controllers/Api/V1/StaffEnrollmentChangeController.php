@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api\V1;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\PriceOption;
 use App\Domain\Enrollment\Actions\ChangeEnrollment;
+use App\Domain\Enrollment\Enums\EnrollmentApplicationStatus;
 use App\Domain\Enrollment\Models\Enrollment;
+use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Enrollment\Models\EnrollmentPause;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
 use App\Domain\Enrollment\Services\SessionApplicability;
@@ -57,12 +59,21 @@ final class StaffEnrollmentChangeController extends Controller
             ->orderBy('name')
             ->get();
 
+        // Children waiting for a place in each target group: a move takes a freed place before them.
+        $waiting = EnrollmentApplication::query()->where('status', EnrollmentApplicationStatus::Waitlisted->value)
+            ->whereIn('group_id', $groups->modelKeys())
+            ->selectRaw('group_id, count(*) as aggregate')->groupBy('group_id')->pluck('aggregate', 'group_id');
+
         return response()->json([
             'groups' => $groups->map(fn (Group $group): array => [
                 'id' => $group->id,
                 'name' => $group->name,
                 'capacity_max' => $group->capacity_max,
+                'schedule' => $group->weeklySlots(),
                 'remaining' => $capacity->remainingForGroup($group, $at),
+                // The next session days with the places a move from that day would find.
+                'starts' => $capacity->moveInDays($group),
+                'waitlist_count' => (int) ($waiting[$group->id] ?? 0),
                 'prices' => $group->priceOptions->map(fn (PriceOption $price): array => [
                     'id' => $price->id,
                     'enrollment_mode' => $price->enrollment_mode,

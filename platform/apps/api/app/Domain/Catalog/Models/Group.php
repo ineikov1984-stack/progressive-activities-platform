@@ -84,6 +84,32 @@ class Group extends Model
             ->withTimestamps();
     }
 
+    /**
+     * The weekly days and times only (for lists the team scans), without dates and exceptions.
+     *
+     * @return array{frequency: string, slots: list<array{weekday: int, starts_at: string, duration_minutes: int}>}|null
+     */
+    public function weeklySlots(): ?array
+    {
+        $pattern = $this->schedule_pattern ?? [];
+        $items = $pattern['slots'] ?? $pattern['patterns'] ?? [];
+        if (! is_array($items)) {
+            return null;
+        }
+        $slots = [];
+        foreach ($items as $item) {
+            if (is_array($item) && isset($item['weekday'], $item['starts_at'])) {
+                $slots[] = [
+                    'weekday' => (int) $item['weekday'],
+                    'starts_at' => (string) $item['starts_at'],
+                    'duration_minutes' => (int) ($item['duration_minutes'] ?? 0),
+                ];
+            }
+        }
+
+        return $slots === [] ? null : ['frequency' => ($pattern['frequency'] ?? 'weekly') === 'biweekly' ? 'biweekly' : 'weekly', 'slots' => $slots];
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {

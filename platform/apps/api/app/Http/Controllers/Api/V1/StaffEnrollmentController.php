@@ -24,6 +24,8 @@ use App\Http\Controllers\Controller;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
@@ -43,9 +45,21 @@ final class StaffEnrollmentController extends Controller
         $this->authorizeAbility($request, 'enrollment.view');
         $validated = $request->validate([
             'status' => ['sometimes', Rule::in(['submitted', 'waitlisted'])],
+            'activity_id' => ['sometimes', 'uuid'],
+            'group_id' => ['sometimes', 'uuid'],
+            'q' => ['sometimes', 'nullable', 'string', 'max:100'],
         ]);
+        $status = $validated['status'] ?? 'submitted';
 
-        $query = EnrollmentApplication::query()->where('status', $validated['status'] ?? 'submitted');
+        $query = EnrollmentApplication::query()->where('status', $status)
+            ->when($validated['group_id'] ?? null, fn ($query, string $groupId) => $query->where('group_id', $groupId))
+            ->when($validated['activity_id'] ?? null, fn ($query, string $activityId) => $query
+                ->whereHas('group.offering', fn ($offering) => $offering->where('activity_id', $activityId)))
+            ->when(trim((string) ($validated['q'] ?? '')), fn ($query, string $search) => $query
+                ->whereHas('child', fn ($child) => $child->whereRaw(
+                    "(first_name || ' ' || coalesce(last_name, '')) ".$this->likeOperator()." ? escape '!'",
+                    ['%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%'],
+                )));
         $total = (clone $query)->count();
         // Oldest first: the team works through the queue in the order parents applied.
         $applications = $query->with(['child', 'group.offering.activity', 'session'])
@@ -53,11 +67,69 @@ final class StaffEnrollmentController extends Controller
             ->limit(self::PAGE_SIZE)
             ->get();
 
+        // Places in each group today (the same count as the group list): the team sees a full group before deciding.
+        $taken = $this->placesTakenByGroup($applications->pluck('group_id')->unique()->values()->all());
+
         return response()->json([
-            'applications' => $applications->map($this->presentApplication(...))->all(),
+            'applications' => $applications->map(fn (EnrollmentApplication $application): array => $this->presentApplication($application, (int) ($taken[$application->group_id] ?? 0)))->all(),
             'total' => $total,
             'has_more' => $total > $applications->count(),
+            'facets' => $this->facets($status),
         ]);
+    }
+
+    /**
+     * Activities and groups that have applications with this status, with counts — the choices
+     * for the filters (two queries, whatever filter is applied).
+     *
+     * @return array{activities: list<array{id: string, title: string|null, count: int}>, groups: list<array{id: string, name: string, activity_id: string|null, count: int}>}
+     */
+    private function facets(string $status): array
+    {
+        $counts = EnrollmentApplication::query()->where('status', $status)
+            ->selectRaw('group_id, count(*) as aggregate')->groupBy('group_id')->pluck('aggregate', 'group_id');
+        $groups = Group::query()->with('offering.activity')->whereKey($counts->keys()->all())->get()
+            ->sortBy(fn (Group $group): string => ($group->offering->activity->title ?? '').'|'.$group->name)->values();
+        $activities = [];
+        foreach ($groups as $group) {
+            $activity = $group->offering?->activity;
+            if ($activity === null) {
+                continue;
+            }
+            $activities[$activity->id] ??= ['id' => $activity->id, 'title' => $activity->title, 'count' => 0];
+            $activities[$activity->id]['count'] += (int) $counts[$group->id];
+        }
+
+        return [
+            'activities' => array_values($activities),
+            'groups' => $groups->map(fn (Group $group): array => [
+                'id' => $group->id, 'name' => $group->name, 'activity_id' => $group->offering?->activity?->id, 'count' => (int) $counts[$group->id],
+            ])->all(),
+        ];
+    }
+
+    /**
+     * Places held today by full-period enrollments, per group (one grouped query) — the number the
+     * group list shows. Optionally only for some groups.
+     *
+     * @param  list<string>|null  $groupIds
+     * @return Collection<array-key, mixed>
+     */
+    private function placesTakenByGroup(?array $groupIds = null): Collection
+    {
+        $today = CarbonImmutable::now('Europe/Sofia')->toDateString();
+
+        return Enrollment::query()->where('scope', EnrollmentScope::FullPeriod->value)
+            ->whereIn('status', [EnrollmentStatus::Active->value, EnrollmentStatus::Paused->value, EnrollmentStatus::Ended->value])
+            ->where(fn ($query) => $query->whereNull('ends_on')->orWhereDate('ends_on', '>=', $today))
+            ->when($groupIds !== null, fn ($query) => $query->whereIn('group_id', $groupIds ?? []))
+            ->selectRaw('group_id, count(*) as aggregate')->groupBy('group_id')->pluck('aggregate', 'group_id');
+    }
+
+    /** Case-insensitive search for Cyrillic names needs ILIKE on PostgreSQL; SQLite (tests) has only LIKE. */
+    private function likeOperator(): string
+    {
+        return DB::getDriverName() === 'pgsql' ? 'ilike' : 'like';
     }
 
     public function review(Request $request, string $application, ReviewEnrollmentApplication $review, AuditRecorder $audit): JsonResponse
@@ -93,16 +165,12 @@ final class StaffEnrollmentController extends Controller
     public function groups(Request $request): JsonResponse
     {
         $this->authorizeAbility($request, 'enrollment.view');
-        $today = CarbonImmutable::now('Europe/Sofia')->toDateString();
-        $groups = Group::query()->with('offering.activity')->where('status', '!=', 'archived')
+        $groups = Group::query()->with(['offering.activity', 'offering.location', 'location'])->where('status', '!=', 'archived')
             ->whereHas('offering.activity', fn ($query) => $query->where('status', '!=', ActivityStatus::Archived->value))
             ->get()
             ->sortBy(fn (Group $group): string => ($group->offering->activity->title ?? '').'|'.$group->name)
             ->values();
-        $taken = Enrollment::query()->where('scope', EnrollmentScope::FullPeriod->value)
-            ->whereIn('status', [EnrollmentStatus::Active->value, EnrollmentStatus::Paused->value, EnrollmentStatus::Ended->value])
-            ->where(fn ($query) => $query->whereNull('ends_on')->orWhereDate('ends_on', '>=', $today))
-            ->selectRaw('group_id, count(*) as aggregate')->groupBy('group_id')->pluck('aggregate', 'group_id');
+        $taken = $this->placesTakenByGroup();
         $waiting = EnrollmentApplication::query()->where('status', EnrollmentApplicationStatus::Waitlisted->value)
             ->selectRaw('group_id, count(*) as aggregate')->groupBy('group_id')->pluck('aggregate', 'group_id');
 
@@ -114,6 +182,9 @@ final class StaffEnrollmentController extends Controller
                 'capacity_max' => $group->capacity_max,
                 'activity_id' => $group->offering?->activity?->id,
                 'activity_title' => $group->offering?->activity?->title,
+                'activity_category' => $group->offering?->activity?->category,
+                'schedule' => $group->weeklySlots(),
+                'location_name' => $group->location->name ?? $group->offering?->location?->name,
                 'enrolled_for_period' => (int) ($taken[$group->id] ?? 0),
                 'waitlist_count' => (int) ($waiting[$group->id] ?? 0),
             ])->all(),
@@ -210,7 +281,7 @@ final class StaffEnrollmentController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function presentApplication(EnrollmentApplication $application): array
+    private function presentApplication(EnrollmentApplication $application, ?int $placesTaken = null): array
     {
         $activity = $application->group?->offering?->activity;
 
@@ -221,7 +292,9 @@ final class StaffEnrollmentController extends Controller
             'scope' => $application->scope->value,
             'source' => $application->source->value,
             'child' => $this->presentChild($application->child),
-            'group' => ['id' => $application->group_id, 'name' => $application->group?->name],
+            'group' => ['id' => $application->group_id, 'name' => $application->group?->name] + ($placesTaken === null ? [] : [
+                'capacity_max' => $application->group?->capacity_max, 'places_taken' => $placesTaken,
+            ]),
             'activity' => ['id' => $activity?->id, 'title' => $activity?->title],
             'session_starts_at' => $application->session?->starts_at?->toIso8601String(),
             'visit_offer_title' => $application->visit_offer_title_snapshot,

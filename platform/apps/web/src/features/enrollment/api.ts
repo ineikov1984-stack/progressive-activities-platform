@@ -8,7 +8,8 @@ export type StaffApplication = {
   scope: 'trial' | 'single' | 'full_period' | string;
   source: string;
   child: StaffChild;
-  group: { id: string; name: string | null };
+  /** capacity_max and places_taken come with the lists: how full the group is today. */
+  group: { id: string; name: string | null; capacity_max?: number | null; places_taken?: number };
   activity: { id: string | null; title: string | null };
   session_starts_at: string | null;
   visit_offer_title: string | null;
@@ -38,6 +39,8 @@ export type GroupRoster = {
   waitlist: StaffApplication[];
   upcoming_sessions?: { id: string; starts_at: string }[];
 };
+/** The weekly days and times of a group (weekday 1 = Monday). */
+export type WeeklySchedule = { frequency: 'weekly' | 'biweekly' | string; slots: { weekday: number; starts_at: string; duration_minutes: number }[] };
 export type StaffGroup = {
   id: string;
   name: string;
@@ -45,14 +48,22 @@ export type StaffGroup = {
   capacity_max: number | null;
   activity_id: string | null;
   activity_title: string | null;
+  activity_category?: string | null;
+  schedule?: WeeklySchedule | null;
+  location_name?: string | null;
   enrolled_for_period: number;
   waitlist_count: number;
 };
+/** A day the child could start in the target group, with the places a move from that day finds. */
+export type MoveInDay = { date: string; starts_at: string; remaining: number | null };
 export type TransferOption = {
   id: string;
   name: string;
   capacity_max: number | null;
+  schedule?: WeeklySchedule | null;
   remaining: number | null;
+  starts?: MoveInDay[];
+  waitlist_count?: number;
   prices: { id: string; enrollment_mode: string; unit: string; amount_cents: number; currency: string }[];
 };
 export type ReviewDecision = 'approve' | 'waitlist' | 'reject';
@@ -100,10 +111,20 @@ export function changeErrorMessage(reason: unknown, fallback: string): string {
   return reason instanceof Error && reason.message ? reason.message : fallback;
 }
 
-export type ApplicationPage = { applications: StaffApplication[]; total: number; has_more: boolean };
+export type ApplicationFacets = {
+  activities: { id: string; title: string | null; count: number }[];
+  groups: { id: string; name: string; activity_id: string | null; count: number }[];
+};
+export type ApplicationPage = { applications: StaffApplication[]; total: number; has_more: boolean; facets?: ApplicationFacets };
+export type ApplicationFilters = { q?: string; activityId?: string; groupId?: string };
 
-export const loadApplications = (organizationId: string, status: 'submitted' | 'waitlisted' = 'submitted') =>
-  request<ApplicationPage>(organizationId, `/applications?status=${status}`);
+export const loadApplications = (organizationId: string, status: 'submitted' | 'waitlisted' = 'submitted', filters: ApplicationFilters = {}) => {
+  const query = new URLSearchParams({ status });
+  if (filters.q?.trim()) query.set('q', filters.q.trim());
+  if (filters.activityId) query.set('activity_id', filters.activityId);
+  if (filters.groupId) query.set('group_id', filters.groupId);
+  return request<ApplicationPage>(organizationId, `/applications?${query.toString()}`);
+};
 
 export const reviewApplication = (organizationId: string, application: StaffApplication, decision: ReviewDecision, publicReason?: string) =>
   request<{ application: StaffApplication }>(organizationId, `/applications/${application.id}/review`, {
@@ -117,8 +138,8 @@ export const loadRoster = (organizationId: string, groupId: string) =>
 export const loadStaffGroups = (organizationId: string) =>
   request<{ groups: StaffGroup[] }>(organizationId, '/groups').then((x) => x.groups);
 
-export const loadTransferOptions = (organizationId: string, enrollmentId: string, date: string) =>
-  request<{ groups: TransferOption[] }>(organizationId, `/enrollments/${enrollmentId}/transfer-options?date=${encodeURIComponent(date)}`).then((x) => x.groups);
+export const loadTransferOptions = (organizationId: string, enrollmentId: string) =>
+  request<{ groups: TransferOption[] }>(organizationId, `/enrollments/${enrollmentId}/transfer-options`).then((x) => x.groups);
 
 function change<T>(organizationId: string, enrollment: RosterEnrollment, path: string, body: Record<string, unknown>, method = 'POST'): Promise<T> {
   const payload = { ...body, version: enrollment.version };
