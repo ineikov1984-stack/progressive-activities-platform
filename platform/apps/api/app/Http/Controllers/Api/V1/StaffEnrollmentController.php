@@ -97,7 +97,7 @@ final class StaffEnrollmentController extends Controller
         $groups = Group::query()->with('offering.activity')->where('status', '!=', 'archived')
             ->whereHas('offering.activity', fn ($query) => $query->where('status', '!=', ActivityStatus::Archived->value))
             ->get()
-            ->sortBy(fn (Group $group): string => ($group->offering?->activity?->title ?? '').'|'.$group->name)
+            ->sortBy(fn (Group $group): string => ($group->offering->activity->title ?? '').'|'.$group->name)
             ->values();
         $taken = Enrollment::query()->where('scope', EnrollmentScope::FullPeriod->value)
             ->whereIn('status', [EnrollmentStatus::Active->value, EnrollmentStatus::Paused->value, EnrollmentStatus::Ended->value])
