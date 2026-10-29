@@ -97,6 +97,7 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
               today={today}
               canManage={canManage}
               open={openId === item.id}
+              onActivity={() => setNotice(undefined)}
               notice={notice?.enrollmentId === item.id ? notice : undefined}
               onOpen={() => setOpenId(item.id)}
               onClose={() => setOpenId(undefined)}
@@ -128,6 +129,7 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
 }
 
 type RowProps = {
+  onActivity: () => void;
   organizationId: string;
   roster: GroupRoster;
   enrollment: RosterEnrollment;
@@ -143,7 +145,7 @@ type RowProps = {
 
 type Confirm = { kind: 'pause'; pauseId: string; startsOn: string; text: string } | { kind: 'reopen'; text: string };
 
-function RosterRow({ organizationId, roster, enrollment, today, canManage, open, notice, onOpen, onClose, onDone, onFailed }: RowProps) {
+function RosterRow({ onActivity, organizationId, roster, enrollment, today, canManage, open, notice, onOpen, onClose, onDone, onFailed }: RowProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [resuming, setResuming] = useState<string>();
@@ -170,7 +172,8 @@ function RosterRow({ organizationId, roster, enrollment, today, canManage, open,
   useEffect(() => { if (confirm) confirmText.current?.focus(); }, [confirm]);
   useEffect(() => { if (resuming) resumeInput.current?.focus(); }, [resuming]);
 
-  function remember(event: MouseEvent<HTMLButtonElement>) { opener.current = event.currentTarget; }
+  // Starting something new hides the previous confirmation, so two messages never stand side by side.
+  function remember(event: MouseEvent<HTMLButtonElement>) { opener.current = event.currentTarget; onActivity(); }
   function back(close: () => void) {
     close();
     requestAnimationFrame(() => opener.current?.focus());
@@ -218,7 +221,7 @@ function RosterRow({ organizationId, roster, enrollment, today, canManage, open,
                 <span>{note.text}</span>
                 {canManage && note.kind === 'skips' ? (
                   <button type="button" className={styles.linkButton} disabled={busy}
-                    onClick={() => void quick(() => restoreSession(organizationId, enrollment, note.sessionId), `Заниманието отново се брои за ${name}.`)}>
+                    onClick={() => { onActivity(); void quick(() => restoreSession(organizationId, enrollment, note.sessionId), `Заниманието отново се брои за ${name}.`); }}>
                     Върни<span className={styles.srOnly}> заниманието за {name}</span>
                   </button>
                 ) : null}
@@ -271,7 +274,7 @@ function RosterRow({ organizationId, roster, enrollment, today, canManage, open,
         {error ? <p className={styles.error} role="alert">{error}</p> : null}
       </div>
       {changeable ? (
-        <button ref={changeButton} type="button" className={styles.secondary} aria-expanded={open} onClick={open ? closePanel : onOpen}>
+        <button ref={changeButton} type="button" className={styles.secondary} aria-expanded={open} onClick={open ? closePanel : () => { onActivity(); onOpen(); }}>
           {open ? 'Затвори' : 'Промени'}<span className={styles.srOnly}> за {name}</span>
         </button>
       ) : null}
