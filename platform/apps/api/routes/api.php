@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\ParentEnrollmentController;
 use App\Http\Controllers\Api\V1\PublicCatalogController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentChangeController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentController;
+use App\Http\Controllers\Api\V1\StaffEnrollmentDetailsController;
 use App\Http\Controllers\Api\V1\VisitOfferController;
 use Illuminate\Support\Facades\Route;
 
@@ -64,6 +65,9 @@ Route::prefix('v1')->group(function (): void {
                     Route::get('/groups', [StaffEnrollmentController::class, 'groups']);
                     Route::get('/groups/{group}/roster', [StaffEnrollmentController::class, 'roster'])->whereUuid('group');
                     Route::get('/enrollments/{enrollment}/transfer-options', [StaffEnrollmentChangeController::class, 'transferOptions'])->whereUuid('enrollment');
+                    // The "Подробности" panel; contacts inside (docs/product/enrollment-contacts-and-emails.md, т. 8).
+                    Route::get('/applications/{application}', [StaffEnrollmentDetailsController::class, 'application'])->whereUuid('application')->middleware('throttle:60,1');
+                    Route::get('/enrollments/{enrollment}', [StaffEnrollmentDetailsController::class, 'enrollment'])->whereUuid('enrollment')->middleware('throttle:60,1');
                 });
                 Route::middleware('organization.access:operational.write')->group(function (): void {
                     Route::post('/applications/{application}/review', [StaffEnrollmentController::class, 'review'])->whereUuid('application');
