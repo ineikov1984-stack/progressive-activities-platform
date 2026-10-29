@@ -60,7 +60,7 @@ class EnrollmentDeliveriesSchemaTest extends TestCase
             // A delivery of this organization cannot point at another organization's event (composite key)…
             $pdo->exec('SAVEPOINT mixed_tenant');
             try {
-                $this->insertDelivery($pdo, $waiting['organization'], $pending['event'], 'pending');
+                $this->insertDelivery($pdo, $waiting['organization'], $pending['event'], 'pending', 'user:mixed');
                 $this->fail('A delivery must not point at another organization\'s event.');
             } catch (\PDOException $exception) {
                 $this->assertSame('23503', $exception->getCode());

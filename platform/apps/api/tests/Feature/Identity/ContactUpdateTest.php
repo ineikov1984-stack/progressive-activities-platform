@@ -64,14 +64,13 @@ class ContactUpdateTest extends TestCase
 
     public function test_nothing_changed_writes_no_audit_and_a_guest_is_refused(): void
     {
+        $this->patchJson('/api/v1/me/contact', ['phone' => '0881 234 567'])->assertUnauthorized();
+
         $user = User::factory()->create(['phone' => '+359881234567']);
 
         $this->actingAs($user)
             ->patchJson('/api/v1/me/contact', ['phone' => '088 123 4567'])
             ->assertOk();
         $this->assertSame(0, AuditEvent::query()->where('action', 'identity.contact_updated')->count());
-
-        auth()->guard('web')->logout();
-        $this->patchJson('/api/v1/me/contact', ['phone' => '0881 234 567'])->assertUnauthorized();
     }
 }
