@@ -13,7 +13,7 @@ async function openDashboard(page: import('@playwright/test').Page) {
   await expect(page.getByRole('heading', { name: 'Progressive Academy' })).toBeVisible();
 }
 
-test('administration exposes and applies the approved fixed palette', async () => {
+test('administration paints its frame from the design tokens', async () => {
   test.setTimeout(60_000);
   const cdpEndpoint = process.env.PLAYWRIGHT_CDP_ENDPOINT;
   const browser = cdpEndpoint
@@ -24,43 +24,16 @@ test('administration exposes and applies the approved fixed palette', async () =
 
   await openDashboard(page);
 
-  const shell = page.locator('[data-admin-shell]');
-  await expect(shell).toHaveCount(1, { timeout: 5_000 });
-  const palette = await shell.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return {
-      navigation: style.getPropertyValue('--admin-navigation').trim(),
-      navigationDeep: style.getPropertyValue('--admin-navigation-deep').trim(),
-      brand: style.getPropertyValue('--admin-brand').trim(),
-      brandDeep: style.getPropertyValue('--admin-brand-deep').trim(),
-      action: style.getPropertyValue('--admin-action').trim(),
-      accent: style.getPropertyValue('--admin-accent').trim(),
-      positive: style.getPropertyValue('--admin-positive').trim(),
-      canvasWarm: style.getPropertyValue('--admin-canvas-warm').trim(),
-      canvas: style.getPropertyValue('--admin-canvas').trim(),
-      surface: style.getPropertyValue('--admin-surface').trim(),
-      border: style.getPropertyValue('--admin-border').trim(),
-      textMuted: style.getPropertyValue('--admin-text-muted').trim(),
-    };
+  const tokens = await page.evaluate(() => {
+    const style = getComputedStyle(document.documentElement);
+    return ['--nav', '--brand', '--action', '--ink', '--surface-page'].map((name) => style.getPropertyValue(name).trim().toLowerCase());
   });
+  expect(tokens).toEqual(['#0f2a40', '#e3823f', '#b8561a', '#173f5f', '#f6f4ef']);
 
-  expect(palette).toEqual({
-    navigation: '#173654',
-    navigationDeep: '#0d253a',
-    brand: '#205e4d',
-    brandDeep: '#173f35',
-    action: '#176a54',
-    accent: '#ee8436',
-    positive: '#b9e986',
-    canvasWarm: '#f6f3ed',
-    canvas: '#f3f6f4',
-    surface: '#ffffff',
-    border: '#dce6e1',
-    textMuted: '#667a73',
-  });
-
-  await expect(page.getByRole('navigation', { name: 'Административна навигация' }).locator('xpath=..')).toHaveCSS('background-color', 'rgb(23, 54, 84)');
-  await expect(page.getByRole('link', { name: 'Начало' })).toHaveCSS('box-shadow', /rgb\(238, 132, 54\)/);
+  const sidebar = page.getByRole('navigation', { name: 'Административна навигация' }).locator('xpath=..');
+  await expect(sidebar).toHaveCSS('background-color', 'rgb(15, 42, 64)');
+  await expect(page.getByRole('link', { name: 'Начало' })).toHaveCSS('box-shadow', /rgb\(227, 130, 63\)/);
+  await expect(page.locator('[data-admin-shell]')).toHaveCount(1);
 
   await context.close();
   if (!cdpEndpoint) await browser.close();

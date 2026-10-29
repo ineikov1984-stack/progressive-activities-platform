@@ -25,12 +25,10 @@ test('dashboard uses grouped accessible navigation and remembers its desktop wid
 
   const navigation = page.getByRole('navigation', { name: 'Административна навигация' });
   await expect(navigation.getByText('Управление', { exact: true })).toBeVisible();
-  await expect(navigation.getByText('Бизнес', { exact: true })).toBeVisible();
   await expect(navigation.getByText('Организация', { exact: true })).toBeVisible();
   await expect(navigation.getByRole('link', { name: 'Дейности' })).toHaveAttribute('href', '/dashboard/activities');
-  const finance = navigation.locator('[aria-disabled="true"]', { hasText: 'Финанси' });
-  await expect(finance).toBeVisible();
-  await expect(finance).not.toHaveAttribute('href');
+  await expect(navigation.getByText('Финанси')).toHaveCount(0);
+  await expect(navigation.locator('[aria-current="page"]')).toHaveCount(1);
 
   await page.getByRole('button', { name: 'Свий менюто' }).click();
   await expect(page.getByRole('button', { name: 'Разгъни менюто' })).toBeVisible();

@@ -7,37 +7,26 @@ import {
 } from '../src/features/dashboard/navigation';
 
 describe('dashboard navigation', () => {
-  it('keeps the approved groups and items in a stable order', () => {
+  it('shows only working destinations, grouped in a stable order', () => {
     const groups = dashboardNavigation('/dashboard/activities');
 
-    expect(groups.map((group) => group.label)).toEqual(['Управление', 'Бизнес', 'Организация']);
+    expect(groups.map((group) => group.label)).toEqual(['Управление', 'Организация']);
     expect(groups.map((group) => group.items.map((item) => item.label))).toEqual([
-      ['Начало', 'Дейности', 'Групи и графици', 'Записвания', 'Отворени врати'],
-      ['Финанси', 'Анализи', 'Сайт и интеграции'],
-      ['Места', 'Екип', 'Медия', 'Настройки'],
+      ['Начало', 'Дейности', 'Отворени врати'],
+      ['Екип'],
     ]);
+    expect(groups.flatMap((group) => group.items).every((item) => item.isAvailable && item.href)).toBe(true);
   });
 
-  it('marks nested routes active and never gives inactive destinations a link', () => {
-    const groups = dashboardNavigation('/dashboard/activities/activity-1/visit-offers');
-    const items = groups.flatMap((group) => group.items);
+  it('marks exactly one destination active, including nested routes', () => {
+    const active = (pathname: string) => dashboardNavigation(pathname)
+      .flatMap((group) => group.items)
+      .filter((item) => item.isActive)
+      .map((item) => item.label);
 
-    expect(items.find((item) => item.label === 'Дейности')).toMatchObject({
-      href: '/dashboard/activities',
-      isActive: true,
-      isAvailable: true,
-    });
-    const finance = items.find((item) => item.label === 'Финанси');
-    expect(finance).toMatchObject({
-      isActive: false,
-      isAvailable: false,
-    });
-    expect(finance?.href).toBeUndefined();
-    const siteIntegrations = items.find((item) => item.label === 'Сайт и интеграции');
-    expect(siteIntegrations).toMatchObject({
-      isAvailable: false,
-    });
-    expect(siteIntegrations?.href).toBeUndefined();
+    expect(active('/dashboard/activities/activity-1/visit-offers')).toEqual(['Дейности']);
+    expect(active('/dashboard')).toEqual(['Начало']);
+    expect(active('/dashboard/open-days')).toEqual(['Отворени врати']);
   });
 
   it('starts expanded on desktop, compact on tablet and leaves mobile to the drawer', () => {

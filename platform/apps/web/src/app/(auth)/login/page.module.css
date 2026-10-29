@@ -4,7 +4,7 @@
   max-width: none;
   margin: 0;
   padding: 0;
-  background: #f5f7fb;
+  background: var(--surface-warm);
 }
 
 .intro {
@@ -15,9 +15,9 @@
   min-height: 34rem;
   padding: clamp(2rem, 6vw, 5rem);
   background:
-    radial-gradient(circle at 15% 15%, rgb(246 184 75 / 24%), transparent 28rem),
-    linear-gradient(145deg, #0c2658 0%, #1746a2 62%, #2565d0 100%);
-  color: #fff;
+    radial-gradient(circle at 85% 12%, rgb(227 130 63 / 22%), transparent 26rem),
+    linear-gradient(160deg, var(--nav) 0%, var(--ink) 100%);
+  color: var(--ink-inverse);
 }
 
 .brand {
@@ -36,14 +36,15 @@
   height: 2.5rem;
   place-items: center;
   border-radius: 0.8rem;
-  background: #f6b84b;
-  color: #0c2658;
+  background: var(--brand);
+  color: var(--nav);
   font-size: 1.25rem;
 }
 
 .eyebrow {
   margin: 0 0 1rem;
-  color: #c9dcff;
+  /* light orange: readable on the navy gradient (≥5:1), unlike --brand */
+  color: var(--focus-on-dark);
   font-size: 0.8rem;
   font-weight: 750;
   letter-spacing: 0.12em;
@@ -53,6 +54,7 @@
 .intro h1 {
   max-width: 12ch;
   margin: 0;
+  color: var(--ink-inverse);
   font-size: clamp(2.5rem, 7vw, 5rem);
   letter-spacing: -0.05em;
   line-height: 0.98;
@@ -61,7 +63,7 @@
 .lead {
   max-width: 34rem;
   margin: 1.5rem 0 0;
-  color: #e7efff;
+  color: var(--ink-inverse);
   font-size: clamp(1rem, 2vw, 1.25rem);
   line-height: 1.6;
 }
@@ -69,7 +71,7 @@
 .privacy {
   max-width: 36rem;
   margin: 0;
-  color: #c9dcff;
+  color: var(--nav-muted);
   font-size: 0.85rem;
   line-height: 1.6;
 }
@@ -82,23 +84,23 @@
 
 .card {
   width: min(100%, 27rem);
-  border: 1px solid #e3e8f2;
-  border-radius: 1.5rem;
-  background: #fff;
-  box-shadow: 0 1.5rem 4rem rgb(19 45 92 / 10%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
   padding: clamp(1.5rem, 5vw, 2.5rem);
 }
 
 .cardTitle {
   margin: 0;
-  color: #17233d;
+  color: var(--ink);
   font-size: 1.5rem;
   font-weight: 800;
 }
 
 .cardCopy,
 .help {
-  color: #667085;
+  color: var(--ink-muted);
   line-height: 1.55;
 }
 
