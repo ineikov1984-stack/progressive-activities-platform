@@ -28,6 +28,8 @@ services:
       MAIL_HOST: mailpit
       MAIL_PORT: 1025
     ports: ["8080:8080"]
+    # Uploaded catalog media (logos, covers, gallery) must survive `docker compose up --build`.
+    volumes: ["api-storage:/app/storage/app"]
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -74,6 +76,7 @@ services:
     ports: ["8025:8025"]
 
 volumes:
+  api-storage:
   postgres-data:
   redis-data:
 
