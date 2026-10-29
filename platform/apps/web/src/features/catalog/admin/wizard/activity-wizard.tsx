@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { type ChangeEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ChangeEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useDashboardContext } from '@/features/dashboard/dashboard-context';
 import { CategoryIllustration } from '@/features/catalog/public/category-illustration';
@@ -122,35 +122,38 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
     return () => clearInterval(timer);
   }, []);
 
-  const autosave = useMemo(() => new Autosave<WizardContent>({
-    delayMs: 1200,
-    save: async (value) => {
-      const updated = await updateActivity(organization.id, activityId, {
-        version: version.current,
-        title: value.title.trim(),
-        category: value.category,
-        summary: value.summary.trim(),
-        age_label: value.age_label.trim(),
-        sections: sectionsPayload(value.sections),
-      });
-      version.current = updated.version;
-      setActivity(updated);
-      setSavedAt(Date.now());
-      setSaveError('');
-    },
-    onState: (state, error) => {
-      setSaveState(state);
-      if (state === 'error') setSaveError(error instanceof Error ? error.message : 'Промените не бяха запазени. Проверете връзката и опитайте отново.');
-    },
-  }), [activityId, organization.id]);
-
-  useEffect(() => () => { void autosave.flush(); }, [autosave]);
+  const autosaveRef = useRef<Autosave<WizardContent> | null>(null);
+  useEffect(() => {
+    const autosave = new Autosave<WizardContent>({
+      delayMs: 1200,
+      save: async (value) => {
+        const updated = await updateActivity(organization.id, activityId, {
+          version: version.current,
+          title: value.title.trim(),
+          category: value.category,
+          summary: value.summary.trim(),
+          age_label: value.age_label.trim(),
+          sections: sectionsPayload(value.sections),
+        });
+        version.current = updated.version;
+        setActivity(updated);
+        setSavedAt(Date.now());
+        setSaveError('');
+      },
+      onState: (state, error) => {
+        setSaveState(state);
+        if (state === 'error') setSaveError(error instanceof Error ? error.message : 'Промените не бяха запазени. Проверете връзката и опитайте отново.');
+      },
+  });
+    autosaveRef.current = autosave;
+    return () => { void autosave.flush(); autosaveRef.current = null; };
+  }, [activityId, organization.id]);
 
   const commit = useCallback((next: WizardContent) => {
     contentRef.current = next;
     setContent(next);
-    if (!contentBlocker(next)) autosave.schedule(next);
-  }, [autosave]);
+    if (!contentBlocker(next)) autosaveRef.current?.schedule(next);
+  }, []);
 
   const change = useCallback((changes: Partial<WizardContent>) => {
     if (contentRef.current) commit({ ...contentRef.current, ...changes });
@@ -162,7 +165,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
   }, [commit]);
 
   function goTo(target: WizardStep) {
-    void autosave.flush();
+    void autosaveRef.current?.flush();
     router.replace(`/dashboard/activities/${activityId}?step=${target.number}`, { scroll: false });
     requestAnimationFrame(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); headingRef.current?.focus(); });
   }
@@ -170,7 +173,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
   async function withBusy(label: string, action: () => Promise<void>) {
     setBusy(label);
     setSaveError('');
-    try { await autosave.flush(); await action(); }
+    try { await autosaveRef.current?.flush(); await action(); }
     catch (reason) { setSaveError(reason instanceof Error ? reason.message : 'Действието не беше изпълнено.'); }
     finally { setBusy(''); }
   }
