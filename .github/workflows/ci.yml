@@ -43,6 +43,8 @@ jobs:
         with:
           php-version: "8.4"
           coverage: none
+          # Same limits as the shipped image (platform/apps/api/docker/catalog-uploads.ini).
+          ini-values: upload_max_filesize=8M, post_max_size=10M
       - uses: ramsey/composer-install@v3
         with:
           working-directory: platform/apps/api
@@ -65,6 +67,7 @@ jobs:
               echo "::error file=platform/apps/api/{$f["name"]},title=Code style::" . implode(", ", $f["appliedFixers"] ?? []) . "\n";
             }
           '
+          if [ "$status" != 0 ]; then echo "::group::Pint report"; cat pint.json; echo "::endgroup::"; echo "::error title=Pint raw report::$(head -c 3000 pint.json | tr '\n' ' ')"; fi
           exit $status
       - name: Static analysis (PHPStan)
         if: ${{ !cancelled() }}
