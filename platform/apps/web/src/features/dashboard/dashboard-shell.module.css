@@ -1,17 +1,4 @@
 .shell {
-  /* Aliases for older modules that still read --admin-*; new code uses the tokens directly. */
-  --admin-navigation: var(--nav);
-  --admin-navigation-deep: var(--nav);
-  --admin-brand: var(--ink);
-  --admin-brand-deep: var(--nav);
-  --admin-action: var(--action);
-  --admin-accent: var(--brand);
-  --admin-positive: var(--brand);
-  --admin-canvas-warm: var(--surface-page);
-  --admin-canvas: var(--surface-page);
-  --admin-surface: var(--surface);
-  --admin-border: var(--border);
-  --admin-text-muted: var(--ink-muted);
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   min-height: 100vh;

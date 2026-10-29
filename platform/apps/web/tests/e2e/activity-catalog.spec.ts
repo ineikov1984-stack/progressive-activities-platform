@@ -20,15 +20,16 @@ async function assertAdministrativeWrite(page: Page): Promise<void> {
   let draftCard = page.getByRole('article').filter({ has: page.getByRole('heading', { name: draftTitle, exact: true }) });
 
   if (await draftCard.count() === 0) {
+    await page.getByRole('button', { name: 'Създай нова дейност' }).first().click();
     await page.getByLabel('Име на дейността').fill(draftTitle);
     await Promise.all([
       page.waitForURL(/\/dashboard\/activities\/[^/]+$/),
-      page.getByRole('button', { name: 'Създай чернова' }).click(),
+      page.getByRole('button', { name: 'Продължи към детайлите' }).click(),
     ]);
   } else {
     await Promise.all([
       page.waitForURL(/\/dashboard\/activities\/[^/]+$/),
-      draftCard.getByRole('link', { name: /Редактирай/ }).click(),
+      draftCard.getByRole('link', { name: /Продължи|Редактирай/ }).click(),
     ]);
   }
 
