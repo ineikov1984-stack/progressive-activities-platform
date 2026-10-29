@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildUpstreamUrl,
+  forwardsSessionCookies,
   upstreamRequestHeaders,
   upstreamResponseHeaders,
 } from '../src/app/backend/[...path]/upstream';
@@ -99,7 +100,7 @@ describe('backend proxy headers', () => {
     }
   });
 
-  it('forwards only the session and CSRF cookies, from any API response', () => {
+  it('forwards session and CSRF cookies only from the session endpoints', () => {
     const upstream = new Headers({
       'content-type': 'application/json',
       'content-encoding': 'gzip',
@@ -110,12 +111,19 @@ describe('backend proxy headers', () => {
     upstream.append('set-cookie', 'XSRF-TOKEN=t; path=/');
     upstream.append('set-cookie', 'tracking=1; path=/');
 
-    const headers = upstreamResponseHeaders(upstream);
+    expect(forwardsSessionCookies(['sanctum', 'csrf-cookie'])).toBe(true);
+    expect(forwardsSessionCookies(['api', 'v1', 'auth', 'login'])).toBe(true);
+    expect(forwardsSessionCookies(['api', 'v1', 'auth', 'logout'])).toBe(true);
+    expect(forwardsSessionCookies(['api', 'v1', 'me'])).toBe(false);
+    expect(forwardsSessionCookies(['api', 'v1', 'organizations'])).toBe(false);
 
-    expect(headers.getSetCookie()).toEqual(['laravel-session=s; path=/; httponly', 'XSRF-TOKEN=t; path=/']);
-    expect(headers.get('content-type')).toBe('application/json');
+    const fromLogin = upstreamResponseHeaders(upstream, true);
+    expect(fromLogin.getSetCookie()).toEqual(['laravel-session=s; path=/; httponly', 'XSRF-TOKEN=t; path=/']);
+    expect(fromLogin.get('content-type')).toBe('application/json');
     for (const name of ['content-encoding', 'content-length', 'location']) {
-      expect(headers.has(name), name).toBe(false);
+      expect(fromLogin.has(name), name).toBe(false);
     }
+
+    expect(upstreamResponseHeaders(upstream, false).getSetCookie()).toEqual([]);
   });
 });
