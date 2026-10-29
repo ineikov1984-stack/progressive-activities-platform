@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, request, test, type BrowserContext, type Page } from '@playwright/test';
 
 // Runs in CI against the real Laravel API, PostgreSQL with RLS and the seeded demo
 // organization (job "e2e-stack"). Values are local demo seed data, never real accounts.
@@ -80,7 +80,10 @@ test('sign in leads to the home screen with tasks', async () => {
 });
 
 test('an owner invites a colleague from the home screen', async () => {
+  // Wait until the team list has loaded, so it cannot replace the new invitation afterwards.
+  const invitationsLoaded = page.waitForResponse((response) => response.url().includes('/backend/api/v1/invitations') && response.request().method() === 'GET');
   await page.goto('/dashboard');
+  await invitationsLoaded;
   const email = `teacher-e2e+${Date.now()}@example.test`;
   await slow(page.getByLabel('Имейл')).toBeVisible();
   await page.getByLabel('Имейл').fill(email);
@@ -110,11 +113,26 @@ test('the organization can be selected', async () => {
 });
 
 test('the selected organization is kept in the session', async () => {
-  // Known issue (docs/process/WORKBOARD.md): after a successful selection the next request
-  // still has no organization (409). Expected to fail with exactly that until the API is
-  // fixed; Playwright then reports the passing test so this marker can be removed.
-  test.fail(true, 'WORKBOARD: the session does not keep active_organization_id');
-  expect(await apiStatus(page, 'context/organization')).not.toBe(409);
+  expect(await apiStatus(page, 'context/organization')).toBe(200);
+});
+
+test('every API response keeps the browser signed in (session cookie stays valid)', async () => {
+  // Regression for 29.10.2026: the API started the session twice, so each response's cookie
+  // pointed to a new, empty session. Talk to the API directly with a normal cookie jar.
+  const jar = await request.newContext({
+    baseURL: 'http://127.0.0.1:8080',
+    extraHTTPHeaders: { Origin: 'http://127.0.0.1:3000', Referer: 'http://127.0.0.1:3000/', Accept: 'application/json' },
+  });
+  const token = async () => decodeURIComponent((await jar.storageState()).cookies.find((item) => item.name === 'XSRF-TOKEN')?.value ?? '');
+  await jar.get('/sanctum/csrf-cookie');
+  expect((await jar.post('/api/v1/auth/login', { headers: { 'X-XSRF-TOKEN': await token() }, data: { email: demo.email, password: demo.password } })).status()).toBe(200);
+  for (let index = 0; index < 3; index += 1) {
+    expect((await jar.get('/api/v1/me')).status(), `request ${index + 1} after sign-in`).toBe(200);
+  }
+  expect((await jar.post('/api/v1/context/organization', { headers: { 'X-XSRF-TOKEN': await token() }, data: { organization_id: demo.organizationId } })).status()).toBe(200);
+  expect((await jar.get('/api/v1/context/organization')).status()).toBe(200);
+  expect((await jar.get('/api/v1/me')).status()).toBe(200);
+  await jar.dispose();
 });
 
 test('another organization is not reachable through the header', async () => {

@@ -17,7 +17,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->statefulApi();
+        // No statefulApi(): the signed-in routes in routes/api.php already run in the `web`
+        // group (cookies, session, CSRF). Running both started the session twice; the second
+        // decrypt failed, the session got a new ID that was never saved, and every response
+        // handed the browser a cookie for an empty session (lost writes, logout after login).
         $middleware->appendToGroup('api', AssignCorrelationId::class);
         $middleware->alias([
             'tenant' => ResolveTenant::class,

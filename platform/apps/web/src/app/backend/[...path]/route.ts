@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { buildUpstreamUrl, forwardsSessionCookies, upstreamRequestHeaders, upstreamResponseHeaders } from './upstream';
+import { buildUpstreamUrl, upstreamRequestHeaders, upstreamResponseHeaders } from './upstream';
 
 type RouteContext = {
   params: Promise<{ path: string[] }>;
@@ -23,7 +23,7 @@ async function proxy(request: NextRequest, context: RouteContext) {
     redirect: 'manual',
   });
 
-  const responseHeaders = upstreamResponseHeaders(upstream.headers, forwardsSessionCookies(path));
+  const responseHeaders = upstreamResponseHeaders(upstream.headers);
   const hasNoBody = request.method === 'HEAD' || upstream.status === 204 || upstream.status === 205 || upstream.status === 304;
 
   return new NextResponse(hasNoBody ? null : await upstream.arrayBuffer(), {
