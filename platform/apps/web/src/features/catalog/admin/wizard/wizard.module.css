@@ -164,12 +164,13 @@
 .conflictDanger, .conflictWarning { display: flex; gap: var(--space-2); margin-top: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); font-size: 13px; line-height: 18px; }
 .conflictDanger { color: var(--status-full); background: var(--status-full-soft); }
 .conflictWarning { color: var(--status-limited); background: var(--status-limited-soft); }
-.slotRow { display: grid; grid-template-columns: minmax(8rem, 1.4fr) minmax(6.5rem, 1fr) minmax(6.5rem, 1fr) auto; gap: var(--space-2); align-items: center; }
+.slotRow { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.slotRow > .input { flex: 1 1 7.5rem; width: auto; }
+.slotRow > .input:first-child { flex-basis: 10rem; }
 .details { display: grid; gap: var(--space-3); }
 .details summary { color: var(--ink); font-size: 14px; font-weight: 600; cursor: pointer; }
 .details[open] summary { margin-bottom: var(--space-3); }
 @media (max-width: 560px) {
-  .slotRow { grid-template-columns: 1fr 1fr; }
   .amountRow { grid-template-columns: 1fr 1fr; }
 }
 
@@ -178,6 +179,10 @@
 .skeletonTall { height: 28rem; }
 @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @media (prefers-reduced-motion: reduce) { .skeleton, .skeletonTall { animation: none; } }
+
+/* Form-heavy steps (places, groups) use the preview column for the form. */
+.layoutWide { grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr); }
+.layoutWide .preview { display: none; }
 
 @media (max-width: 1180px) {
   .layout { grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr); }

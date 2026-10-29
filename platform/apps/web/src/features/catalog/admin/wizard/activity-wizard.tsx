@@ -146,6 +146,12 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
     if (current?.offering) commit({ ...current, offering: { ...current.offering, ...changes } });
   }, [commit]);
 
+  // On phones the step list scrolls sideways; keep the current step visible.
+  const loaded = content !== undefined;
+  useEffect(() => {
+    if (loaded) document.querySelector<HTMLElement>('[aria-current="step"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [step.id, loaded]);
+
   function goTo(target: WizardStep) {
     void autosaveRef.current?.flush();
     router.replace(`/dashboard/activities/${activityId}?step=${target.number}`, { scroll: false });
@@ -253,7 +259,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
       ) : null}
       {saveError ? <p className={styles.error} role="alert">{saveError}</p> : null}
 
-      <div className={styles.layout}>
+      <div className={`${styles.layout} ${step.id === 'people' || step.id === 'groups' ? styles.layoutWide : ''}`}>
         <nav className={styles.steps} aria-label="Стъпки">
           <span className={styles.muted}>Стъпка {step.number} от {wizardSteps.length}</span>
           <ol>
