@@ -38,14 +38,14 @@ jobs:
       run:
         working-directory: platform/apps/api
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
         with:
           php-version: "8.4"
           coverage: none
           # Same limits as the shipped image (platform/apps/api/docker/catalog-uploads.ini).
           ini-values: upload_max_filesize=8M, post_max_size=10M
-      - uses: ramsey/composer-install@v3
+      - uses: ramsey/composer-install@v4
         with:
           working-directory: platform/apps/api
       - name: Create restricted application database role
@@ -114,11 +114,11 @@ jobs:
       run:
         working-directory: platform
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.19.0
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: pnpm
@@ -135,7 +135,7 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Build API image
         run: docker build --target development -t progressive-api platform/apps/api
       - name: Build web image
