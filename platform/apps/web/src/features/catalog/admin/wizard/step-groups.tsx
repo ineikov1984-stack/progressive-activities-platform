@@ -32,6 +32,7 @@ export function StepGroups({ organizationId, activityId, ageLabel, groups, locat
   const [extraDates, setExtraDates] = useState<ExtraDate[]>([]);
   const [excluded, setExcluded] = useState('');
   const [frequency, setFrequency] = useState<'weekly' | 'biweekly'>('weekly');
+  const [approval, setApproval] = useState<'manual' | 'automatic'>('manual');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -42,6 +43,7 @@ export function StepGroups({ organizationId, activityId, ageLabel, groups, locat
     setExtraDates(group?.schedule_pattern.added_dates ?? []);
     setExcluded(group?.schedule_pattern.excluded_dates?.join('\n') ?? '');
     setFrequency(group?.schedule_pattern.frequency ?? 'weekly');
+    setApproval(group?.enrollment_approval_mode ?? 'manual');
     setError(''); setNotice('');
   }
 
@@ -60,6 +62,7 @@ export function StepGroups({ organizationId, activityId, ageLabel, groups, locat
         capacity_max: Number(value('capacity_max')),
         location_id: value('location_id') || null,
         instructor_ids: form.getAll('instructor_ids').map(String),
+        enrollment_approval_mode: approval,
         schedule_pattern: buildSchedulePattern({ startDate: value('start_date'), endDate: value('end_date'), frequency, slots, excludedDates: excluded, addedDates: extraDates.filter((item) => item.date) }),
       }, existing?.id);
       onGroup(group);
@@ -85,6 +88,7 @@ export function StepGroups({ organizationId, activityId, ageLabel, groups, locat
               </div>
               <span className={styles.muted}>{summarizeSchedule(group.schedule_pattern)}</span>
               <span className={styles.muted}>{group.sessions.length} занятия · до {group.capacity_max} деца{group.location_id ? ` · ${locations.find((item) => item.id === group.location_id)?.name ?? ''}` : ''}</span>
+              <span className={styles.muted}>{group.enrollment_approval_mode === 'automatic' ? 'Заявките се одобряват автоматично, ако има място' : 'Заявките се одобряват от екипа'}</span>
               {group.conflicts.map((conflict, index) => {
                 const view = conflictPresentation(conflict);
                 return <span key={index} className={view.tone === 'danger' ? styles.conflictDanger : styles.conflictWarning}><Icon path={icons.warn} /><span><strong>{view.label}.</strong> {view.message}</span></span>;
@@ -138,6 +142,20 @@ export function StepGroups({ organizationId, activityId, ageLabel, groups, locat
             <Field id="g-min" label="Минимум деца"><input id="g-min" name="capacity_min" type="number" min={1} className={styles.input} defaultValue={current?.capacity_min ?? 1} /></Field>
             <Field id="g-max" label="Максимум деца"><input id="g-max" name="capacity_max" type="number" min={1} className={styles.input} required defaultValue={current?.capacity_max ?? 12} /></Field>
           </div>
+          <fieldset className={styles.fieldset}>
+            <legend className={styles.label}>Как се одобряват заявките</legend>
+            <div className={styles.choiceGrid}>
+              <label className={`${styles.choice} ${approval === 'manual' ? styles.choiceOn : ''}`}>
+                <input type="radio" name="approval" value="manual" checked={approval === 'manual'} onChange={() => setApproval('manual')} />
+                <span className={styles.choiceText}><strong>Ръчно от екипа</strong><span>Всяка заявка чака вашето решение.</span></span>
+              </label>
+              <label className={`${styles.choice} ${approval === 'automatic' ? styles.choiceOn : ''}`}>
+                <input type="radio" name="approval" value="automatic" checked={approval === 'automatic'} onChange={() => setApproval('automatic')} />
+                <span className={styles.choiceText}><strong>Автоматично, ако има място</strong><span>Детето се записва веднага. При пълна група заявката отива в чакащите. Удобно за записване за целия срок.</span></span>
+              </label>
+            </div>
+            <p className={styles.hint}>Може да се промени и по-късно, също и след публикуване — в „Записвания“ → „Групи“.</p>
+          </fieldset>
           {instructors.length > 0 ? (
             <fieldset className={styles.fieldset}>
               <legend className={styles.label}>Преподаватели в групата</legend>

@@ -55,6 +55,7 @@ final class ActivityGroupController extends Controller
             'id' => $group->id, 'offering_id' => $group->offering_id, 'version' => $group->version,
             'name' => $group->name, 'age_label' => $group->age_label, 'status' => $group->status,
             'capacity_min' => $group->capacity_min, 'capacity_max' => $group->capacity_max,
+            'enrollment_approval_mode' => $group->enrollment_approval_mode,
             'location_id' => $group->location_id, 'instructor_ids' => $group->instructors->modelKeys(),
             'schedule_pattern' => $group->schedule_pattern,
             'price_options' => $group->priceOptions->map(fn ($price) => [

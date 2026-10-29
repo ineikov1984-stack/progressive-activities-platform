@@ -210,6 +210,34 @@ class StaffEnrollmentApiTest extends TestCase
             ->assertJsonPath('groups.0.schedule', ['frequency' => 'weekly', 'slots' => [['weekday' => 5, 'starts_at' => '16:00', 'duration_minutes' => 60]]]);
     }
 
+    public function test_team_turns_on_automatic_approval_for_a_group(): void
+    {
+        [$organization, $group] = $this->organizationWithApplication();
+        [, $foreignGroup] = $this->organizationWithApplication();
+        $coordinator = $this->member($organization, 'coordinator');
+        $url = "/api/v1/enrollment/groups/{$group->id}/approval";
+
+        $this->actAs($coordinator, $organization)
+            ->patchJson($url, ['enrollment_approval_mode' => 'automatic'])
+            ->assertOk()
+            ->assertExactJson(['group' => ['id' => $group->id, 'enrollment_approval_mode' => 'automatic']]);
+        $this->getJson('/api/v1/enrollment/groups')->assertJsonPath('groups.0.enrollment_approval_mode', 'automatic');
+        $this->getJson("/api/v1/enrollment/groups/{$group->id}/roster")->assertJsonPath('group.enrollment_approval_mode', 'automatic');
+        // Identifiers and the new mode only.
+        $this->assertDatabaseHas('audit_events', [
+            'action' => 'enrollment.group_approval_changed', 'subject_id' => $group->id, 'actor_id' => $coordinator->id,
+        ]);
+
+        $this->patchJson($url, ['enrollment_approval_mode' => 'sometimes'])->assertUnprocessable()->assertJsonValidationErrors('enrollment_approval_mode');
+        $this->patchJson("/api/v1/enrollment/groups/{$foreignGroup->id}/approval", ['enrollment_approval_mode' => 'automatic'])->assertNotFound();
+        $this->assertSame('manual', $foreignGroup->refresh()->enrollment_approval_mode);
+        foreach (['finance', 'viewer', 'instructor'] as $role) {
+            $this->actAs($this->member($organization, $role), $organization)
+                ->patchJson($url, ['enrollment_approval_mode' => 'manual'])->assertForbidden();
+        }
+        $this->assertSame('automatic', $group->refresh()->enrollment_approval_mode);
+    }
+
     public static function roles(): iterable
     {
         yield 'platform administrator' => ['platform_admin', 200, 200];

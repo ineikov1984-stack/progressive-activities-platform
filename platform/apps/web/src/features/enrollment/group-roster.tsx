@@ -5,6 +5,7 @@ import {
   changeErrorMessage, endPause, type GroupRoster, loadRoster, reopenEnrollment, restoreSession, reviewApplication,
   type RosterEnrollment, type StaffApplication,
 } from './api';
+import { ApprovalSetting } from './approval-setting';
 import { ChangePanel } from './change-panel';
 import { addDays, dateText, needsGroupPlace, placesText, type RosterNote, rosterNotes, scopeLabels, shortDay, sofiaDay } from './presentation';
 import styles from './enrollments.module.css';
@@ -95,6 +96,8 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
         Заети места: <strong>{roster.group.enrolled_for_period}</strong>{roster.group.capacity_max ? ` от ${roster.group.capacity_max}` : ''} · {placesText(roster.group.remaining)}
         {roster.enrollments.length > fullPeriodCount ? ` · ${roster.enrollments.length - fullPeriodCount} с еднократно или пробно посещение` : ''}
       </p>
+      <ApprovalSetting key={roster.group.enrollment_approval_mode} organizationId={organizationId} groupId={groupId} canManage={canManage}
+        mode={roster.group.enrollment_approval_mode === 'automatic' ? 'automatic' : 'manual'} onSaved={() => onChanged?.()} />
       <p ref={topNotice} tabIndex={-1} className={topText ? styles.rowNotice : styles.srOnly}>{topText}</p>
       {error ? <div className={styles.actions}><p className={styles.error} role="alert">{error}</p>{retry}</div> : null}
       {searchable ? (
