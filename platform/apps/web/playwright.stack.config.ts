@@ -4,7 +4,7 @@ import { defineConfig } from '@playwright/test';
 // Started by the "e2e-stack" CI job after the API is migrated, seeded and running.
 export default defineConfig({
   testDir: './tests/e2e',
-  testMatch: ['stack-smoke.spec.ts'],
+  testMatch: ['stack-smoke.spec.ts', 'stack-session-diagnostic.spec.ts'],
   workers: 1,
   retries: 0,
   use: {
