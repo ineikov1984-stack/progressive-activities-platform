@@ -6,7 +6,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Снимки в администрацията през заглавка за организация | Claude | claude/private-media | `features/catalog/admin/private-image.tsx`, `activity-list.tsx`, `activity-editor.tsx` | PR отворен |
+| Качените снимки да не се губят при rebuild (volume за API storage) | Claude | claude/api-storage-volume | `platform/compose.yaml` (горещ) | PR отворен |
 
 ## Опашка (по приоритет)
 
