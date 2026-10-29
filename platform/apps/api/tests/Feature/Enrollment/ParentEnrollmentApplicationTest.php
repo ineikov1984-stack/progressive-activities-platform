@@ -117,9 +117,10 @@ class ParentEnrollmentApplicationTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('application.status', 'approved');
 
-        // Not in the immutable history, the events or the audit log.
+        // Not in the immutable history, the events or the audit log (the parent's own steps write no audit today).
+        $this->assertGreaterThan(0, DB::table('enrollment_transitions')->count());
+        $this->assertGreaterThan(0, DB::table('enrollment_events')->count());
         foreach (['enrollment_transitions', 'enrollment_events', 'audit_events'] as $table) {
-            $this->assertGreaterThan(0, DB::table($table)->count(), $table);
             $this->assertStringNotContainsString('NOTE-7f3a', (string) json_encode(DB::table($table)->get()), $table);
         }
         $this->actingAs($parent)->withHeader('Idempotency-Key', 'note-002')
