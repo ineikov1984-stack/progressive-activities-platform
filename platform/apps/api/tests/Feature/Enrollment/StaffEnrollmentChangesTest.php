@@ -187,7 +187,9 @@ class StaffEnrollmentChangesTest extends TestCase
         $this->assertDatabaseHas('enrollment_events', ['enrollment_id' => $enrollment->id, 'type' => 'enrollment.pause_ended']);
         $this->assertAuditWithoutPersonalData('enrollment.paused', $enrollment->id, ['Болест']);
         $this->assertDatabaseMissing('enrollment_transitions', ['public_reason' => 'Болест']);
-        $this->assertSame(0, DB::table('enrollment_transitions')->where('metadata', 'like', '%Болест%')->count());
+        foreach (DB::table('enrollment_transitions')->where('enrollment_id', $enrollment->id)->pluck('metadata') as $metadata) {
+            $this->assertStringNotContainsString('Болест', $this->readable((string) $metadata));
+        }
     }
 
     public function test_end_sets_the_last_day_or_cancels_an_enrollment_that_has_not_started(): void
@@ -416,7 +418,28 @@ class StaffEnrollmentChangesTest extends TestCase
 
         // The first enrollment cannot be reopened as well: the child already continues in the group.
         $this->postJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/reopen", ['version' => 2])
-            ->assertUnprocessable()->assertJsonValidationErrors('enrollment');
+            ->assertUnprocessable()->assertJsonPath('errors.enrollment.0', 'Детето вече продължава в групата с ново записване.');
+    }
+
+    public function test_reopen_follows_a_chain_of_moves(): void
+    {
+        $f = $this->fixture();
+        $owner = $this->member($f['organization'], 'organization_owner');
+        $this->actAs($owner, $f['organization']);
+        $third = $this->withTenant($f['organization'], fn () => $f['thursday']->offering->groups()->create([
+            'name' => 'Събота', 'capacity_max' => 10, 'status' => 'published', 'waitlist_enabled' => true, 'enrollment_approval_mode' => 'manual',
+        ]));
+        $thirdPrice = $this->withTenant($f['organization'], fn () => $f['thursday']->offering->priceOptions()->create([
+            'group_id' => $third->id, 'enrollment_mode' => 'monthly', 'unit' => 'month', 'amount_cents' => 4000, 'currency' => 'EUR', 'is_available' => true,
+        ]));
+        // A (Tuesday) → B (Thursday, from 12.11) → C (Saturday, from 12.11): B is cancelled before it starts.
+        $movedId = $this->postJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/transfer", $this->transferPayload($f))->assertOk()->json('enrollment.id');
+        $this->postJson("/api/v1/enrollment/enrollments/{$movedId}/transfer", [
+            'target_group_id' => $third->id, 'price_option_id' => $thirdPrice->id, 'effective_date' => '2026-11-12', 'reason' => self::REASON, 'version' => 1,
+        ])->assertOk();
+
+        $this->postJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/reopen", ['version' => 2])
+            ->assertUnprocessable()->assertJsonPath('errors.enrollment.0', 'Детето е преместено в друга група. За да се върне, преместете го обратно.');
     }
 
     public function test_a_cancelled_move_lets_the_old_enrollment_continue(): void
@@ -444,6 +467,7 @@ class StaffEnrollmentChangesTest extends TestCase
         $movedId = $this->postJson("{$source}/transfer", $this->transferPayload($f))->assertOk()->json('enrollment.id');
         $this->postJson("/api/v1/enrollment/enrollments/{$movedId}/end", ['last_day' => '2026-11-01', 'reason' => self::REASON, 'version' => 1])->assertOk();
         // A pause after the end adds a later "ended → ended" step to the history.
+        $this->travel(1)->minutes();
         $this->postJson("{$source}/pauses", ['starts_on' => '2026-11-02', 'ends_on' => '2026-11-03', 'reason_category' => 'family', 'version' => 2])->assertCreated();
 
         $this->postJson("{$source}/reopen", ['version' => 3])
@@ -705,9 +729,16 @@ class StaffEnrollmentChangesTest extends TestCase
     {
         $event = DB::table('audit_events')->where('action', $action)->where('subject_id', $subjectId)->first();
         $this->assertNotNull($event, "Missing audit event {$action}.");
+        // Stored JSON escapes Cyrillic (\u0410…); compare against readable text.
+        $metadata = $this->readable((string) $event->metadata);
         foreach (['Ани', 'Иванова', self::REASON, ...$secrets] as $secret) {
-            $this->assertStringNotContainsString($secret, (string) $event->metadata);
+            $this->assertStringNotContainsString($secret, $metadata);
         }
+    }
+
+    private function readable(string $json): string
+    {
+        return (string) json_encode(json_decode($json, true), JSON_UNESCAPED_UNICODE);
     }
 
     /**

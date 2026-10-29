@@ -309,7 +309,7 @@ final class ChangeEnrollment
             if ($current->status !== EnrollmentStatus::Ended || $current->ends_on === null || $current->ends_on->toDateString() < $today) {
                 throw ValidationException::withMessages(['enrollment' => 'Само насрочено прекратяване може да се отмени.']);
             }
-            if (Enrollment::query()->where('transferred_from_id', $current->id)->where('status', '!=', EnrollmentStatus::Cancelled->value)->exists()) {
+            if ($this->movedOn($current)) {
                 throw ValidationException::withMessages(['enrollment' => 'Детето е преместено в друга група. За да се върне, преместете го обратно.']);
             }
 
@@ -420,6 +420,27 @@ final class ChangeEnrollment
         }
 
         return [$current, $groups];
+    }
+
+    /**
+     * Whether the enrollment continues somewhere else: a move that was not cancelled, also further
+     * down a chain (A → B cancelled → C). The chain is short; the loop is bounded anyway.
+     */
+    private function movedOn(Enrollment $enrollment): bool
+    {
+        $id = $enrollment->id;
+        for ($step = 0; $step < 50; $step++) {
+            $next = Enrollment::query()->where('transferred_from_id', $id)->first(['id', 'status']);
+            if ($next === null) {
+                return false;
+            }
+            if ($next->status !== EnrollmentStatus::Cancelled) {
+                return true;
+            }
+            $id = $next->id;
+        }
+
+        return true;
     }
 
     /** Another full-period place of the same child in the group on or after the day (not cancelled). */

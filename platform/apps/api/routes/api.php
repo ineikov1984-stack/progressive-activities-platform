@@ -39,8 +39,8 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/me', [AuthController::class, 'me']);
             Route::get('/parent/children', [ParentChildController::class, 'index']);
             Route::post('/parent/children', [ParentChildController::class, 'store']);
-            Route::get('/parent/children/{child}', [ParentChildController::class, 'show']);
-            Route::patch('/parent/children/{child}', [ParentChildController::class, 'update']);
+            Route::get('/parent/children/{child}', [ParentChildController::class, 'show'])->whereUuid('child');
+            Route::patch('/parent/children/{child}', [ParentChildController::class, 'update'])->whereUuid('child');
             Route::get('/parent/enrollment-applications', [ParentEnrollmentController::class, 'index']);
             Route::post('/parent/enrollment-applications', [ParentEnrollmentController::class, 'store']);
             Route::post('/parent/enrollment-applications/{application}/withdraw', [ParentEnrollmentController::class, 'withdraw'])->whereUuid('application');

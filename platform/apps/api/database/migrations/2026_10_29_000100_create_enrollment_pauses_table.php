@@ -18,7 +18,8 @@ return new class extends Migration
         // with the restricted application role the SECURITY DEFINER checks would see no rows.
         if (DB::getDriverName() === 'pgsql') {
             $role = DB::selectOne('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user');
-            if ($role === null || (! $role->rolsuper && ! $role->rolbypassrls)) {
+            // No row when the migration only prints its SQL (--pretend).
+            if ($role !== null && ! $role->rolsuper && ! $role->rolbypassrls) {
                 throw new RuntimeException('Run migrations as the database owner: php artisan migrate --database=pgsql_admin --force');
             }
         }
