@@ -131,3 +131,12 @@ jobs:
       # demo database run locally against the Docker stack (see docs/process/WORKFLOW.md).
       - name: Browser tests (synthetic fixtures)
         run: pnpm --filter @progressive/web exec playwright test --config=playwright.isolated.config.ts --reporter=github,line
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build API image
+        run: docker build --target development -t progressive-api platform/apps/api
+      - name: Build web image
+        run: docker build --target development -f platform/apps/web/Dockerfile -t progressive-web platform

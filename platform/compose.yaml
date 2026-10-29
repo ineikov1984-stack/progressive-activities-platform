@@ -34,7 +34,8 @@ services:
 
   web:
     build:
-      context: ./apps/web
+      context: .
+      dockerfile: apps/web/Dockerfile
       target: development
     environment:
       API_BASE_URL: http://api:8080
