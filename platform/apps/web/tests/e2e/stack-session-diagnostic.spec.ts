@@ -8,7 +8,7 @@ import { expect, request, test, type APIRequestContext } from '@playwright/test'
 const api = 'http://127.0.0.1:8080';
 const front = { Origin: 'http://127.0.0.1:3000', Referer: 'http://127.0.0.1:3000/' };
 const sql = (query: string) => execSync(`psql -h 127.0.0.1 -U progressive -d progressive -tAc "${query}"`, { env: { ...process.env, PGPASSWORD: 'progressive-local-only' } }).toString().trim().replace(/\n/g, ' | ');
-const appKey = Buffer.from((readFileSync(resolve(process.cwd(), 'apps/api/.env'), 'utf8').match(/^APP_KEY=base64:(.+)$/m) ?? ['', ''])[1], 'base64');
+const appKey = Buffer.from((readFileSync(resolve(process.cwd(), '../api/.env'), 'utf8').match(/^APP_KEY=base64:(.+)$/m) ?? ['', ''])[1], 'base64');
 
 function decryptCookie(raw: string): string {
   try {
