@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Enrollment\Actions\ReviewEnrollmentApplication;
 use App\Domain\Enrollment\Enums\EnrollmentApplicationStatus;
+use App\Domain\Enrollment\Enums\EnrollmentScope;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Child;
 use App\Domain\Enrollment\Models\Enrollment;
@@ -13,6 +14,7 @@ use App\Domain\Enrollment\Services\EnrollmentCapacity;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -87,6 +89,8 @@ final class StaffEnrollmentController extends Controller
             ->with('child')
             ->orderBy('starts_on')
             ->get();
+        // Same rule as EnrollmentCapacity::remainingForGroup: full-period enrollments current today.
+        $today = CarbonImmutable::now()->setTimezone($record->schedule_pattern['timezone'] ?? 'Europe/Sofia')->toDateString();
         $waiting = EnrollmentApplication::query()
             ->where('group_id', $record->id)
             ->where('status', EnrollmentApplicationStatus::Waitlisted->value)
@@ -101,8 +105,7 @@ final class StaffEnrollmentController extends Controller
                 'activity_id' => $record->offering?->activity?->id,
                 'activity_title' => $record->offering?->activity?->title,
                 'capacity_max' => $record->capacity_max,
-                // Same rule as capacity: current full-period enrollments take a place.
-                'enrolled_for_period' => $enrollments->filter(fn (Enrollment $enrollment): bool => $enrollment->scope->value === 'full_period')->count(),
+                'enrolled_for_period' => $enrollments->filter(fn (Enrollment $enrollment): bool => $this->takesPlaceToday($enrollment, $today))->count(),
                 'remaining' => $capacity->remainingForGroup($record),
                 'waitlist_enabled' => $record->waitlist_enabled,
             ],
@@ -117,6 +120,13 @@ final class StaffEnrollmentController extends Controller
             ])->all(),
             'waitlist' => $waiting->map($this->presentApplication(...))->all(),
         ]);
+    }
+
+    private function takesPlaceToday(Enrollment $enrollment, string $today): bool
+    {
+        return $enrollment->scope === EnrollmentScope::FullPeriod
+            && $enrollment->starts_on->toDateString() <= $today
+            && ($enrollment->ends_on === null || $enrollment->ends_on->toDateString() >= $today);
     }
 
     /** @return array<string, mixed> */

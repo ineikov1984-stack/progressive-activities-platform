@@ -99,6 +99,7 @@ export function EnrollmentsPage() {
   const [groups, setGroups] = useState<GroupEntry[]>();
   const [groupsError, setGroupsError] = useState('');
   const canManage = organization.permissions.includes('enrollment.manage');
+  const canView = organization.permissions.includes('enrollment.view');
   const [openGroup, setOpenGroup] = useState<string>();
   const [busyId, setBusyId] = useState('');
   const [error, setError] = useState('');
@@ -173,7 +174,7 @@ export function EnrollmentsPage() {
       {notice ? <p className={styles.success} role="status">{notice}</p> : null}
       {error ? <p className={styles.error} role="alert">{error}</p> : null}
 
-      {!canManage ? <p className={styles.muted}>Вашата роля позволява само преглед. Решенията се вземат от собственика, администратора или координатора.</p> : null}
+      {canView && !canManage ? <p className={styles.muted}>Вашата роля позволява само преглед. Решенията се вземат от собственика, администратора или координатора.</p> : null}
 
       <section aria-label={tabs.find((item) => item.id === tab)?.label} aria-busy={tab === 'groups' ? groups === undefined : list === undefined} className={styles.panel}>
         {tab !== 'groups' ? (
@@ -188,7 +189,12 @@ export function EnrollmentsPage() {
               {page?.has_more ? <p className={styles.muted}>Показани са първите {list.length} от {page.total}. Решете тези и списъкът ще продължи.</p> : null}
             </div>
           )
-        ) : groups === undefined ? <span className={styles.skeleton} aria-busy="true" /> : groupsError ? <p className={styles.error} role="alert">{groupsError}</p> : groups.length === 0 ? (
+        ) : groups === undefined ? <span className={styles.skeleton} aria-busy="true" /> : groupsError ? (
+          <div className={styles.empty} role="alert">
+            <strong>{groupsError}</strong>
+            <p><button type="button" className={styles.secondary} onClick={() => { setGroupsError(''); setGroups(undefined); }}>Опитай отново</button></p>
+          </div>
+        ) : groups.length === 0 ? (
           <div className={styles.empty}>
             <strong>Все още няма групи</strong>
             <p>Групите се създават в стъпка 7 на всяка дейност. <Link href="/dashboard/activities">Към дейностите</Link></p>
