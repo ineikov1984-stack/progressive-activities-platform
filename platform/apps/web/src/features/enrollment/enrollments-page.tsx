@@ -8,7 +8,7 @@ import { type ApplicationFacets, type ApplicationPage, loadApplications, loadSta
 import { GroupRosterPanel } from './group-roster';
 import {
   activitySummary, applicationPlaces, dateText, dateTimeText, type GroupFilter, groupFill, groupFilterLabels, groupsByActivity, hasPlaceForWaiting,
-  matchesGroupFilter, matchesGroupSearch, priceText, scheduleText, scopeLabels, waitingText,
+  matchesGroupFilter, matchesGroupSearch, needsGroupPlace, priceText, scheduleText, scopeLabels, waitingQueues, waitingText,
 } from './presentation';
 import styles from './enrollments.module.css';
 
@@ -45,7 +45,8 @@ function ApplicationRow({ application, busy, canManage, inQueue = false, onDecid
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const waiting = application.status === 'waitlisted';
-  const places = applicationPlaces(application.group);
+  // Only a place for the whole period depends on the group's count (a trial or one-off visit has its own session).
+  const places = needsGroupPlace(application) ? applicationPlaces(application.group) : undefined;
   // A waiting child cannot be approved into a full group; a new application can still go to the waiting list.
   const blocked = waiting && places?.full === true;
   const Heading = inQueue ? 'h4' : 'h3';
@@ -77,12 +78,13 @@ function ApplicationRow({ application, busy, canManage, inQueue = false, onDecid
         </form>
       ) : (
         <div className={`${styles.actions} ${styles.appActions}`}>
-          <button type="button" className={styles.primary} disabled={busy || blocked} aria-describedby={blocked ? `full-${application.id}` : undefined} onClick={() => onDecide('approve')}>
+          <button type="button" className={blocked ? styles.secondary : styles.primary} disabled={busy || blocked} aria-describedby={blocked ? (inQueue ? `queue-full-${application.group.id}` : `full-${application.id}`) : undefined} onClick={() => onDecide('approve')}>
             {busy ? 'Запазване…' : 'Одобри'}<span className={styles.srOnly}> {name}</span>
           </button>
           {!waiting ? <button type="button" className={styles.secondary} disabled={busy} onClick={() => onDecide('waitlist')}>Към чакащите<span className={styles.srOnly}> {name}</span></button> : null}
           <button type="button" className={styles.quiet} disabled={busy} onClick={() => setRejecting(true)}>Откажи<span className={styles.srOnly}> {name}</span></button>
-          {blocked ? <span id={`full-${application.id}`} className={styles.smallWarning}>Няма свободно място</span> : null}
+          {/* In a queue the heading already says the group is full. */}
+          {blocked && !inQueue ? <span id={`full-${application.id}`} className={styles.smallWarning}>Няма свободно място</span> : null}
         </div>
       )}
     </article>
@@ -93,17 +95,17 @@ type FilterValues = { search: string; activityId: string; groupId: string };
 
 function ApplicationFiltersBar({ facets, values, total, onChange, onClear }: { facets?: ApplicationFacets; values: FilterValues; total?: number; onChange: (values: FilterValues) => void; onClear: () => void }) {
   const active = values.search.trim() !== '' || values.activityId !== '' || values.groupId !== '';
-  // On a phone the filters fold behind one button, unless one is in use.
+  // On a phone the filters fold behind one button; the button says when a filter is on.
   const [open, setOpen] = useState(false);
   const activities = facets?.activities ?? [];
   const groups = facets?.groups ?? [];
   const groupOption = (group: ApplicationFacets['groups'][number]) => <option key={group.id} value={group.id}>{group.name} ({group.count})</option>;
   return (
     <div className={styles.filterArea}>
-      <button type="button" className={`${styles.secondary} ${styles.filtersToggle}`} aria-expanded={open || active} aria-controls="applications-filters" onClick={() => setOpen(!open)}>
+      <button type="button" className={`${styles.secondary} ${styles.filtersToggle}`} aria-expanded={open} aria-controls="applications-filters" onClick={() => setOpen(!open)}>
         Търсене и филтри{active ? ' · включени' : ''}
       </button>
-      <div id="applications-filters" className={`${styles.filters} ${open || active ? styles.filtersOpen : ''}`} role="search" aria-label="Търсене в заявките">
+      <div id="applications-filters" className={`${styles.filters} ${open ? styles.filtersOpen : ''}`} role="search" aria-label="Търсене в заявките">
         <div className={styles.filterField}>
           <label htmlFor="applications-search">Дете</label>
           <input id="applications-search" type="search" value={values.search} placeholder="Име на детето" maxLength={100} onChange={(event) => onChange({ ...values, search: event.target.value })} />
@@ -137,20 +139,18 @@ function ApplicationFiltersBar({ facets, values, total, onChange, onClear }: { f
 }
 
 /** Waiting children under their group, in the order they applied, with the places the group has today. */
-function WaitingQueues({ list, busyId, canManage, onDecide }: { list: StaffApplication[]; busyId: string; canManage: boolean; onDecide: (application: StaffApplication, decision: ReviewDecision, reason?: string) => void }) {
-  const queues = new Map<string, StaffApplication[]>();
-  for (const application of list) queues.set(application.group.id, [...(queues.get(application.group.id) ?? []), application]);
+function WaitingQueues({ queues, counts, busyId, canManage, onDecide }: { queues: StaffApplication[][]; counts: Map<string, number>; busyId: string; canManage: boolean; onDecide: (application: StaffApplication, decision: ReviewDecision, reason?: string) => void }) {
   return (
     <div className={styles.queues}>
-      {[...queues.values()].map((items) => {
+      {queues.map((items) => {
         const places = applicationPlaces(items[0].group);
         return (
           <section key={items[0].group.id} className={styles.queue} aria-labelledby={`queue-${items[0].group.id}`}>
             <h3 id={`queue-${items[0].group.id}`} className={styles.queueTitle}>
               {items[0].activity.title} · {items[0].group.name}
               <span className={styles.queueMeta}>
-                <span className={styles.small}>{waitingText(items.length)} · по реда на заявките</span>
-                {places ? <span className={places.full ? styles.smallWarning : styles.placeFree}>{places.text}</span> : null}
+                <span className={styles.small}>{waitingText(counts.get(items[0].group.id) ?? items.length)} · по реда на заявките</span>
+                {places ? <span id={`queue-full-${items[0].group.id}`} className={places.full ? styles.smallWarning : styles.placeFree}>{places.text}</span> : null}
               </span>
             </h3>
             <ol className={styles.queueList}>
@@ -307,6 +307,12 @@ export function EnrollmentsPage() {
     noticeRef.current?.focus();
   }, [notice]);
   const [shownCount, setShownCount] = useState(PAGE);
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (!error) return;
+    errorRef.current?.scrollIntoView({ block: 'nearest' });
+    errorRef.current?.focus();
+  }, [error]);
 
   // Filters for "Заявки" and "Чакащи": the name is searched a moment after typing stops.
   const [filters, setFilters] = useState<FilterValues>(noFilters);
@@ -398,8 +404,21 @@ export function EnrollmentsPage() {
   const unfiltered = tab === 'submitted' ? submitted : waitlisted;
   const page = filtering ? (filtered?.key === filterKey ? filtered.page : undefined) : unfiltered;
   const list = page?.applications;
-  const visible = list?.slice(0, shownCount);
+  // "Чакащи" grows by whole queues, so a group's waiting children are never split across the page.
+  const queues = tab === 'waitlisted' && list ? (() => {
+    const shown: StaffApplication[][] = [];
+    let count = 0;
+    for (const queue of waitingQueues(list)) {
+      if (count >= shownCount) break;
+      shown.push(queue);
+      count += queue.length;
+    }
+    return shown;
+  })() : undefined;
+  const visible = queues ? queues.flat() : list?.slice(0, shownCount);
   const hidden = list && visible ? list.length - visible.length : 0;
+  // Waiting counts per group from the API (all of them, not only the ones shown).
+  const queueCounts = new Map((waitlisted?.facets?.groups ?? []).map((group) => [group.id, group.count]));
   const showFilters = tab !== 'groups' && (filtering || filters.search !== '' || (unfiltered?.total ?? 0) >= FILTERS_FROM);
 
   return (
@@ -419,7 +438,7 @@ export function EnrollmentsPage() {
       </div>
 
       <p ref={noticeRef} tabIndex={-1} className={notice ? styles.success : styles.srOnly} role="status">{notice?.text ?? ''}</p>
-      {error ? <p className={styles.error} role="alert">{error}</p> : null}
+      {error ? <p ref={errorRef} tabIndex={-1} className={styles.error} role="alert">{error}</p> : null}
 
       {canView && !canManage ? <p className={styles.muted}>Вашата роля позволява само преглед. Решенията се вземат от собственика, администратора или координатора.</p> : null}
 
@@ -437,7 +456,7 @@ export function EnrollmentsPage() {
                 <p>{filtering ? 'Променете търсенето или изчистете филтрите.' : tab === 'submitted' ? 'Когато родител подаде заявка, тя ще се появи тук и в „Какво чака вас“.' : 'Тук ще са децата, които чакат свободно място в пълна група.'}</p>
               </div>
             ) : tab === 'waitlisted' ? (
-              <WaitingQueues list={visible} busyId={busyId} canManage={canManage} onDecide={decide} />
+              <WaitingQueues queues={queues ?? []} counts={filtering ? new Map() : queueCounts} busyId={busyId} canManage={canManage} onDecide={decide} />
             ) : (
               <div className={styles.appList}>
                 {visible.map((application) => <ApplicationRow key={application.id} application={application} canManage={canManage} busy={busyId === application.id} onDecide={(decision, reason) => decide(application, decision, reason)} />)}

@@ -199,6 +199,21 @@ export function activitySummary(section: ActivityGroups, shown = section.groups.
   return `${groups} · ${places}${full}${waiting}`;
 }
 
+/**
+ * A place in the group for the whole period is what the group's count measures. Trial, one-off and
+ * open-day visits are decided by the places in their own session, so the group count says nothing about them.
+ */
+export function needsGroupPlace(application: Pick<StaffApplication, 'scope' | 'visit_offer_title'>): boolean {
+  return application.scope === 'full_period' && !application.visit_offer_title;
+}
+
+/** Waiting children grouped by group, in the order of their first application. */
+export function waitingQueues(list: StaffApplication[]): StaffApplication[][] {
+  const queues = new Map<string, StaffApplication[]>();
+  for (const application of list) queues.set(application.group.id, [...(queues.get(application.group.id) ?? []), application]);
+  return [...queues.values()];
+}
+
 /** How full the group of an application is today, in words; nothing when the team cannot know. */
 export function applicationPlaces(group: StaffApplication['group']): { text: string; full: boolean } | undefined {
   if (group.places_taken === undefined) return undefined;

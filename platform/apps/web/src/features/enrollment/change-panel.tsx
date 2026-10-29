@@ -189,7 +189,7 @@ function TransferForm({ organizationId, roster, enrollment, name, onDone, onFail
       {target?.starts?.length ? (
         <fieldset className={styles.fieldset}>
           <legend>От кое занимание е в „{target.name}“</legend>
-          <p className={styles.hint} id={`move-days-${enrollment.id}`}>Датите с „няма място“ не могат да се изберат: от тях нататък в групата няма място за всяко занимание.</p>
+          <p className={styles.hint} id={`move-days-${enrollment.id}`}>Датите с „няма място“ не могат да се изберат: от тях нататък поне едно занимание в групата е пълно.</p>
           <div className={styles.dayGrid}>
             {target.starts.map((start) => {
               const free = hasPlace(start);

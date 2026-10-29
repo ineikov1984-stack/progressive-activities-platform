@@ -6,7 +6,7 @@ import {
   type RosterEnrollment, type StaffApplication,
 } from './api';
 import { ChangePanel } from './change-panel';
-import { addDays, dateText, placesText, type RosterNote, rosterNotes, scopeLabels, shortDay, sofiaDay } from './presentation';
+import { addDays, dateText, needsGroupPlace, placesText, type RosterNote, rosterNotes, scopeLabels, shortDay, sofiaDay } from './presentation';
 import styles from './enrollments.module.css';
 
 type Props = { organizationId: string; groupId: string; canManage: boolean; onChanged?: () => void };
@@ -81,6 +81,8 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
   const today = sofiaDay();
   const fullPeriodCount = roster.enrollments.filter((item) => item.scope === 'full_period').length;
   const groupFull = roster.group.remaining !== null && roster.group.remaining <= 0;
+  // Only a place for the whole period waits for the group; a trial or one-off visit has its own session.
+  const blockedByGroup = (item: StaffApplication) => groupFull && needsGroupPlace(item);
   // A long group gets a search by name; the row with an open change or a fresh message always stays.
   const searchable = roster.enrollments.length > SEARCH_FROM;
   const needle = search.trim().toLocaleLowerCase('bg');
@@ -127,14 +129,14 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
       {roster.waitlist.length > 0 ? (
         <>
           <h5 className={styles.subTitle}>Чакащи ({roster.waitlist.length})</h5>
-          {canManage && groupFull ? <p id={`roster-full-${groupId}`} className={styles.smallWarning}>Няма свободно място — одобряване ще е възможно, когато място се освободи.</p> : null}
+          {canManage && roster.waitlist.some(blockedByGroup) ? <p id={`roster-full-${groupId}`} className={styles.smallWarning}>Няма свободно място — записване за периода ще е възможно, когато място се освободи.</p> : null}
           <ol className={styles.waitList}>
             {roster.waitlist.map((item) => (
               <li key={item.id}>
                 <span><span className={styles.listName}>{item.child.name}</span> <span className={styles.small}>от {dateText(item.submitted_at)}</span></span>
                 {canManage ? (
                   <span className={styles.actions}>
-                    <button type="button" className={styles.primary} disabled={approving !== '' || groupFull} aria-describedby={groupFull ? `roster-full-${groupId}` : undefined} onClick={() => void approve(item)}>
+                    <button type="button" className={blockedByGroup(item) ? styles.secondary : styles.primary} disabled={approving !== '' || blockedByGroup(item)} aria-describedby={blockedByGroup(item) ? `roster-full-${groupId}` : undefined} onClick={() => void approve(item)}>
                       {approving === item.id ? 'Запазване…' : 'Одобри'}<span className={styles.srOnly}> {item.child.name}</span>
                     </button>
                   </span>

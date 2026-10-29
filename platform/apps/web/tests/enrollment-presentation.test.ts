@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GroupRoster, RosterEnrollment, StaffGroup } from '../src/features/enrollment/api';
 import {
-  activitySummary, addDays, applicationPlaces, groupFill, groupsByActivity, hasPlaceForWaiting, lastDayOfMonth, matchesGroupFilter, matchesGroupSearch, moveInSummary,
+  activitySummary, addDays, applicationPlaces, needsGroupPlace, waitingQueues, groupFill, groupsByActivity, hasPlaceForWaiting, lastDayOfMonth, matchesGroupFilter, matchesGroupSearch, moveInSummary,
   placesText, priceText, rosterNotes, scheduleText, skippableSessions, sofiaDay, waitingText, weekdayDay,
 } from '../src/features/enrollment/presentation';
 
@@ -108,6 +108,15 @@ describe('enrollment presentation', () => {
     expect(applicationPlaces({ ...base, capacity_max: 12, places_taken: 12 })).toEqual({ text: 'Групата е пълна · 12 от 12', full: true });
     expect(applicationPlaces({ ...base, capacity_max: 12, places_taken: 9 })).toEqual({ text: '3 свободни места', full: false });
     expect(applicationPlaces({ ...base, capacity_max: null, places_taken: 30 })).toEqual({ text: 'Без ограничение на местата', full: false });
+    // A trial, one-off or open-day visit is decided by its own session, not by the group count.
+    expect(needsGroupPlace({ scope: 'full_period', visit_offer_title: null })).toBe(true);
+    expect(needsGroupPlace({ scope: 'trial', visit_offer_title: null })).toBe(false);
+    expect(needsGroupPlace({ scope: 'full_period', visit_offer_title: 'Ден на отворените врати' })).toBe(false);
+  });
+
+  it('keeps the waiting children of a group together, in the order they applied', () => {
+    const app = (id: string, group: string) => ({ id, group: { id: group, name: group } }) as Parameters<typeof waitingQueues>[0][number];
+    expect(waitingQueues([app('1', 'a'), app('2', 'b'), app('3', 'a')]).map((queue) => queue.map((item) => item.id))).toEqual([['1', '3'], ['2']]);
   });
 
   it('tells from when a move into a group is possible', () => {
