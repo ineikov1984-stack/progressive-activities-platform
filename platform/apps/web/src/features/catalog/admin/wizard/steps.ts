@@ -1,5 +1,5 @@
 import type { ActivityDraft, ActivityGroup, ActivitySections } from '../api';
-import { activityCompleteness, compactOptionalSections } from '../presentation';
+import { activityCompleteness, compactOptionalSections, placeholderAge, placeholderSummary } from '../presentation';
 
 export type WizardStepId = 'basics' | 'audience' | 'story' | 'media' | 'people' | 'price' | 'groups' | 'trials' | 'review';
 
@@ -45,8 +45,25 @@ export function completedSteps(activity: ActivityDraft, groups: ActivityGroup[])
 /** Content edited in the wizard. Everything else on the activity stays as it is. */
 export type WizardContent = Pick<ActivityDraft, 'title' | 'category' | 'summary' | 'age_label'> & { sections: ActivitySections };
 
+/** Placeholder texts from a new activity are shown as empty fields, never as real text. */
 export function contentFromActivity(activity: ActivityDraft): WizardContent {
-  return { title: activity.title, category: activity.category, summary: activity.summary, age_label: activity.age_label, sections: activity.sections ?? {} };
+  return {
+    title: activity.title,
+    category: activity.category,
+    summary: activity.summary === placeholderSummary ? '' : activity.summary,
+    age_label: activity.age_label === placeholderAge ? '' : activity.age_label,
+    sections: activity.sections ?? {},
+  };
+}
+
+/** What is stored: empty required texts go back to the placeholders the API accepts. */
+export function storedBasics(content: WizardContent): Pick<WizardContent, 'title' | 'category' | 'summary' | 'age_label'> {
+  return {
+    title: content.title.trim(),
+    category: content.category,
+    summary: content.summary.trim() || placeholderSummary,
+    age_label: content.age_label.trim() || placeholderAge,
+  };
 }
 
 export const summaryLimit = 220;
@@ -54,8 +71,6 @@ export const summaryLimit = 220;
 /** Why the content cannot be saved yet, in plain Bulgarian; undefined when it can. */
 export function contentBlocker(content: WizardContent): string | undefined {
   if (!content.title.trim()) return 'Въведете име на дейността, за да запазим промените.';
-  if (!content.summary.trim()) return 'Въведете кратко описание, за да запазим промените.';
-  if (!content.age_label.trim()) return 'Посочете за каква възраст е дейността, за да запазим промените.';
   if (content.summary.length > summaryLimit) return `Краткото описание е над ${summaryLimit} знака.`;
   return undefined;
 }

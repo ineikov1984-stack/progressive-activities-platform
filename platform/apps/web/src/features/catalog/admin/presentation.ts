@@ -159,8 +159,9 @@ export type CompletenessStep = { id: string; label: string; done: boolean };
 export type ActivityCompleteness = { done: number; total: number; steps: CompletenessStep[]; next?: CompletenessStep };
 
 // Values the old quick-create form stored before the organisation filled them in.
-const placeholderSummary = 'Добавете кратко описание на дейността.';
-const placeholderAge = 'Добавете възраст';
+/** Stored until the person writes their own text (the API requires non-empty values). */
+export const placeholderSummary = 'Добавете кратко описание на дейността.';
+export const placeholderAge = 'Добавете възраст';
 const placeholderCategory = 'Друго';
 
 const filled = (value?: string | null) => Boolean(value && value.trim());

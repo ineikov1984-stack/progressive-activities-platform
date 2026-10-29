@@ -25,6 +25,7 @@ describe('wizard steps', () => {
     expect(contentBlocker({ title: ' ', category: 'x', summary: 'y', age_label: 'z', sections: {} })).toMatch(/име/);
     expect(contentBlocker({ title: 'a', category: 'x', summary: 'y'.repeat(221), age_label: 'z', sections: {} })).toMatch(/220/);
     expect(contentBlocker({ title: 'a', category: 'x', summary: 'y', age_label: 'z', sections: {} })).toBeUndefined();
+    expect(contentBlocker({ title: 'a', category: 'x', summary: '', age_label: '', sections: {} })).toBeUndefined();
   });
 
   it('describes when the draft was saved', () => {
@@ -41,5 +42,16 @@ describe('sectionsPayload', () => {
     expect(sectionsPayload({ about: '  Разказ ', benefits: ['Екип', ' '], methodology: '' })).toEqual({
       about: 'Разказ', benefits: ['Екип'], methodology: null, participation_terms: null, faq: null, gallery: null, instructor_intro: null,
     });
+  });
+});
+
+describe('placeholders', () => {
+  it('shows placeholders as empty fields and stores them back when left empty', async () => {
+    const { contentFromActivity, storedBasics } = await import('../src/features/catalog/admin/wizard/steps');
+    const content = contentFromActivity(activity({ summary: 'Добавете кратко описание на дейността.', age_label: 'Добавете възраст' }));
+    expect(content.summary).toBe('');
+    expect(content.age_label).toBe('');
+    expect(storedBasics(content)).toMatchObject({ summary: 'Добавете кратко описание на дейността.', age_label: 'Добавете възраст' });
+    expect(storedBasics({ ...content, summary: ' Текст ' }).summary).toBe('Текст');
   });
 });

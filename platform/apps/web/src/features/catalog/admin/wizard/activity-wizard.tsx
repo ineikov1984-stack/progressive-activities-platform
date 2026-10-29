@@ -10,7 +10,7 @@ import { type ActivityDraft, type ActivityGroup, type ActivitySections, loadActi
 import { activityCategories, activityCompleteness, formatEur } from '../presentation';
 import { PrivateImage, usePrivateMedia } from '../private-image';
 import { Autosave, type AutosaveState } from './autosave';
-import { agePresets, completedSteps, contentBlocker, contentFromActivity, savedAgo, sectionsPayload, stepByNumber, summaryLimit, type WizardContent, type WizardStep, wizardSteps } from './steps';
+import { agePresets, completedSteps, contentBlocker, contentFromActivity, savedAgo, sectionsPayload, stepByNumber, storedBasics, summaryLimit, type WizardContent, type WizardStep, wizardSteps } from './steps';
 import styles from './wizard.module.css';
 
 const icons = {
@@ -129,10 +129,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
       save: async (value) => {
         const updated = await updateActivity(organization.id, activityId, {
           version: version.current,
-          title: value.title.trim(),
-          category: value.category,
-          summary: value.summary.trim(),
-          age_label: value.age_label.trim(),
+          ...storedBasics(value),
           sections: sectionsPayload(value.sections),
         });
         version.current = updated.version;
@@ -239,7 +236,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
   const index = wizardSteps.findIndex((item) => item.id === step.id);
   const previous = wizardSteps[index - 1];
   const next = wizardSteps[index + 1];
-  const statusText = locked ? 'Публикувана' : saveState === 'saving' || saveState === 'pending' ? 'Запазване…' : saveState === 'error' ? 'Не е запазено' : savedAgo(savedAt, now);
+  const statusText = saveState === 'saving' || saveState === 'pending' ? 'Запазване…' : saveState === 'error' ? 'Не е запазено' : savedAt === undefined ? 'промените се пазят автоматично' : savedAgo(savedAt, now);
   const publicHref = `/o/${organization.slug}/activities/${activity.slug}`;
   const classicHref = (anchor?: string) => `/dashboard/activities/${activityId}/classic${anchor ? `#${anchor}` : ''}`;
 
@@ -252,7 +249,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
           <div className={styles.titleBlock}>
             <h1 className={styles.title}>{content.title.trim() || 'Нова дейност'}</h1>
             <span className={`${styles.status} ${saveState === 'error' ? styles.statusError : ''}`} role="status" aria-live="polite">
-              {!locked && saveState !== 'error' && saveState !== 'saving' && saveState !== 'pending' ? <Icon path={icons.check} /> : null}
+              {!locked && savedAt !== undefined && saveState === 'saved' ? <Icon path={icons.check} /> : null}
               {locked ? 'Публикувана' : `Чернова · ${statusText}`}
             </span>
           </div>
@@ -316,7 +313,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
                     </div>
                   </div>
                   <Field id="w-summary" label="Кратко описание" hint={<><span>1–2 изречения: какво правят децата и какво печелят.</span><span aria-live="polite">{content.summary.length} / {summaryLimit}</span></>}>
-                    <textarea id="w-summary" className={`${styles.input} ${styles.textarea}`} value={content.summary} aria-describedby="w-summary-hint" onChange={(event) => change({ summary: event.target.value })} />
+                    <textarea id="w-summary" className={`${styles.input} ${styles.textarea}`} value={content.summary} placeholder="Например: Децата сглобяват и програмират малки роботи и се учат да мислят стъпка по стъпка."  aria-describedby="w-summary-hint" onChange={(event) => change({ summary: event.target.value })} />
                   </Field>
                 </>
               ) : null}
@@ -324,7 +321,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
               {step.id === 'audience' ? (
                 <>
                   <Field id="w-age" label="За кого е подходяща" hint="Възраст или класове, както ги казвате на родителите. Изберете готов вариант или напишете свой.">
-                    <input id="w-age" className={styles.input} value={content.age_label} maxLength={80} aria-describedby="w-age-hint" onChange={(event) => change({ age_label: event.target.value })} />
+                    <input id="w-age" className={styles.input} value={content.age_label} placeholder="Например: 7–10 г. или 1.–4. клас"  maxLength={80} aria-describedby="w-age-hint" onChange={(event) => change({ age_label: event.target.value })} />
                   </Field>
                   <div className={styles.chips} role="group" aria-label="Готови варианти за възраст">
                     {agePresets.map((item) => <button type="button" key={item} className={`${styles.chip} ${content.age_label === item ? styles.chipOn : ''}`} aria-pressed={content.age_label === item} onClick={() => change({ age_label: item })}>{item}</button>)}

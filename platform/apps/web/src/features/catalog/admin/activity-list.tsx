@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useDashboardContext } from '@/features/dashboard/dashboard-context';
 import { ActivityDraft, createActivity, loadCatalogWorkspace } from './api';
 import { usePrivateMedia } from './private-image';
-import { activityCategories, activityCompleteness, activityStatusLabel, formatEur } from './presentation';
+import { activityCategories, activityCompleteness, activityStatusLabel, formatEur, placeholderAge, placeholderSummary } from './presentation';
 import styles from './activity-list.module.css';
 
 type Filter = 'all' | 'published' | 'draft' | 'archived';
@@ -19,8 +19,6 @@ const filters: { id: Filter; label: string }[] = [
   { id: 'archived', label: 'Архив' },
 ];
 
-const placeholderSummary = 'Добавете кратко описание на дейността.';
-const placeholderAge = 'Добавете възраст';
 
 const unitLabels: Record<string, string> = { month: '/ месец', session: '/ занимание', period: '/ период', package: '/ пакет' };
 
