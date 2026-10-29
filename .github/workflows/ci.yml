@@ -249,7 +249,7 @@ jobs:
           tail -n 60 platform/apps/api/storage/logs/laravel.log 2>/dev/null | grep -E "ERROR|Exception" | while IFS= read -r line; do echo "::warning title=Laravel log::${line:0:900}"; done || true
       - name: Keep Playwright traces on failure
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: e2e-stack-traces
           path: platform/apps/web/test-results/

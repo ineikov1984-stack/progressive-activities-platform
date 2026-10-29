@@ -1,4 +1,5 @@
 import type { ActivityDraft, ActivityGroup, ActivitySections } from '../api';
+import { checkOffering, type OfferingDraft, offeringFromActivity } from './offering';
 import { activityCompleteness, compactOptionalSections, placeholderAge, placeholderSummary } from '../presentation';
 
 export type WizardStepId = 'basics' | 'audience' | 'story' | 'media' | 'people' | 'price' | 'groups' | 'trials' | 'review';
@@ -8,8 +9,6 @@ export type WizardStep = {
   number: number;
   title: string;
   note: string;
-  /** Steps that still live in the classic editor until they are rebuilt here. */
-  classicAnchor?: string;
   optional?: boolean;
 };
 
@@ -18,11 +17,11 @@ export const wizardSteps: WizardStep[] = [
   { id: 'audience', number: 2, title: 'Аудитория', note: 'Възраст или класове' },
   { id: 'story', number: 3, title: 'Представяне и ползи', note: 'Какво правят децата и какво печелят' },
   { id: 'media', number: 4, title: 'Снимки и галерия', note: 'Основна снимка и галерия' },
-  { id: 'people', number: 5, title: 'Места и преподаватели', note: 'Къде и с кого', classicAnchor: 'resources' },
-  { id: 'price', number: 6, title: 'Цени и записване', note: 'Цени и условия', classicAnchor: 'basics' },
-  { id: 'groups', number: 7, title: 'Групи и график', note: 'Дни, часове, места', classicAnchor: 'schedule' },
+  { id: 'people', number: 5, title: 'Места и преподаватели', note: 'Къде и с кого' },
+  { id: 'price', number: 6, title: 'Цени и записване', note: 'Цени и условия' },
+  { id: 'groups', number: 7, title: 'Групи и график', note: 'Дни, часове, места' },
   { id: 'trials', number: 8, title: 'Пробни и еднократни', note: 'По избор', optional: true },
-  { id: 'review', number: 9, title: 'Преглед и публикуване', note: 'Проверка преди родителите', classicAnchor: 'review' },
+  { id: 'review', number: 9, title: 'Преглед и публикуване', note: 'Проверка преди родителите' },
 ];
 
 export function stepByNumber(value: string | null | undefined): WizardStep {
@@ -43,7 +42,7 @@ export function completedSteps(activity: ActivityDraft, groups: ActivityGroup[])
 }
 
 /** Content edited in the wizard. Everything else on the activity stays as it is. */
-export type WizardContent = Pick<ActivityDraft, 'title' | 'category' | 'summary' | 'age_label'> & { sections: ActivitySections };
+export type WizardContent = Pick<ActivityDraft, 'title' | 'category' | 'summary' | 'age_label'> & { sections: ActivitySections; offering: OfferingDraft | null };
 
 /** Placeholder texts from a new activity are shown as empty fields, never as real text. */
 export function contentFromActivity(activity: ActivityDraft): WizardContent {
@@ -53,7 +52,19 @@ export function contentFromActivity(activity: ActivityDraft): WizardContent {
     summary: activity.summary === placeholderSummary ? '' : activity.summary,
     age_label: activity.age_label === placeholderAge ? '' : activity.age_label,
     sections: activity.sections ?? {},
+    offering: offeringFromActivity(activity),
   };
+}
+
+/** The activity as it will be once the current edits are saved (for progress and preview). */
+export function draftActivity(activity: ActivityDraft, content: WizardContent): ActivityDraft {
+  const offering = activity.offering && content.offering
+    ? (() => {
+      const { payload } = checkOffering(content.offering);
+      return { ...activity.offering, ...payload, price_options: payload.price_options ?? activity.offering.price_options };
+    })()
+    : activity.offering;
+  return { ...activity, title: content.title, category: content.category, summary: content.summary, age_label: content.age_label, sections: content.sections, offering };
 }
 
 /** What is stored: empty required texts go back to the placeholders the API accepts. */

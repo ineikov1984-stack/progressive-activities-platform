@@ -156,8 +156,25 @@ test('an owner creates a draft activity and continues in the editor', async () =
   await slow(page.getByRole('status').first()).toContainText('Запазено');
   await page.reload();
   await slow(page.getByLabel('За кого е подходяща')).toHaveValue('7–10 г.');
-  await page.getByRole('button', { name: /Основна информация/ }).click();
+  await page.getByRole('navigation', { name: 'Стъпки' }).getByRole('button', { name: /Основна информация/ }).click();
   await slow(page.getByLabel('Кратко описание')).toHaveValue(summary);
+
+  // Step 6: a price is saved automatically in euro.
+  await page.getByRole('navigation', { name: 'Стъпки' }).getByRole('button', { name: /Цени и записване/ }).click();
+  await slow(page.getByRole('heading', { level: 2, name: 'Цени и записване' })).toBeVisible();
+  if (await page.getByLabel('Цена', { exact: true }).count() === 0) await page.getByRole('button', { name: 'Добави начин на записване' }).click();
+  await page.getByLabel('Цена', { exact: true }).first().fill('25');
+  await expect(page.getByText(/Родителите виждат:.*25,00/)).toBeVisible();
+  await slow(page.getByRole('status').first()).toContainText('Запазено');
+  await page.reload();
+  await slow(page.getByLabel('Цена', { exact: true }).first()).toHaveValue('25,00');
+
+  // Step 7: a weekly group creates its sessions.
+  await page.getByRole('navigation', { name: 'Стъпки' }).getByRole('button', { name: /Групи и график/ }).click();
+  await page.getByLabel('От дата').fill('2027-03-01');
+  await page.getByLabel('До дата').fill('2027-03-29');
+  await page.getByRole('button', { name: 'Създай групата' }).click();
+  await slow(page.getByText(/е създадена с \d+ занятия/)).toBeVisible();
 
   await page.goto('/dashboard/activities');
   const card = page.getByRole('article').filter({ has: page.getByRole('heading', { name: title }) });
