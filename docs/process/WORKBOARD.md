@@ -17,8 +17,8 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Ревю на собственика 29.10 — план и решения | Claude | claude/review-plan | `docs/product/owner-review-2026-10-29.md`, `docs/process/DECISIONS.md`, `docs/process/WORKBOARD.md` | одобрено; PR #33 |
-| Записвания — етап А: интерфейс (списъци, филтри, групи под дейността, места по дати) | Claude | claude/enrollment-lists | `apps/web/src/features/enrollment/**`, `apps/api/app/Http/Controllers/Api/V1/Staff*`, тестове към тях | в работа |
+| Етап Б — спецификация: контакти, бележка, имейли, съобщения от екипа | Claude | claude/enrollment-contacts-spec | `docs/product/enrollment-contacts-and-emails.md`, `docs/process/DECISIONS.md`, `docs/process/WORKBOARD.md` | ревю от архитект (4 кръга); PR #35 |
+| Записвания — етап А2: автоматично одобрение при свободно място | Claude | claude/group-approval | `apps/api/routes/api.php`, `apps/api/app/Http/Controllers/Api/V1/{StaffEnrollment,ActivityGroup}Controller.php`, `SaveGroupSchedule`, `apps/web/src/features/{enrollment,catalog/admin/wizard}/**` | в работа |
 
 ## Опашка (по приоритет)
 
@@ -54,6 +54,7 @@
 
 ## Наскоро завършено
 
+- 29.10.2026 — PR #33 (план от ревюто на собственика) и #34 („Записвания“ етап А: групи под дейностите, филтри, места по дати при преместване; UX ревю в 2 кръга, проверено на 360–1440 px) (Claude).
 - 29.10.2026 — PR #32: „Записвания“ — старото съобщение изчезва при ново действие, броячите „Заявки/Чакащи“ се обновяват след промяна в група (Claude).
 - 29.10.2026 — PR #30–#31: Записвания Б2 — преместване, пауза, прекратяване, пропуск и връщане от екипа (едно действие и за родителя), паузи в база с RLS, „Одобри“ от групата, задача „Свободно място“; миграциите вече с ролята-собственик, ограничени права на приложението. Ревюта: архитект, сигурност (3 кръга), UX (2 кръга); проверено на живо на 390/768/1440 (Claude).
 
