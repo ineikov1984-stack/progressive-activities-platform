@@ -24,10 +24,12 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Wizard за създаване на дейност — част 2 (стъпки 5–7) | Claude | claude/wizard-part-2 | `apps/web/src/features/catalog/admin/wizard/**` (без API) | PR отворен; после: махане на `/classic` |
+| Wizard: завършване (стъпка А) | Claude | claude/wizard-complete | `features/catalog/admin/wizard/**` | PR #24 |
+| Записвания от екипа — Б1: входящи, решение, списък на групата | Claude | claude/staff-enrollment-inbox | `routes/api.php` (горещ), `app/Domain/Enrollment/**`, нов раздел „Записвания“ в web | започва след спецификацията |
 
 ## Опашка (по приоритет)
 
+- **Записвания от екипа Б2–Б4** и **цени В1–В4** — по `docs/product/staff-enrollment.md` и `docs/product/pricing-models.md` (строга). *Claude, независим review.*
 1. **Защита на `main`** — ruleset „PR задължителен, без force push и изтриване“. Claude не може да го включи през API; прави се от собственика в GitHub → Settings → Rules (за private хранилище изисква GitHub Pro). Дотогава правилото се спазва чрез AGENTS.md. *Собственик.*
 2. **Чернова на промените за публикувана дейност** (строга) — по `docs/product/published-activity-changes.md`: миграция + RLS, действия, API, тестове. *Codex пише backend, Claude UI и review.*
 3. **Задача 9: OpenAPI 3.1 + генериран TypeScript клиент** (строга) — contract test, `packages/api-client`, замяна на ръчните `api.ts`. *Codex пише, Claude review.*
