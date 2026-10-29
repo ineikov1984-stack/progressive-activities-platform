@@ -125,11 +125,11 @@ final class ReviewEnrollmentApplication
                 );
             }
 
-            $reviewed = $this->transitionApplication(
-                $actor, $current, EnrollmentApplicationStatus::Approved,
-                $publicReason, $internalNote, 'enrollment.application_approved', false, $eligibilityOverrideReason,
+            $transition = $this->recordTransition(
+                $actor, $current, EnrollmentApplicationStatus::Approved, $publicReason, $internalNote, $eligibilityOverrideReason,
             );
-            Enrollment::query()->create([
+            $reviewed = $current->refresh();
+            $enrollment = Enrollment::query()->create([
                 'application_id' => $reviewed->id,
                 'child_id' => $reviewed->child_id,
                 'group_id' => $reviewed->group_id,
@@ -140,7 +140,7 @@ final class ReviewEnrollmentApplication
                 // Calendar day in the group's time zone (docs/product/staff-enrollment.md, т. 9.1).
                 'starts_on' => ($reviewed->session->starts_at ?? now())->setTimezone($group->schedule_pattern['timezone'] ?? 'Europe/Sofia')->toDateString(),
             ]);
-            $this->event('enrollment.application_approved', $reviewed, null);
+            $this->event('enrollment.application_approved', $reviewed, $enrollment, $transition);
 
             return $reviewed;
         });
@@ -156,6 +156,23 @@ final class ReviewEnrollmentApplication
         bool $recordEvent = true,
         ?string $eligibilityOverrideReason = null,
     ): EnrollmentApplication {
+        $transition = $this->recordTransition($actor, $application, $status, $publicReason, $internalNote, $eligibilityOverrideReason);
+        if ($recordEvent) {
+            $this->event($eventType, $application, null, $transition);
+        }
+
+        return $application->refresh();
+    }
+
+    /** The application's new status and its immutable history row (the source of the text a parent is told). */
+    private function recordTransition(
+        User $actor,
+        EnrollmentApplication $application,
+        EnrollmentApplicationStatus $status,
+        ?string $publicReason,
+        ?string $internalNote,
+        ?string $eligibilityOverrideReason,
+    ): EnrollmentTransition {
         $fromStatus = $application->status->value;
         $application->update([
             'status' => $status,
@@ -163,7 +180,8 @@ final class ReviewEnrollmentApplication
             'internal_note' => $internalNote,
             'version' => $application->version + 1,
         ]);
-        EnrollmentTransition::query()->create([
+
+        return EnrollmentTransition::query()->create([
             'application_id' => $application->id,
             'actor_user_id' => $actor->id,
             'from_status' => $fromStatus,
@@ -172,20 +190,16 @@ final class ReviewEnrollmentApplication
             'internal_note' => $internalNote,
             'metadata' => $eligibilityOverrideReason === null ? null : ['eligibility_override_reason' => trim($eligibilityOverrideReason)],
         ]);
-        if ($recordEvent) {
-            $this->event($eventType, $application, null);
-        }
-
-        return $application->refresh();
     }
 
-    private function event(string $type, EnrollmentApplication $application, ?Enrollment $enrollment): void
+    /** The event carries the transition, so an email later quotes the reason as it was given (docs/product/enrollment-contacts-and-emails.md, т. 6.2). */
+    private function event(string $type, EnrollmentApplication $application, ?Enrollment $enrollment, EnrollmentTransition $transition): void
     {
         EnrollmentEvent::query()->create([
             'type' => $type,
             'application_id' => $application->id,
             'enrollment_id' => $enrollment?->id,
-            'payload' => ['status' => $application->status->value],
+            'payload' => ['status' => $application->status->value, 'transition_id' => $transition->id],
             'occurred_at' => now(),
         ]);
     }

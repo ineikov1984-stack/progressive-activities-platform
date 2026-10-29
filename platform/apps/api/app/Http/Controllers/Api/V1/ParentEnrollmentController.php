@@ -8,6 +8,7 @@ use App\Domain\Enrollment\Actions\SubmitEnrollmentApplication;
 use App\Domain\Enrollment\Enums\EnrollmentApplicationStatus;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
+use App\Domain\Enrollment\Models\EnrollmentEvent;
 use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
@@ -46,7 +47,9 @@ final class ParentEnrollmentController extends Controller
             'visit_offer_id' => ['sometimes', 'nullable', 'uuid'],
             'session_id' => ['required_with:visit_offer_id', 'nullable', 'uuid'],
             'accepted_terms_version' => ['required', 'string', 'max:100'],
-        ]);
+            // Seen only by the organization's team; health details have their own place later.
+            'parent_note' => ['sometimes', 'nullable', 'string', 'max:500'],
+        ], ['parent_note.max' => 'Бележката е до 500 знака.']);
         $application = $submit->handle($request->user(), $payload, $idempotencyKey);
 
         return response()->json(
@@ -83,11 +86,18 @@ final class ParentEnrollmentController extends Controller
                     'status' => EnrollmentApplicationStatus::Withdrawn,
                     'version' => $current->version + 1,
                 ]);
-                EnrollmentTransition::query()->create([
+                $transition = EnrollmentTransition::query()->create([
                     'application_id' => $current->id,
                     'actor_user_id' => $request->user()->id,
                     'from_status' => $fromStatus,
                     'to_status' => EnrollmentApplicationStatus::Withdrawn->value,
+                ]);
+                // The team is told that the parent withdrew (docs/product/enrollment-contacts-and-emails.md, т. 6.2).
+                EnrollmentEvent::query()->create([
+                    'type' => 'enrollment.application_withdrawn',
+                    'application_id' => $current->id,
+                    'payload' => ['status' => EnrollmentApplicationStatus::Withdrawn->value, 'transition_id' => $transition->id],
+                    'occurred_at' => now(),
                 ]);
             });
 
@@ -177,6 +187,7 @@ final class ParentEnrollmentController extends Controller
                 'unit' => $application->unit_snapshot,
             ],
             'public_reason' => $application->public_reason,
+            'parent_note' => $application->parent_note,
             'version' => $application->version,
         ];
     }

@@ -5,7 +5,10 @@ namespace Tests\Feature\Enrollment;
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\Location;
+use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
+use App\Domain\Enrollment\Models\EnrollmentEvent;
+use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
@@ -74,6 +77,11 @@ class StaffEnrollmentApiTest extends TestCase
         $this->assertDatabaseHas('audit_events', [
             'action' => 'enrollment.application_reviewed', 'subject_id' => $application->id, 'actor_id' => $coordinator->id,
         ]);
+        // The event points at its enrollment and at the transition that holds what the parent is told.
+        $event = EnrollmentEvent::query()->withoutGlobalScopes()->where('type', 'enrollment.application_approved')->sole();
+        $transition = EnrollmentTransition::query()->withoutGlobalScopes()->where('application_id', $application->id)->sole();
+        $this->assertSame(['status' => 'approved', 'transition_id' => $transition->id], $event->payload);
+        $this->assertSame(Enrollment::query()->withoutGlobalScopes()->where('application_id', $application->id)->value('id'), $event->enrollment_id);
     }
 
     public function test_waitlisted_application_is_approved_when_a_place_frees_up(): void

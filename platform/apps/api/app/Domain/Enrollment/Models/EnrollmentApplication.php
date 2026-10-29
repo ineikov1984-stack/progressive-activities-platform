@@ -32,7 +32,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'accepted_terms_at', 'amount_cents_snapshot', 'currency_snapshot',
     'unit_snapshot', 'visit_offer_id', 'visit_offer_title_snapshot',
     'fee_reason_snapshot', 'cancellation_policy_snapshot', 'public_reason',
-    'internal_note', 'version',
+    'internal_note', 'parent_note', 'version',
 ])]
 class EnrollmentApplication extends Model
 {

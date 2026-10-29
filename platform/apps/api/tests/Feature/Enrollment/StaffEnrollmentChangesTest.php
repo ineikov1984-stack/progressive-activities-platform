@@ -8,7 +8,9 @@ use App\Domain\Catalog\Models\PriceOption;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
+use App\Domain\Enrollment\Models\EnrollmentEvent;
 use App\Domain\Enrollment\Models\EnrollmentPause;
+use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
 use App\Domain\Enrollment\Services\SessionApplicability;
 use App\Domain\Identity\Models\User;
@@ -43,6 +45,8 @@ class StaffEnrollmentChangesTest extends TestCase
     {
         $f = $this->fixture();
         $coordinator = $this->member($f['organization'], 'coordinator');
+        // Only a parent's own application needs a phone; a move made by the team does not.
+        $f['parent']->forceFill(['phone' => null])->save();
 
         $response = $this->actAs($coordinator, $f['organization'])
             ->postJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/transfer", [
@@ -219,6 +223,12 @@ class StaffEnrollmentChangesTest extends TestCase
         $this->assertSame(['2026-10-27', '2026-11-03', '2026-11-17', '2026-11-24'], $this->sessionDates($f['organization'], $enrollment));
 
         $this->assertDatabaseHas('enrollment_events', ['enrollment_id' => $enrollment->id, 'type' => 'enrollment.paused']);
+        // Every change event names its transition (the reason a parent is told lives there).
+        $this->withTenant($f['organization'], function () use ($enrollment): void {
+            foreach (EnrollmentEvent::query()->where('enrollment_id', $enrollment->id)->get() as $event) {
+                $this->assertTrue(EnrollmentTransition::query()->whereKey($event->payload['transition_id'] ?? null)->where('enrollment_id', $enrollment->id)->exists(), $event->type);
+            }
+        });
         $this->assertDatabaseHas('enrollment_events', ['enrollment_id' => $enrollment->id, 'type' => 'enrollment.pause_ended']);
         $this->assertAuditWithoutPersonalData('enrollment.paused', $enrollment->id, ['Болест']);
         $this->assertDatabaseMissing('enrollment_transitions', ['public_reason' => 'Болест']);

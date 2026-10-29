@@ -9,11 +9,14 @@ use App\Domain\Catalog\Models\PriceOption;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Enrollment\Models\Child;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
+use App\Domain\Enrollment\Models\EnrollmentEvent;
+use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -89,6 +92,52 @@ class ParentEnrollmentApplicationTest extends TestCase
         $second = $this->submit($parent, $sibling->id, $group->id, $price->id, 'auto-002');
         $this->assertSame('waitlisted', $second->status->value);
         $this->assertDatabaseMissing('enrollments', ['application_id' => $second->id]);
+    }
+
+    public function test_the_note_stays_with_the_application_and_is_never_copied_to_history(): void
+    {
+        [, $parent, $child, $group, , $price] = $this->fixture('monthly');
+        $note = 'Звъннете ми, когато прегледате заявката.';
+
+        $id = $this->actingAs($parent)->withHeader('Idempotency-Key', 'note-001')
+            ->postJson('/api/v1/parent/enrollment-applications', [...$this->payload($child->id, $group->id, $price->id), 'parent_note' => "  {$note}  "])
+            ->assertCreated()
+            ->assertJsonPath('application.parent_note', $note)
+            ->json('application.id');
+        $this->assertSame($note, EnrollmentApplication::query()->withoutGlobalScopes()->findOrFail($id)->parent_note);
+        $this->actingAs($parent)->postJson('/api/v1/parent/enrollment-applications/'.$id.'/withdraw', ['version' => 1])->assertOk();
+
+        // Not in the immutable history, the events or the audit log.
+        foreach (['enrollment_transitions', 'enrollment_events', 'audit_events'] as $table) {
+            $this->assertStringNotContainsString('Звъннете', json_encode(DB::table($table)->get(), JSON_UNESCAPED_UNICODE) ?: '', $table);
+        }
+        $this->actingAs($parent)->withHeader('Idempotency-Key', 'note-002')
+            ->postJson('/api/v1/parent/enrollment-applications', [...$this->payload($child->id, $group->id, $price->id), 'parent_note' => str_repeat('а', 501)])
+            ->assertUnprocessable()->assertJsonValidationErrors('parent_note');
+    }
+
+    public function test_a_parent_needs_a_phone_to_apply(): void
+    {
+        [, $parent, $child, $group, , $price] = $this->fixture('monthly');
+        $parent->forceFill(['phone' => null])->save();
+
+        $this->actingAs($parent)->withHeader('Idempotency-Key', 'no-phone')
+            ->postJson('/api/v1/parent/enrollment-applications', $this->payload($child->id, $group->id, $price->id))
+            ->assertUnprocessable()->assertJsonValidationErrors('phone');
+        $this->assertDatabaseCount('enrollment_applications', 0);
+    }
+
+    public function test_a_withdrawal_tells_the_team_through_an_event_with_its_transition(): void
+    {
+        [, $parent, $child, $group, , $price] = $this->fixture('monthly');
+        $application = $this->submit($parent, $child->id, $group->id, $price->id, 'withdraw-event');
+        $this->actingAs($parent)->postJson('/api/v1/parent/enrollment-applications/'.$application->id.'/withdraw', ['version' => 1])->assertOk();
+
+        $event = EnrollmentEvent::query()->withoutGlobalScopes()->where('type', 'enrollment.application_withdrawn')->sole();
+        $transition = EnrollmentTransition::query()->withoutGlobalScopes()->where('application_id', $application->id)->where('to_status', 'withdrawn')->sole();
+        $this->assertSame($application->id, $event->application_id);
+        $this->assertSame(['status' => 'withdrawn', 'transition_id' => $transition->id], $event->payload);
+        $this->assertNull($event->expanded_at);
     }
 
     public function test_legacy_trial_and_single_prices_require_a_published_visit_offer(): void
