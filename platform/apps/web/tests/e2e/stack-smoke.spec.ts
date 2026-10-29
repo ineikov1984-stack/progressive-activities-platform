@@ -124,7 +124,7 @@ test('another organization is not reachable through the header', async () => {
   expect(response.body).not.toContain(foreign.activityId);
 });
 
-test('another organization\'s activity is not reachable from our own organization (RLS)', async () => {
+test('another organization\'s activity is not reachable from our own organization', async () => {
   const single = await api(page, `catalog/activities/${foreign.activityId}`, { organizationId: demo.organizationId });
   expect(single.status).toBe(404);
   expect(single.body).not.toContain('Чужда дейност');
