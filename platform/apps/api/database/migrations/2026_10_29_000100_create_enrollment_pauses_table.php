@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Pauses of a full-period enrollment set by the organization's team (docs/product/staff-enrollment.md, т. 9.3).
  * The enrollment stays active and keeps its place; sessions inside a pause do not count for the child.
- * Also: an enrollment can be transferred only once (unique transferred_from_id).
+ * Also: an enrollment continues in at most one other group (partial unique index on transferred_from_id).
  */
 return new class extends Migration
 {
@@ -31,10 +31,9 @@ return new class extends Migration
             $table->index(['organization_id', 'starts_on']);
         });
 
-        // An enrollment is transferred at most once; works even when the parent is not known yet (Б3).
-        Schema::table('enrollments', function (Blueprint $table): void {
-            $table->unique('transferred_from_id', 'enrollments_transferred_from_unique');
-        });
+        // An enrollment continues in at most one other group (a cancelled move does not count);
+        // works even when the parent is not known yet (Б3). Same SQL on PostgreSQL and SQLite.
+        DB::unprepared("CREATE UNIQUE INDEX enrollments_transferred_from_unique ON enrollments (transferred_from_id) WHERE transferred_from_id IS NOT NULL AND status <> 'cancelled'");
 
         if (DB::getDriverName() === 'sqlite') {
             foreach (['INSERT', 'UPDATE'] as $operation) {
@@ -75,9 +74,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('enrollment_pauses');
-        Schema::table('enrollments', function (Blueprint $table): void {
-            $table->dropUnique('enrollments_transferred_from_unique');
-        });
+        DB::unprepared('DROP INDEX IF EXISTS enrollments_transferred_from_unique');
 
         if (DB::getDriverName() === 'pgsql') {
             DB::unprepared('ALTER TABLE enrollments DROP CONSTRAINT IF EXISTS enrollments_id_organization_unique');

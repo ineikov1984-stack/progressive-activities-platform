@@ -8,6 +8,7 @@ use App\Domain\Catalog\Models\PriceOption;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
+use App\Domain\Enrollment\Models\EnrollmentPause;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
 use App\Domain\Enrollment\Services\SessionApplicability;
 use App\Domain\Identity\Models\User;
@@ -364,6 +365,145 @@ class StaffEnrollmentChangesTest extends TestCase
         $this->assertSame('2026-11-11', $source->ends_on?->format('Y-m-d'));
     }
 
+    public function test_every_change_refuses_a_stale_version(): void
+    {
+        $f = $this->fixture();
+        $owner = $this->member($f['organization'], 'organization_owner');
+        $this->actAs($owner, $f['organization']);
+        $base = "/api/v1/enrollment/enrollments/{$f['enrollment']->id}";
+        $nov10 = $this->withTenant($f['organization'], fn () => Session::query()->where('group_id', $f['tuesday']->id)->whereDate('starts_at', '2026-11-10')->firstOrFail());
+        $pauseId = $this->postJson("{$base}/pauses", ['starts_on' => '2026-11-16', 'ends_on' => '2026-11-18', 'reason_category' => 'other', 'version' => 1])->assertCreated()->json('pause.id');
+        $this->postJson("{$base}/skipped-sessions", ['session_id' => $nov10->id, 'reason' => 'Състезание', 'version' => 2])->assertOk();
+
+        foreach ([
+            ['post', "{$base}/pauses", ['starts_on' => '2026-11-23', 'ends_on' => '2026-11-24', 'reason_category' => 'other', 'version' => 1]],
+            ['post', "{$base}/pauses/{$pauseId}/end", ['resume_on' => '2026-11-16', 'version' => 1]],
+            ['post', "{$base}/end", ['last_day' => '2026-11-30', 'reason' => self::REASON, 'version' => 1]],
+            ['post', "{$base}/reopen", ['version' => 1]],
+            ['post', "{$base}/skipped-sessions", ['session_id' => $nov10->id, 'reason' => 'Състезание', 'version' => 1]],
+            ['delete', "{$base}/skipped-sessions/{$nov10->id}?version=1", []],
+            ['post', "{$base}/transfer", $this->transferPayload($f)],
+        ] as [$method, $url, $body]) {
+            $this->json(strtoupper($method), $url, $body)->assertUnprocessable()->assertJsonValidationErrors('version');
+        }
+        $this->assertSame(3, $this->withTenant($f['organization'], fn () => Enrollment::query()->findOrFail($f['enrollment']->id)->version));
+    }
+
+    public function test_a_transfer_is_undone_by_moving_back_after_the_last_day(): void
+    {
+        $f = $this->fixture();
+        $owner = $this->member($f['organization'], 'organization_owner');
+        $this->actAs($owner, $f['organization']);
+        $movedId = $this->postJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/transfer", $this->transferPayload($f))->assertOk()->json('enrollment.id');
+        $back = "/api/v1/enrollment/enrollments/{$movedId}/transfer";
+        $payload = ['target_group_id' => $f['tuesday']->id, 'price_option_id' => $f['tuesdayPrice']->id, 'reason' => self::REASON, 'version' => 1];
+
+        // Before 12.11 the child is still in the Tuesday group.
+        $this->postJson($back, [...$payload, 'effective_date' => '2026-11-05'])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.target_group_id.0', 'Детето е в тази група до 11.11.2026. Изберете дата след това.');
+        $returned = $this->postJson($back, [...$payload, 'effective_date' => '2026-11-12'])->assertOk()->json('enrollment');
+
+        $moved = $this->withTenant($f['organization'], fn () => Enrollment::query()->findOrFail($movedId));
+        $this->assertSame('cancelled', $moved->status->value);
+        $this->assertSame($f['tuesday']->id, $returned['group_id']);
+        $this->assertSame([], $this->sessionDates($f['organization'], $movedId));
+        // Tuesday sessions continue without a gap: the old enrollment until 11.11, the new one from 12.11.
+        $this->assertSame(['2026-11-17', '2026-11-24'], $this->sessionDates($f['organization'], $returned['id']));
+        $this->assertSame(['2026-10-27', '2026-11-03', '2026-11-10'], $this->sessionDates($f['organization'], $f['enrollment']->id));
+    }
+
+    public function test_a_cancelled_move_lets_the_old_enrollment_continue(): void
+    {
+        $f = $this->fixture();
+        $owner = $this->member($f['organization'], 'organization_owner');
+        $this->actAs($owner, $f['organization']);
+        $source = "/api/v1/enrollment/enrollments/{$f['enrollment']->id}";
+        $movedId = $this->postJson("{$source}/transfer", $this->transferPayload($f))->assertOk()->json('enrollment.id');
+        $this->postJson("/api/v1/enrollment/enrollments/{$movedId}/end", ['last_day' => '2026-11-01', 'reason' => self::REASON, 'version' => 1])
+            ->assertOk()->assertJsonPath('enrollment.status', 'cancelled');
+
+        $this->postJson("{$source}/reopen", ['version' => 2])->assertOk()->assertJsonPath('enrollment.status', 'active');
+        $this->getJson("/api/v1/enrollment/groups/{$f['tuesday']->id}/roster")->assertOk()->assertJsonPath('enrollments.0.moves_to', null);
+        $this->postJson("{$source}/transfer", [...$this->transferPayload($f, '2026-11-19'), 'version' => 3])->assertOk();
+    }
+
+    public function test_pauses_after_the_new_last_day_are_shortened_or_cancelled(): void
+    {
+        $f = $this->fixture();
+        $owner = $this->member($f['organization'], 'organization_owner');
+        $this->actAs($owner, $f['organization']);
+        $base = "/api/v1/enrollment/enrollments/{$f['enrollment']->id}";
+        $overlapping = $this->postJson("{$base}/pauses", ['starts_on' => '2026-11-09', 'ends_on' => '2026-11-13', 'reason_category' => 'family', 'version' => 1])->assertCreated()->json('pause.id');
+        $later = $this->postJson("{$base}/pauses", ['starts_on' => '2026-11-16', 'ends_on' => '2026-11-20', 'reason_category' => 'holiday', 'version' => 2])->assertCreated()->json('pause.id');
+
+        $this->postJson("{$base}/transfer", [...$this->transferPayload($f), 'version' => 3])->assertOk();
+
+        $this->withTenant($f['organization'], function () use ($overlapping, $later): void {
+            $this->assertSame('2026-11-11', EnrollmentPause::query()->findOrFail($overlapping)->ends_on->format('Y-m-d'));
+            $this->assertNotNull(EnrollmentPause::query()->findOrFail($later)->cancelled_at);
+        });
+    }
+
+    public function test_a_restored_session_needs_a_free_place_and_the_same_child_is_not_enrolled_twice(): void
+    {
+        $f = $this->fixture();
+        $owner = $this->member($f['organization'], 'organization_owner');
+        $this->actAs($owner, $f['organization']);
+        $base = "/api/v1/enrollment/enrollments/{$f['enrollment']->id}";
+        $nov10 = $this->withTenant($f['organization'], function () use ($f): Session {
+            $session = Session::query()->where('group_id', $f['tuesday']->id)->whereDate('starts_at', '2026-11-10')->firstOrFail();
+            $session->update(['capacity' => 1]);
+
+            return $session;
+        });
+        $this->postJson("{$base}/skipped-sessions", ['session_id' => $nov10->id, 'reason' => 'Състезание', 'version' => 1])->assertOk();
+        $this->enrollAnotherChild($f, $f['tuesday'], $f['tuesdayPrice'], '2026-11-10', $nov10);
+        $this->deleteJson("{$base}/skipped-sessions/{$nov10->id}?version=2")->assertUnprocessable()->assertJsonValidationErrors('capacity');
+
+        // The same child already has a place in the Thursday group (even without generated sessions).
+        $this->withTenant($f['organization'], function () use ($f): void {
+            Session::query()->where('group_id', $f['thursday']->id)->delete();
+            $application = EnrollmentApplication::query()->findOrFail($f['enrollment']->application_id);
+            $copy = $application->replicate(['id']);
+            $copy->fill(['group_id' => $f['thursday']->id, 'price_option_id' => $f['thursdayPrice']->id, 'idempotency_key' => fake()->uuid()])->save();
+            Enrollment::query()->create([
+                'application_id' => $copy->id, 'child_id' => $f['enrollment']->child_id, 'group_id' => $f['thursday']->id,
+                'price_option_id' => $f['thursdayPrice']->id, 'scope' => 'full_period', 'status' => 'active', 'starts_on' => '2026-10-20',
+            ]);
+        });
+        $this->postJson("{$base}/transfer", [...$this->transferPayload($f), 'version' => 2])
+            ->assertUnprocessable()->assertJsonValidationErrors('target_group_id');
+    }
+
+    public function test_an_end_date_is_never_extended(): void
+    {
+        $f = $this->fixture();
+        $this->withTenant($f['organization'], fn () => Enrollment::query()->whereKey($f['enrollment']->id)->update(['ends_on' => '2026-12-31']));
+        $owner = $this->member($f['organization'], 'organization_owner');
+
+        $this->actAs($owner, $f['organization'])
+            ->postJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/end", ['last_day' => '2027-01-15', 'reason' => self::REASON, 'version' => 1])
+            ->assertUnprocessable()->assertJsonValidationErrors('last_day');
+    }
+
+    public function test_finance_sees_pause_dates_but_not_the_reason(): void
+    {
+        $f = $this->fixture();
+        $owner = $this->member($f['organization'], 'organization_owner');
+        $finance = $this->member($f['organization'], 'finance');
+        $this->actAs($owner, $f['organization'])
+            ->postJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/pauses", ['starts_on' => '2026-11-09', 'ends_on' => '2026-11-11', 'reason_category' => 'health', 'version' => 1])
+            ->assertCreated();
+
+        $this->actAs($finance, $f['organization'])
+            ->getJson("/api/v1/enrollment/groups/{$f['tuesday']->id}/roster")
+            ->assertOk()
+            ->assertJsonPath('enrollments.0.pauses.0.starts_on', '2026-11-09')
+            ->assertJsonPath('enrollments.0.pauses.0.reason_category', null)
+            ->assertJsonPath('upcoming_sessions', []);
+    }
+
     /** @return iterable<string, array{string, int}> */
     public static function rolesThatMayNotChange(): iterable
     {
@@ -388,6 +528,8 @@ class StaffEnrollmentChangesTest extends TestCase
         $this->postJson("{$base}/end", ['last_day' => '2026-11-30', 'reason' => self::REASON, 'version' => 1])->assertForbidden();
         $this->postJson("{$base}/skipped-sessions", ['session_id' => $session->id, 'reason' => 'Състезание', 'version' => 1])->assertForbidden();
         $this->deleteJson("{$base}/skipped-sessions/{$session->id}?version=1")->assertForbidden();
+        $this->postJson("{$base}/pauses/".Str::uuid().'/end', ['resume_on' => '2026-11-10', 'version' => 1])->assertForbidden();
+        $this->postJson("{$base}/reopen", ['version' => 1])->assertForbidden();
 
         $this->assertSame(1, $this->withTenant($f['organization'], fn () => Enrollment::query()->findOrFail($f['enrollment']->id)->version));
     }
@@ -407,6 +549,10 @@ class StaffEnrollmentChangesTest extends TestCase
         $this->postJson("{$foreignBase}/pauses", ['starts_on' => '2026-11-09', 'ends_on' => '2026-11-11', 'reason_category' => 'health', 'note' => 'Болест', 'version' => 1])->assertNotFound();
         $this->postJson("{$foreignBase}/end", ['last_day' => '2026-11-30', 'reason' => self::REASON, 'version' => 1])->assertNotFound();
         $this->postJson("{$foreignBase}/skipped-sessions", ['session_id' => $foreignSession->id, 'reason' => 'Състезание', 'version' => 1])->assertNotFound();
+        $this->deleteJson("{$foreignBase}/skipped-sessions/{$foreignSession->id}?version=1")->assertNotFound();
+        $this->postJson("{$foreignBase}/pauses/".Str::uuid().'/end', ['resume_on' => '2026-11-10', 'version' => 1])->assertNotFound();
+        $this->postJson("{$foreignBase}/reopen", ['version' => 1])->assertNotFound();
+        $this->getJson('/api/v1/enrollment/enrollments/not-a-uuid/transfer-options')->assertNotFound();
 
         // Own enrollment with a foreign group, price or session in the body is refused without revealing anything.
         $own = "/api/v1/enrollment/enrollments/{$f['enrollment']->id}";
@@ -435,6 +581,18 @@ class StaffEnrollmentChangesTest extends TestCase
         try {
             $selected = $this->insertPauseFixture($pdo, 'selected');
             $foreign = $this->insertPauseFixture($pdo, 'foreign');
+
+            // The pause's organization must be the enrollment's organization (composite foreign key).
+            $pdo->exec('SAVEPOINT mixed_tenant');
+            try {
+                $pdo->prepare(
+                    'INSERT INTO enrollment_pauses (id, organization_id, enrollment_id, starts_on, ends_on, reason_category, created_at, updated_at) '
+                    ."VALUES (gen_random_uuid(), :organization, :enrollment, '2026-11-09', '2026-11-10', 'other', NOW(), NOW())"
+                )->execute(['organization' => $selected['organization'], 'enrollment' => $foreign['enrollment']]);
+                $this->fail('A pause must not point at another organization\'s enrollment.');
+            } catch (\PDOException) {
+                $pdo->exec('ROLLBACK TO SAVEPOINT mixed_tenant');
+            }
 
             $pdo->exec('SET LOCAL ROLE progressive_app');
             $pdo->prepare("SELECT set_config('app.current_organization_id', :id, true)")->execute(['id' => $selected['organization']]);

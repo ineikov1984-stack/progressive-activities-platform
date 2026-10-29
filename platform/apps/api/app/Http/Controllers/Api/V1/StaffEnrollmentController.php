@@ -137,7 +137,7 @@ final class StaffEnrollmentController extends Controller
                 'child',
                 'pauses' => fn ($query) => $query->whereNull('cancelled_at')->whereDate('ends_on', '>=', $today)->orderBy('starts_on'),
                 'sessionExceptions' => fn ($query) => $query->where('kind', 'excluded')->with('session'),
-                'transferredTo.group',
+                'transferredTo' => fn ($query) => $query->where('status', '!=', EnrollmentStatus::Cancelled->value)->with('group'),
             ])
             ->orderBy('starts_on')
             ->get();
@@ -160,7 +160,7 @@ final class StaffEnrollmentController extends Controller
                 'remaining' => $capacity->remainingForGroup($record),
                 'waitlist_enabled' => $record->waitlist_enabled,
             ],
-            'enrollments' => $enrollments->map(fn (Enrollment $enrollment): array => $this->presentRosterEnrollment($enrollment, $today))->all(),
+            'enrollments' => $enrollments->map(fn (Enrollment $enrollment): array => $this->presentRosterEnrollment($enrollment, $today, $canManage))->all(),
             'waitlist' => $waiting->map($this->presentApplication(...))->all(),
             'upcoming_sessions' => $canManage ? Session::query()->where('group_id', $record->id)->where('status', 'scheduled')
                 ->where('starts_at', '>', now())->orderBy('starts_at')->limit(12)->get()
@@ -169,11 +169,12 @@ final class StaffEnrollmentController extends Controller
     }
 
     /**
-     * What the team needs on a roster row: no reasons or notes (they stay in the history).
+     * What the team needs on a roster row: no reasons or notes. The pause category (it can say
+     * "health") only for those who manage enrollments, not for finance or viewers.
      *
      * @return array<string, mixed>
      */
-    private function presentRosterEnrollment(Enrollment $enrollment, string $today): array
+    private function presentRosterEnrollment(Enrollment $enrollment, string $today, bool $canManage): array
     {
         $next = $enrollment->transferredTo;
 
@@ -196,7 +197,7 @@ final class StaffEnrollmentController extends Controller
                 'id' => $pause->id,
                 'starts_on' => $pause->starts_on->format('Y-m-d'),
                 'ends_on' => $pause->ends_on->format('Y-m-d'),
-                'reason_category' => $pause->reason_category,
+                'reason_category' => $canManage ? $pause->reason_category : null,
             ])->values()->all(),
             'skipped_sessions' => $enrollment->sessionExceptions
                 ->filter(fn (EnrollmentSessionException $exception): bool => $exception->session !== null && $exception->session->starts_at->isFuture())
