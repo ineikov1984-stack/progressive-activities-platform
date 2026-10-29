@@ -125,7 +125,31 @@ jobs:
           cache-dependency-path: platform/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit --audit-level high
-      - run: pnpm verify
+      # Same as `pnpm verify`, split so a failure shows which check and where.
+      - run: pnpm docs:check
+      - name: Lint
+        run: |
+          status=0
+          pnpm --filter @progressive/web exec eslint . -f json -o "$RUNNER_TEMP/eslint.json" || status=$?
+          node -e '
+            const fs = require("fs");
+            const file = process.env.RUNNER_TEMP + "/eslint.json";
+            if (!fs.existsSync(file)) process.exit(0);
+            for (const result of JSON.parse(fs.readFileSync(file, "utf8"))) {
+              const path = result.filePath.slice(result.filePath.indexOf("platform/apps/web/"));
+              for (const m of result.messages) {
+                const level = m.severity === 2 ? "error" : "warning";
+                console.log(`::${level} file=${path},line=${m.line || 1},col=${m.column || 1},title=${m.ruleId || "eslint"}::${m.message.replace(/\r?\n/g, " ")}`);
+              }
+            }
+          '
+          exit $status
+      - if: ${{ !cancelled() }}
+        run: pnpm typecheck
+      - if: ${{ !cancelled() }}
+        run: pnpm test
+      - if: ${{ !cancelled() }}
+        run: pnpm build
       - run: pnpm --filter @progressive/web exec playwright install --with-deps chromium
       # Browser suites that use synthetic API fixtures. The smoke suite against the real
       # API and database runs in the e2e-stack job; the remaining demo-database suites
