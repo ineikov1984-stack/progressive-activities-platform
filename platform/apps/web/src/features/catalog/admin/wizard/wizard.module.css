@@ -54,7 +54,7 @@
 .stepNote { color: var(--ink-muted); font-size: 12px; font-weight: 400; }
 
 /* Main */
-.main { display: grid; gap: var(--space-6); min-width: 0; }
+.main { display: grid; gap: var(--space-6); min-width: 0; max-width: none; margin: 0; padding: 0; } /* overrides the global main rule */
 .stepHead { display: grid; gap: var(--space-2); }
 .eyebrow { color: var(--action-hover); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .stepTitle { margin: 0; color: var(--ink); font-size: clamp(26px, 3.4vw, 32px); font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; }
