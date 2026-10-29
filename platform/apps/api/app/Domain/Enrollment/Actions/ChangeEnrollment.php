@@ -309,8 +309,11 @@ final class ChangeEnrollment
             if ($current->status !== EnrollmentStatus::Ended || $current->ends_on === null || $current->ends_on->toDateString() < $today) {
                 throw ValidationException::withMessages(['enrollment' => 'Само насрочено прекратяване може да се отмени.']);
             }
-            if ($this->movedOn($current)) {
-                throw ValidationException::withMessages(['enrollment' => 'Детето е преместено в друга група. За да се върне, преместете го обратно.']);
+            $continuation = $this->continuation($current);
+            if ($continuation !== null) {
+                throw ValidationException::withMessages(['enrollment' => $continuation->group_id === $current->group_id
+                    ? 'Детето вече продължава в групата с ново записване.'
+                    : 'Детето е преместено в друга група. За да се върне, преместете го обратно.']);
             }
 
             $dayAfter = CarbonImmutable::parse($current->ends_on->toDateString(), $timezone)->addDay();
@@ -423,24 +426,21 @@ final class ChangeEnrollment
     }
 
     /**
-     * Whether the enrollment continues somewhere else: a move that was not cancelled, also further
-     * down a chain (A → B cancelled → C). The chain is short; the loop is bounded anyway.
+     * Where the enrollment continues after a move that was not cancelled, also further down a chain
+     * (A → B cancelled → C, or back to A). The chain is short; the loop is bounded anyway.
      */
-    private function movedOn(Enrollment $enrollment): bool
+    private function continuation(Enrollment $enrollment): ?Enrollment
     {
         $id = $enrollment->id;
         for ($step = 0; $step < 50; $step++) {
-            $next = Enrollment::query()->where('transferred_from_id', $id)->first(['id', 'status']);
-            if ($next === null) {
-                return false;
-            }
-            if ($next->status !== EnrollmentStatus::Cancelled) {
-                return true;
+            $next = Enrollment::query()->where('transferred_from_id', $id)->first(['id', 'group_id', 'status']);
+            if ($next === null || $next->status !== EnrollmentStatus::Cancelled) {
+                return $next;
             }
             $id = $next->id;
         }
 
-        return true;
+        throw ValidationException::withMessages(['enrollment' => 'Историята на преместванията е твърде дълга. Обърнете се към поддръжката.']);
     }
 
     /** Another full-period place of the same child in the group on or after the day (not cancelled). */
