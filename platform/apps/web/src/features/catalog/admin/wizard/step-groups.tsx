@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { type FormEvent, useState } from 'react';
 import { type ActivityGroup, type InstructorProfile, type Location, saveGroup } from '../api';
 import { buildSchedulePattern, conflictPresentation, summarizeSchedule } from '../presentation';
@@ -174,6 +175,7 @@ export function StepGroups({ organizationId, activityId, ageLabel, groups, locat
       ) : (
         <button type="button" className={styles.secondary} onClick={() => open()}><Icon path={icons.plus} />Добави група</button>
       )}
+      <p className={styles.hint}>Пробни занимания и еднократни посещения по групите се добавят в <Link href={`/dashboard/activities/${activityId}/visit-offers`}>Предложения за посещение</Link>.</p>
     </>
   );
 }

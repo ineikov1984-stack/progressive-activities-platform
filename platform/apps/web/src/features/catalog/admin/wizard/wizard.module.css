@@ -109,6 +109,9 @@
 .checkDone .icon { color: var(--status-available); }
 .checkMissing { background: var(--status-limited-soft); }
 .checkMissing .icon { color: var(--status-limited); }
+.checkOptional { background: var(--surface-sunken); }
+.checkOptional .icon { color: var(--ink-muted); }
+.reviewTitle { margin: var(--space-2) 0 0; color: var(--ink); font-size: 15px; font-weight: 650; }
 .publishRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
 
 .footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }

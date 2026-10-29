@@ -459,41 +459,41 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
   );
 }
 
+/** What the API requires to publish; the rest is recommended but does not block. */
+const requiredForPublish = new Set(['basics', 'audience', 'price']);
+
 function ReviewStep({ activity, groups, onPublish, publishing, message, onGo }: { activity: ActivityDraft; groups: ActivityGroup[]; onPublish: () => void; publishing: boolean; message: string; onGo: (step: WizardStep) => void }) {
   const completeness = activityCompleteness(activity);
-  const missing = completeness.steps.filter((item) => !item.done);
   const stepFor: Record<string, WizardStep> = Object.fromEntries(wizardSteps.map((item) => [item.id, item]));
   stepFor.terms = stepFor.price;
   const blocking = groups.flatMap((group) => group.conflicts).filter((conflict) => conflict.severity === 'blocking');
-  const ready = missing.length === 0 && groups.length > 0 && blocking.length === 0;
+  const required = completeness.steps.filter((item) => requiredForPublish.has(item.id));
+  const recommended = completeness.steps.filter((item) => !requiredForPublish.has(item.id));
+  const ready = required.every((item) => item.done) && groups.length > 0 && blocking.length === 0;
+  const row = (key: string, done: boolean, label: string, target?: WizardStep, action = 'Попълни', tone: 'missing' | 'optional' = 'missing') => (
+    <li key={key} className={done ? styles.checkDone : tone === 'missing' ? styles.checkMissing : styles.checkOptional}>
+      <Icon path={done ? icons.check : icons.warn} />
+      <span>{label}</span>
+      {!done && target ? <button type="button" className={styles.linkButton} onClick={() => onGo(target)}>{action}</button> : null}
+    </li>
+  );
   return (
     <div className={styles.review}>
+      <h3 className={styles.reviewTitle}>Задължително за публикуване</h3>
       <ul className={styles.checklist}>
-        {completeness.steps.map((item) => (
-          <li key={item.id} className={item.done ? styles.checkDone : styles.checkMissing}>
-            <Icon path={item.done ? icons.check : icons.warn} />
-            <span>{item.label}</span>
-            {!item.done && stepFor[item.id] ? <button type="button" className={styles.linkButton} onClick={() => onGo(stepFor[item.id])}>Попълни</button> : null}
-          </li>
-        ))}
-        <li className={groups.length > 0 ? styles.checkDone : styles.checkMissing}>
-          <Icon path={groups.length > 0 ? icons.check : icons.warn} />
-          <span>Поне една група с график</span>
-          {groups.length === 0 ? <button type="button" className={styles.linkButton} onClick={() => onGo(stepFor.groups)}>Добави</button> : null}
-        </li>
-        {blocking.length > 0 ? (
-          <li className={styles.checkMissing}>
-            <Icon path={icons.warn} />
-            <span>Графикът се застъпва с друго занимание</span>
-            <button type="button" className={styles.linkButton} onClick={() => onGo(stepFor.groups)}>Провери</button>
-          </li>
-        ) : null}
+        {required.map((item) => row(item.id, item.done, item.label, stepFor[item.id]))}
+        {row('groups', groups.length > 0, 'Поне една група с график', stepFor.groups, 'Добави')}
+        {blocking.length > 0 ? row('conflicts', false, 'Графикът се застъпва с друго занимание', stepFor.groups, 'Провери') : null}
+      </ul>
+      <h3 className={styles.reviewTitle}>Препоръчително — помага на родителите да изберат</h3>
+      <ul className={styles.checklist}>
+        {recommended.map((item) => row(item.id, item.done, item.label, stepFor[item.id], 'Попълни', 'optional'))}
       </ul>
       {message ? <p className={styles.success} role="status">{message}</p> : null}
       {activity.status === 'draft' ? (
         <div className={styles.publishRow}>
           <button type="button" className={styles.primary} onClick={onPublish} disabled={publishing || !ready} aria-describedby="publish-hint">{publishing ? 'Публикуване…' : 'Публикувай дейността'}</button>
-          <span className={styles.hint} id="publish-hint">{ready ? 'След публикуване родителите ще я видят в каталога.' : 'Попълнете липсващите стъпки, за да публикувате.'}</span>
+          <span className={styles.hint} id="publish-hint">{ready ? 'След публикуване родителите ще я видят в каталога.' : 'Попълнете задължителните стъпки, за да публикувате.'}</span>
         </div>
       ) : null}
     </div>
