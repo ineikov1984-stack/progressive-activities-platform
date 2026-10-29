@@ -15,10 +15,24 @@ export class CatalogApiError extends Error { constructor(message: string, public
 type JsonObject = Record<string, unknown>;
 function cookie(name: string): string | undefined { if (typeof document === 'undefined') return; const value = document.cookie.split('; ').find((item) => item.startsWith(`${name}=`)); return value ? decodeURIComponent(value.slice(name.length + 1)) : undefined; }
 async function csrf(): Promise<string | undefined> { const current = cookie('XSRF-TOKEN'); if (current) return current; await fetch('/backend/sanctum/csrf-cookie', { credentials: 'include' }); return cookie('XSRF-TOKEN'); }
+const knownApiMessages: Record<string, string> = {
+  'Only drafts can be edited.': 'Публикуваната дейност не може да се променя директно. Скоро ще може да правите промени като чернова.',
+  'Only drafts can be published.': 'Дейността вече е публикувана.',
+  'Activity version conflict.': 'Някой току-що промени тази дейност. Презаредете страницата и опитайте отново.',
+  'Blocking schedule conflict.': 'Графикът се застъпва с друго занимание. Проверете групите и опитайте отново.',
+  'Only active organizations can publish.': 'Организацията трябва да бъде одобрена, преди да публикува.',
+};
+
+/** API messages are shown to people; never show English or technical text. */
+export function catalogErrorMessage(message: unknown): string {
+  if (typeof message !== 'string' || message.trim() === '') return 'Заявката към каталога не беше изпълнена.';
+  if (knownApiMessages[message]) return knownApiMessages[message];
+  return /[А-Яа-я]/.test(message) ? message : 'Действието не беше изпълнено. Опитайте отново или се свържете с поддръжката.';
+}
 async function request<T>(organizationId: string, path: string, options: RequestInit = {}, write = false): Promise<T> {
   const token = write ? await csrf() : undefined;
   const response = await fetch(`/backend/api/v1/catalog${path}`, { ...options, credentials: 'include', headers: { Accept: 'application/json', 'X-Organization-Id': organizationId, ...(token ? { 'X-XSRF-TOKEN': token } : {}), ...(options.headers ?? {}) } });
-  if (!response.ok) { const body = await response.json().catch(() => ({})) as JsonObject; throw new CatalogApiError(typeof body.message === 'string' ? body.message : 'Заявката към каталога не беше изпълнена.', response.status, body.errors && typeof body.errors === 'object' ? body.errors as Record<string, string[]> : {}); }
+  if (!response.ok) { const body = await response.json().catch(() => ({})) as JsonObject; throw new CatalogApiError(catalogErrorMessage(body.message), response.status, body.errors && typeof body.errors === 'object' ? body.errors as Record<string, string[]> : {}); }
   return response.json() as Promise<T>;
 }
 const json = (body: unknown): RequestInit => ({ headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });

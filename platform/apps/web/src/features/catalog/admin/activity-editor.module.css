@@ -4,3 +4,8 @@
 .page button.dangerButton{color:#842e26!important;background:#fff0ee!important}
 .priceOptions{display:grid;gap:1rem;margin:1rem 0}.priceOptions fieldset,.slotRow{padding:1rem;border:1px solid #d9e3df;border-radius:.8rem}.priceOptions legend{font-weight:800}.slotRow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:.7rem;margin-bottom:.7rem}.dangerButton{color:#842e26!important;background:#fff0ee!important}
 @media(max-width:760px){.slotRow{grid-template-columns:1fr}}
+
+.lockedFieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.lockedFieldset:disabled { opacity: .72; }
+.lockedNotice { display: grid; gap: var(--space-1); max-width: 86rem; box-sizing: border-box; margin: 1rem auto; padding: var(--space-4) var(--space-6); border-radius: var(--radius-lg); color: var(--ink-body); background: var(--status-info-soft); font-size: 14px; line-height: 20px; }
+.lockedNotice strong { color: var(--ink); font-size: 15px; }
