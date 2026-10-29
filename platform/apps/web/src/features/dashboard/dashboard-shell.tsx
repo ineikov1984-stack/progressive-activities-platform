@@ -6,7 +6,6 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AuthenticationRequiredError,
   loadOrganizationContext,
-  rememberOrganizationInSession,
   type DashboardOrganization,
   type DashboardUser,
 } from './api';
@@ -68,8 +67,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    loadOrganizationContext().then(async (context) => {
-      await rememberOrganizationInSession(context.organization.id);
+    loadOrganizationContext().then((context) => {
       setUser(context.user);
       setOrganization(context.organization);
       setOrganizations(context.organizations);

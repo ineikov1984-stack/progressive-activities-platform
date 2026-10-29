@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useDashboardContext } from '@/features/dashboard/dashboard-context';
-import { ActivityDraft, createActivity, loadCatalogWorkspace, privateMediaUrl } from './api';
+import { ActivityDraft, createActivity, loadCatalogWorkspace } from './api';
+import { usePrivateMedia } from './private-image';
 import { activityCategories, activityCompleteness, activityStatusLabel, formatEur } from './presentation';
 import styles from './activity-list.module.css';
 
@@ -40,10 +41,10 @@ function metaLine(activity: ActivityDraft): string {
   ].filter(Boolean).join(' · ');
 }
 
-function ActivityCard({ activity, organizationSlug }: { activity: ActivityDraft; organizationSlug: string }) {
+function ActivityCard({ activity, organizationId, organizationSlug }: { activity: ActivityDraft; organizationId: string; organizationSlug: string }) {
   const completeness = activityCompleteness(activity);
   const isComplete = completeness.done === completeness.total;
-  const cover = privateMediaUrl(activity.hero_image_path);
+  const cover = usePrivateMedia(organizationId, activity.hero_image_path);
   const editHref = `/dashboard/activities/${activity.id}`;
   const statusClass = activity.status === 'published' ? styles.badgeAvailable : activity.status === 'archived' ? styles.badgeMuted : styles.badgeDraft;
   const progressText = isComplete
@@ -208,7 +209,7 @@ export function ActivityList() {
             )
             : visible.length === 0
               ? <p className={styles.muted}>Няма дейности, които отговарят на избраното.</p>
-              : visible.map((activity) => <ActivityCard key={activity.id} activity={activity} organizationSlug={organization.slug} />)}
+              : visible.map((activity) => <ActivityCard key={activity.id} activity={activity} organizationId={organization.id} organizationSlug={organization.slug} />)}
       </section>
     </div>
   );
