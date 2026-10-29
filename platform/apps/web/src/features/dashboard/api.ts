@@ -139,3 +139,16 @@ export async function createInvitation(organizationId: string, email: string, ro
     body: JSON.stringify({ email, role }),
   });
 }
+
+/**
+ * The parts of the home screen that the frame does not already hold.
+ * User and organization come from DashboardContext, so they are not fetched twice.
+ */
+export async function loadWorkspaceOverview(organizationId: string): Promise<Pick<DashboardData, 'invitations' | 'auditEvents'>> {
+  const headers = { 'X-Organization-Id': organizationId };
+  const [{ invitations }, { events: auditEvents }] = await Promise.all([
+    requestJson<{ invitations: DashboardInvitation[] }>('/backend/api/v1/invitations', { headers }),
+    requestJson<{ events: DashboardAuditEvent[] }>('/backend/api/v1/audit-events', { headers }),
+  ]);
+  return { invitations, auditEvents };
+}

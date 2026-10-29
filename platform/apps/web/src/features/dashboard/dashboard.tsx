@@ -1,34 +1,29 @@
 'use client';
 
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AuthenticationRequiredError,
   createInvitation,
-  DashboardAuditEvent,
-  DashboardData,
-  DashboardInvitation,
-  loadDashboard,
+  type DashboardAuditEvent,
+  type DashboardInvitation,
+  loadWorkspaceOverview,
 } from './api';
-import styles from '@/app/dashboard/page.module.css';
+import { useDashboardContext } from './dashboard-context';
+import { type ActivityDraft, loadCatalogWorkspace } from '@/features/catalog/admin/api';
+import { buildTasks, plural, type Task } from './tasks';
 import { OrganizationStatusCard } from '@/features/organizations/application/status-card';
+import styles from './home.module.css';
 
 const roleLabels: Record<string, string> = {
   platform_admin: 'Платформен администратор',
-  organization_owner: 'Собственик на организация',
-  organization_admin: 'Администратор на организация',
+  organization_owner: 'Собственик',
+  organization_admin: 'Администратор',
   coordinator: 'Координатор',
   instructor: 'Преподавател / треньор',
   finance: 'Финанси',
   viewer: 'Само преглед',
-};
-
-const permissionLabels: Record<string, string> = {
-  create: 'Създаване',
-  update: 'Редактиране',
-  invite: 'Покани',
-  finance: 'Финанси',
-  view: 'Преглед',
 };
 
 const invitationStatusLabels: Record<string, string> = {
@@ -38,232 +33,188 @@ const invitationStatusLabels: Record<string, string> = {
 };
 
 const auditActionLabels: Record<string, string> = {
-  'identity.login_succeeded': 'Успешен вход',
+  'identity.login_succeeded': 'Вход в системата',
   'organization.context_selected': 'Избрана организация',
-  'organization.invitation_created': 'Създадена покана',
-  'organization.role_changed': 'Зададена роля',
+  'organization.invitation_created': 'Изпратена покана',
+  'organization.role_changed': 'Променена роля',
   'catalog.activity_submitted': 'Дейност, изпратена за преглед',
 };
 
+function greeting(now: Date): string {
+  const hour = Number(new Intl.DateTimeFormat('bg-BG', { hour: 'numeric', hour12: false, timeZone: 'Europe/Sofia' }).format(now));
+  if (hour < 11) return 'Добро утро';
+  if (hour < 18) return 'Добър ден';
+  return 'Добър вечер';
+}
+
+const taskIconPaths: Record<Task['tone'], string[]> = {
+  action: ['M4 20h4L19 9l-4-4L4 16v4z', 'M13.5 6.5l4 4'],
+  limited: ['M4 6h16v12H4z', 'M4 7l8 6 8-6'],
+  info: ['M12 5v14', 'M5 12h14'],
+};
+
+function TaskIcon({ tone }: { tone: Task['tone'] }) {
+  return <svg viewBox="0 0 24 24" aria-hidden="true">{taskIconPaths[tone].map((path) => <path key={path} d={path} />)}</svg>;
+}
+
 export function Dashboard() {
   const router = useRouter();
-  const hasStartedLoading = useRef(false);
-  const [data, setData] = useState<DashboardData>();
-  const [error, setError] = useState<string>();
+  const { user, organization } = useDashboardContext();
+  const [activities, setActivities] = useState<ActivityDraft[]>();
+  const [invitations, setInvitations] = useState<DashboardInvitation[]>();
+  const [auditEvents, setAuditEvents] = useState<DashboardAuditEvent[]>();
+  const [loadError, setLoadError] = useState<string>();
+  const [formError, setFormError] = useState<string>();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [oneTimeToken, setOneTimeToken] = useState<string>();
 
   useEffect(() => {
-    if (hasStartedLoading.current) {
-      return;
-    }
-
-    hasStartedLoading.current = true;
-    loadDashboard()
-      .then(setData)
-      .catch((reason: unknown) => {
-        if (reason instanceof AuthenticationRequiredError) {
-          router.replace('/login');
-          return;
-        }
-
-        setError(reason instanceof Error ? reason.message : 'Не успяхме да заредим административното табло.');
-      });
-  }, [router]);
+    let active = true;
+    Promise.all([
+      loadWorkspaceOverview(organization.id),
+      loadCatalogWorkspace(organization.id).then((workspace) => workspace.activities).catch(() => [] as ActivityDraft[]),
+    ]).then(([overview, catalogActivities]) => {
+      if (!active) return;
+      setInvitations(overview.invitations);
+      setAuditEvents(overview.auditEvents);
+      setActivities(catalogActivities);
+    }).catch((reason: unknown) => {
+      if (!active) return;
+      if (reason instanceof AuthenticationRequiredError) router.replace('/login');
+      else setLoadError('Част от таблото не се зареди. Опитайте да презаредите страницата.');
+    });
+    return () => { active = false; };
+  }, [organization.id, router]);
 
   async function handleInvitation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!data) {
-      return;
-    }
-
     const invitationForm = event.currentTarget;
-    setError(undefined);
+    const form = new FormData(invitationForm);
+    setFormError(undefined);
     setOneTimeToken(undefined);
     setIsSubmitting(true);
-
-    const form = new FormData(invitationForm);
-
     try {
-      const result = await createInvitation(
-        data.organization.id,
-        String(form.get('email') ?? ''),
-        String(form.get('role') ?? 'instructor'),
-      );
-      setData((current) => current ? {
-        ...current,
-        invitations: [result.invitation, ...current.invitations],
-      } : current);
+      const result = await createInvitation(organization.id, String(form.get('email') ?? ''), String(form.get('role') ?? 'instructor'));
+      setInvitations((current) => [result.invitation, ...(current ?? [])]);
       setOneTimeToken(result.token);
       invitationForm.reset();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Поканата не беше създадена.');
+      setFormError(reason instanceof Error ? reason.message : 'Поканата не беше изпратена.');
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  if (!data && !error) {
-    return <main className={styles.centerState}><p>Зареждане на администрацията…</p></main>;
-  }
-
-  if (!data) {
-    return (
-      <main className={styles.centerState}>
-        <h1>Администрация</h1>
-        <p role="alert">{error}</p>
-        <button type="button" onClick={() => window.location.reload()}>Опитай отново</button>
-      </main>
-    );
-  }
+  const isLoaded = activities !== undefined && invitations !== undefined;
+  const tasks = isLoaded ? buildTasks(activities, invitations) : [];
+  const published = activities?.filter((activity) => activity.status === 'published').length ?? 0;
+  const firstName = user.name.split(/\s+/)[0];
 
   return (
-    <main className={styles.dashboardPage}>
-      <section className={styles.content}>
-        <section id="overview" className={styles.hero}>
-          <div>
-            <p className={styles.eyebrow}>Работно пространство</p>
-            <h2>{data.organization.name}</h2>
-            <p>Това табло показва реалните възможности, изградени до момента.</p>
-          </div>
-          <div className={styles.roleCard}>
-            <span>Текуща роля</span>
-            <strong>{roleLabels[data.organization.role] ?? data.organization.role}</strong>
-          </div>
-        </section>
+    <div className={styles.page}>
+      <header className={styles.header}>
+        <div className={styles.heading}>
+          <p className={styles.eyebrow}>{greeting(new Date())}, {firstName}</p>
+          <h1>{organization.name}</h1>
+          <p className={styles.muted}>{roleLabels[organization.role] ?? 'Член на екипа'} · {plural(published, 'публикувана дейност', 'публикувани дейности')}</p>
+        </div>
+        <Link className={styles.primary} href="/dashboard/activities?new=1">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          Създай нова дейност
+        </Link>
+      </header>
 
-        <OrganizationStatusCard organizationId={data.organization.id} />
+      {organization.status !== 'active' ? <OrganizationStatusCard organizationId={organization.id} /> : null}
+      {loadError ? <p className={styles.error} role="alert">{loadError}</p> : null}
 
-        <section className={styles.grid} aria-label="Обобщение">
-          <article className={styles.card}>
-            <span className={styles.cardLabel}>Организации</span>
-            <strong className={styles.metric}>{data.organizations.length}</strong>
-            <p>Активни работни пространства за този профил</p>
-          </article>
-          <article className={styles.card}>
-            <span className={styles.cardLabel}>Покани</span>
-            <strong className={styles.metric}>{data.invitations.length}</strong>
-            <p>Създадени покани в активната организация</p>
-          </article>
-          <article className={styles.card}>
-            <span className={styles.cardLabel}>Сигурност</span>
-            <strong className={styles.ready}>Tenant защита</strong>
-            <p>Достъпът е ограничен до избраната организация</p>
-          </article>
-          <article className={styles.card}>
-            <span className={styles.cardLabel}>Одитни събития</span>
-            <strong className={styles.metric}>{data.auditEvents.length}</strong>
-            <p>Проследими действия в активната организация</p>
-          </article>
-        </section>
-
-        <section className={styles.card}>
-          <div className={styles.sectionHeading}>
-            <div>
-              <p className={styles.eyebrow}>Разрешения</p>
-              <h2>Какво може този профил</h2>
-            </div>
+      <section aria-labelledby="tasks-title" className={styles.section}>
+        <h2 id="tasks-title" className={styles.sectionTitle}>Какво чака вас</h2>
+        {!isLoaded ? (
+          <div className={styles.taskGrid} aria-busy="true">{[0, 1, 2].map((item) => <span className={styles.skeleton} key={item} />)}</div>
+        ) : tasks.length === 0 ? (
+          <div className={styles.allClear}>
+            <span className={styles.allClearIcon} aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10" /></svg></span>
+            <div><strong>Всичко е наред</strong><p>Няма чернови или покани, които чакат действие.</p></div>
           </div>
-          <div className={styles.permissions}>
-            {data.organization.permissions.map((permission) => (
-              <span key={permission}>✓ {permissionLabels[permission] ?? permission}</span>
+        ) : (
+          <div className={styles.taskGrid}>
+            {tasks.map((task) => (
+              <Link className={styles.task} href={task.href} key={task.id}>
+                <span className={`${styles.taskIcon} ${styles[task.tone]}`}><TaskIcon tone={task.tone} /></span>
+                <span className={styles.taskText}><strong>{task.title}</strong><span>{task.detail}</span></span>
+              </Link>
             ))}
           </div>
-        </section>
+        )}
+      </section>
 
-        <section id="team" className={styles.teamGrid}>
-          <article className={styles.card}>
-            <div className={styles.sectionHeading}>
-              <div>
-                <p className={styles.eyebrow}>Екип</p>
-                <h2>Нова покана</h2>
-              </div>
-            </div>
-            <form className={styles.form} onSubmit={handleInvitation}>
-              <label htmlFor="invitation-email">Имейл на нов член</label>
-              <input id="invitation-email" name="email" type="email" required />
-              <label htmlFor="invitation-role">Роля</label>
-              <select id="invitation-role" name="role" defaultValue="instructor">
-                <option value="organization_admin">Администратор</option>
-                <option value="coordinator">Координатор</option>
-                <option value="instructor">Преподавател / треньор</option>
-                <option value="finance">Финанси</option>
-                <option value="viewer">Само преглед</option>
-              </select>
-              <button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? 'Създаване…' : 'Изпрати покана'}
-              </button>
-            </form>
-            {oneTimeToken ? (
-              <div className={styles.tokenNotice}>
-                <strong>Token за еднократно приемане</strong>
-                <code>{oneTimeToken}</code>
-                <p>В production той ще се изпраща чрез защитено съобщение и няма да се показва повторно.</p>
-              </div>
-            ) : null}
-            {error ? <p className={styles.error} role="alert">{error}</p> : null}
-          </article>
+      <section aria-labelledby="shortcuts-title" className={styles.section}>
+        <h2 id="shortcuts-title" className={styles.sectionTitle}>Бърз достъп</h2>
+        <div className={styles.shortcuts}>
+          <Link href="/dashboard/activities" className={styles.shortcut}><strong>Дейности</strong><span>{activities ? plural(activities.length, 'дейност', 'дейности') : '…'}</span></Link>
+          <Link href="/dashboard/open-days" className={styles.shortcut}><strong>Отворени врати</strong><span>Кампании и пробни занимания</span></Link>
+          <Link href={`/o/${organization.slug}`} className={styles.shortcut}><strong>Публичен профил</strong><span>Как ви виждат родителите</span></Link>
+        </div>
+      </section>
 
-          <article className={styles.card}>
-            <div className={styles.sectionHeading}>
-              <div>
-                <p className={styles.eyebrow}>Последни</p>
-                <h2>Покани</h2>
-              </div>
-              <span>{data.invitations.length}</span>
+      <section id="team" aria-labelledby="team-title" className={styles.twoColumns}>
+        <article className={styles.panel}>
+          <h2 id="team-title">Покани колега</h2>
+          <form className={styles.form} onSubmit={handleInvitation}>
+            <label htmlFor="invitation-email">Имейл</label>
+            <input id="invitation-email" name="email" type="email" autoComplete="email" required />
+            <label htmlFor="invitation-role">Роля</label>
+            <select id="invitation-role" name="role" defaultValue="instructor">
+              <option value="organization_admin">Администратор</option>
+              <option value="coordinator">Координатор</option>
+              <option value="instructor">Преподавател / треньор</option>
+              <option value="finance">Финанси</option>
+              <option value="viewer">Само преглед</option>
+            </select>
+            <button type="submit" disabled={isSubmitting} aria-busy={isSubmitting}>{isSubmitting ? 'Изпращане…' : 'Изпрати покана'}</button>
+          </form>
+          {oneTimeToken ? (
+            <div className={styles.notice} role="status">
+              <strong>Поканата е създадена</strong>
+              <p>Кодът за приемане е показан само в тестовата среда. В реална работа колегата ще го получи по имейл.</p>
+              <code>{oneTimeToken}</code>
             </div>
-            {data.invitations.length === 0 ? (
-              <p className={styles.empty}>Все още няма създадени покани.</p>
-            ) : (
-              <ul className={styles.invitationList}>
-                {data.invitations.map((invitation: DashboardInvitation) => (
-                  <li key={invitation.id}>
-                    <div>
-                      <strong>{invitation.email}</strong>
-                      <span>{roleLabels[invitation.role] ?? invitation.role}</span>
-                    </div>
-                    <span className={`${styles.status} ${styles[invitation.status] ?? ''}`}>
-                      {invitationStatusLabels[invitation.status] ?? invitation.status}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </article>
-        </section>
+          ) : null}
+          {formError ? <p className={styles.error} role="alert">{formError}</p> : null}
+        </article>
 
-        <section id="audit" className={`${styles.card} ${styles.auditSection}`}>
-          <div className={styles.sectionHeading}>
-            <div>
-              <p className={styles.eyebrow}>Сигурност и отчетност</p>
-              <h2>Последни действия</h2>
-            </div>
-            <span>{data.auditEvents.length}</span>
-          </div>
-          {data.auditEvents.length === 0 ? (
-            <p className={styles.empty}>Все още няма записани действия.</p>
+        <article className={styles.panel}>
+          <h2>Екип и покани</h2>
+          {invitations === undefined ? <span className={styles.skeleton} /> : invitations.length === 0 ? (
+            <p className={styles.muted}>Все още не сте поканили колеги.</p>
           ) : (
-            <ul className={styles.auditList}>
-              {data.auditEvents.map((event: DashboardAuditEvent) => (
-                <li key={event.id}>
-                  <span className={styles.auditDot} aria-hidden="true" />
-                  <div>
-                    <strong>{auditActionLabels[event.action] ?? event.action}</strong>
-                    <span>{event.subject_type} · {event.subject_id}</span>
-                  </div>
-                  <time dateTime={event.created_at}>
-                    {new Intl.DateTimeFormat('bg-BG', {
-                      dateStyle: 'short',
-                      timeStyle: 'short',
-                      timeZone: 'Europe/Sofia',
-                    }).format(new Date(event.created_at))}
-                  </time>
+            <ul className={styles.list}>
+              {invitations.map((invitation) => (
+                <li key={invitation.id}>
+                  <span className={styles.listMain}><strong>{invitation.email}</strong><span>{roleLabels[invitation.role] ?? 'Член на екипа'}</span></span>
+                  <span className={`${styles.badge} ${styles[`badge_${invitation.status}`] ?? ''}`}>{invitationStatusLabels[invitation.status] ?? 'Неизвестен статус'}</span>
                 </li>
               ))}
             </ul>
           )}
-        </section>
+        </article>
       </section>
-    </main>
+
+      <section aria-labelledby="audit-title" className={styles.panel}>
+        <h2 id="audit-title">Последни действия</h2>
+        {auditEvents === undefined ? <span className={styles.skeleton} /> : auditEvents.length === 0 ? (
+          <p className={styles.muted}>Все още няма записани действия.</p>
+        ) : (
+          <ul className={styles.list}>
+            {auditEvents.slice(0, 8).map((event) => (
+              <li key={event.id}>
+                <span className={styles.listMain}><strong>{auditActionLabels[event.action] ?? 'Действие в системата'}</strong></span>
+                <time className={styles.muted} dateTime={event.created_at}>{new Intl.DateTimeFormat('bg-BG', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Sofia' }).format(new Date(event.created_at))}</time>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
   );
 }

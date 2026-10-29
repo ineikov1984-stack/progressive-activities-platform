@@ -1,4 +1,4 @@
-import type { ActivityGroup, ActivitySections, CampaignMembershipInput, OpenDayCampaign, PriceOption, ScheduleConflict, SchedulePattern, VisitOffer, VisitOfferFields, VisitOfferInput } from './api';
+import type { ActivityDraft, ActivityGroup, ActivitySections, CampaignMembershipInput, OpenDayCampaign, PriceOption, ScheduleConflict, SchedulePattern, VisitOffer, VisitOfferFields, VisitOfferInput } from './api';
 
 const statusLabels: Record<string, string> = { draft: 'Чернова', published: 'Публикувана', archived: 'Архивирана' };
 const weekdays: Record<number, string> = { 1: 'понеделник', 2: 'вторник', 3: 'сряда', 4: 'четвъртък', 5: 'петък', 6: 'събота', 7: 'неделя' };
@@ -154,3 +154,34 @@ export function campaignMembershipChange(offer: Pick<VisitOffer, 'id' | 'version
   if (!target || (offer.campaign_id && !source)) throw new Error('Кампанията е променена. Заредете актуалните данни.');
   return { id: target.id, body: { version: target.version, visit_offer_ids: nextId ? [...new Set([...target.visit_offers.map((item) => item.id), offer.id])] : target.visit_offers.filter((item) => item.id !== offer.id).map((item) => item.id), visit_offer_versions: { [offer.id]: offer.version }, source_campaign_versions: source && source.id !== target.id ? { [source.id]: source.version } : {} } };
 }
+
+export type CompletenessStep = { id: string; label: string; done: boolean };
+export type ActivityCompleteness = { done: number; total: number; steps: CompletenessStep[]; next?: CompletenessStep };
+
+// Values the old quick-create form stored before the organisation filled them in.
+const placeholderSummary = 'Добавете кратко описание на дейността.';
+const placeholderAge = 'Добавете възраст';
+const placeholderCategory = 'Друго';
+
+const filled = (value?: string | null) => Boolean(value && value.trim());
+
+/**
+ * What still separates an activity from a page parents can trust.
+ * Groups and schedules are loaded per activity and are checked in the editor.
+ */
+export function activityCompleteness(activity: ActivityDraft): ActivityCompleteness {
+  const offering = activity.offering;
+  const steps: CompletenessStep[] = [
+    { id: 'basics', label: 'Основна информация', done: filled(activity.title) && activity.category !== placeholderCategory && filled(activity.summary) && activity.summary !== placeholderSummary },
+    { id: 'audience', label: 'Аудитория', done: filled(activity.age_label) && activity.age_label !== placeholderAge },
+    { id: 'story', label: 'Представяне и ползи', done: filled(activity.sections?.about) },
+    { id: 'media', label: 'Снимки', done: filled(activity.hero_image_path) },
+    { id: 'people', label: 'Място и преподавател', done: Boolean(offering?.location_id && offering?.lead_instructor_profile_id) },
+    { id: 'price', label: 'Цени и записване', done: Boolean(offering?.price_options?.length) },
+    { id: 'terms', label: 'Условия', done: filled(offering?.terms) || filled(offering?.cancellation_policy) },
+  ];
+  const done = steps.filter((step) => step.done).length;
+  return { done, total: steps.length, steps, next: steps.find((step) => !step.done) };
+}
+
+export const activityCategories = ['Спорт и движение', 'Изкуства', 'Наука и технологии', 'Музика', 'Езици и четене', 'Логика и игри', 'Друго'] as const;

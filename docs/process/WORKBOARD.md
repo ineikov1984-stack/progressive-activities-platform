@@ -6,7 +6,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Дизайн системата в кода: tokens, Onest, рамка на администрацията, вход | Claude | claude/design-system | `apps/web/src/app/globals.css`, `apps/web/src/design-system/**`, `features/dashboard/**`, вход | PR отворен; после Етап 1 екрани |
+| Етап 1: начален екран „Какво чака вас“ и нов списък с дейности | Claude | claude/stage-1-admin | `apps/web/src/features/dashboard/**`, `features/catalog/admin/activity-list*`, `presentation.ts` | PR отворен; визуална проверка след merge |
 
 ## Опашка (по приоритет)
 
