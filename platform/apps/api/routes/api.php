@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\V1\OrganizationController;
 use App\Http\Controllers\Api\V1\ParentChildController;
 use App\Http\Controllers\Api\V1\ParentEnrollmentController;
 use App\Http\Controllers\Api\V1\PublicCatalogController;
+use App\Http\Controllers\Api\V1\StaffEnrollmentController;
 use App\Http\Controllers\Api\V1\VisitOfferController;
 use Illuminate\Support\Facades\Route;
 
@@ -55,6 +56,14 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/invitations', [InvitationController::class, 'index'])->middleware('tenant');
             Route::post('/invitations/accept', [InvitationController::class, 'accept']);
             Route::get('/audit-events', [AuditEventController::class, 'index'])->middleware('tenant');
+            Route::prefix('enrollment')->middleware('tenant')->group(function (): void {
+                Route::middleware('organization.access:operational.read')->group(function (): void {
+                    Route::get('/applications', [StaffEnrollmentController::class, 'applications']);
+                    Route::get('/groups/{group}/roster', [StaffEnrollmentController::class, 'roster']);
+                });
+                Route::post('/applications/{application}/review', [StaffEnrollmentController::class, 'review'])
+                    ->middleware('organization.access:operational.write');
+            });
             Route::prefix('catalog')->middleware('tenant')->group(function (): void {
                 Route::middleware('organization.access:operational.read')->group(function (): void {
                     Route::get('/activities', [ActivityController::class, 'index']);

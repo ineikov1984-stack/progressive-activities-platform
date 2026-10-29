@@ -21,11 +21,13 @@ enum OrganizationRole: string
     public function abilities(): array
     {
         return match ($this) {
-            self::PlatformAdmin, self::OrganizationOwner => ['create', 'update', 'invite', 'finance', 'view', 'catalog.view', 'catalog.manage', 'catalog.publish'],
-            self::OrganizationAdmin => ['create', 'update', 'invite', 'view', 'catalog.view', 'catalog.manage', 'catalog.publish'],
-            self::Coordinator => ['create', 'update', 'view', 'catalog.view', 'catalog.manage'],
-            self::Instructor, self::Viewer => ['view', 'catalog.view'],
-            self::Finance => ['finance', 'view'],
+            self::PlatformAdmin, self::OrganizationOwner => ['create', 'update', 'invite', 'finance', 'view', 'catalog.view', 'catalog.manage', 'catalog.publish', 'enrollment.view', 'enrollment.manage'],
+            self::OrganizationAdmin => ['create', 'update', 'invite', 'view', 'catalog.view', 'catalog.manage', 'catalog.publish', 'enrollment.view', 'enrollment.manage'],
+            self::Coordinator => ['create', 'update', 'view', 'catalog.view', 'catalog.manage', 'enrollment.view', 'enrollment.manage'],
+            // Instructors will see only their own groups (docs/product/staff-enrollment.md, Б2).
+            self::Instructor => ['view', 'catalog.view'],
+            self::Viewer => ['view', 'catalog.view', 'enrollment.view'],
+            self::Finance => ['finance', 'view', 'enrollment.view'],
         };
     }
 }
