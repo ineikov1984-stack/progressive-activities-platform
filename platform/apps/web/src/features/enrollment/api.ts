@@ -92,6 +92,14 @@ async function request<T>(organizationId: string, path: string, init: RequestIni
   return response.json() as Promise<T>;
 }
 
+/** Error text for a change; a stale version means someone else just changed the same enrollment. */
+export function changeErrorMessage(reason: unknown, fallback: string): string {
+  if (reason instanceof EnrollmentApiError && reason.fieldErrors.version) {
+    return 'Някой току-що промени това записване. Данните са обновени — проверете и опитайте отново.';
+  }
+  return reason instanceof Error && reason.message ? reason.message : fallback;
+}
+
 export type ApplicationPage = { applications: StaffApplication[]; total: number; has_more: boolean };
 
 export const loadApplications = (organizationId: string, status: 'submitted' | 'waitlisted' = 'submitted') =>

@@ -254,16 +254,26 @@ test('the team pauses a child from the group roster and undoes it', async () => 
   // The innermost list item with the name is the child's row (the group's item contains it too).
   const row = page.getByRole('listitem').filter({ has: page.getByText(childName, { exact: true }) }).last();
   await slow(row).toBeVisible();
-  await row.getByRole('button', { name: 'Промени' }).click();
+  await row.getByRole('button', { name: /^Промени/ }).click();
   await row.getByRole('button', { name: /^Пауза/ }).click();
   await row.getByRole('radio', { name: 'Ваканция или пътуване' }).check();
-  await row.getByRole('button', { name: 'Пусни паузата' }).click();
-  await slow(page.getByText(new RegExp(`^Пауза за ${childName}`))).toBeVisible();
+  await row.getByRole('button', { name: 'Запиши паузата' }).click();
+  await slow(row.getByText(new RegExp(`^Пауза за ${childName}`))).toBeVisible();
   await slow(row.getByText(/^Пауза \d/)).toBeVisible();
 
-  await row.getByRole('button', { name: 'Отмени паузата' }).click();
-  await slow(page.getByText(`Паузата за ${childName} е отменена.`)).toBeVisible();
+  await row.getByRole('button', { name: /^Отмени паузата за/ }).click();
+  await row.getByRole('button', { name: 'Отмени паузата', exact: true }).click();
+  await slow(row.getByText(`Паузата за ${childName} е отменена.`)).toBeVisible();
   await expect(row.getByText(/^Пауза \d/)).toHaveCount(0);
+
+  // The parent's own route goes through the same rules on PostgreSQL with RLS.
+  const roster = JSON.parse((await api(page, `enrollment/groups/${demo.groupId}/roster`, { organizationId: demo.organizationId })).body) as { enrollments: { id: string; child: { name: string } }[] };
+  const enrollmentId = roster.enrollments.find((item) => item.child.name === childName)?.id;
+  expect(enrollmentId).toBeTruthy();
+  const tomorrow = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Sofia' }).format(new Date(Date.now() + 86_400_000));
+  const ended = await api(page, `parent/enrollments/${enrollmentId}/end-from`, { method: 'POST', body: { effective_date: tomorrow, reason: 'Синтетична проверка' } });
+  expect(ended.status, ended.body).toBe(200);
+  expect(JSON.parse(ended.body).enrollment.status).toBe('ended');
 });
 
 test('a published activity is locked in the editor', async () => {

@@ -62,10 +62,15 @@ export function EnrollmentsPage() {
   const [groupsError, setGroupsError] = useState('');
   const canManage = organization.permissions.includes('enrollment.manage');
   const canView = organization.permissions.includes('enrollment.view');
-  const [openGroup, setOpenGroup] = useState<string>();
+  const [openGroup, setOpenGroup] = useState<string | undefined>(() => searchParams.get('group') ?? undefined);
   const [busyId, setBusyId] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+
+  // After a change in a group the counts in the group list follow (without closing the open group).
+  const refreshGroups = useCallback(() => {
+    loadStaffGroups(organization.id).then(setGroups).catch(() => undefined);
+  }, [organization.id]);
 
   const refresh = useCallback(async () => {
     const [newOnes, waiting] = await Promise.all([loadApplications(organization.id, 'submitted'), loadApplications(organization.id, 'waitlisted')]);
@@ -135,6 +140,7 @@ export function EnrollmentsPage() {
       {canView && !canManage ? <p className={styles.muted}>Вашата роля позволява само преглед. Решенията се вземат от собственика, администратора или координатора.</p> : null}
 
       <section aria-label={tabs.find((item) => item.id === tab)?.title} aria-busy={tab === 'groups' ? groups === undefined : list === undefined} className={styles.panel}>
+        <h2 className={styles.srOnly}>{tabs.find((item) => item.id === tab)?.title}</h2>
         {tab !== 'groups' ? (
           list === undefined ? <span className={styles.skeleton} aria-busy="true" /> : list.length === 0 ? (
             <div className={styles.empty}>
@@ -163,7 +169,7 @@ export function EnrollmentsPage() {
               const open = openGroup === group.id;
               return (
                 <li key={group.id} className={styles.groupItem}>
-                  <button type="button" className={styles.groupButton} aria-expanded={open} onClick={() => setOpenGroup(open ? undefined : group.id)}>
+                  <h3 className={styles.groupHeading}><button type="button" className={styles.groupButton} aria-expanded={open} onClick={() => setOpenGroup(open ? undefined : group.id)}>
                     <span>
                       <strong>{group.name}</strong>
                       <span className={styles.small}>
@@ -172,8 +178,8 @@ export function EnrollmentsPage() {
                       </span>
                     </span>
                     <span aria-hidden="true">{open ? '−' : '+'}</span>
-                  </button>
-                  {open ? <GroupRosterPanel organizationId={organization.id} groupId={group.id} canManage={canManage} /> : null}
+                  </button></h3>
+                  {open ? <GroupRosterPanel organizationId={organization.id} groupId={group.id} canManage={canManage} onChanged={refreshGroups} /> : null}
                 </li>
               );
             })}

@@ -90,6 +90,7 @@ export function Dashboard() {
   const [activities, setActivities] = useState<ActivityDraft[]>();
   const [pendingApplications, setPendingApplications] = useState(0);
   const [freed, setFreed] = useState<FreedPlace[]>([]);
+  const canManageEnrollments = organization.permissions.includes('enrollment.manage');
   const [invitations, setInvitations] = useState<DashboardInvitation[]>();
   const [auditEvents, setAuditEvents] = useState<DashboardAuditEvent[]>();
   const [loadError, setLoadError] = useState<string>();
@@ -104,7 +105,10 @@ export function Dashboard() {
       loadCatalogWorkspace(organization.id).then((workspace) => workspace.activities).catch(() => [] as ActivityDraft[]),
       // Roles without access to enrollments simply see no such task.
       loadApplications(organization.id).then((page) => page.total).catch(() => 0),
-      loadStaffGroups(organization.id).then(freedPlaces).catch(() => [] as FreedPlace[]),
+      // Only those who decide on enrollments get the "free place" task.
+      canManageEnrollments
+        ? loadStaffGroups(organization.id).then(freedPlaces).catch(() => [] as FreedPlace[])
+        : Promise.resolve([] as FreedPlace[]),
     ]).then(([overview, catalogActivities, pending, freedGroups]) => {
       if (!active) return;
       setPendingApplications(pending);
@@ -118,7 +122,7 @@ export function Dashboard() {
       else setLoadError('Част от таблото не се зареди. Опитайте да презаредите страницата.');
     });
     return () => { active = false; };
-  }, [organization.id, router]);
+  }, [organization.id, router, canManageEnrollments]);
 
   async function handleInvitation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
