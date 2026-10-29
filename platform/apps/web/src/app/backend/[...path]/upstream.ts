@@ -34,21 +34,10 @@ const clientControlledInfrastructureHeaders = new Set([
 // Location could reveal the internal API host; the API answers JSON, not redirects.
 const droppedResponseHeaders = new Set(['content-encoding', 'content-length', 'location']);
 
-// Session and CSRF cookies reach the browser only from the endpoints that
-// create, rotate or end a session, and only under those two names. Forwarding
-// them from every response logged users out right after sign-in (29.10.2026);
-// renewing an active session is tracked in docs/process/WORKBOARD.md.
+// Only the session and CSRF cookies reach the browser, from every response, so an
+// active session keeps sliding. (Until 29.10.2026 only sign-in responses were forwarded,
+// because the API started the session twice and later cookies pointed to empty sessions.)
 const forwardedCookieName = /^(XSRF-TOKEN|[a-z0-9-]+[-_]session)$/;
-
-const sessionCookiePaths = new Set([
-  'sanctum/csrf-cookie',
-  'api/v1/auth/login',
-  'api/v1/auth/logout',
-]);
-
-export function forwardsSessionCookies(segments: readonly string[]): boolean {
-  return sessionCookiePaths.has(segments.join('/'));
-}
 
 function isAllowedPath(segments: readonly string[]): boolean {
   if (segments.length === 2 && segments[0] === 'sanctum' && segments[1] === 'csrf-cookie') {
@@ -125,7 +114,7 @@ function cookieName(setCookie: string): string {
   return setCookie.slice(0, setCookie.indexOf('=')).trim();
 }
 
-export function upstreamResponseHeaders(upstream: Headers, forwardCookies: boolean): Headers {
+export function upstreamResponseHeaders(upstream: Headers): Headers {
   const headers = new Headers();
 
   upstream.forEach((value, name) => {
@@ -133,10 +122,6 @@ export function upstreamResponseHeaders(upstream: Headers, forwardCookies: boole
       headers.set(name, value);
     }
   });
-
-  if (!forwardCookies) {
-    return headers;
-  }
 
   for (const cookie of upstream.getSetCookie()) {
     if (forwardedCookieName.test(cookieName(cookie))) {
