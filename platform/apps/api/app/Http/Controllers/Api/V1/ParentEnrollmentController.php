@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Domain\Catalog\Models\Session;
 use App\Domain\Enrollment\Actions\ChangeEnrollment;
 use App\Domain\Enrollment\Actions\RecordVisitOutcome;
 use App\Domain\Enrollment\Actions\SubmitEnrollmentApplication;
@@ -101,14 +100,15 @@ final class ParentEnrollmentController extends Controller
     public function endFrom(Request $request, string $enrollment, ChangeEnrollment $change): JsonResponse
     {
         $validated = $request->validate([
-            'effective_date' => ['required', 'date'],
-            'reason' => ['required', 'string', 'max:1000'],
+            'effective_date' => ['required', 'date_format:Y-m-d'],
+            'reason' => ['required', 'string', 'max:500'],
         ]);
         $record = $this->ownedEnrollment($request, $enrollment);
 
         try {
-            $updated = $change->endFrom(
-                $request->user(), $record, $validated['effective_date'], $validated['reason'],
+            // Same rules as for the team (docs/product/staff-enrollment.md, т. 9.4); the parent sends no version.
+            $updated = $change->end(
+                $request->user(), $record, $validated['effective_date'], $validated['reason'], null,
             );
 
             return response()->json(['enrollment' => $this->presentEnrollment($updated)]);
@@ -159,13 +159,12 @@ final class ParentEnrollmentController extends Controller
     {
         $validated = $request->validate([
             'session_id' => ['required', 'uuid'],
-            'reason' => ['required', 'string', 'max:1000'],
+            'reason' => ['required', 'string', 'max:500'],
         ]);
         $record = $this->ownedEnrollment($request, $enrollment);
 
         try {
-            $session = Session::query()->findOrFail($validated['session_id']);
-            $change->excludeSession($request->user(), $record, $session, $validated['reason']);
+            $change->skipSession($request->user(), $record, $validated['session_id'], $validated['reason'], null);
 
             return response()->json(['enrollment' => $this->presentEnrollment($record->refresh())]);
         } finally {

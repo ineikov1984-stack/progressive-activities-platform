@@ -27,4 +27,12 @@ enum AuditAction: string
     case CatalogOpenDayCampaignPublished = 'catalog.open_day_campaign_published';
     case CatalogOpenDayCampaignClosed = 'catalog.open_day_campaign_closed';
     case CatalogOpenDayCampaignCancelled = 'catalog.open_day_campaign_cancelled';
+    case EnrollmentApplicationReviewed = 'enrollment.application_reviewed';
+    case EnrollmentTransferred = 'enrollment.transferred';
+    case EnrollmentPaused = 'enrollment.paused';
+    case EnrollmentPauseEnded = 'enrollment.pause_ended';
+    case EnrollmentEnded = 'enrollment.ended';
+    case EnrollmentReopened = 'enrollment.reopened';
+    case EnrollmentSessionExcluded = 'enrollment.session_excluded';
+    case EnrollmentSessionRestored = 'enrollment.session_restored';
 }

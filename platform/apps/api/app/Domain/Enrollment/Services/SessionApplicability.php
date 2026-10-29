@@ -6,8 +6,15 @@ use App\Domain\Catalog\Models\Session;
 use App\Domain\Enrollment\Enums\EnrollmentScope;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Enrollment;
+use App\Domain\Enrollment\Models\EnrollmentPause;
+use App\Domain\Enrollment\Models\EnrollmentSessionException;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 
+/**
+ * Which sessions count for an enrollment. Enrollment and pause dates are calendar days in the
+ * group's time zone, so a session at 00:30 local time belongs to that local day, not to the UTC one.
+ */
 final class SessionApplicability
 {
     /** @return Collection<int, Session> */
@@ -23,16 +30,72 @@ final class SessionApplicability
                 ->where('status', 'scheduled')->get();
         }
 
+        $timezone = self::timezone($enrollment);
         $excludedSessionIds = $enrollment->sessionExceptions()
             ->where('kind', 'excluded')->pluck('session_id');
+        // Pauses keep the place in the group, but their sessions do not count for the child.
+        $pauses = $enrollment->pauses()->whereNull('cancelled_at')->get(['starts_on', 'ends_on']);
+        $from = CarbonImmutable::parse($enrollment->starts_on->toDateString(), $timezone)->utc();
+        $until = $enrollment->ends_on === null
+            ? null
+            : CarbonImmutable::parse($enrollment->ends_on->toDateString(), $timezone)->addDay()->utc();
 
         return Session::query()->where('group_id', $enrollment->group_id)
             ->where('status', 'scheduled')
-            ->whereDate('starts_at', '>=', $enrollment->starts_on)
-            ->when($enrollment->ends_on !== null, fn ($query) => $query
-                ->whereDate('starts_at', '<=', $enrollment->ends_on))
+            ->where('starts_at', '>=', $from)
+            ->when($until !== null, fn ($query) => $query->where('starts_at', '<', $until))
             ->when($excludedSessionIds->isNotEmpty(), fn ($query) => $query
                 ->whereNotIn('id', $excludedSessionIds))
-            ->orderBy('starts_at')->get();
+            ->orderBy('starts_at')->get()
+            ->reject(fn (Session $session): bool => $pauses->contains(
+                fn (EnrollmentPause $pause): bool => self::within($session, $pause, $timezone),
+            ))
+            ->values();
+    }
+
+    /**
+     * Same rule as sessionsFor() for one session, from loaded relations (group, sessionExceptions,
+     * pauses) — used when counting who attends a session without a query per enrollment.
+     */
+    public function appliesTo(Enrollment $enrollment, Session $session): bool
+    {
+        if ($enrollment->status === EnrollmentStatus::Cancelled || $session->status !== 'scheduled'
+            || $session->group_id !== $enrollment->group_id) {
+            return false;
+        }
+        if (in_array($enrollment->scope, [EnrollmentScope::Trial, EnrollmentScope::Single], true)) {
+            return $enrollment->session_id === $session->id;
+        }
+
+        $timezone = self::timezone($enrollment);
+        $day = $session->starts_at->setTimezone($timezone)->toDateString();
+        if ($day < $enrollment->starts_on->toDateString()
+            || ($enrollment->ends_on !== null && $day > $enrollment->ends_on->toDateString())) {
+            return false;
+        }
+        if ($enrollment->sessionExceptions->contains(
+            fn (EnrollmentSessionException $exception): bool => $exception->kind === 'excluded' && $exception->session_id === $session->id,
+        )) {
+            return false;
+        }
+
+        return ! $enrollment->pauses->contains(
+            fn (EnrollmentPause $pause): bool => $pause->cancelled_at === null && self::within($session, $pause, $timezone),
+        );
+    }
+
+    /** The group's time zone; enrollment dates are calendar days there. */
+    public static function timezone(Enrollment $enrollment): string
+    {
+        $timezone = $enrollment->group?->schedule_pattern['timezone'] ?? null;
+
+        return is_string($timezone) && $timezone !== '' ? $timezone : 'Europe/Sofia';
+    }
+
+    private static function within(Session $session, EnrollmentPause $pause, string $timezone): bool
+    {
+        $day = $session->starts_at->setTimezone($timezone)->toDateString();
+
+        return $day >= $pause->starts_on->toDateString() && $day <= $pause->ends_on->toDateString();
     }
 }

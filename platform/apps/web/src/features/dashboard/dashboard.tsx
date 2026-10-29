@@ -62,9 +62,14 @@ const auditActionLabels: Record<string, string> = {
   'enrollment.application_rejected': 'Отказана заявка за записване',
   'enrollment.application_waitlisted': 'Заявка в списък на чакащите',
   'enrollment.visit_outcome_recorded': 'Отбелязан резултат от пробно занимание',
-  'enrollment.session_excluded': 'Пропуснато занимание по заявка на родител',
+  'enrollment.application_reviewed': 'Решение по заявка за записване',
+  'enrollment.session_excluded': 'Пропуснато занимание',
+  'enrollment.session_restored': 'Върнато пропуснато занимание',
   'enrollment.transferred': 'Дете, преместено в друга група',
+  'enrollment.paused': 'Пауза в посещенията',
+  'enrollment.pause_ended': 'Пауза, приключена по-рано',
   'enrollment.ended': 'Прекратено записване',
+  'enrollment.reopened': 'Отменено прекратяване на записване',
 };
 
 const visibleInvitations = 5;

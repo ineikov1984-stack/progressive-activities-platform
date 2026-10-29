@@ -25,12 +25,7 @@ final class EnrollmentCapacity
         $timezone = $group->schedule_pattern['timezone'] ?? 'Europe/Sofia';
         $at ??= CarbonImmutable::now();
         $date = $at->setTimezone($timezone)->toDateString();
-        $occupied = Enrollment::query()->where('group_id', $group->id)
-            ->where('scope', EnrollmentScope::FullPeriod)
-            ->whereIn('status', [EnrollmentStatus::Active, EnrollmentStatus::Paused])
-            ->whereDate('starts_on', '<=', $date)
-            ->where(fn ($query) => $query->whereNull('ends_on')->orWhereDate('ends_on', '>=', $date))
-            ->count();
+        $occupied = $this->placesTaken($group, $date);
 
         $remaining = $group->capacity_max === null ? null : max(0, $group->capacity_max - $occupied);
         $sessions = Session::query()->where('group_id', $group->id)
@@ -59,19 +54,43 @@ final class EnrollmentCapacity
             return null;
         }
 
+        return max(0, $capacity - $this->attending($session, $forAllocation));
+    }
+
+    /**
+     * Places in the group held on a date by full-period enrollments: not cancelled and not ended
+     * before the date, whatever their start (a future transfer holds its place already, a scheduled
+     * end holds it until the last day). docs/product/staff-enrollment.md, т. 9.1.
+     */
+    public function placesTaken(Group $group, string $date): int
+    {
+        return Enrollment::query()->where('group_id', $group->id)
+            ->where('scope', EnrollmentScope::FullPeriod)
+            ->whereIn('status', [EnrollmentStatus::Active, EnrollmentStatus::Paused, EnrollmentStatus::Ended])
+            ->where(fn ($query) => $query->whereNull('ends_on')->orWhereDate('ends_on', '>=', $date))
+            ->count();
+    }
+
+    /** True when more children attend the session than it has places (e.g. after a pause ends early). */
+    public function overbooked(Session $session): bool
+    {
+        $capacity = $session->capacity ?? $session->group->capacity_max;
+
+        return $capacity !== null && $this->attending($session, false) > $capacity;
+    }
+
+    private function attending(Session $session, bool $forAllocation): int
+    {
         $query = Enrollment::query()->where('group_id', $session->group_id)
-            ->whereIn('status', [EnrollmentStatus::Active, EnrollmentStatus::Paused, EnrollmentStatus::Ended]);
+            ->whereIn('status', [EnrollmentStatus::Active, EnrollmentStatus::Paused, EnrollmentStatus::Ended])
+            ->with(['group', 'sessionExceptions', 'pauses']);
         if ($forAllocation) {
             $query->orderBy('id')->lockForUpdate();
         }
 
-        $occupied = $query->get()
-            ->filter(
-                fn (Enrollment $enrollment): bool => $this->applicability
-                    ->sessionsFor($enrollment)->contains('id', $session->id)
-            )->count();
-
-        return max(0, $capacity - $occupied);
+        return $query->get()
+            ->filter(fn (Enrollment $enrollment): bool => $this->applicability->appliesTo($enrollment, $session))
+            ->count();
     }
 
     public function remainingForOffer(VisitOffer $offer, Session $session, bool $forAllocation = false): int

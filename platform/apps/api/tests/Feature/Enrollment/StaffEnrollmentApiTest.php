@@ -70,6 +70,9 @@ class StaffEnrollmentApiTest extends TestCase
         $this->assertDatabaseHas('enrollment_transitions', [
             'application_id' => $application->id, 'actor_user_id' => $coordinator->id, 'to_status' => 'approved',
         ]);
+        $this->assertDatabaseHas('audit_events', [
+            'action' => 'enrollment.application_reviewed', 'subject_id' => $application->id, 'actor_id' => $coordinator->id,
+        ]);
     }
 
     public function test_waitlisted_application_is_approved_when_a_place_frees_up(): void
