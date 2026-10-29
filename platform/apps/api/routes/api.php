@@ -43,12 +43,12 @@ Route::prefix('v1')->group(function (): void {
             Route::patch('/parent/children/{child}', [ParentChildController::class, 'update']);
             Route::get('/parent/enrollment-applications', [ParentEnrollmentController::class, 'index']);
             Route::post('/parent/enrollment-applications', [ParentEnrollmentController::class, 'store']);
-            Route::post('/parent/enrollment-applications/{application}/withdraw', [ParentEnrollmentController::class, 'withdraw']);
+            Route::post('/parent/enrollment-applications/{application}/withdraw', [ParentEnrollmentController::class, 'withdraw'])->whereUuid('application');
             Route::post('/parent/enrollments/{enrollment}/end-from', [ParentEnrollmentController::class, 'endFrom'])->whereUuid('enrollment');
             Route::post('/parent/enrollments/{enrollment}/exclude-session', [ParentEnrollmentController::class, 'excludeSession'])->whereUuid('enrollment');
             Route::post('/parent/enrollments/{enrollment}/visit-outcome', [ParentEnrollmentController::class, 'visitOutcome'])->whereUuid('enrollment');
             Route::post('/enrollments/{enrollment}/visit-outcome', [ParentEnrollmentController::class, 'staffVisitOutcome'])
-                ->middleware(['tenant', 'organization.access:operational.write']);
+                ->middleware(['tenant', 'organization.access:operational.write'])->whereUuid('enrollment');
             Route::get('/organizations', [OrganizationController::class, 'index']);
             Route::post('/context/organization', [OrganizationContextController::class, 'select']);
             Route::get('/context/organization', [OrganizationContextController::class, 'current'])

@@ -96,11 +96,7 @@ final class ChangeEnrollment
                 throw ValidationException::withMessages(['capacity' => 'В групата няма свободно място от тази дата.']);
             }
             // Also when the target group has no sessions yet: no second full-period place for the same child.
-            $already = Enrollment::query()->where('group_id', $target->id)->where('child_id', $current->child_id)
-                ->where('scope', EnrollmentScope::FullPeriod->value)
-                ->whereIn('status', [EnrollmentStatus::Active->value, EnrollmentStatus::Paused->value, EnrollmentStatus::Ended->value])
-                ->where(fn ($query) => $query->whereNull('ends_on')->orWhereDate('ends_on', '>=', $date->toDateString()))
-                ->first();
+            $already = $this->otherPlace($current, $target, $date);
             if ($already !== null) {
                 throw ValidationException::withMessages(['target_group_id' => $already->ends_on === null
                     ? 'Детето вече е записано в тази група.'
@@ -118,6 +114,7 @@ final class ChangeEnrollment
 
             // The old enrollment stops the day before, so no session counts in both groups.
             $fromStatus = $current->status->value;
+            $previousEnd = $current->ends_on?->toDateString();
             $notStarted = $date->toDateString() <= $current->starts_on->toDateString();
             $lastDay = $notStarted ? null : $date->subDay();
             $current->update([
@@ -127,7 +124,7 @@ final class ChangeEnrollment
             ]);
             $trimmed = $this->trimPauses($actor, $current, $lastDay);
             $this->transition($actor, $current, $fromStatus, $current->status->value, $reason, [
-                'transferred_to_group_id' => $target->id, 'pauses_changed' => $trimmed,
+                'transferred_to_group_id' => $target->id, 'previous_ends_on' => $previousEnd, 'pauses_changed' => $trimmed,
             ]);
 
             $application = $current->application;
@@ -317,13 +314,19 @@ final class ChangeEnrollment
             }
 
             $dayAfter = CarbonImmutable::parse($current->ends_on->toDateString(), $timezone)->addDay();
+            // After "move back" the child already continues in this group with a newer enrollment.
+            if ($this->otherPlace($current, $group, $dayAfter) !== null) {
+                throw ValidationException::withMessages(['enrollment' => 'Детето вече продължава в групата с ново записване.']);
+            }
             $remaining = $this->capacity->remainingForGroup($group, $dayAfter, forAllocation: true);
             if ($remaining !== null && $remaining < 1) {
                 throw ValidationException::withMessages(['capacity' => 'Мястото в групата вече е заето.']);
             }
 
-            $previousEnd = $current->transitions()->where('to_status', EnrollmentStatus::Ended->value)
-                ->latest()->first()?->metadata['previous_ends_on'] ?? null;
+            // The step that set the end (from active); later pause or skip steps keep the status "ended".
+            $previousEnd = $current->transitions()->where('from_status', EnrollmentStatus::Active->value)
+                ->where('to_status', EnrollmentStatus::Ended->value)
+                ->orderByDesc('created_at')->orderByDesc('id')->first()?->metadata['previous_ends_on'] ?? null;
             $current->update([
                 'status' => EnrollmentStatus::Active,
                 'ends_on' => is_string($previousEnd) ? $previousEnd : null,
@@ -417,6 +420,17 @@ final class ChangeEnrollment
         }
 
         return [$current, $groups];
+    }
+
+    /** Another full-period place of the same child in the group on or after the day (not cancelled). */
+    private function otherPlace(Enrollment $enrollment, Group $group, CarbonImmutable $day): ?Enrollment
+    {
+        return Enrollment::query()->where('group_id', $group->id)->where('child_id', $enrollment->child_id)
+            ->whereKeyNot($enrollment->id)
+            ->where('scope', EnrollmentScope::FullPeriod->value)
+            ->whereIn('status', [EnrollmentStatus::Active->value, EnrollmentStatus::Paused->value, EnrollmentStatus::Ended->value])
+            ->where(fn ($query) => $query->whereNull('ends_on')->orWhereDate('ends_on', '>=', $day->toDateString()))
+            ->first();
     }
 
     /** @param Collection<string, Group> $groups */
