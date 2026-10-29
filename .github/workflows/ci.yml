@@ -38,7 +38,7 @@ jobs:
       run:
         working-directory: platform/apps/api
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: shivammathur/setup-php@v2
         with:
           php-version: "8.4"
@@ -55,8 +55,26 @@ jobs:
           psql -h 127.0.0.1 -U progressive -d progressive
           -v ON_ERROR_STOP=1 -f /init/01-app-role.sql
       - run: cp .env.example .env && php artisan key:generate
-      - run: composer audit
-      - run: composer verify
+      - name: Lint, static analysis and tests
+        run: composer verify
+      - name: Security audit of PHP dependencies
+        if: ${{ !cancelled() }}
+        run: |
+          status=0
+          composer audit --locked --format=json > composer-audit.json || status=$?
+          php -r '
+            $a = json_decode(file_get_contents("composer-audit.json"), true) ?: [];
+            foreach (($a["advisories"] ?? []) as $pkg => $list) {
+              foreach ($list as $x) {
+                $id = $x["cve"] ?? $x["advisoryId"] ?? "";
+                echo "::error title=Security advisory::{$pkg} {$x["affectedVersions"]} - {$x["title"]} ({$id})\n";
+              }
+            }
+            foreach (($a["abandoned"] ?? []) as $pkg => $replacement) {
+              echo "::warning title=Abandoned package::{$pkg}" . ($replacement ? " (use {$replacement})" : "") . "\n";
+            }
+          '
+          exit $status
 
   web:
     runs-on: ubuntu-latest
@@ -64,11 +82,11 @@ jobs:
       run:
         working-directory: platform
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
         with:
           version: 11.19.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "24"
           cache: pnpm
@@ -77,4 +95,7 @@ jobs:
       - run: pnpm audit --audit-level high
       - run: pnpm verify
       - run: pnpm --filter @progressive/web exec playwright install --with-deps chromium
-      - run: pnpm test:e2e
+      # Browser suites that use synthetic API fixtures. Suites that need the seeded
+      # demo database run locally against the Docker stack (see docs/process/WORKFLOW.md).
+      - name: Browser tests (synthetic fixtures)
+        run: pnpm --filter @progressive/web exec playwright test --config=playwright.isolated.config.ts --reporter=github,line
