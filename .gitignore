@@ -23,3 +23,6 @@ playwright-report/
 .vscode/
 *.log
 tmp/
+
+# Local package store
+.pnpm-store/

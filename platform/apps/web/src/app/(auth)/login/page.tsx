@@ -17,7 +17,7 @@ export default function LoginPage() {
         </Link>
         <div>
           <p className={styles.eyebrow}>Семейства · училища · партньори</p>
-          <h1 id="login-heading">Вход в платформата</h1>
+          <h1 id="login-heading">Вход в системата</h1>
           <p className={styles.lead}>
             Управлявайте занимания, записвания и посещения от едно сигурно място.
           </p>

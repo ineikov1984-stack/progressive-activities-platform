@@ -90,7 +90,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const contextValue = { user, organization, organizations };
 
   return <DashboardContext.Provider value={contextValue}>
-    <div className={`${styles.shell} ${isCollapsed ? styles.collapsed : ''} ${isMobileOpen ? styles.mobileOpen : ''}`}>
+    <div data-admin-shell className={`${styles.shell} ${isCollapsed ? styles.collapsed : ''} ${isMobileOpen ? styles.mobileOpen : ''}`}>
       <button className={styles.backdrop} type="button" aria-label="Затвори менюто" onClick={() => setIsMobileOpen(false)} />
       <aside className={styles.sidebar}>
         <div className={styles.brand}><span className={styles.mark}>PA</span><span className={styles.brandText}><strong>Progressive</strong><small>Activities</small></span><button className={styles.mobileClose} type="button" aria-label="Затвори менюто" onClick={() => setIsMobileOpen(false)}>×</button></div>
