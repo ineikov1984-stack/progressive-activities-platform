@@ -76,16 +76,18 @@ export function EnrollmentsPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  // After a change in a group the counts in the group list follow (without closing the open group).
-  const refreshGroups = useCallback(() => {
-    loadStaffGroups(organization.id).then(setGroups).catch(() => undefined);
-  }, [organization.id]);
-
   const refresh = useCallback(async () => {
     const [newOnes, waiting] = await Promise.all([loadApplications(organization.id, 'submitted'), loadApplications(organization.id, 'waitlisted')]);
     setSubmitted(newOnes);
     setWaitlisted(waiting);
   }, [organization.id]);
+
+  // After a change in a group the counts follow: the group list (without closing the open group)
+  // and the "Заявки / Чакащи" counters (a waiting child may have been approved from the group).
+  const refreshGroups = useCallback(() => {
+    loadStaffGroups(organization.id).then(setGroups).catch(() => undefined);
+    refresh().catch(() => undefined);
+  }, [organization.id, refresh]);
 
   useEffect(() => {
     let active = true;
