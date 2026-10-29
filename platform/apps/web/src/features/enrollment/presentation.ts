@@ -157,29 +157,54 @@ export function matchesGroupSearch(group: StaffGroup, search: string): boolean {
   return [group.activity_title, group.name, group.location_name].some((value) => value?.toLocaleLowerCase('bg').includes(needle));
 }
 
-export type ActivityGroups = { id: string; title: string; category: string | null; groups: StaffGroup[]; taken: number; capacity: number | null; waiting: number };
+/** "1 чака", "3 чакат". */
+export function waitingText(count: number): string {
+  return count === 1 ? '1 чака' : `${count} чакат`;
+}
+
+/** A group with a free place and children waiting: work for the team. */
+export function hasPlaceForWaiting(group: StaffGroup): boolean {
+  return group.waitlist_count > 0 && !groupFill(group).full;
+}
+
+export type ActivityGroups = {
+  id: string; title: string; category: string | null; groups: StaffGroup[];
+  taken: number; capacity: number | null; waiting: number; full: number; placeForWaiting: number;
+};
 
 /** Groups under their activity, in the order the API sorts them (activity, then group). */
 export function groupsByActivity(groups: StaffGroup[]): ActivityGroups[] {
   const sections = new Map<string, ActivityGroups>();
   for (const group of groups) {
     const id = group.activity_id ?? `group-${group.id}`;
-    const section = sections.get(id) ?? { id, title: group.activity_title ?? 'Дейност', category: group.activity_category ?? null, groups: [], taken: 0, capacity: 0, waiting: 0 };
+    const section = sections.get(id) ?? { id, title: group.activity_title ?? 'Дейност', category: group.activity_category ?? null, groups: [], taken: 0, capacity: 0, waiting: 0, full: 0, placeForWaiting: 0 };
     section.groups.push(group);
     section.taken += group.enrolled_for_period;
     section.waiting += group.waitlist_count;
     section.capacity = section.capacity === null || !group.capacity_max ? null : section.capacity + group.capacity_max;
+    if (groupFill(group).full) section.full += 1;
+    if (hasPlaceForWaiting(group)) section.placeForWaiting += 1;
     sections.set(id, section);
   }
   return [...sections.values()];
 }
 
-/** "3 групи · 14 от 36 места · 2 чакащи" for an activity heading. */
-export function activitySummary(section: ActivityGroups): string {
-  const groups = section.groups.length === 1 ? '1 група' : `${section.groups.length} групи`;
+/** "3 групи · 26 от 32 места · 1 пълна · 3 чакат" for an activity heading; with a filter, how many groups are shown. */
+export function activitySummary(section: ActivityGroups, shown = section.groups.length): string {
+  const total = section.groups.length;
+  const groups = shown < total ? `показани ${shown} от ${total} групи` : total === 1 ? '1 група' : `${total} групи`;
   const places = section.capacity ? `${section.taken} от ${section.capacity} места` : `${section.taken} записани`;
-  const waiting = section.waiting > 0 ? ` · ${section.waiting} чакащи` : '';
-  return `${groups} · ${places}${waiting}`;
+  const full = section.full === 0 ? '' : section.full === 1 ? ' · 1 пълна' : ` · ${section.full} пълни`;
+  const waiting = section.waiting > 0 ? ` · ${waitingText(section.waiting)}` : '';
+  return `${groups} · ${places}${full}${waiting}`;
+}
+
+/** How full the group of an application is today, in words; nothing when the team cannot know. */
+export function applicationPlaces(group: StaffApplication['group']): { text: string; full: boolean } | undefined {
+  if (group.places_taken === undefined) return undefined;
+  if (!group.capacity_max) return { text: 'Без ограничение на местата', full: false };
+  const full = group.places_taken >= group.capacity_max;
+  return { text: full ? `Групата е пълна · ${group.places_taken} от ${group.capacity_max}` : placesText(group.capacity_max - group.places_taken), full };
 }
 
 const dayFormat = new Intl.DateTimeFormat('bg-BG', { weekday: 'short', day: 'numeric', month: 'long', timeZone: 'Europe/Sofia' });

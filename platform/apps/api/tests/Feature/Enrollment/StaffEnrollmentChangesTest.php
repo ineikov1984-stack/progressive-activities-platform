@@ -156,6 +156,7 @@ class StaffEnrollmentChangesTest extends TestCase
             ->assertOk()
             ->assertJsonPath('groups.0.id', $f['thursday']->id)
             ->assertJsonPath('groups.0.schedule', null)
+            ->assertJsonPath('groups.0.waitlist_count', 0)
             ->json('groups.0.starts');
 
         $this->assertSame(['2026-11-05', '2026-11-12', '2026-11-19', '2026-11-26'], array_column($starts, 'date'));

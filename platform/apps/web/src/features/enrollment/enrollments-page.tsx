@@ -7,8 +7,8 @@ import { useDashboardContext } from '@/features/dashboard/dashboard-context';
 import { type ApplicationFacets, type ApplicationPage, loadApplications, loadStaffGroups, reviewApplication, type ReviewDecision, type StaffApplication, type StaffGroup } from './api';
 import { GroupRosterPanel } from './group-roster';
 import {
-  activitySummary, dateText, dateTimeText, type GroupFilter, groupFill, groupFilterLabels, groupsByActivity, matchesGroupFilter,
-  matchesGroupSearch, priceText, scheduleText, scopeLabels,
+  activitySummary, applicationPlaces, dateText, dateTimeText, type GroupFilter, groupFill, groupFilterLabels, groupsByActivity, hasPlaceForWaiting,
+  matchesGroupFilter, matchesGroupSearch, priceText, scheduleText, scopeLabels, waitingText,
 } from './presentation';
 import styles from './enrollments.module.css';
 
@@ -21,25 +21,49 @@ function initialTab(view: string | null): Tab {
 const FILTERS_FROM = 4;
 /** With more activities than this, the group list opens folded, one activity at a time. */
 const OPEN_ACTIVITIES_UP_TO = 4;
+/** Applications shown at once; "Покажи още" adds the next ones. */
+const PAGE = 20;
 
-function ApplicationRow({ application, busy, canManage, headingLevel = 'h3', onDecide }: { application: StaffApplication; busy: boolean; canManage: boolean; headingLevel?: 'h3' | 'h4'; onDecide: (decision: ReviewDecision, reason?: string) => void }) {
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`} viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false">
+      <path d="M5 7.5 10 12.5 15 7.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+type RowProps = {
+  application: StaffApplication;
+  busy: boolean;
+  canManage: boolean;
+  /** In a queue under its group: the heading already names the activity and the group. */
+  inQueue?: boolean;
+  onDecide: (decision: ReviewDecision, reason?: string) => void;
+};
+
+function ApplicationRow({ application, busy, canManage, inQueue = false, onDecide }: RowProps) {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const waiting = application.status === 'waitlisted';
-  const Heading = headingLevel;
+  const places = applicationPlaces(application.group);
+  // A waiting child cannot be approved into a full group; a new application can still go to the waiting list.
+  const blocked = waiting && places?.full === true;
+  const Heading = inQueue ? 'h4' : 'h3';
+  const name = application.child.name ?? 'Дете';
   return (
     <article className={styles.appRow} aria-labelledby={`app-${application.id}`}>
       <div className={styles.appWho}>
-        <Heading id={`app-${application.id}`} className={styles.child}>{application.child.name ?? 'Дете'}</Heading>
+        <Heading id={`app-${application.id}`} className={styles.child}>{name}</Heading>
         <span className={styles.small}>{application.child.class_label ? `${application.child.class_label} · ` : ''}заявка от {dateText(application.submitted_at)}</span>
       </div>
       <div className={styles.appWhat}>
-        <span className={styles.meta}>{application.activity.title} · {application.group.name}</span>
+        {!inQueue ? <span className={styles.meta}>{application.activity.title} · {application.group.name}</span> : null}
         <span className={styles.small}>
           {application.visit_offer_title ?? scopeLabels[application.scope] ?? 'Записване'}
           {application.session_starts_at ? ` · ${dateTimeText(application.session_starts_at)}` : ''}
           {' · '}{priceText(application.price)}
         </span>
+        {!inQueue && places ? <span className={places.full ? styles.smallWarning : styles.placeFree}>{places.text}</span> : null}
         {waiting && application.public_reason ? <span className={styles.small}>Казахме на родителя: „{application.public_reason}“</span> : null}
       </div>
       {!canManage ? null : rejecting ? (
@@ -53,9 +77,12 @@ function ApplicationRow({ application, busy, canManage, headingLevel = 'h3', onD
         </form>
       ) : (
         <div className={`${styles.actions} ${styles.appActions}`}>
-          <button type="button" className={styles.primary} disabled={busy} onClick={() => onDecide('approve')}>{busy ? 'Запазване…' : 'Одобри'}<span className={styles.srOnly}> {application.child.name}</span></button>
-          {!waiting ? <button type="button" className={styles.secondary} disabled={busy} onClick={() => onDecide('waitlist')}>Към чакащите<span className={styles.srOnly}> {application.child.name}</span></button> : null}
-          <button type="button" className={styles.quiet} disabled={busy} onClick={() => setRejecting(true)}>Откажи<span className={styles.srOnly}> {application.child.name}</span></button>
+          <button type="button" className={styles.primary} disabled={busy || blocked} aria-describedby={blocked ? `full-${application.id}` : undefined} onClick={() => onDecide('approve')}>
+            {busy ? 'Запазване…' : 'Одобри'}<span className={styles.srOnly}> {name}</span>
+          </button>
+          {!waiting ? <button type="button" className={styles.secondary} disabled={busy} onClick={() => onDecide('waitlist')}>Към чакащите<span className={styles.srOnly}> {name}</span></button> : null}
+          <button type="button" className={styles.quiet} disabled={busy} onClick={() => setRejecting(true)}>Откажи<span className={styles.srOnly}> {name}</span></button>
+          {blocked ? <span id={`full-${application.id}`} className={styles.smallWarning}>Няма свободно място</span> : null}
         </div>
       )}
     </article>
@@ -64,56 +91,78 @@ function ApplicationRow({ application, busy, canManage, headingLevel = 'h3', onD
 
 type FilterValues = { search: string; activityId: string; groupId: string };
 
-function ApplicationFiltersBar({ facets, values, shown, total, onChange, onClear }: { facets?: ApplicationFacets; values: FilterValues; shown?: number; total?: number; onChange: (values: FilterValues) => void; onClear: () => void }) {
-  const groups = (facets?.groups ?? []).filter((group) => !values.activityId || group.activity_id === values.activityId);
+function ApplicationFiltersBar({ facets, values, total, onChange, onClear }: { facets?: ApplicationFacets; values: FilterValues; total?: number; onChange: (values: FilterValues) => void; onClear: () => void }) {
   const active = values.search.trim() !== '' || values.activityId !== '' || values.groupId !== '';
+  // On a phone the filters fold behind one button, unless one is in use.
+  const [open, setOpen] = useState(false);
+  const activities = facets?.activities ?? [];
+  const groups = facets?.groups ?? [];
+  const groupOption = (group: ApplicationFacets['groups'][number]) => <option key={group.id} value={group.id}>{group.name} ({group.count})</option>;
   return (
-    <div className={styles.filters} role="search" aria-label="Търсене в заявките">
-      <div className={styles.filterField}>
-        <label htmlFor="applications-search">Дете</label>
-        <input id="applications-search" type="search" value={values.search} placeholder="Име на детето" maxLength={100} onChange={(event) => onChange({ ...values, search: event.target.value })} />
+    <div className={styles.filterArea}>
+      <button type="button" className={`${styles.secondary} ${styles.filtersToggle}`} aria-expanded={open || active} aria-controls="applications-filters" onClick={() => setOpen(!open)}>
+        Търсене и филтри{active ? ' · включени' : ''}
+      </button>
+      <div id="applications-filters" className={`${styles.filters} ${open || active ? styles.filtersOpen : ''}`} role="search" aria-label="Търсене в заявките">
+        <div className={styles.filterField}>
+          <label htmlFor="applications-search">Дете</label>
+          <input id="applications-search" type="search" value={values.search} placeholder="Име на детето" maxLength={100} onChange={(event) => onChange({ ...values, search: event.target.value })} />
+        </div>
+        <div className={styles.filterField}>
+          <label htmlFor="applications-activity">Дейност</label>
+          <select id="applications-activity" value={values.activityId} onChange={(event) => onChange({ ...values, activityId: event.target.value, groupId: '' })}>
+            <option value="">Всички дейности</option>
+            {activities.map((activity) => <option key={activity.id} value={activity.id}>{activity.title ?? 'Дейност'} ({activity.count})</option>)}
+          </select>
+        </div>
+        <div className={styles.filterField}>
+          <label htmlFor="applications-group">Група</label>
+          <select id="applications-group" value={values.groupId} onChange={(event) => onChange({ ...values, groupId: event.target.value })}>
+            <option value="">Всички групи</option>
+            {/* Without a chosen activity, groups are listed under their activity: "Група 1" alone is ambiguous. */}
+            {values.activityId
+              ? groups.filter((group) => group.activity_id === values.activityId).map(groupOption)
+              : activities.map((activity) => (
+                <optgroup key={activity.id} label={activity.title ?? 'Дейност'}>
+                  {groups.filter((group) => group.activity_id === activity.id).map(groupOption)}
+                </optgroup>
+              ))}
+          </select>
+        </div>
+        {active ? <button type="button" className={styles.quiet} onClick={onClear}>Изчисти филтрите</button> : null}
+        <p className={styles.small} role="status">{active && total !== undefined ? `Намерени: ${total}` : ''}</p>
       </div>
-      <div className={styles.filterField}>
-        <label htmlFor="applications-activity">Дейност</label>
-        <select id="applications-activity" value={values.activityId} onChange={(event) => onChange({ ...values, activityId: event.target.value, groupId: '' })}>
-          <option value="">Всички дейности</option>
-          {(facets?.activities ?? []).map((activity) => <option key={activity.id} value={activity.id}>{activity.title ?? 'Дейност'} ({activity.count})</option>)}
-        </select>
-      </div>
-      <div className={styles.filterField}>
-        <label htmlFor="applications-group">Група</label>
-        <select id="applications-group" value={values.groupId} onChange={(event) => onChange({ ...values, groupId: event.target.value })}>
-          <option value="">Всички групи</option>
-          {groups.map((group) => <option key={group.id} value={group.id}>{group.name} ({group.count})</option>)}
-        </select>
-      </div>
-      {active ? <button type="button" className={styles.quiet} onClick={onClear}>Изчисти</button> : null}
-      <p className={styles.small} role="status">{active && shown !== undefined && total !== undefined ? `Намерени: ${total}` : ''}</p>
     </div>
   );
 }
 
-/** Waiting children under their group, in the order they applied. */
+/** Waiting children under their group, in the order they applied, with the places the group has today. */
 function WaitingQueues({ list, busyId, canManage, onDecide }: { list: StaffApplication[]; busyId: string; canManage: boolean; onDecide: (application: StaffApplication, decision: ReviewDecision, reason?: string) => void }) {
   const queues = new Map<string, StaffApplication[]>();
   for (const application of list) queues.set(application.group.id, [...(queues.get(application.group.id) ?? []), application]);
   return (
     <div className={styles.queues}>
-      {[...queues.values()].map((items) => (
-        <section key={items[0].group.id} className={styles.queue} aria-labelledby={`queue-${items[0].group.id}`}>
-          <h3 id={`queue-${items[0].group.id}`} className={styles.queueTitle}>
-            {items[0].activity.title} · {items[0].group.name}
-            <span className={styles.small}>{items.length === 1 ? '1 чака' : `${items.length} чакат`} · по реда на заявките</span>
-          </h3>
-          <ol className={styles.queueList}>
-            {items.map((application) => (
-              <li key={application.id}>
-                <ApplicationRow application={application} canManage={canManage} headingLevel="h4" busy={busyId === application.id} onDecide={(decision, reason) => onDecide(application, decision, reason)} />
-              </li>
-            ))}
-          </ol>
-        </section>
-      ))}
+      {[...queues.values()].map((items) => {
+        const places = applicationPlaces(items[0].group);
+        return (
+          <section key={items[0].group.id} className={styles.queue} aria-labelledby={`queue-${items[0].group.id}`}>
+            <h3 id={`queue-${items[0].group.id}`} className={styles.queueTitle}>
+              {items[0].activity.title} · {items[0].group.name}
+              <span className={styles.queueMeta}>
+                <span className={styles.small}>{waitingText(items.length)} · по реда на заявките</span>
+                {places ? <span className={places.full ? styles.smallWarning : styles.placeFree}>{places.text}</span> : null}
+              </span>
+            </h3>
+            <ol className={styles.queueList}>
+              {items.map((application) => (
+                <li key={application.id}>
+                  <ApplicationRow application={application} canManage={canManage} inQueue busy={busyId === application.id} onDecide={(decision, reason) => onDecide(application, decision, reason)} />
+                </li>
+              ))}
+            </ol>
+          </section>
+        );
+      })}
     </div>
   );
 }
@@ -128,7 +177,10 @@ function GroupsView({ groups, organizationId, canManage, openGroup, onToggleGrou
     return new Set(sections.filter((section) => !section.groups.some((group) => group.id === openGroup)).map((section) => section.id));
   });
   const narrowing = search.trim() !== '' || filter !== 'all';
-  const sections = groupsByActivity(groups.filter((group) => matchesGroupFilter(group, filter) && matchesGroupSearch(group, search)));
+  // The heading of an activity always counts all its groups; the filter decides which are listed.
+  const sections = groupsByActivity(groups)
+    .map((section) => ({ section, shown: section.groups.filter((group) => matchesGroupFilter(group, filter) && matchesGroupSearch(group, search)) }))
+    .filter((item) => item.shown.length > 0);
   const filters: GroupFilter[] = ['all', 'free', 'full', 'waiting'];
 
   function toggleActivity(id: string) {
@@ -142,7 +194,7 @@ function GroupsView({ groups, organizationId, canManage, openGroup, onToggleGrou
   return (
     <>
       {groups.length > FILTERS_FROM ? (
-        <div className={styles.filters} role="search" aria-label="Търсене в групите">
+        <div className={`${styles.filters} ${styles.filtersOpen}`} role="search" aria-label="Търсене в групите">
           <div className={styles.filterField}>
             <label htmlFor="groups-search">Дейност, група или място</label>
             <input id="groups-search" type="search" value={search} placeholder="Например: шахмат" maxLength={100} onChange={(event) => setSearch(event.target.value)} />
@@ -163,12 +215,13 @@ function GroupsView({ groups, organizationId, canManage, openGroup, onToggleGrou
         </div>
       ) : (
         <div className={styles.activities}>
-          {sections.map((section) => {
+          {sections.map(({ section, shown }) => {
             const open = narrowing || !folded.has(section.id);
             const label = (
               <span className={styles.activityText}>
                 <span className={styles.activityTitle}>{section.title}</span>
-                <span className={styles.small}>{section.category ? `${section.category} · ` : ''}{activitySummary(section)}</span>
+                <span className={styles.small}>{section.category ? `${section.category} · ` : ''}{activitySummary(section, shown.length)}</span>
+                {section.placeForWaiting > 0 ? <span className={styles.workBadge}>Има място за чакащо дете</span> : null}
               </span>
             );
             return (
@@ -176,19 +229,20 @@ function GroupsView({ groups, organizationId, canManage, openGroup, onToggleGrou
                 <h3 className={styles.activityHeading} id={`activity-${section.id}`}>
                   {narrowing ? <span className={styles.activityStatic}>{label}</span> : (
                     <button type="button" className={styles.activityButton} aria-expanded={open} onClick={() => toggleActivity(section.id)}>
-                      {label}<span className={styles.toggleSign} aria-hidden="true">{open ? '−' : '+'}</span>
+                      {label}
+                      <span className={styles.toggle}><span className={styles.toggleText}>{open ? 'Скрий' : 'Покажи'}</span><Chevron open={open} /></span>
                     </button>
                   )}
                 </h3>
                 {open ? (
                   <ul className={styles.groupList}>
-                    {section.groups.map((group) => {
+                    {shown.map((group) => {
                       const expanded = openGroup === group.id;
                       const fill = groupFill(group);
                       const details = [scheduleText(group.schedule), group.location_name].filter(Boolean).join(' · ');
                       return (
                         <li key={group.id} className={styles.groupItem}>
-                          <h4 className={styles.groupHeading}>
+                          <h4 className={`${styles.groupHeading} ${expanded ? styles.groupHeadingOpen : ''}`}>
                             <button id={`group-${group.id}`} type="button" className={styles.groupButton} aria-expanded={expanded} onClick={() => onToggleGroup(group.id)}>
                               <span className={styles.groupMain}>
                                 <strong>{group.name}</strong>
@@ -199,9 +253,9 @@ function GroupsView({ groups, organizationId, canManage, openGroup, onToggleGrou
                                   {fill.percent !== null ? <span className={styles.meter} aria-hidden="true"><span className={fill.full ? styles.meterFull : styles.meterValue} style={{ width: `${fill.percent}%` }} /></span> : null}
                                   <span className={fill.full ? styles.fullText : undefined}>{fill.text}</span>
                                 </span>
-                                {group.waitlist_count > 0 ? <span className={styles.waitBadge}>{group.waitlist_count} чакащи</span> : null}
+                                {group.waitlist_count > 0 ? <span className={hasPlaceForWaiting(group) ? styles.workBadge : styles.waitBadge}>{hasPlaceForWaiting(group) ? `Има място · ${waitingText(group.waitlist_count)}` : waitingText(group.waitlist_count)}</span> : null}
                               </span>
-                              <span className={styles.toggleSign} aria-hidden="true">{expanded ? '−' : '+'}</span>
+                              <span className={styles.toggle}><span className={styles.toggleText}>{expanded ? 'Скрий децата' : 'Деца'}</span><Chevron open={expanded} /></span>
                             </button>
                           </h4>
                           {expanded ? <GroupRosterPanel organizationId={organizationId} groupId={group.id} canManage={canManage} onChanged={onChanged} /> : null}
@@ -243,7 +297,16 @@ export function EnrollmentsPage() {
   }, [groups]);
   const [busyId, setBusyId] = useState('');
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  // The decided row disappears: the message takes the focus so it is seen and read, also on a phone.
+  // A new object each time, so the same text said twice still moves the focus.
+  const [notice, setNotice] = useState<{ text: string }>();
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (!notice) return;
+    noticeRef.current?.scrollIntoView({ block: 'nearest' });
+    noticeRef.current?.focus();
+  }, [notice]);
+  const [shownCount, setShownCount] = useState(PAGE);
 
   // Filters for "Заявки" and "Чакащи": the name is searched a moment after typing stops.
   const [filters, setFilters] = useState<FilterValues>(noFilters);
@@ -300,16 +363,26 @@ export function EnrollmentsPage() {
     setTab(next);
     setFilters(noFilters);
     setQuery('');
+    setShownCount(PAGE);
+  }
+
+  function changeFilters(next: FilterValues) {
+    setFilters(next);
+    setShownCount(PAGE);
   }
 
   async function decide(application: StaffApplication, decision: ReviewDecision, reason?: string) {
-    setBusyId(application.id); setError(''); setNotice('');
+    setBusyId(application.id); setError(''); setNotice(undefined);
     try {
       const result = await reviewApplication(organization.id, application, decision, reason);
       const name = application.child.name ?? 'Детето';
-      setNotice(result.status === 'approved' ? `${name} е записано в „${application.group.name}“. Родителят ще види решението в профила си.`
-        : result.status === 'waitlisted' ? `${name} е в списъка на чакащите за „${application.group.name}“.`
-          : `Заявката за ${name} е отказана. Родителят ще види обяснението.`);
+      const group = application.group.name ?? 'групата';
+      const text = result.status === 'approved' ? `${name} е записано в „${group}“. Родителят ще види решението в профила си.`
+        // "Одобри" on a full group puts the child on the waiting list: say why.
+        : result.status === 'waitlisted' && decision === 'approve' ? `Групата „${group}“ е пълна, затова ${name} е добавено в чакащите.`
+          : result.status === 'waitlisted' ? `${name} е в списъка на чакащите за „${group}“.`
+            : `Заявката за ${name} е отказана. Родителят ще види обяснението.`;
+      setNotice({ text });
       await refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Решението не беше запазено.');
@@ -325,6 +398,8 @@ export function EnrollmentsPage() {
   const unfiltered = tab === 'submitted' ? submitted : waitlisted;
   const page = filtering ? (filtered?.key === filterKey ? filtered.page : undefined) : unfiltered;
   const list = page?.applications;
+  const visible = list?.slice(0, shownCount);
+  const hidden = list && visible ? list.length - visible.length : 0;
   const showFilters = tab !== 'groups' && (filtering || filters.search !== '' || (unfiltered?.total ?? 0) >= FILTERS_FROM);
 
   return (
@@ -343,7 +418,7 @@ export function EnrollmentsPage() {
         ))}
       </div>
 
-      {notice ? <p className={styles.success} role="status">{notice}</p> : null}
+      <p ref={noticeRef} tabIndex={-1} className={notice ? styles.success : styles.srOnly} role="status">{notice?.text ?? ''}</p>
       {error ? <p className={styles.error} role="alert">{error}</p> : null}
 
       {canView && !canManage ? <p className={styles.muted}>Вашата роля позволява само преглед. Решенията се вземат от собственика, администратора или координатора.</p> : null}
@@ -353,22 +428,27 @@ export function EnrollmentsPage() {
         {tab !== 'groups' ? (
           <>
             {showFilters ? (
-              <ApplicationFiltersBar facets={unfiltered?.facets} values={filters} shown={list?.length} total={page?.total}
-                onChange={setFilters} onClear={() => { setFilters(noFilters); setQuery(''); }} />
+              <ApplicationFiltersBar facets={unfiltered?.facets} values={filters} total={page?.total}
+                onChange={changeFilters} onClear={() => { changeFilters(noFilters); setQuery(''); }} />
             ) : null}
-            {list === undefined ? <span className={styles.skeleton} aria-busy="true" /> : list.length === 0 ? (
+            {list === undefined || visible === undefined ? <span className={styles.skeleton} aria-busy="true" /> : list.length === 0 ? (
               <div className={styles.empty}>
                 <strong>{filtering ? 'Няма заявки, които отговарят на търсенето' : tab === 'submitted' ? 'Няма нови заявки' : 'Никой не чака място'}</strong>
                 <p>{filtering ? 'Променете търсенето или изчистете филтрите.' : tab === 'submitted' ? 'Когато родител подаде заявка, тя ще се появи тук и в „Какво чака вас“.' : 'Тук ще са децата, които чакат свободно място в пълна група.'}</p>
               </div>
             ) : tab === 'waitlisted' ? (
-              <WaitingQueues list={list} busyId={busyId} canManage={canManage} onDecide={decide} />
+              <WaitingQueues list={visible} busyId={busyId} canManage={canManage} onDecide={decide} />
             ) : (
               <div className={styles.appList}>
-                {list.map((application) => <ApplicationRow key={application.id} application={application} canManage={canManage} busy={busyId === application.id} onDecide={(decision, reason) => decide(application, decision, reason)} />)}
+                {visible.map((application) => <ApplicationRow key={application.id} application={application} canManage={canManage} busy={busyId === application.id} onDecide={(decision, reason) => decide(application, decision, reason)} />)}
               </div>
             )}
-            {page?.has_more && list ? <p className={styles.muted}>Показани са първите {list.length} от {page.total}. Решете тези или стеснете търсенето.</p> : null}
+            {hidden > 0 ? (
+              <div className={styles.more}>
+                <span className={styles.small}>Показани {visible?.length} от {page?.total ?? list?.length}</span>
+                <button type="button" className={styles.secondary} onClick={() => setShownCount((count) => count + PAGE)}>Покажи още {Math.min(PAGE, hidden)}</button>
+              </div>
+            ) : page?.has_more && list ? <p className={styles.muted}>Показани са първите {list.length} от {page.total}. Решете тези или стеснете търсенето.</p> : null}
           </>
         ) : groups === undefined ? <span className={styles.skeleton} aria-busy="true" /> : groupsError ? (
           <div className={styles.empty} role="alert">

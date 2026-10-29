@@ -173,13 +173,14 @@ function TransferForm({ organizationId, roster, enrollment, name, onDone, onFail
             const summary = moveInSummary(option.starts);
             const schedule = scheduleText(option.schedule);
             return (
-              <label key={option.id} className={`${styles.option} ${summary.possible ? '' : styles.optionDisabled}`}>
+              <label key={option.id} className={`${styles.option} ${summary.possible ? '' : styles.optionFull}`}>
                 <input type="radio" name={`target-${enrollment.id}`} value={option.id} checked={targetId === option.id} disabled={!summary.possible}
                   onChange={() => chooseGroup(option)} />
                 <span>
                   <strong>{option.name}</strong>
                   {schedule ? <span className={styles.small}>{schedule}</span> : null}
-                  <span className={summary.possible ? styles.small : styles.smallWarning}>{summary.text}</span>
+                  <span className={summary.possible ? styles.placeFree : styles.smallWarning}>{summary.text}</span>
+                  {option.waitlist_count ? <span className={styles.small}>{option.waitlist_count === 1 ? '1 дете чака място' : `${option.waitlist_count} деца чакат място`}</span> : null}
                 </span>
               </label>
             );
@@ -188,7 +189,7 @@ function TransferForm({ organizationId, roster, enrollment, name, onDone, onFail
       {target?.starts?.length ? (
         <fieldset className={styles.fieldset}>
           <legend>От кое занимание е в „{target.name}“</legend>
-          <p className={styles.hint} id={`move-days-${enrollment.id}`}>Пълните дати не могат да се изберат: от тях нататък в групата няма място.</p>
+          <p className={styles.hint} id={`move-days-${enrollment.id}`}>Датите с „няма място“ не могат да се изберат: от тях нататък в групата няма място за всяко занимание.</p>
           <div className={styles.dayGrid}>
             {target.starts.map((start) => {
               const free = hasPlace(start);
@@ -197,7 +198,8 @@ function TransferForm({ organizationId, roster, enrollment, name, onDone, onFail
                   <input type="radio" className={styles.srOnly} name={`move-day-${enrollment.id}`} value={start.date} checked={date === start.date} disabled={!free}
                     aria-describedby={`move-days-${enrollment.id}`} onChange={() => setDate(start.date)} />
                   <strong>{weekdayDay(start.date)}</strong>
-                  <span>{free ? (start.remaining === null ? 'има място' : placesText(start.remaining).toLocaleLowerCase('bg')) : 'пълна'}</span>
+                  <span>{free ? (start.remaining === null ? 'има място' : placesText(start.remaining).toLocaleLowerCase('bg')) : 'няма място'}</span>
+                  {date === start.date ? <span className={styles.dayPicked}><span aria-hidden="true">✓ </span>Избрано</span> : null}
                 </label>
               );
             })}
@@ -224,6 +226,7 @@ function TransferForm({ organizationId, roster, enrollment, name, onDone, onFail
             ? `Записването в „${roster.group.name}“ още не е започнало и ще бъде отменено.`
             : `Последен ден в „${roster.group.name}“: ${shortDay(addDays(date, -1))}.`}
           {' '}Цена: {priceText({ amount_cents: price.amount_cents, currency: price.currency, unit: price.unit })}.
+          {target.waitlist_count ? ` В „${target.name}“ ${target.waitlist_count === 1 ? 'чака 1 дете' : `чакат ${target.waitlist_count} деца`} — преместването заема мястото преди тях.` : ''}
         </p>
       ) : null}
       <FormButtons busy={busy} label="Премести" error={error} onBack={onBack} />

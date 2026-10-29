@@ -80,6 +80,7 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
   if (!roster) return <span className={styles.skeleton} aria-busy="true" />;
   const today = sofiaDay();
   const fullPeriodCount = roster.enrollments.filter((item) => item.scope === 'full_period').length;
+  const groupFull = roster.group.remaining !== null && roster.group.remaining <= 0;
   // A long group gets a search by name; the row with an open change or a fresh message always stays.
   const searchable = roster.enrollments.length > SEARCH_FROM;
   const needle = search.trim().toLocaleLowerCase('bg');
@@ -101,6 +102,7 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
           <span className={styles.small} role="status">{needle ? `Показани: ${shown.length} от ${roster.enrollments.length}` : ''}</span>
         </div>
       ) : null}
+      <h5 className={styles.subTitle}>Записани деца ({roster.enrollments.length})</h5>
       {roster.enrollments.length === 0 ? <p className={styles.muted}>Все още няма записани деца.</p> : shown.length === 0 ? <p className={styles.muted}>Няма дете с това име в групата.</p> : (
         <ul className={styles.rows}>
           {shown.map((item) => (
@@ -124,15 +126,18 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
       )}
       {roster.waitlist.length > 0 ? (
         <>
-          <h5 className={styles.subTitle}>Чакащи</h5>
+          <h5 className={styles.subTitle}>Чакащи ({roster.waitlist.length})</h5>
+          {canManage && groupFull ? <p id={`roster-full-${groupId}`} className={styles.smallWarning}>Няма свободно място — одобряване ще е възможно, когато място се освободи.</p> : null}
           <ol className={styles.waitList}>
             {roster.waitlist.map((item) => (
               <li key={item.id}>
                 <span><span className={styles.listName}>{item.child.name}</span> <span className={styles.small}>от {dateText(item.submitted_at)}</span></span>
                 {canManage ? (
-                  <button type="button" className={styles.secondary} disabled={approving !== ''} onClick={() => void approve(item)}>
-                    {approving === item.id ? 'Запазване…' : 'Одобри'}<span className={styles.srOnly}> {item.child.name}</span>
-                  </button>
+                  <span className={styles.actions}>
+                    <button type="button" className={styles.primary} disabled={approving !== '' || groupFull} aria-describedby={groupFull ? `roster-full-${groupId}` : undefined} onClick={() => void approve(item)}>
+                      {approving === item.id ? 'Запазване…' : 'Одобри'}<span className={styles.srOnly}> {item.child.name}</span>
+                    </button>
+                  </span>
                 ) : null}
               </li>
             ))}
@@ -237,7 +242,7 @@ function RosterRow({ onActivity, organizationId, roster, enrollment, today, canM
                 {canManage && note.kind === 'skips' ? (
                   <button type="button" className={styles.linkButton} disabled={busy}
                     onClick={() => { onActivity(); void quick(() => restoreSession(organizationId, enrollment, note.sessionId), `Заниманието отново се брои за ${name}.`); }}>
-                    Върни<span className={styles.srOnly}> заниманието за {name}</span>
+                    Отмени пропуска<span className={styles.srOnly}> за {name}</span>
                   </button>
                 ) : null}
                 {canManage && note.kind === 'pause' ? (

@@ -8,7 +8,8 @@ export type StaffApplication = {
   scope: 'trial' | 'single' | 'full_period' | string;
   source: string;
   child: StaffChild;
-  group: { id: string; name: string | null };
+  /** capacity_max and places_taken come with the lists: how full the group is today. */
+  group: { id: string; name: string | null; capacity_max?: number | null; places_taken?: number };
   activity: { id: string | null; title: string | null };
   session_starts_at: string | null;
   visit_offer_title: string | null;
@@ -62,6 +63,7 @@ export type TransferOption = {
   schedule?: WeeklySchedule | null;
   remaining: number | null;
   starts?: MoveInDay[];
+  waitlist_count?: number;
   prices: { id: string; enrollment_mode: string; unit: string; amount_cents: number; currency: string }[];
 };
 export type ReviewDecision = 'approve' | 'waitlist' | 'reject';

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { GroupRoster, RosterEnrollment, StaffGroup } from '../src/features/enrollment/api';
 import {
-  activitySummary, addDays, groupFill, groupsByActivity, lastDayOfMonth, matchesGroupFilter, matchesGroupSearch, moveInSummary, placesText, priceText,
-  rosterNotes, scheduleText, skippableSessions, sofiaDay, weekdayDay,
+  activitySummary, addDays, applicationPlaces, groupFill, groupsByActivity, hasPlaceForWaiting, lastDayOfMonth, matchesGroupFilter, matchesGroupSearch, moveInSummary,
+  placesText, priceText, rosterNotes, scheduleText, skippableSessions, sofiaDay, waitingText, weekdayDay,
 } from '../src/features/enrollment/presentation';
 
 const enrollment = (patch: Partial<RosterEnrollment> = {}): RosterEnrollment => ({
@@ -87,13 +87,27 @@ describe('enrollment presentation', () => {
     ];
     const sections = groupsByActivity(groups);
     expect(sections.map((section) => [section.title, section.groups.map((item) => item.id)])).toEqual([['Шахмат', ['g1', 'g2']], ['Рисуване', ['g3']]]);
-    expect(activitySummary(sections[0])).toBe('2 групи · 14 от 24 места · 3 чакащи');
+    expect(activitySummary(sections[0])).toBe('2 групи · 14 от 24 места · 1 пълна · 3 чакат');
+    expect(activitySummary(sections[0], 1)).toBe('показани 1 от 2 групи · 14 от 24 места · 1 пълна · 3 чакат');
     expect(activitySummary(sections[1])).toBe('1 група · 0 от 8 места');
+    expect(sections[0].placeForWaiting).toBe(0);
+    expect(hasPlaceForWaiting(group({ waitlist_count: 1, enrolled_for_period: 11 }))).toBe(true);
+    expect(hasPlaceForWaiting(group({ waitlist_count: 1, enrolled_for_period: 12 }))).toBe(false);
+    expect(waitingText(1)).toBe('1 чака');
+    expect(waitingText(3)).toBe('3 чакат');
     expect(groups.filter((item) => matchesGroupFilter(item, 'full')).map((item) => item.id)).toEqual(['g2']);
     expect(groups.filter((item) => matchesGroupFilter(item, 'free')).map((item) => item.id)).toEqual(['g1', 'g3']);
     expect(groups.filter((item) => matchesGroupFilter(item, 'waiting')).map((item) => item.id)).toEqual(['g2']);
     expect(groups.filter((item) => matchesGroupSearch(item, 'ШАХ')).map((item) => item.id)).toEqual(['g1', 'g2']);
     expect(groups.filter((item) => matchesGroupSearch(item, 'зала')).map((item) => item.id)).toEqual(['g1', 'g2']);
+  });
+
+  it('says how full the group of an application is', () => {
+    const base = { id: 'g1', name: 'Група 1' };
+    expect(applicationPlaces(base)).toBeUndefined();
+    expect(applicationPlaces({ ...base, capacity_max: 12, places_taken: 12 })).toEqual({ text: 'Групата е пълна · 12 от 12', full: true });
+    expect(applicationPlaces({ ...base, capacity_max: 12, places_taken: 9 })).toEqual({ text: '3 свободни места', full: false });
+    expect(applicationPlaces({ ...base, capacity_max: null, places_taken: 30 })).toEqual({ text: 'Без ограничение на местата', full: false });
   });
 
   it('tells from when a move into a group is possible', () => {

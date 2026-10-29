@@ -163,6 +163,10 @@ class StaffEnrollmentApiTest extends TestCase
         $ids = fn (string $query): array => array_column($this->getJson("/api/v1/enrollment/applications{$query}")->assertOk()->json('applications'), 'id');
 
         $this->assertSame([$application->id, $second->id, $painting->id], $ids(''));
+        // Each row says how full its group is today, so a full group is seen before deciding.
+        $this->getJson('/api/v1/enrollment/applications')
+            ->assertJsonPath('applications.0.group', ['id' => $group->id, 'name' => 'Група 1', 'capacity_max' => 2, 'places_taken' => 0])
+            ->assertJsonPath('applications.2.group.capacity_max', 8);
         $this->assertSame([$second->id], $ids('?q='.urlencode('Боби')));
         // Part of the first or the last name.
         $this->assertSame([$application->id, $second->id], $ids('?q='.urlencode('ов')));
