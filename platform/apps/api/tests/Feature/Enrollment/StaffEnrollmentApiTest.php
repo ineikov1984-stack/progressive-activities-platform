@@ -158,7 +158,7 @@ class StaffEnrollmentApiTest extends TestCase
         [$organization, $group, $application] = $this->organizationWithApplication();
         $this->travel(1)->minutes();
         $second = $this->anotherApplication($organization, $application);
-        [$otherGroup, $painting] = $this->paintingApplication($organization);
+        [$otherGroup, $painting, $paintingActivityId] = $this->paintingApplication($organization);
         $this->actAs($this->member($organization, 'coordinator'), $organization);
         $ids = fn (string $query): array => array_column($this->getJson("/api/v1/enrollment/applications{$query}")->assertOk()->json('applications'), 'id');
 
@@ -176,7 +176,7 @@ class StaffEnrollmentApiTest extends TestCase
         $this->getJson("/api/v1/enrollment/applications?group_id={$otherGroup->id}")
             ->assertJsonPath('total', 1)
             ->assertJsonPath('facets.activities', [
-                ['id' => $otherGroup->offering->activity_id, 'title' => 'Рисуване', 'count' => 1],
+                ['id' => $paintingActivityId, 'title' => 'Рисуване', 'count' => 1],
                 ['id' => $activityId, 'title' => 'Шах', 'count' => 2],
             ])
             ->assertJsonPath('facets.groups.1', ['id' => $group->id, 'name' => 'Група 1', 'activity_id' => $activityId, 'count' => 2]);
@@ -317,7 +317,7 @@ class StaffEnrollmentApiTest extends TestCase
         return $application;
     }
 
-    /** @return array{Group, EnrollmentApplication} */
+    /** @return array{Group, EnrollmentApplication, string} */
     private function paintingApplication(Organization $organization): array
     {
         app(TenantContext::class)->select($organization);
@@ -341,6 +341,6 @@ class StaffEnrollmentApiTest extends TestCase
         ]);
         app(TenantContext::class)->clear();
 
-        return [$group->load('offering'), $application];
+        return [$group, $application, $activity->id];
     }
 }

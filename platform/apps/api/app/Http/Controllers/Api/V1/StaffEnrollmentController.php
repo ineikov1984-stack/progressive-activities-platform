@@ -24,6 +24,7 @@ use App\Http\Controllers\Controller;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
@@ -84,7 +85,7 @@ final class StaffEnrollmentController extends Controller
         $counts = EnrollmentApplication::query()->where('status', $status)
             ->selectRaw('group_id, count(*) as aggregate')->groupBy('group_id')->pluck('aggregate', 'group_id');
         $groups = Group::query()->with('offering.activity')->whereKey($counts->keys()->all())->get()
-            ->sortBy(fn (Group $group): string => ($group->offering?->activity?->title ?? '').'|'.$group->name)->values();
+            ->sortBy(fn (Group $group): string => ($group->offering->activity->title ?? '').'|'.$group->name)->values();
         $activities = [];
         foreach ($groups as $group) {
             $activity = $group->offering?->activity;
@@ -106,7 +107,7 @@ final class StaffEnrollmentController extends Controller
     /** Case-insensitive search for Cyrillic names needs ILIKE on PostgreSQL; SQLite (tests) has only LIKE. */
     private function likeOperator(): string
     {
-        return EnrollmentApplication::query()->getConnection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
+        return DB::getDriverName() === 'pgsql' ? 'ilike' : 'like';
     }
 
     public function review(Request $request, string $application, ReviewEnrollmentApplication $review, AuditRecorder $audit): JsonResponse
