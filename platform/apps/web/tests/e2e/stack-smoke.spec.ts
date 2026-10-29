@@ -81,9 +81,8 @@ test('sign in leads to the home screen with tasks', async () => {
 
 test('an owner invites a colleague from the home screen', async () => {
   // Wait until the team list has loaded, so it cannot replace the new invitation afterwards.
-  const invitationsLoaded = page.waitForResponse((response) => response.url().includes('/backend/api/v1/invitations') && response.request().method() === 'GET');
   await page.goto('/dashboard');
-  await invitationsLoaded;
+  await slow(page.getByText(/Очаква приемане|Приета|Изтекла|Все още не сте поканили колеги/).first()).toBeVisible();
   const email = `teacher-e2e+${Date.now()}@example.test`;
   await slow(page.getByLabel('Имейл')).toBeVisible();
   await page.getByLabel('Имейл').fill(email);
@@ -116,15 +115,17 @@ test('the selected organization is kept in the session', async () => {
   expect(await apiStatus(page, 'context/organization')).toBe(200);
 });
 
-test('every API response keeps the browser signed in (session cookie stays valid)', async () => {
+test('every API response keeps the session valid; CSRF and sign-out still work', async () => {
   // Regression for 29.10.2026: the API started the session twice, so each response's cookie
   // pointed to a new, empty session. Talk to the API directly with a normal cookie jar.
+  // Origin/Referer are the web app's: if Sanctum's stateful middleware is ever re-added, they
+  // match SANCTUM_STATEFUL_DOMAINS in CI, the session would start twice again and this fails.
   const jar = await request.newContext({
-    baseURL: 'http://127.0.0.1:8080',
+    baseURL: process.env.API_BASE_URL ?? 'http://127.0.0.1:8080',
     extraHTTPHeaders: { Origin: 'http://127.0.0.1:3000', Referer: 'http://127.0.0.1:3000/', Accept: 'application/json' },
   });
   const token = async () => decodeURIComponent((await jar.storageState()).cookies.find((item) => item.name === 'XSRF-TOKEN')?.value ?? '');
-  await jar.get('/sanctum/csrf-cookie');
+  expect((await jar.get('/sanctum/csrf-cookie')).status()).toBe(204);
   expect((await jar.post('/api/v1/auth/login', { headers: { 'X-XSRF-TOKEN': await token() }, data: { email: demo.email, password: demo.password } })).status()).toBe(200);
   for (let index = 0; index < 3; index += 1) {
     expect((await jar.get('/api/v1/me')).status(), `request ${index + 1} after sign-in`).toBe(200);
@@ -132,6 +133,11 @@ test('every API response keeps the browser signed in (session cookie stays valid
   expect((await jar.post('/api/v1/context/organization', { headers: { 'X-XSRF-TOKEN': await token() }, data: { organization_id: demo.organizationId } })).status()).toBe(200);
   expect((await jar.get('/api/v1/context/organization')).status()).toBe(200);
   expect((await jar.get('/api/v1/me')).status()).toBe(200);
+  // CSRF is still enforced on state-changing requests.
+  expect((await jar.post('/api/v1/context/organization', { data: { organization_id: demo.organizationId } })).status()).toBe(419);
+  // Signing out ends the session.
+  expect((await jar.post('/api/v1/auth/logout', { headers: { 'X-XSRF-TOKEN': await token() } })).status()).toBe(204);
+  expect((await jar.get('/api/v1/me')).status()).toBe(401);
   await jar.dispose();
 });
 
