@@ -17,7 +17,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Записвания Б2а — промени от екипа (API) | Claude | claude/staff-enrollment-actions | `database/migrations/**`, `routes/api.php` (горещи), `app/Domain/Enrollment/**`, `StaffEnrollmentController`, `docs/product/staff-enrollment.md` | спецификация → ревю архитект → TDD |
+| Записвания Б2а — промени от екипа (API) | Claude | claude/staff-enrollment-actions | `database/migrations/**`, `routes/api.php` (горещи), `app/Domain/Enrollment/**`, `StaffEnrollmentController`, `docs/product/staff-enrollment.md` | PR #30: ревю архитект и сигурност — поправено; CI |
 
 ## Опашка (по приоритет)
 

@@ -220,7 +220,8 @@ jobs:
         working-directory: platform/apps/api
         run: |
           cp .env.example .env && php artisan key:generate --ansi
-          php artisan migrate --force --ansi
+          # Migrations run as the database owner; the API itself uses the restricted role (RLS).
+          php artisan migrate --database=pgsql_admin --force --ansi
           php artisan db:seed --class='Database\Seeders\LocalDemoSeeder' --force --ansi
           php artisan db:seed --class='Database\Seeders\E2eForeignTenantSeeder' --force --ansi
           nohup php artisan serve --host=127.0.0.1 --port=8080 --no-reload > "$RUNNER_TEMP/api.log" 2>&1 &

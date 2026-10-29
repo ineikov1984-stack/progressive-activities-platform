@@ -103,18 +103,11 @@ final class ParentEnrollmentController extends Controller
             'effective_date' => ['required', 'date_format:Y-m-d'],
             'reason' => ['required', 'string', 'max:500'],
         ]);
-        $record = $this->ownedEnrollment($request, $enrollment);
 
-        try {
-            // Same rules as for the team (docs/product/staff-enrollment.md, т. 9.4); the parent sends no version.
-            $updated = $change->end(
-                $request->user(), $record, $validated['effective_date'], $validated['reason'], null,
-            );
-
-            return response()->json(['enrollment' => $this->presentEnrollment($updated)]);
-        } finally {
-            $this->context->clear();
-        }
+        // Same rules as for the team (docs/product/staff-enrollment.md, т. 9.4); the parent sends no version.
+        return $this->withOwnedEnrollment($request, $enrollment, fn (Enrollment $record): JsonResponse => response()->json([
+            'enrollment' => $this->presentEnrollment($change->end($request->user(), $record, $validated['effective_date'], $validated['reason'], null)),
+        ]));
     }
 
     public function visitOutcome(Request $request, string $enrollment, RecordVisitOutcome $recordOutcome): JsonResponse
@@ -124,22 +117,10 @@ final class ParentEnrollmentController extends Controller
             'reason' => ['sometimes', 'nullable', 'string', 'max:1000'],
         ]);
 
-        return DB::transaction(function () use ($request, $enrollment, $recordOutcome, $validated): JsonResponse {
-            try {
-                if (DB::getDriverName() === 'pgsql') {
-                    DB::select("SELECT set_config('app.current_user_id', ?, true)", [$request->user()->id]);
-                    $tenant = DB::selectOne('SELECT public.enrollment_owned_tenant(?::uuid, ?::uuid) AS id', [$enrollment, $request->user()->id])?->id;
-                    abort_if($tenant === null, 404);
-                    $this->context->select($tenant);
-                    $this->setDatabaseTenant();
-                }
-                $record = $this->ownedEnrollment($request, $enrollment);
-                $transition = $recordOutcome->handle($request->user(), $record, $validated['outcome'], $validated['reason'] ?? null);
+        return $this->withOwnedEnrollment($request, $enrollment, function (Enrollment $record) use ($request, $recordOutcome, $validated): JsonResponse {
+            $transition = $recordOutcome->handle($request->user(), $record, $validated['outcome'], $validated['reason'] ?? null);
 
-                return response()->json(['enrollment' => $this->presentEnrollment($record->refresh()), 'outcome' => $transition->metadata['outcome']]);
-            } finally {
-                $this->context->clear();
-            }
+            return response()->json(['enrollment' => $this->presentEnrollment($record->refresh()), 'outcome' => $transition->metadata['outcome']]);
         });
     }
 
@@ -161,15 +142,12 @@ final class ParentEnrollmentController extends Controller
             'session_id' => ['required', 'uuid'],
             'reason' => ['required', 'string', 'max:500'],
         ]);
-        $record = $this->ownedEnrollment($request, $enrollment);
 
-        try {
+        return $this->withOwnedEnrollment($request, $enrollment, function (Enrollment $record) use ($request, $change, $validated): JsonResponse {
             $change->skipSession($request->user(), $record, $validated['session_id'], $validated['reason'], null);
 
             return response()->json(['enrollment' => $this->presentEnrollment($record->refresh())]);
-        } finally {
-            $this->context->clear();
-        }
+        });
     }
 
     /** @return array<string, mixed> */
@@ -201,6 +179,31 @@ final class ParentEnrollmentController extends Controller
             'public_reason' => $application->public_reason,
             'version' => $application->version,
         ];
+    }
+
+    /**
+     * Runs a change on the parent's own enrollment in one transaction, so the tenant set for
+     * PostgreSQL RLS (transaction-local) covers the lookup and the whole change.
+     *
+     * @param  callable(Enrollment): JsonResponse  $callback
+     */
+    private function withOwnedEnrollment(Request $request, string $enrollment, callable $callback): JsonResponse
+    {
+        return DB::transaction(function () use ($request, $enrollment, $callback): JsonResponse {
+            try {
+                if (DB::getDriverName() === 'pgsql') {
+                    DB::select("SELECT set_config('app.current_user_id', ?, true)", [$request->user()->id]);
+                    $tenant = DB::selectOne('SELECT public.enrollment_owned_tenant(?::uuid, ?::uuid) AS id', [$enrollment, $request->user()->id])?->id;
+                    abort_if($tenant === null, 404);
+                    $this->context->select($tenant);
+                    $this->setDatabaseTenant();
+                }
+
+                return $callback($this->ownedEnrollment($request, $enrollment));
+            } finally {
+                $this->context->clear();
+            }
+        });
     }
 
     private function ownedEnrollment(Request $request, string $enrollment): Enrollment

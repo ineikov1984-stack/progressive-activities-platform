@@ -95,6 +95,17 @@ final class ChangeEnrollment
             if ($remaining !== null && $remaining < 1) {
                 throw ValidationException::withMessages(['capacity' => 'В групата няма свободно място от тази дата.']);
             }
+            // Also when the target group has no sessions yet: no second full-period place for the same child.
+            $already = Enrollment::query()->where('group_id', $target->id)->where('child_id', $current->child_id)
+                ->where('scope', EnrollmentScope::FullPeriod->value)
+                ->whereIn('status', [EnrollmentStatus::Active->value, EnrollmentStatus::Paused->value, EnrollmentStatus::Ended->value])
+                ->where(fn ($query) => $query->whereNull('ends_on')->orWhereDate('ends_on', '>=', $date->toDateString()))
+                ->first();
+            if ($already !== null) {
+                throw ValidationException::withMessages(['target_group_id' => $already->ends_on === null
+                    ? 'Детето вече е записано в тази група.'
+                    : 'Детето е в тази група до '.$already->ends_on->format('d.m.Y').'. Изберете дата след това.']);
+            }
             $child = Child::query()->whereKey($current->child_id)->firstOrFail();
             foreach (Session::query()->where('group_id', $target->id)->where('status', 'scheduled')
                 ->where('starts_at', '>=', $date->utc())->orderBy('id')->get() as $session) {
@@ -129,7 +140,8 @@ final class ChangeEnrollment
                 'scope' => EnrollmentScope::FullPeriod,
                 'source' => EnrollmentSource::Staff,
                 'status' => EnrollmentApplicationStatus::Approved,
-                'idempotency_key' => 'transfer-'.$current->id,
+                // Version in the key: after a cancelled move the same enrollment may be transferred again.
+                'idempotency_key' => 'transfer-'.$current->id.'-'.$current->version,
                 // Same activity, same terms; the history records that the team made the change.
                 'accepted_terms_version' => $application->accepted_terms_version,
                 'accepted_terms_at' => $application->accepted_terms_at,
@@ -216,7 +228,8 @@ final class ChangeEnrollment
             ]);
             $dates = ['pause_id' => $pause->id, 'starts_on' => $start->toDateString(), 'ends_on' => $end->toDateString()];
             $this->touch($current);
-            $this->transition($actor, $current, $current->status->value, $current->status->value, $note, [...$dates, 'reason_category' => $category]);
+            // The note may hold personal details; it stays in the pause (editable), never in the immutable history.
+            $this->transition($actor, $current, $current->status->value, $current->status->value, null, [...$dates, 'reason_category' => $category]);
             $this->event('enrollment.paused', $current, [...$dates, 'reason_category' => $category]);
             $this->audit->record(AuditAction::EnrollmentPaused, new AuditableReference('enrollment', $current->id), $dates);
 
@@ -265,6 +278,9 @@ final class ChangeEnrollment
                 throw ValidationException::withMessages(['enrollment' => 'Записването вече има дата на прекратяване или е приключило.']);
             }
             $last = $this->day($lastDay, $this->timezone($this->groupOf($current, $groups)), 'last_day');
+            if ($current->ends_on !== null && $last->toDateString() > $current->ends_on->toDateString()) {
+                throw ValidationException::withMessages(['last_day' => 'Записването приключва на '.$current->ends_on->format('d.m.Y').'. Изберете дата до тогава.']);
+            }
             $notStarted = $last->toDateString() < $current->starts_on->toDateString();
             $fromStatus = $current->status->value;
             $previousEnd = $current->ends_on?->toDateString();
@@ -296,7 +312,7 @@ final class ChangeEnrollment
             if ($current->status !== EnrollmentStatus::Ended || $current->ends_on === null || $current->ends_on->toDateString() < $today) {
                 throw ValidationException::withMessages(['enrollment' => 'Само насрочено прекратяване може да се отмени.']);
             }
-            if (Enrollment::query()->where('transferred_from_id', $current->id)->exists()) {
+            if (Enrollment::query()->where('transferred_from_id', $current->id)->where('status', '!=', EnrollmentStatus::Cancelled->value)->exists()) {
                 throw ValidationException::withMessages(['enrollment' => 'Детето е преместено в друга група. За да се върне, преместете го обратно.']);
             }
 
