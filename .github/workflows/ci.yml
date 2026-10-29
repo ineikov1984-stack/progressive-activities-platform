@@ -55,8 +55,37 @@ jobs:
           psql -h 127.0.0.1 -U progressive -d progressive
           -v ON_ERROR_STOP=1 -f /init/01-app-role.sql
       - run: cp .env.example .env && php artisan key:generate
-      - name: Lint, static analysis and tests
-        run: composer verify
+      - name: Code style (Pint)
+        run: |
+          status=0
+          vendor/bin/pint --test --format=json > pint.json || status=$?
+          php -r '
+            $r = json_decode(file_get_contents("pint.json"), true) ?: [];
+            foreach (($r["files"] ?? []) as $f) {
+              echo "::error file=platform/apps/api/{$f["name"]},title=Code style::" . implode(", ", $f["appliedFixers"] ?? []) . "\n";
+            }
+          '
+          exit $status
+      - name: Static analysis (PHPStan)
+        if: ${{ !cancelled() }}
+        run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress --error-format=github
+      - name: Tests
+        if: ${{ !cancelled() }}
+        run: |
+          php artisan config:clear --ansi
+          status=0
+          php artisan test --log-junit junit.xml || status=$?
+          php -r '
+            if (! is_file("junit.xml")) { exit(0); }
+            $xml = simplexml_load_file("junit.xml");
+            foreach ($xml->xpath("//testcase[failure or error]") as $case) {
+              $node = $case->failure ?: $case->error;
+              $text = trim(preg_replace("/\s+/", " ", (string) $node));
+              $file = str_replace(getcwd() . "/", "", (string) $case["file"]);
+              echo "::error file=platform/apps/api/{$file},line={$case["line"]},title={$case["class"]}::{$case["name"]}: " . substr($text, 0, 900) . "\n";
+            }
+          '
+          exit $status
       - name: Security audit of PHP dependencies
         if: ${{ !cancelled() }}
         run: |
