@@ -17,7 +17,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Етап Б, PR 2: панел „Подробности“ за детето, контакти за екипа | Claude | claude/child-details-panel | `routes/api.php` (два GET-а), `OrganizationRole`, `StaffEnrollment*`, `LocalDemoSeeder`, web `features/enrollment` | код, после ревю по сигурност и UX |
+| Етап Б, PR 2: панел „Подробности“ за детето, контакти за екипа | Claude | claude/child-details-panel | `routes/api.php` (два GET-а), `OrganizationRole`, `StaffEnrollment*`, `LocalDemoSeeder`, web `features/enrollment` | PR #39 — ревюта минати, чака merge |
 
 ## Опашка (по приоритет)
 
