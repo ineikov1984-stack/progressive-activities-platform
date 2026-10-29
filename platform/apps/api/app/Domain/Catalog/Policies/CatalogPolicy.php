@@ -27,6 +27,16 @@ final readonly class CatalogPolicy
         return $this->allows($user, $organization, 'catalog.publish');
     }
 
+    public function viewEnrollments(User $user, Organization $organization): bool
+    {
+        return $this->allows($user, $organization, 'enrollment.view');
+    }
+
+    public function manageEnrollments(User $user, Organization $organization): bool
+    {
+        return $this->allows($user, $organization, 'enrollment.manage');
+    }
+
     private function allows(User $user, Organization $organization, string $ability): bool
     {
         if (! $this->context->hasOrganization()

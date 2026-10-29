@@ -44,11 +44,26 @@ final class ReviewEnrollmentApplication
             }
             $current = EnrollmentApplication::query()->lockForUpdate()->findOrFail($application->id);
 
-            if ($current->status !== EnrollmentApplicationStatus::Submitted
-                || $current->version !== $expectedVersion) {
+            if ($current->status === EnrollmentApplicationStatus::Waitlisted && $decision === 'waitlist') {
+                throw ValidationException::withMessages(['decision' => 'Заявката вече е в списъка на чакащите.']);
+            }
+            // Waiting applications can still be approved or rejected when a place frees up.
+            $reviewable = in_array($current->status, [EnrollmentApplicationStatus::Submitted, EnrollmentApplicationStatus::Waitlisted], true);
+            if (! $reviewable || $current->version !== $expectedVersion) {
                 throw ValidationException::withMessages([
                     'version' => 'Заявлението е променено междувременно или вече е обработено.',
                 ]);
+            }
+
+            if ($decision === 'waitlist') {
+                if (! $group->waitlist_enabled || ($offer !== null && ! $offer->waitlist_enabled)) {
+                    throw ValidationException::withMessages(['decision' => 'Списъкът с чакащи за тази група е изключен.']);
+                }
+
+                return $this->transitionApplication(
+                    $actor, $current, EnrollmentApplicationStatus::Waitlisted,
+                    $publicReason, $internalNote, 'enrollment.application_waitlisted',
+                );
             }
 
             if ($decision === 'reject') {
@@ -97,6 +112,9 @@ final class ReviewEnrollmentApplication
                 : $this->capacity->remainingForSession($current->session()->firstOrFail(), forAllocation: true));
 
             if ($remaining !== null && $remaining < 1) {
+                if ($current->status === EnrollmentApplicationStatus::Waitlisted) {
+                    throw ValidationException::withMessages(['capacity' => 'Все още няма свободно място в групата.']);
+                }
                 if (! $group->waitlist_enabled || ($offer !== null && ! $offer->waitlist_enabled)) {
                     throw ValidationException::withMessages(['capacity' => 'Няма свободни места и списъкът с чакащи е изключен.']);
                 }

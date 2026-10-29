@@ -37,6 +37,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('catalog.view', [CatalogPolicy::class, 'view']);
         Gate::define('catalog.manage', [CatalogPolicy::class, 'manage']);
         Gate::define('catalog.publish', [CatalogPolicy::class, 'publish']);
+        Gate::define('enrollment.view', [CatalogPolicy::class, 'viewEnrollments']);
+        Gate::define('enrollment.manage', [CatalogPolicy::class, 'manageEnrollments']);
 
         RateLimiter::for('login', function (Request $request): Limit {
             $email = Str::lower((string) $request->input('email'));

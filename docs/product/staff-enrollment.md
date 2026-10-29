@@ -43,7 +43,7 @@
 
 | Действие | Собственик / администратор | Координатор | Преподавател | Финанси / преглед |
 |---|---|---|---|---|
-| Виж входящи, групи, деца | да | да | само своите групи (без контакти на родителя) | да (без контакти) |
+| Виж входящи, групи, деца | да | да | Б2: само своите групи (без контакти на родителя); в Б1 — без достъп | да (име и клас на детето, без контакти) |
 | Одобри / чакащи / откажи | да | да | не | не |
 | Ръчно записване, преместване, пауза, прекратяване | да | да | не | не |
 | Индивидуална цена | да | не | не | не (виж стъпка В) |
@@ -72,11 +72,13 @@
 
 ## 5. API (под `/api/v1`, `tenant` + роли)
 
+От Б1 маршрутите са под префикс `/api/v1/enrollment/…`.
+
 | Метод | Път | Какво |
 |---|---|---|
-| GET | `/enrollment-applications?status=submitted` | входящи |
-| POST | `/enrollment-applications/{id}/review` | `decision: approve\|waitlist\|reject`, `version`, `public_reason`, `internal_note` |
-| GET | `/groups/{group}/roster` | записани, пауза, чакащи, капацитет |
+| GET | `/enrollment/applications?status=submitted\|waitlisted` | входящи / чакащи (`total`, `has_more`) |
+| POST | `/enrollment/applications/{id}/review` | `decision: approve\|waitlist\|reject`, `version`, `public_reason`, `internal_note` |
+| GET | `/enrollment/groups/{group}/roster` | записани, пауза, чакащи, капацитет |
 | GET | `/children?query=` | търсене в `organization_children` |
 | GET | `/children/{organizationChild}` | картон: дейности, история, контакт (според ролята) |
 | POST | `/children` | ново дете от екипа + родител + консент |

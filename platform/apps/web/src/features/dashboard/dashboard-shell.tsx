@@ -62,7 +62,8 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const [error, setError] = useState('');
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const groups = useMemo(() => dashboardNavigation(pathname), [pathname]);
+  const permissions = organization?.permissions;
+  const groups = useMemo(() => dashboardNavigation(pathname, permissions), [pathname, permissions]);
 
   useEffect(() => {
     if (started.current) return;

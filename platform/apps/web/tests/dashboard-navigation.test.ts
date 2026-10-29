@@ -12,10 +12,16 @@ describe('dashboard navigation', () => {
 
     expect(groups.map((group) => group.label)).toEqual(['Управление', 'Организация']);
     expect(groups.map((group) => group.items.map((item) => item.label))).toEqual([
-      ['Начало', 'Дейности', 'Отворени врати'],
+      ['Начало', 'Дейности', 'Записвания', 'Отворени врати'],
       ['Екип'],
     ]);
     expect(groups.flatMap((group) => group.items).every((item) => item.isAvailable && item.href)).toBe(true);
+  });
+
+  it('hides destinations the role cannot use', () => {
+    const labels = (permissions: string[]) => dashboardNavigation('/dashboard', permissions).flatMap((group) => group.items).map((item) => item.label);
+    expect(labels(['view', 'catalog.view'])).not.toContain('Записвания');
+    expect(labels(['view', 'catalog.view', 'enrollment.view'])).toContain('Записвания');
   });
 
   it('marks exactly one destination active, including nested routes', () => {
@@ -27,6 +33,7 @@ describe('dashboard navigation', () => {
     expect(active('/dashboard/activities/activity-1/visit-offers')).toEqual(['Дейности']);
     expect(active('/dashboard')).toEqual(['Начало']);
     expect(active('/dashboard/open-days')).toEqual(['Отворени врати']);
+    expect(active('/dashboard/enrollments')).toEqual(['Записвания']);
   });
 
   it('starts expanded on desktop, compact on tablet and leaves mobile to the drawer', () => {

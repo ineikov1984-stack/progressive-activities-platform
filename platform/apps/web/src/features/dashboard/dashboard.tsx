@@ -13,6 +13,7 @@ import {
 import { useDashboardContext } from './dashboard-context';
 import { type ActivityDraft, loadCatalogWorkspace } from '@/features/catalog/admin/api';
 import { buildTasks, greeting, plural, type Task } from './tasks';
+import { loadApplications } from '@/features/enrollment/api';
 import { OrganizationStatusCard } from '@/features/organizations/application/status-card';
 import styles from './home.module.css';
 
@@ -82,6 +83,7 @@ export function Dashboard() {
   const router = useRouter();
   const { user, organization } = useDashboardContext();
   const [activities, setActivities] = useState<ActivityDraft[]>();
+  const [pendingApplications, setPendingApplications] = useState(0);
   const [invitations, setInvitations] = useState<DashboardInvitation[]>();
   const [auditEvents, setAuditEvents] = useState<DashboardAuditEvent[]>();
   const [loadError, setLoadError] = useState<string>();
@@ -94,8 +96,11 @@ export function Dashboard() {
     Promise.all([
       loadWorkspaceOverview(organization.id),
       loadCatalogWorkspace(organization.id).then((workspace) => workspace.activities).catch(() => [] as ActivityDraft[]),
-    ]).then(([overview, catalogActivities]) => {
+      // Roles without access to enrollments simply see no such task.
+      loadApplications(organization.id).then((page) => page.total).catch(() => 0),
+    ]).then(([overview, catalogActivities, pending]) => {
       if (!active) return;
+      setPendingApplications(pending);
       setInvitations(overview.invitations);
       setAuditEvents(overview.auditEvents);
       setActivities(catalogActivities);
@@ -127,7 +132,7 @@ export function Dashboard() {
   }
 
   const isLoaded = activities !== undefined && invitations !== undefined;
-  const tasks = isLoaded ? buildTasks(activities, invitations) : [];
+  const tasks = isLoaded ? buildTasks(activities, invitations, pendingApplications) : [];
   const published = activities?.filter((activity) => activity.status === 'published').length ?? 0;
   const firstName = user.name.split(/\s+/)[0];
 
