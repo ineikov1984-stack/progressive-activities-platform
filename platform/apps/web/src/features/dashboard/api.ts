@@ -99,6 +99,32 @@ export async function loadOrganizationContext(): Promise<Pick<DashboardData, 'us
   return { user, organization, organizations };
 }
 
+const rememberedOrganizations = new Map<string, Promise<void>>();
+
+/**
+ * Requests that cannot carry the X-Organization-Id header (for example <img> tags
+ * for private catalog media) rely on the organization stored in the server session.
+ * The dashboard frame stores it once per page load; a failure only means such images will not show.
+ */
+export function rememberOrganizationInSession(organizationId: string): Promise<void> {
+  let pending = rememberedOrganizations.get(organizationId);
+  if (!pending) {
+    pending = ensureCsrfToken()
+      .then((csrfToken) => requestJson('/backend/api/v1/context/organization', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'X-XSRF-TOKEN': csrfToken } : {}),
+        },
+        body: JSON.stringify({ organization_id: organizationId }),
+      }))
+      .then(() => undefined)
+      .catch(() => { rememberedOrganizations.delete(organizationId); });
+    rememberedOrganizations.set(organizationId, pending);
+  }
+  return pending;
+}
+
 export async function loadDashboard(): Promise<DashboardData> {
   try {
     const { user, organization, organizations } = await loadOrganizationContext();

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ActivityDraft } from '../src/features/catalog/admin/api';
 import type { DashboardInvitation } from '../src/features/dashboard/api';
-import { buildTasks } from '../src/features/dashboard/tasks';
+import { buildTasks, greeting } from '../src/features/dashboard/tasks';
 
 const draft = (id: string, title: string, extra: Partial<ActivityDraft> = {}): ActivityDraft => ({
   id, slug: id, status: 'draft', version: 1, title, category: 'Друго',
@@ -32,5 +32,14 @@ describe('dashboard tasks', () => {
 
   it('stays quiet when nothing waits for the user', () => {
     expect(buildTasks([draft('p', 'Плуване', { status: 'published' })], [invitation('accepted')])).toEqual([]);
+  });
+});
+
+describe('greeting', () => {
+  it('uses the hour in Sofia, not the browser format', () => {
+    // 12:35 UTC on 29 Oct 2026 is 14:35 in Sofia (EET, UTC+2).
+    expect(greeting(new Date('2026-10-29T12:35:00Z'))).toBe('Добър ден');
+    expect(greeting(new Date('2026-10-29T06:00:00Z'))).toBe('Добро утро');
+    expect(greeting(new Date('2026-10-29T18:30:00Z'))).toBe('Добър вечер');
   });
 });

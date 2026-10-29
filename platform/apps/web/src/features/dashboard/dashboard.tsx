@@ -12,7 +12,7 @@ import {
 } from './api';
 import { useDashboardContext } from './dashboard-context';
 import { type ActivityDraft, loadCatalogWorkspace } from '@/features/catalog/admin/api';
-import { buildTasks, plural, type Task } from './tasks';
+import { buildTasks, greeting, plural, type Task } from './tasks';
 import { OrganizationStatusCard } from '@/features/organizations/application/status-card';
 import styles from './home.module.css';
 
@@ -34,18 +34,39 @@ const invitationStatusLabels: Record<string, string> = {
 
 const auditActionLabels: Record<string, string> = {
   'identity.login_succeeded': 'Вход в системата',
-  'organization.context_selected': 'Избрана организация',
+  'organization.context_selected': 'Отворена администрацията на организацията',
+  'organization.applicant_created': 'Създаден профил на организация',
+  'organization.application_submitted': 'Изпратена заявка за регистрация',
+  'organization.application_reviewed': 'Прегледана заявка за регистрация',
   'organization.invitation_created': 'Изпратена покана',
   'organization.role_changed': 'Променена роля',
   'catalog.activity_submitted': 'Дейност, изпратена за преглед',
+  'catalog.activity_published': 'Публикувана дейност',
+  'catalog.open_day_campaign_created': 'Създадена кампания „Отворени врати“',
+  'catalog.open_day_campaign_updated': 'Променена кампания „Отворени врати“',
+  'catalog.open_day_campaign_published': 'Публикувана кампания „Отворени врати“',
+  'catalog.open_day_campaign_closed': 'Затворена кампания „Отворени врати“',
+  'catalog.open_day_campaign_cancelled': 'Отменена кампания „Отворени врати“',
+  'catalog.visit_offer_created': 'Създадено пробно занимание',
+  'catalog.visit_offer_updated': 'Променено пробно занимание',
+  'catalog.visit_offer_published': 'Публикувано пробно занимание',
+  'catalog.visit_offer_closed': 'Затворено пробно занимание',
+  'catalog.visit_offer_cancelled': 'Отменено пробно занимание',
+  'catalog.visit_offer_capacity_changed': 'Променени места за пробно занимание',
+  'catalog.visit_offer_deadline_changed': 'Променен срок за пробно занимание',
+  'catalog.visit_offer_policy_changed': 'Променени условия за пробно занимание',
+  'catalog.visit_offer_price_changed': 'Променена цена за пробно занимание',
+  'enrollment.application_submitted': 'Нова заявка за записване',
+  'enrollment.application_approved': 'Одобрена заявка за записване',
+  'enrollment.application_rejected': 'Отказана заявка за записване',
+  'enrollment.application_waitlisted': 'Заявка в списък на чакащите',
+  'enrollment.visit_outcome_recorded': 'Отбелязан резултат от пробно занимание',
+  'enrollment.session_excluded': 'Пропуснато занимание по заявка на родител',
+  'enrollment.transferred': 'Дете, преместено в друга група',
+  'enrollment.ended': 'Прекратено записване',
 };
 
-function greeting(now: Date): string {
-  const hour = Number(new Intl.DateTimeFormat('bg-BG', { hour: 'numeric', hour12: false, timeZone: 'Europe/Sofia' }).format(now));
-  if (hour < 11) return 'Добро утро';
-  if (hour < 18) return 'Добър ден';
-  return 'Добър вечер';
-}
+const visibleInvitations = 5;
 
 const taskIconPaths: Record<Task['tone'], string[]> = {
   action: ['M4 20h4L19 9l-4-4L4 16v4z', 'M13.5 6.5l4 4'],
@@ -116,7 +137,7 @@ export function Dashboard() {
         <div className={styles.heading}>
           <p className={styles.eyebrow}>{greeting(new Date())}, {firstName}</p>
           <h1>{organization.name}</h1>
-          <p className={styles.muted}>{roleLabels[organization.role] ?? 'Член на екипа'} · {plural(published, 'публикувана дейност', 'публикувани дейности')}</p>
+          <p className={styles.muted}>{roleLabels[organization.role] ?? 'Член на екипа'}{activities ? ` · ${plural(published, 'публикувана дейност', 'публикувани дейности')}` : ''}</p>
         </div>
         <Link className={styles.primary} href="/dashboard/activities?new=1">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
@@ -189,7 +210,7 @@ export function Dashboard() {
             <p className={styles.muted}>Все още не сте поканили колеги.</p>
           ) : (
             <ul className={styles.list}>
-              {invitations.map((invitation) => (
+              {invitations.slice(0, visibleInvitations).map((invitation) => (
                 <li key={invitation.id}>
                   <span className={styles.listMain}><strong>{invitation.email}</strong><span>{roleLabels[invitation.role] ?? 'Член на екипа'}</span></span>
                   <span className={`${styles.badge} ${styles[`badge_${invitation.status}`] ?? ''}`}>{invitationStatusLabels[invitation.status] ?? 'Неизвестен статус'}</span>
@@ -197,6 +218,9 @@ export function Dashboard() {
               ))}
             </ul>
           )}
+          {invitations && invitations.length > visibleInvitations
+            ? <p className={styles.muted}>и още {plural(invitations.length - visibleInvitations, 'покана', 'покани')}</p>
+            : null}
         </article>
       </section>
 
