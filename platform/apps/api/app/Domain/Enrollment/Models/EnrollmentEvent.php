@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'type', 'application_id', 'enrollment_id', 'payload', 'occurred_at',
-    'delivered_at', 'attempts',
+    'delivered_at', 'attempts', 'expanded_at',
 ])]
 class EnrollmentEvent extends Model
 {
@@ -48,6 +48,7 @@ class EnrollmentEvent extends Model
             'payload' => 'array',
             'occurred_at' => 'immutable_datetime',
             'delivered_at' => 'immutable_datetime',
+            'expanded_at' => 'immutable_datetime',
             'attempts' => 'integer',
         ];
     }

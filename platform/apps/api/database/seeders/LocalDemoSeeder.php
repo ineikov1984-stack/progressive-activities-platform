@@ -53,6 +53,8 @@ class LocalDemoSeeder extends Seeder
                 ['email' => $email],
                 [
                     'name' => 'Демо собственик',
+                    // Synthetic number: the demo owner also applies as a parent in the local and e2e checks.
+                    'phone' => '+359880000001',
                     'password' => Hash::make($password),
                     'email_verified_at' => now(),
                     'locale' => 'bg',

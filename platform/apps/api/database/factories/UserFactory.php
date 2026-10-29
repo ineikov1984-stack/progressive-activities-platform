@@ -31,6 +31,8 @@ class UserFactory extends Factory
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
+            // Synthetic; a parent needs a phone to apply (docs/product/enrollment-contacts-and-emails.md, т. 5).
+            'phone' => fake()->numerify('+3598########'),
             'password' => static::$password ??= Hash::make('password'),
             'locale' => 'bg',
             'timezone' => 'Europe/Sofia',

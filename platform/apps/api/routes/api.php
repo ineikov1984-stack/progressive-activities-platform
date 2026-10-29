@@ -37,6 +37,7 @@ Route::prefix('v1')->group(function (): void {
         Route::middleware('auth:sanctum')->group(function (): void {
             Route::post('/auth/logout', [AuthController::class, 'logout']);
             Route::get('/me', [AuthController::class, 'me']);
+            Route::patch('/me/contact', [AuthController::class, 'updateContact'])->middleware('throttle:30,1');
             Route::get('/parent/children', [ParentChildController::class, 'index']);
             Route::post('/parent/children', [ParentChildController::class, 'store']);
             Route::get('/parent/children/{child}', [ParentChildController::class, 'show'])->whereUuid('child');

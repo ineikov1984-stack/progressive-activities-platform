@@ -72,7 +72,8 @@ final class RecordVisitOutcome
             $current->update(['status' => $status, 'version' => $current->version + 1]);
             EnrollmentEvent::query()->create([
                 'type' => 'enrollment.visit_outcome_recorded', 'application_id' => $application->id,
-                'enrollment_id' => $current->id, 'payload' => $metadata, 'occurred_at' => now(),
+                // The transition holds the reason as it was given (docs/product/enrollment-contacts-and-emails.md, т. 4).
+                'enrollment_id' => $current->id, 'payload' => [...$metadata, 'transition_id' => $transition->id], 'occurred_at' => now(),
             ]);
 
             return $transition;

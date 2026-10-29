@@ -165,12 +165,12 @@ final class ChangeEnrollment
                 'starts_on' => $date->toDateString(),
                 'transferred_from_id' => $current->id,
             ]);
-            $this->transition($actor, $moved, null, EnrollmentStatus::Active->value, $reason, ['transferred_from_id' => $current->id]);
+            $transition = $this->transition($actor, $moved, null, EnrollmentStatus::Active->value, $reason, ['transferred_from_id' => $current->id]);
             $this->event('enrollment.transferred', $moved, [
                 'transferred_from_id' => $current->id, 'effective_date' => $date->toDateString(),
                 'amount_cents' => $price->amount_cents, 'currency' => $price->currency, 'unit' => $price->unit,
                 'price_changed' => $priceChanged,
-            ]);
+            ], $transition);
             $this->audit->record(AuditAction::EnrollmentTransferred, new AuditableReference('enrollment', $current->id), [
                 'new_enrollment_id' => $moved->id, 'from_group_id' => $current->group_id,
                 'to_group_id' => $target->id, 'effective_date' => $date->toDateString(),
@@ -226,8 +226,8 @@ final class ChangeEnrollment
             $dates = ['pause_id' => $pause->id, 'starts_on' => $start->toDateString(), 'ends_on' => $end->toDateString()];
             $this->touch($current);
             // The note may hold personal details; it stays in the pause (editable), never in the immutable history.
-            $this->transition($actor, $current, $current->status->value, $current->status->value, null, [...$dates, 'reason_category' => $category]);
-            $this->event('enrollment.paused', $current, [...$dates, 'reason_category' => $category]);
+            $transition = $this->transition($actor, $current, $current->status->value, $current->status->value, null, [...$dates, 'reason_category' => $category]);
+            $this->event('enrollment.paused', $current, [...$dates, 'reason_category' => $category], $transition);
             $this->audit->record(AuditAction::EnrollmentPaused, new AuditableReference('enrollment', $current->id), $dates);
 
             return $pause->refresh();
@@ -256,8 +256,8 @@ final class ChangeEnrollment
 
             $details = ['pause_id' => $pause->id, 'resume_on' => $resume->toDateString(), 'cancelled' => $cancelled];
             $this->touch($current);
-            $this->transition($actor, $current, $current->status->value, $current->status->value, null, $details);
-            $this->event('enrollment.pause_ended', $current, $details);
+            $transition = $this->transition($actor, $current, $current->status->value, $current->status->value, null, $details);
+            $this->event('enrollment.pause_ended', $current, $details, $transition);
             $this->audit->record(AuditAction::EnrollmentPauseEnded, new AuditableReference('enrollment', $current->id), $details);
 
             return $pause->refresh();
@@ -288,10 +288,10 @@ final class ChangeEnrollment
             ]);
             $trimmed = $this->trimPauses($actor, $current, $notStarted ? null : $last);
             $details = ['last_day' => $last->toDateString(), 'cancelled' => $notStarted];
-            $this->transition($actor, $current, $fromStatus, $current->status->value, $reason, [
+            $transition = $this->transition($actor, $current, $fromStatus, $current->status->value, $reason, [
                 ...$details, 'previous_ends_on' => $previousEnd, 'pauses_changed' => $trimmed,
             ]);
-            $this->event($notStarted ? 'enrollment.cancelled' : 'enrollment.ended', $current, $details);
+            $this->event($notStarted ? 'enrollment.cancelled' : 'enrollment.ended', $current, $details, $transition);
             $this->audit->record(AuditAction::EnrollmentEnded, new AuditableReference('enrollment', $current->id), $details);
 
             return $current->refresh();
@@ -336,8 +336,8 @@ final class ChangeEnrollment
                 'version' => $current->version + 1,
             ]);
             $details = ['previous_last_day' => $dayAfter->subDay()->toDateString()];
-            $this->transition($actor, $current, EnrollmentStatus::Ended->value, EnrollmentStatus::Active->value, null, $details);
-            $this->event('enrollment.reopened', $current, $details);
+            $transition = $this->transition($actor, $current, EnrollmentStatus::Ended->value, EnrollmentStatus::Active->value, null, $details);
+            $this->event('enrollment.reopened', $current, $details, $transition);
             $this->audit->record(AuditAction::EnrollmentReopened, new AuditableReference('enrollment', $current->id), $details);
 
             return $current->refresh();
@@ -364,8 +364,8 @@ final class ChangeEnrollment
             );
             $details = ['session_id' => $session->id];
             $this->touch($current);
-            $this->transition($actor, $current, $current->status->value, $current->status->value, $reason, $details);
-            $this->event('enrollment.session_excluded', $current, $details);
+            $transition = $this->transition($actor, $current, $current->status->value, $current->status->value, $reason, $details);
+            $this->event('enrollment.session_excluded', $current, $details, $transition);
             $this->audit->record(AuditAction::EnrollmentSessionExcluded, new AuditableReference('enrollment', $current->id), $details);
 
             return $exception;
@@ -390,8 +390,8 @@ final class ChangeEnrollment
 
             $details = ['session_id' => $session->id];
             $this->touch($current);
-            $this->transition($actor, $current, $current->status->value, $current->status->value, null, $details);
-            $this->event('enrollment.session_restored', $current, $details);
+            $transition = $this->transition($actor, $current, $current->status->value, $current->status->value, null, $details);
+            $this->event('enrollment.session_restored', $current, $details, $transition);
             $this->audit->record(AuditAction::EnrollmentSessionRestored, new AuditableReference('enrollment', $current->id), $details);
         });
     }
@@ -567,9 +567,9 @@ final class ChangeEnrollment
     }
 
     /** @param array<string, mixed>|null $metadata */
-    private function transition(User $actor, Enrollment $enrollment, ?string $fromStatus, string $toStatus, ?string $reason, ?array $metadata = null): void
+    private function transition(User $actor, Enrollment $enrollment, ?string $fromStatus, string $toStatus, ?string $reason, ?array $metadata = null): EnrollmentTransition
     {
-        EnrollmentTransition::query()->create([
+        return EnrollmentTransition::query()->create([
             'enrollment_id' => $enrollment->id,
             'actor_user_id' => $actor->id,
             'from_status' => $fromStatus,
@@ -580,13 +580,14 @@ final class ChangeEnrollment
     }
 
     /** @param array<string, mixed> $payload */
-    private function event(string $type, Enrollment $enrollment, array $payload): void
+    private function event(string $type, Enrollment $enrollment, array $payload, EnrollmentTransition $transition): void
     {
         EnrollmentEvent::query()->create([
             'type' => $type,
             'application_id' => $enrollment->application_id,
             'enrollment_id' => $enrollment->id,
-            'payload' => $payload,
+            // The transition holds the reason as it was given; an email quotes it from there.
+            'payload' => [...$payload, 'transition_id' => $transition->id],
             'occurred_at' => now(),
         ]);
     }

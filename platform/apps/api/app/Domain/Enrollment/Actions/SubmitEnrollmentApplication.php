@@ -102,6 +102,10 @@ final class SubmitEnrollmentApplication
                 if ($existing !== null) {
                     return $existing->load('enrollment');
                 }
+                // The organization must be able to call back (docs/product/enrollment-contacts-and-emails.md, т. 5).
+                if (blank($actor->phone)) {
+                    throw ValidationException::withMessages(['phone' => 'Добавете телефон за връзка в профила си — така организацията може да ви се обади.']);
+                }
 
                 if ($group === null || $group->status !== 'published'
                     || $group->offering->activity->status !== ActivityStatus::Published
@@ -155,6 +159,7 @@ final class SubmitEnrollmentApplication
 
                 $application = EnrollmentApplication::query()->create([
                     'parent_user_id' => $actor->id,
+                    'parent_note' => $this->note($payload['parent_note'] ?? null),
                     'child_id' => $child->id,
                     'group_id' => $group->id,
                     'price_option_id' => $price?->id,
@@ -173,8 +178,9 @@ final class SubmitEnrollmentApplication
                     'fee_reason_snapshot' => $offer?->fee_reason,
                     'cancellation_policy_snapshot' => $offer?->cancellation_policy,
                 ]);
+                $transition = null;
                 if ($offer !== null) {
-                    EnrollmentTransition::query()->create([
+                    $transition = EnrollmentTransition::query()->create([
                         'application_id' => $application->id,
                         'actor_user_id' => isset($metadata['eligibility_override_reason']) ? $overrideActor->id : $actor->id,
                         'to_status' => $status->value,
@@ -184,7 +190,7 @@ final class SubmitEnrollmentApplication
                 EnrollmentEvent::query()->create([
                     'type' => 'enrollment.application_submitted',
                     'application_id' => $application->id,
-                    'payload' => ['status' => $status->value, ...$metadata],
+                    'payload' => ['status' => $status->value, ...$metadata, ...($transition === null ? [] : ['transition_id' => $transition->id])],
                     'occurred_at' => now(),
                 ]);
 
@@ -239,5 +245,12 @@ final class SubmitEnrollmentApplication
         if (DB::getDriverName() === 'pgsql') {
             DB::select("SELECT set_config('app.current_organization_id', ?, true)", [$this->context->organizationId()]);
         }
+    }
+
+    private function note(mixed $value): ?string
+    {
+        $note = is_string($value) ? trim($value) : '';
+
+        return $note === '' ? null : $note;
     }
 }

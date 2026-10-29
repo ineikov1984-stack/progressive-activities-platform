@@ -6,6 +6,7 @@ use App\Domain\Audit\AuditRecorder;
 use App\Domain\Audit\Enums\AuditAction;
 use App\Domain\Audit\ValueObjects\AuditableReference;
 use App\Domain\Identity\Models\User;
+use App\Domain\Identity\Support\PhoneNumber;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -66,7 +67,43 @@ class AuthController extends Controller
     }
 
     /**
-     * @return array{id: string, name: string, email: string, locale: string, timezone: string, email_verified: bool, mfa_enabled: bool}
+     * The signed-in person's own name and phone (docs/product/enrollment-contacts-and-emails.md, т. 5).
+     * The phone is kept in E.164; the audit records only that it changed.
+     */
+    public function updateContact(Request $request, AuditRecorder $auditRecorder): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $validated = $request->validate([
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
+        ], ['name.required' => 'Напишете името си.', 'name.max' => 'Името е твърде дълго.', 'phone.max' => 'Проверете телефона — например 0888 123 456 или +44 7700 900123.']);
+
+        $changes = [];
+        if (array_key_exists('name', $validated)) {
+            $changes['name'] = trim((string) $validated['name']);
+        }
+        if (array_key_exists('phone', $validated)) {
+            $raw = trim((string) $validated['phone']);
+            $phone = $raw === '' ? null : PhoneNumber::normalize($raw);
+            if ($raw !== '' && $phone === null) {
+                throw ValidationException::withMessages(['phone' => 'Проверете телефона — например 0888 123 456 или +44 7700 900123.']);
+            }
+            $changes['phone'] = $phone;
+        }
+        $user->fill($changes);
+        $changed = array_keys($user->getDirty());
+        $user->save();
+        if ($changed !== []) {
+            // Which fields changed, never their values.
+            $auditRecorder->record(AuditAction::IdentityContactUpdated, new AuditableReference('user', $user->id), ['fields' => $changed]);
+        }
+
+        return response()->json(['user' => $this->presentUser($user)]);
+    }
+
+    /**
+     * @return array{id: string, name: string, email: string, phone: string|null, locale: string, timezone: string, email_verified: bool, mfa_enabled: bool}
      */
     private function presentUser(User $user): array
     {
@@ -74,6 +111,7 @@ class AuthController extends Controller
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
+            'phone' => $user->phone,
             'locale' => $user->locale,
             'timezone' => $user->timezone,
             'email_verified' => $user->hasVerifiedEmail(),

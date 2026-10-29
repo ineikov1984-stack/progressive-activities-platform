@@ -5,6 +5,7 @@ namespace App\Domain\Audit\Enums;
 enum AuditAction: string
 {
     case IdentityLoginSucceeded = 'identity.login_succeeded';
+    case IdentityContactUpdated = 'identity.contact_updated';
     case OrganizationContextSelected = 'organization.context_selected';
     case OrganizationInvitationCreated = 'organization.invitation_created';
     case OrganizationApplicationSubmitted = 'organization.application_submitted';
