@@ -38,11 +38,13 @@ jobs:
       run:
         working-directory: platform/apps/api
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: shivammathur/setup-php@v2
         with:
           php-version: "8.4"
           coverage: none
+          # Same limits as the shipped image (platform/apps/api/docker/catalog-uploads.ini).
+          ini-values: upload_max_filesize=8M, post_max_size=10M
       - uses: ramsey/composer-install@v3
         with:
           working-directory: platform/apps/api
@@ -55,8 +57,56 @@ jobs:
           psql -h 127.0.0.1 -U progressive -d progressive
           -v ON_ERROR_STOP=1 -f /init/01-app-role.sql
       - run: cp .env.example .env && php artisan key:generate
-      - run: composer audit
-      - run: composer verify
+      - name: Code style (Pint)
+        run: |
+          status=0
+          vendor/bin/pint --test --format=json > "$RUNNER_TEMP/pint-report.json" || status=$?
+          php -r '
+            $r = json_decode(file_get_contents(getenv("RUNNER_TEMP") . "/pint-report.json"), true) ?: [];
+            foreach (($r["files"] ?? []) as $f) {
+              echo "::error file=platform/apps/api/{$f["name"]},title=Code style::" . implode(", ", $f["appliedFixers"] ?? []) . "\n";
+            }
+          '
+          if [ "$status" != 0 ]; then echo "::group::Pint report"; cat "$RUNNER_TEMP/pint-report.json"; echo "::endgroup::"; echo "::error title=Pint raw report::$(head -c 3000 "$RUNNER_TEMP/pint-report.json" | tr '\n' ' ')"; fi
+          exit $status
+      - name: Static analysis (PHPStan)
+        if: ${{ !cancelled() }}
+        run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress --error-format=github
+      - name: Tests
+        if: ${{ !cancelled() }}
+        run: |
+          php artisan config:clear --ansi
+          status=0
+          php artisan test --log-junit junit.xml || status=$?
+          php -r '
+            if (! is_file("junit.xml")) { exit(0); }
+            $xml = simplexml_load_file("junit.xml");
+            foreach ($xml->xpath("//testcase[failure or error]") as $case) {
+              $node = $case->failure ?: $case->error;
+              $text = trim(preg_replace("/\s+/", " ", (string) $node));
+              $file = str_replace(getcwd() . "/", "", (string) $case["file"]);
+              echo "::error file=platform/apps/api/{$file},line={$case["line"]},title={$case["class"]}::{$case["name"]}: " . substr($text, 0, 900) . "\n";
+            }
+          '
+          exit $status
+      - name: Security audit of PHP dependencies
+        if: ${{ !cancelled() }}
+        run: |
+          status=0
+          composer audit --locked --format=json > "$RUNNER_TEMP/composer-audit.json" || status=$?
+          php -r '
+            $a = json_decode(file_get_contents(getenv("RUNNER_TEMP") . "/composer-audit.json"), true) ?: [];
+            foreach (($a["advisories"] ?? []) as $pkg => $list) {
+              foreach ($list as $x) {
+                $id = $x["cve"] ?? $x["advisoryId"] ?? "";
+                echo "::error title=Security advisory::{$pkg} {$x["affectedVersions"]} - {$x["title"]} ({$id})\n";
+              }
+            }
+            foreach (($a["abandoned"] ?? []) as $pkg => $replacement) {
+              echo "::warning title=Abandoned package::{$pkg}" . ($replacement ? " (use {$replacement})" : "") . "\n";
+            }
+          '
+          exit $status
 
   web:
     runs-on: ubuntu-latest
@@ -64,11 +114,11 @@ jobs:
       run:
         working-directory: platform
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
         with:
           version: 11.19.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "24"
           cache: pnpm
@@ -77,4 +127,7 @@ jobs:
       - run: pnpm audit --audit-level high
       - run: pnpm verify
       - run: pnpm --filter @progressive/web exec playwright install --with-deps chromium
-      - run: pnpm test:e2e
+      # Browser suites that use synthetic API fixtures. Suites that need the seeded
+      # demo database run locally against the Docker stack (see docs/process/WORKFLOW.md).
+      - name: Browser tests (synthetic fixtures)
+        run: pnpm --filter @progressive/web exec playwright test --config=playwright.isolated.config.ts --reporter=github,line

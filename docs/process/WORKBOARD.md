@@ -6,11 +6,11 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Процес за Codex + Claude (AGENTS.md, CLAUDE.md, docs/process) | Claude | platform-foundation | AGENTS.md, CLAUDE.md, docs/process, .github/pull_request_template.md | готово локално; чака GitHub хранилище |
+| CI: правилен обхват на браузърните тестове + видими находки от одита | Claude | claude/ci-diagnostics | `.github/workflows/**` | PR отворен; следва поправка на уязвимите зависимости |
 
 ## Опашка (по приоритет)
 
-1. **GitHub** — private хранилище, push на `platform-foundation` като `main`, защита на `main` (PR + зелен CI). *Собственик + Claude.*
+1. **Защита на `main`** — ruleset „PR задължителен, без force push и изтриване“. Claude не може да го включи през API; прави се от собственика в GitHub → Settings → Rules (за private хранилище изисква GitHub Pro). Дотогава правилото се спазва чрез AGENTS.md. *Собственик.*
 2. **Почистване** (бърза) — премахване на `platform/platform/`, на `apps/web/pnpm-lock.yaml` и `apps/web/pnpm-workspace.yaml`, на Laravel workflow-ите в `apps/api/.github/`; проверка, че CI е само в корена. *Codex.*
 3. **Сигурност на proxy-то** (строга) — allowlist в `apps/web/src/app/backend/[...path]/route.ts` (`api/v1/*`, `sanctum/csrf-cookie`); security headers и CSP в `next.config.ts`; gitleaks в CI. *Codex пише, Claude review.*
 4. **Design tokens и базови компоненти** (стандартна) — tokens в `packages/design-system`, единна палитра за login и администрация, Button/Input/Card/Badge/Skeleton. Завършва текущия клон „admin color system“. *Claude.*
@@ -21,9 +21,10 @@
 
 ## Въпроси към собственика
 
-- Кой GitHub акаунт и как да се казва хранилището?
 - Името и домейнът на marketplace-а (от плана, т. 4).
 
 ## Наскоро завършено
 
+- 29.10.2026 — кодът е в GitHub: `ineikov1984-stack/progressive-activities-platform`, клон `main` (Claude + собственик).
+- 29.10.2026 — процес за Codex + Claude: AGENTS.md, CLAUDE.md, docs/process (Claude).
 - 29.10.2026 — подсигурена работа: клон `platform-foundation` + локален backup bundle (Claude).
