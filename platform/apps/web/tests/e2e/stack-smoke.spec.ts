@@ -237,17 +237,17 @@ test('the team pauses a child from the group roster and undoes it', async () => 
   const childName = `Тест Пауза ${Date.now().toString(36)}`;
   const [firstName, ...rest] = childName.split(' ');
   const child = await api(page, 'parent/children', { method: 'POST', body: { first_name: firstName, last_name: rest.join(' ') } });
-  expect(child.status).toBe(201);
+  expect(child.status, child.body).toBe(201);
   const application = await api(page, 'parent/enrollment-applications', {
     method: 'POST',
     headers: { 'Idempotency-Key': `e2e-pause-${Date.now()}` },
     body: { child_id: JSON.parse(child.body).child.id, group_id: demo.groupId, price_option_id: demo.monthlyPriceId, accepted_terms_version: 'e2e' },
   });
-  expect(application.status).toBe(201);
+  expect(application.status, application.body).toBe(201);
   const review = await api(page, `enrollment/applications/${JSON.parse(application.body).application.id}/review`, {
     method: 'POST', organizationId: demo.organizationId, body: { decision: 'approve', version: 1 },
   });
-  expect(review.status).toBe(200);
+  expect(review.status, review.body).toBe(200);
 
   await page.goto('/dashboard/enrollments?view=groups');
   await page.getByRole('button', { name: new RegExp(demo.groupName) }).click();
