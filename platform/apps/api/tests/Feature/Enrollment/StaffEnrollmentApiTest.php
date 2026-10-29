@@ -4,6 +4,7 @@ namespace Tests\Feature\Enrollment;
 
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
+use App\Domain\Catalog\Models\Location;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
@@ -152,6 +153,59 @@ class StaffEnrollmentApiTest extends TestCase
     }
 
     /** @return iterable<string, array{string, int, int}> */
+    public function test_applications_can_be_narrowed_by_activity_group_and_child_name(): void
+    {
+        [$organization, $group, $application] = $this->organizationWithApplication();
+        $this->travel(1)->minutes();
+        $second = $this->anotherApplication($organization, $application);
+        [$otherGroup, $painting] = $this->paintingApplication($organization);
+        $this->actAs($this->member($organization, 'coordinator'), $organization);
+        $ids = fn (string $query): array => array_column($this->getJson("/api/v1/enrollment/applications{$query}")->assertOk()->json('applications'), 'id');
+
+        $this->assertSame([$application->id, $second->id, $painting->id], $ids(''));
+        $this->assertSame([$second->id], $ids('?q='.urlencode('Боби')));
+        // Part of the first or the last name.
+        $this->assertSame([$application->id, $second->id], $ids('?q='.urlencode('ов')));
+        // Wildcards are searched literally.
+        $this->assertSame([], $ids('?q='.urlencode('%')));
+        $this->assertSame([$painting->id], $ids("?group_id={$otherGroup->id}"));
+        $activityId = $this->getJson('/api/v1/enrollment/applications')->json('applications.0.activity.id');
+        $this->assertSame([$application->id, $second->id], $ids("?activity_id={$activityId}&q=".urlencode('  ')));
+
+        // The choices for the filters do not depend on the filter applied.
+        $this->getJson("/api/v1/enrollment/applications?group_id={$otherGroup->id}")
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('facets.activities', [
+                ['id' => $otherGroup->offering->activity_id, 'title' => 'Рисуване', 'count' => 1],
+                ['id' => $activityId, 'title' => 'Шах', 'count' => 2],
+            ])
+            ->assertJsonPath('facets.groups.1', ['id' => $group->id, 'name' => 'Група 1', 'activity_id' => $activityId, 'count' => 2]);
+        $this->getJson('/api/v1/enrollment/applications?group_id=not-a-uuid')->assertUnprocessable();
+        $this->getJson('/api/v1/enrollment/applications?q='.str_repeat('а', 101))->assertUnprocessable();
+    }
+
+    public function test_group_list_shows_the_activity_days_and_place(): void
+    {
+        [$organization, $group] = $this->organizationWithApplication();
+        app(TenantContext::class)->select($organization);
+        $location = Location::query()->create(['name' => 'Спортна зала', 'type' => 'physical', 'space_usage' => 'shared', 'address' => 'София']);
+        $group->update([
+            'location_id' => $location->id,
+            'schedule_pattern' => ['timezone' => 'Europe/Sofia', 'frequency' => 'weekly', 'start_date' => '2026-11-01', 'excluded_dates' => ['2026-12-25'],
+                'slots' => [['weekday' => 5, 'starts_at' => '16:00', 'duration_minutes' => 60]]],
+        ]);
+        app(TenantContext::class)->clear();
+
+        $this->actAs($this->member($organization, 'viewer'), $organization)
+            ->getJson('/api/v1/enrollment/groups')
+            ->assertOk()
+            ->assertJsonPath('groups.0.activity_title', 'Шах')
+            ->assertJsonPath('groups.0.activity_category', 'Наука')
+            ->assertJsonPath('groups.0.location_name', 'Спортна зала')
+            // Only the weekly days and times, not the dates and exceptions of the pattern.
+            ->assertJsonPath('groups.0.schedule', ['frequency' => 'weekly', 'slots' => [['weekday' => 5, 'starts_at' => '16:00', 'duration_minutes' => 60]]]);
+    }
+
     public static function roles(): iterable
     {
         yield 'platform administrator' => ['platform_admin', 200, 200];
@@ -261,5 +315,32 @@ class StaffEnrollmentApiTest extends TestCase
         app(TenantContext::class)->clear();
 
         return $application;
+    }
+
+    /** @return array{Group, EnrollmentApplication} */
+    private function paintingApplication(Organization $organization): array
+    {
+        app(TenantContext::class)->select($organization);
+        $parent = User::factory()->create();
+        $child = $parent->children()->create(['first_name' => 'Цвети', 'last_name' => 'Цанева']);
+        $activity = Activity::query()->create([
+            'slug' => fake()->unique()->slug(), 'title' => 'Рисуване', 'category' => 'Изкуство',
+            'summary' => 'Описание', 'age_label' => '1.–4. клас', 'status' => 'published',
+        ]);
+        $offering = $activity->offerings()->create([]);
+        $group = $offering->groups()->create(['name' => 'Ателие', 'capacity_max' => 8, 'status' => 'published', 'enrollment_approval_mode' => 'manual']);
+        $price = $offering->priceOptions()->create([
+            'group_id' => $group->id, 'enrollment_mode' => 'monthly', 'unit' => 'month', 'amount_cents' => 3000, 'currency' => 'EUR', 'is_available' => true,
+        ]);
+        $this->travel(1)->minutes();
+        $application = EnrollmentApplication::query()->create([
+            'parent_user_id' => $parent->id, 'child_id' => $child->id, 'group_id' => $group->id,
+            'price_option_id' => $price->id, 'scope' => 'full_period', 'source' => 'organization_catalog', 'status' => 'submitted',
+            'idempotency_key' => fake()->uuid(), 'accepted_terms_version' => 'v1', 'accepted_terms_at' => now(),
+            'amount_cents_snapshot' => 3000, 'currency_snapshot' => 'EUR', 'unit_snapshot' => 'month',
+        ]);
+        app(TenantContext::class)->clear();
+
+        return [$group->load('offering'), $application];
     }
 }

@@ -43,9 +43,21 @@ final class StaffEnrollmentController extends Controller
         $this->authorizeAbility($request, 'enrollment.view');
         $validated = $request->validate([
             'status' => ['sometimes', Rule::in(['submitted', 'waitlisted'])],
+            'activity_id' => ['sometimes', 'uuid'],
+            'group_id' => ['sometimes', 'uuid'],
+            'q' => ['sometimes', 'nullable', 'string', 'max:100'],
         ]);
+        $status = $validated['status'] ?? 'submitted';
 
-        $query = EnrollmentApplication::query()->where('status', $validated['status'] ?? 'submitted');
+        $query = EnrollmentApplication::query()->where('status', $status)
+            ->when($validated['group_id'] ?? null, fn ($query, string $groupId) => $query->where('group_id', $groupId))
+            ->when($validated['activity_id'] ?? null, fn ($query, string $activityId) => $query
+                ->whereHas('group.offering', fn ($offering) => $offering->where('activity_id', $activityId)))
+            ->when(trim((string) ($validated['q'] ?? '')), fn ($query, string $search) => $query
+                ->whereHas('child', fn ($child) => $child->whereRaw(
+                    "(first_name || ' ' || coalesce(last_name, '')) ".$this->likeOperator()." ? escape '!'",
+                    ['%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%'],
+                )));
         $total = (clone $query)->count();
         // Oldest first: the team works through the queue in the order parents applied.
         $applications = $query->with(['child', 'group.offering.activity', 'session'])
@@ -57,7 +69,44 @@ final class StaffEnrollmentController extends Controller
             'applications' => $applications->map($this->presentApplication(...))->all(),
             'total' => $total,
             'has_more' => $total > $applications->count(),
+            'facets' => $this->facets($status),
         ]);
+    }
+
+    /**
+     * Activities and groups that have applications with this status, with counts — the choices
+     * for the filters (two queries, whatever filter is applied).
+     *
+     * @return array{activities: list<array{id: string, title: string|null, count: int}>, groups: list<array{id: string, name: string, activity_id: string|null, count: int}>}
+     */
+    private function facets(string $status): array
+    {
+        $counts = EnrollmentApplication::query()->where('status', $status)
+            ->selectRaw('group_id, count(*) as aggregate')->groupBy('group_id')->pluck('aggregate', 'group_id');
+        $groups = Group::query()->with('offering.activity')->whereKey($counts->keys()->all())->get()
+            ->sortBy(fn (Group $group): string => ($group->offering?->activity?->title ?? '').'|'.$group->name)->values();
+        $activities = [];
+        foreach ($groups as $group) {
+            $activity = $group->offering?->activity;
+            if ($activity === null) {
+                continue;
+            }
+            $activities[$activity->id] ??= ['id' => $activity->id, 'title' => $activity->title, 'count' => 0];
+            $activities[$activity->id]['count'] += (int) $counts[$group->id];
+        }
+
+        return [
+            'activities' => array_values($activities),
+            'groups' => $groups->map(fn (Group $group): array => [
+                'id' => $group->id, 'name' => $group->name, 'activity_id' => $group->offering?->activity?->id, 'count' => (int) $counts[$group->id],
+            ])->all(),
+        ];
+    }
+
+    /** Case-insensitive search for Cyrillic names needs ILIKE on PostgreSQL; SQLite (tests) has only LIKE. */
+    private function likeOperator(): string
+    {
+        return EnrollmentApplication::query()->getConnection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
     }
 
     public function review(Request $request, string $application, ReviewEnrollmentApplication $review, AuditRecorder $audit): JsonResponse
@@ -94,7 +143,7 @@ final class StaffEnrollmentController extends Controller
     {
         $this->authorizeAbility($request, 'enrollment.view');
         $today = CarbonImmutable::now('Europe/Sofia')->toDateString();
-        $groups = Group::query()->with('offering.activity')->where('status', '!=', 'archived')
+        $groups = Group::query()->with(['offering.activity', 'offering.location', 'location'])->where('status', '!=', 'archived')
             ->whereHas('offering.activity', fn ($query) => $query->where('status', '!=', ActivityStatus::Archived->value))
             ->get()
             ->sortBy(fn (Group $group): string => ($group->offering->activity->title ?? '').'|'.$group->name)
@@ -114,6 +163,9 @@ final class StaffEnrollmentController extends Controller
                 'capacity_max' => $group->capacity_max,
                 'activity_id' => $group->offering?->activity?->id,
                 'activity_title' => $group->offering?->activity?->title,
+                'activity_category' => $group->offering?->activity?->category,
+                'schedule' => $group->weeklySlots(),
+                'location_name' => $group->location->name ?? $group->offering?->location?->name,
                 'enrolled_for_period' => (int) ($taken[$group->id] ?? 0),
                 'waitlist_count' => (int) ($waiting[$group->id] ?? 0),
             ])->all(),

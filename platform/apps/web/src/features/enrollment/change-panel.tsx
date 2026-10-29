@@ -5,7 +5,9 @@ import {
   changeErrorMessage, endEnrollment, type GroupRoster, loadTransferOptions, type PauseReason, pauseEnrollment,
   type RosterEnrollment, skipSession, transferEnrollment, type TransferOption,
 } from './api';
-import { addDays, lastDayOfMonth, pauseReasonLabels, placesText, priceText, sessionText, shortDay, skippableSessions, sofiaDay } from './presentation';
+import {
+  addDays, hasPlace, lastDayOfMonth, moveInSummary, pauseReasonLabels, placesText, priceText, scheduleText, sessionText, shortDay, skippableSessions, sofiaDay, weekdayDay,
+} from './presentation';
 import styles from './enrollments.module.css';
 
 type Choice = 'transfer' | 'pause' | 'skip' | 'end';
@@ -42,11 +44,11 @@ export function ChangePanel({ organizationId, roster, enrollment, onDone, onFail
 
   return (
     <div className={styles.changePanel}>
-      <h4 id={`change-title-${enrollment.id}`} ref={heading} tabIndex={-1}>{titles[choice ?? 'choose']}</h4>
+      <h5 id={`change-title-${enrollment.id}`} ref={heading} tabIndex={-1}>{titles[choice ?? 'choose']}</h5>
       {choice === undefined ? (
         <>
           <div className={styles.choices}>
-            {active ? <button type="button" className={styles.choice} onClick={() => setChoice('transfer')}><strong>Премести в друга група</strong><span>От дата по ваш избор</span></button> : null}
+            {active ? <button type="button" className={styles.choice} onClick={() => setChoice('transfer')}><strong>Премести в друга група</strong><span>Виждате кога има място</span></button> : null}
             <button type="button" className={styles.choice} onClick={() => setChoice('pause')}><strong>Пауза</strong><span>Болест или ваканция — мястото се пази</span></button>
             <button type="button" className={styles.choice} onClick={() => setChoice('skip')}><strong>Пропусни занимание</strong><span>Една конкретна дата</span></button>
             {active ? <button type="button" className={styles.choice} onClick={() => setChoice('end')}><strong>Прекрати</strong><span>Детето спира да посещава</span></button> : null}
@@ -115,38 +117,43 @@ function NothingToDo({ text, onBack }: { text: string; onBack: () => void }) {
 }
 
 function TransferForm({ organizationId, roster, enrollment, name, onDone, onFailed, onBack }: FormProps) {
-  const today = sofiaDay();
-  const [date, setDate] = useState(addDays(today, 1));
   const [options, setOptions] = useState<TransferOption[]>();
   const [loadError, setLoadError] = useState('');
   const [targetId, setTargetId] = useState('');
+  const [date, setDate] = useState('');
   const [priceId, setPriceId] = useState('');
   const [reason, setReason] = useState('');
   const { busy, error, run, fail, clear } = useSubmit(onDone, onFailed);
 
   useEffect(() => {
-    if (!date) return;
     let active = true;
-    loadTransferOptions(organizationId, enrollment.id, date)
+    loadTransferOptions(organizationId, enrollment.id)
       .then((groups) => { if (active) { setOptions(groups); setLoadError(''); } })
       .catch((reason: unknown) => { if (active) { setOptions([]); setLoadError(changeErrorMessage(reason, 'Групите не се заредиха. Опитайте отново.')); } });
     return () => { active = false; };
-  }, [organizationId, enrollment.id, date]);
+  }, [organizationId, enrollment.id]);
 
   if (options !== undefined && options.length === 0 && !loadError) {
     return <NothingToDo text="Дейността няма друга публикувана група. Помолете администратора да добави група в „Дейности“." onBack={onBack} />;
   }
 
   const target = options?.find((option) => option.id === targetId);
-  const targetFull = target !== undefined && target.remaining !== null && target.remaining < 1;
+  const day = target?.starts?.find((start) => start.date === date);
   const price = target?.prices.find((option) => option.id === priceId) ?? (target?.prices.length === 1 ? target.prices[0] : undefined);
   const notStarted = date !== '' && date <= enrollment.starts_on;
 
+  function chooseGroup(option: TransferOption) {
+    setTargetId(option.id);
+    // The first day with a place is the usual choice; the team can pick a later one.
+    setDate(option.starts?.find(hasPlace)?.date ?? '');
+    setPriceId(option.prices.length === 1 ? option.prices[0].id : '');
+  }
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const missing = date < today ? 'Изберете дата от днес нататък.'
-      : !target ? 'Изберете новата група.'
-        : targetFull ? 'В тази група няма място от избраната дата. Изберете друга група или дата.'
+    const missing = !target ? 'Изберете новата група.'
+      : !day ? 'Изберете от кое занимание детето е в новата група.'
+        : !hasPlace(day) ? 'На тази дата групата е пълна. Изберете друга дата.'
           : !price ? 'Изберете цена в новата група.'
             : !reason.trim() ? 'Напишете обяснение за родителя.' : '';
     if (missing || !target || !price) { fail(missing); return; }
@@ -159,24 +166,44 @@ function TransferForm({ organizationId, roster, enrollment, name, onDone, onFail
 
   return (
     <form className={styles.form} onSubmit={submit} onChange={clear} noValidate>
-      <div className={styles.field}>
-        <label htmlFor={`move-date-${enrollment.id}`}>От коя дата е в новата група</label>
-        <input id={`move-date-${enrollment.id}`} type="date" min={today} max={addDays(today, 365)} value={date} onChange={(event) => setDate(event.target.value)} />
-      </div>
       <fieldset className={styles.fieldset}>
         <legend>Нова група</legend>
         {options === undefined ? <span className={styles.skeleton} aria-busy="true" /> : loadError ? <p className={styles.error} role="alert">{loadError}</p>
           : options.map((option) => {
-            const full = option.remaining !== null && option.remaining < 1;
+            const summary = moveInSummary(option.starts);
+            const schedule = scheduleText(option.schedule);
             return (
-              <label key={option.id} className={`${styles.option} ${full ? styles.optionDisabled : ''}`}>
-                <input type="radio" name={`target-${enrollment.id}`} value={option.id} checked={targetId === option.id} disabled={full}
-                  onChange={() => { setTargetId(option.id); setPriceId(option.prices.length === 1 ? option.prices[0].id : ''); }} />
-                <span><strong>{option.name}</strong><span className={styles.small}>{full ? 'Няма свободно място от тази дата' : placesText(option.remaining)}</span></span>
+              <label key={option.id} className={`${styles.option} ${summary.possible ? '' : styles.optionDisabled}`}>
+                <input type="radio" name={`target-${enrollment.id}`} value={option.id} checked={targetId === option.id} disabled={!summary.possible}
+                  onChange={() => chooseGroup(option)} />
+                <span>
+                  <strong>{option.name}</strong>
+                  {schedule ? <span className={styles.small}>{schedule}</span> : null}
+                  <span className={summary.possible ? styles.small : styles.smallWarning}>{summary.text}</span>
+                </span>
               </label>
             );
           })}
       </fieldset>
+      {target?.starts?.length ? (
+        <fieldset className={styles.fieldset}>
+          <legend>От кое занимание е в „{target.name}“</legend>
+          <p className={styles.hint} id={`move-days-${enrollment.id}`}>Пълните дати не могат да се изберат: от тях нататък в групата няма място.</p>
+          <div className={styles.dayGrid}>
+            {target.starts.map((start) => {
+              const free = hasPlace(start);
+              return (
+                <label key={start.date} className={`${styles.day} ${date === start.date ? styles.dayOn : ''} ${free ? '' : styles.dayFull}`}>
+                  <input type="radio" className={styles.srOnly} name={`move-day-${enrollment.id}`} value={start.date} checked={date === start.date} disabled={!free}
+                    aria-describedby={`move-days-${enrollment.id}`} onChange={() => setDate(start.date)} />
+                  <strong>{weekdayDay(start.date)}</strong>
+                  <span>{free ? (start.remaining === null ? 'има място' : placesText(start.remaining).toLocaleLowerCase('bg')) : 'пълна'}</span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      ) : null}
       {target && target.prices.length === 0 ? <p className={styles.error} role="alert">Групата няма цена за записване за периода. Добавете я в стъпка 6 на дейността.</p> : null}
       {target && target.prices.length > 1 ? (
         <fieldset className={styles.fieldset}>
@@ -190,7 +217,7 @@ function TransferForm({ organizationId, roster, enrollment, name, onDone, onFail
         </fieldset>
       ) : null}
       <ReasonField id={`move-reason-${enrollment.id}`} value={reason} onChange={setReason} />
-      {target && price && !targetFull ? (
+      {target && price && day && hasPlace(day) ? (
         <p className={styles.summary}>
           {name} ще е в „{target.name}“ от {shortDay(date)}.{' '}
           {notStarted

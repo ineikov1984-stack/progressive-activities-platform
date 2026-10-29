@@ -11,6 +11,8 @@ import styles from './enrollments.module.css';
 
 type Props = { organizationId: string; groupId: string; canManage: boolean; onChanged?: () => void };
 type Notice = { enrollmentId: string; text: string; token: number };
+/** More children than this and the group gets a search by name. */
+const SEARCH_FROM = 10;
 
 const noteStyle: Record<RosterNote['kind'], string> = {
   starts: styles.noteInfo,
@@ -29,6 +31,7 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
   const [openId, setOpenId] = useState<string>();
   const [reloadKey, setReloadKey] = useState(0);
   const [approving, setApproving] = useState('');
+  const [search, setSearch] = useState('');
   const topNotice = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
@@ -77,6 +80,11 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
   if (!roster) return <span className={styles.skeleton} aria-busy="true" />;
   const today = sofiaDay();
   const fullPeriodCount = roster.enrollments.filter((item) => item.scope === 'full_period').length;
+  // A long group gets a search by name; the row with an open change or a fresh message always stays.
+  const searchable = roster.enrollments.length > SEARCH_FROM;
+  const needle = search.trim().toLocaleLowerCase('bg');
+  const shown = !searchable || !needle ? roster.enrollments : roster.enrollments.filter((item) =>
+    item.id === openId || item.id === notice?.enrollmentId || (item.child.name ?? '').toLocaleLowerCase('bg').includes(needle));
 
   return (
     <div className={styles.roster}>
@@ -86,9 +94,16 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
       </p>
       <p ref={topNotice} tabIndex={-1} className={topText ? styles.rowNotice : styles.srOnly}>{topText}</p>
       {error ? <div className={styles.actions}><p className={styles.error} role="alert">{error}</p>{retry}</div> : null}
-      {roster.enrollments.length === 0 ? <p className={styles.muted}>Все още няма записани деца.</p> : (
+      {searchable ? (
+        <div className={styles.rosterSearch}>
+          <label htmlFor={`roster-search-${groupId}`}>Търси дете в групата</label>
+          <input id={`roster-search-${groupId}`} type="search" value={search} maxLength={100} onChange={(event) => setSearch(event.target.value)} />
+          <span className={styles.small} role="status">{needle ? `Показани: ${shown.length} от ${roster.enrollments.length}` : ''}</span>
+        </div>
+      ) : null}
+      {roster.enrollments.length === 0 ? <p className={styles.muted}>Все още няма записани деца.</p> : shown.length === 0 ? <p className={styles.muted}>Няма дете с това име в групата.</p> : (
         <ul className={styles.rows}>
-          {roster.enrollments.map((item) => (
+          {shown.map((item) => (
             <RosterRow
               key={item.id}
               organizationId={organizationId}
@@ -109,7 +124,7 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
       )}
       {roster.waitlist.length > 0 ? (
         <>
-          <h4 className={styles.subTitle}>Чакащи</h4>
+          <h5 className={styles.subTitle}>Чакащи</h5>
           <ol className={styles.waitList}>
             {roster.waitlist.map((item) => (
               <li key={item.id}>

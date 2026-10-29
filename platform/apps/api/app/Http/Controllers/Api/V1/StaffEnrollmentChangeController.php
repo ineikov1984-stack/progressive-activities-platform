@@ -62,7 +62,10 @@ final class StaffEnrollmentChangeController extends Controller
                 'id' => $group->id,
                 'name' => $group->name,
                 'capacity_max' => $group->capacity_max,
+                'schedule' => $group->weeklySlots(),
                 'remaining' => $capacity->remainingForGroup($group, $at),
+                // The next session days with the places a move from that day would find.
+                'starts' => $capacity->moveInDays($group),
                 'prices' => $group->priceOptions->map(fn (PriceOption $price): array => [
                     'id' => $price->id,
                     'enrollment_mode' => $price->enrollment_mode,

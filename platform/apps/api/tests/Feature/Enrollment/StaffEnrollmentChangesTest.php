@@ -142,6 +142,40 @@ class StaffEnrollmentChangesTest extends TestCase
             ->assertJsonPath('groups.0.prices.0.amount_cents', 5000);
     }
 
+    public function test_transfer_options_show_from_which_day_a_move_finds_a_place(): void
+    {
+        $f = $this->fixture(thursdayCapacity: 2);
+        // One child stays, one leaves after 12.11, and a one-off visit fills 19.11.
+        $this->enrollAnotherChild($f, $f['thursday'], $f['thursdayPrice']);
+        $this->enrollAnotherChild($f, $f['thursday'], $f['thursdayPrice'], endsOn: '2026-11-12');
+        $nov19 = $this->withTenant($f['organization'], fn (): Session => Session::query()->where('group_id', $f['thursday']->id)->whereDate('starts_at', '2026-11-19')->firstOrFail());
+        $this->enrollAnotherChild($f, $f['thursday'], $f['thursdayPrice'], '2026-11-19', $nov19);
+
+        $starts = $this->actAs($this->member($f['organization'], 'coordinator'), $f['organization'])
+            ->getJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/transfer-options")
+            ->assertOk()
+            ->assertJsonPath('groups.0.id', $f['thursday']->id)
+            ->assertJsonPath('groups.0.schedule', null)
+            ->json('groups.0.starts');
+
+        $this->assertSame(['2026-11-05', '2026-11-12', '2026-11-19', '2026-11-26'], array_column($starts, 'date'));
+        // Full while the leaving child holds the place, then full on the day of the visit, free from 26.11.
+        $this->assertSame([0, 0, 0, 1], array_column($starts, 'remaining'));
+        $this->assertSame('2026-11-26T14:00:00+00:00', $starts[3]['starts_at']);
+        // The same answer as the check the move itself makes for that day.
+        $this->withTenant($f['organization'], function () use ($f, $starts): void {
+            $capacity = app(EnrollmentCapacity::class);
+            foreach ($starts as $start) {
+                $day = CarbonImmutable::parse($start['date'], 'Europe/Sofia');
+                $this->assertSame($capacity->remainingForGroup($f['thursday']->refresh(), $day), $start['remaining'], $start['date']);
+            }
+        });
+        // A move from 26.11 goes through; from 19.11 it is refused.
+        $url = "/api/v1/enrollment/enrollments/{$f['enrollment']->id}/transfer";
+        $this->postJson($url, $this->transferPayload($f, '2026-11-19'))->assertUnprocessable()->assertJsonValidationErrors('capacity');
+        $this->postJson($url, $this->transferPayload($f, '2026-11-26'))->assertOk();
+    }
+
     public function test_pause_skips_sessions_keeps_the_place_and_can_end_early(): void
     {
         $f = $this->fixture();
@@ -794,9 +828,9 @@ class StaffEnrollmentChangesTest extends TestCase
         });
     }
 
-    private function enrollAnotherChild(array $f, Group $group, PriceOption $price, string $startsOn = '2026-10-20', ?Session $visit = null): void
+    private function enrollAnotherChild(array $f, Group $group, PriceOption $price, string $startsOn = '2026-10-20', ?Session $visit = null, ?string $endsOn = null): void
     {
-        $this->withTenant($f['organization'], function () use ($group, $price, $startsOn, $visit): void {
+        $this->withTenant($f['organization'], function () use ($group, $price, $startsOn, $visit, $endsOn): void {
             $parent = User::factory()->create();
             $child = $parent->children()->create(['first_name' => 'Боби', 'last_name' => 'Петров']);
             $scope = $visit === null ? 'full_period' : 'single';
@@ -809,6 +843,7 @@ class StaffEnrollmentChangesTest extends TestCase
             Enrollment::query()->create([
                 'application_id' => $application->id, 'child_id' => $child->id, 'group_id' => $group->id,
                 'price_option_id' => $price->id, 'session_id' => $visit?->id, 'scope' => $scope, 'status' => 'active', 'starts_on' => $startsOn,
+                'ends_on' => $endsOn,
             ]);
         });
     }
