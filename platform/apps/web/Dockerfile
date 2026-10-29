@@ -1,13 +1,13 @@
 # Build context: platform/ (see compose.yaml). Dependencies come from the
 # workspace lockfile so every image installs exactly what CI tested.
-FROM node:24-alpine AS dependencies
+FROM node:25-alpine AS dependencies
 RUN corepack enable
 WORKDIR /repo
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile --filter @progressive/web...
 
-FROM node:24-alpine AS development
+FROM node:25-alpine AS development
 RUN corepack enable
 WORKDIR /repo
 COPY --from=dependencies /repo/node_modules ./node_modules

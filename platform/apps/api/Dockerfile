@@ -3,7 +3,7 @@ WORKDIR /app
 COPY composer.json composer.lock* ./
 RUN composer install --no-interaction --prefer-dist --no-scripts
 
-FROM php:8.4-cli-alpine AS development
+FROM php:8.5-cli-alpine AS development
 RUN apk add --no-cache icu-dev libzip-dev postgresql-dev \
     && docker-php-ext-install intl pdo_pgsql zip
 COPY docker/catalog-uploads.ini /usr/local/etc/php/conf.d/catalog-uploads.ini
