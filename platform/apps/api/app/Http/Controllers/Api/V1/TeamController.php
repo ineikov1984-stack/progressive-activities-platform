@@ -75,6 +75,7 @@ class TeamController extends Controller
     {
         /** @var User $actor */
         $actor = $request->user();
+        Gate::forUser($actor)->authorize('manageTeam', $this->organization());
         $record = $save->update($actor, StaffMember::query()->findOrFail($member), $request->all());
 
         return response()->json(['member' => $this->present(collect([$record]), true)[0]]);
@@ -82,9 +83,10 @@ class TeamController extends Controller
 
     public function archive(Request $request, ArchiveStaffMember $archive, string $member): JsonResponse
     {
-        $validated = $request->validate(['version' => ['required', 'integer', 'min:1']]);
         /** @var User $actor */
         $actor = $request->user();
+        Gate::forUser($actor)->authorize('manageTeam', $this->organization());
+        $validated = $request->validate(['version' => ['required', 'integer', 'min:1']]);
         $record = $archive->handle($actor, StaffMember::query()->findOrFail($member), (int) $validated['version']);
 
         return response()->json(['member' => $this->present(collect([$record]), true)[0]]);
@@ -92,9 +94,10 @@ class TeamController extends Controller
 
     public function linkProfile(Request $request, LinkInstructorProfile $link, string $member): JsonResponse
     {
-        $validated = $request->validate(['instructor_profile_id' => ['sometimes', 'nullable', 'uuid']]);
         /** @var User $actor */
         $actor = $request->user();
+        Gate::forUser($actor)->authorize('manageTeam', $this->organization());
+        $validated = $request->validate(['instructor_profile_id' => ['sometimes', 'nullable', 'uuid']]);
         $record = StaffMember::query()->findOrFail($member);
         $link->handle($actor, $record, $validated['instructor_profile_id'] ?? null);
 

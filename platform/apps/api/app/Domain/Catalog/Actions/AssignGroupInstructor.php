@@ -49,7 +49,9 @@ final readonly class AssignGroupInstructor
             Activity::query()->whereKey($group->offering()->value('activity_id'))->lockForUpdate()->firstOrFail();
             $group = Group::query()->whereKey($group->id)->lockForUpdate()->firstOrFail();
             $profile = InstructorProfile::query()->findOrFail($data['instructor_profile_id']);
-            $person = $profile->getAttribute('staff_member_id') === null ? null : StaffMember::query()->find($profile->getAttribute('staff_member_id'));
+            // Under a lock: archiving the person at the same moment waits, then sees this assignment (т. 6).
+            $person = $profile->getAttribute('staff_member_id') === null ? null
+                : StaffMember::query()->lockForUpdate()->find($profile->getAttribute('staff_member_id'));
             if ($person?->archived_at !== null) {
                 throw ValidationException::withMessages(['instructor_profile_id' => 'Преподавателят е архивиран.']);
             }

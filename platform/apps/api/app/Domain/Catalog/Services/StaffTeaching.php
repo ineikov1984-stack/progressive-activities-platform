@@ -81,6 +81,16 @@ final readonly class StaffTeaching
         if ($open !== null) {
             return 'Първо приключете назначението в „'.$open['label'].'“.';
         }
+        // The lead of an offering is shown on the public page of the activity (т. 5.3).
+        $lead = DB::table('offerings')->join('activities', 'activities.id', '=', 'offerings.activity_id')
+            ->where('offerings.organization_id', $this->context->organizationId())
+            ->where('offerings.lead_instructor_profile_id', $profileId)
+            ->orderBy('activities.title')->first(['activities.title', 'offerings.title as offering_title']);
+        if ($lead !== null) {
+            $label = trim((string) $lead->offering_title) === '' ? $lead->title : $lead->title.' · '.$lead->offering_title;
+
+            return 'Първо сменете водещия на „'.$label.'“.';
+        }
         $session = DB::table('activity_session_instructors')
             ->join('activity_sessions', 'activity_sessions.id', '=', 'activity_session_instructors.session_id')
             ->join('activity_groups', 'activity_groups.id', '=', 'activity_sessions.group_id')

@@ -32,6 +32,8 @@ final readonly class ArchiveStaffMember
         Gate::forUser($actor)->authorize('manageTeam', $organization);
 
         return DB::transaction(function () use ($actor, $member, $version, $organization): StaffMember {
+            // The organization first: two owners archiving each other at the same moment go one after the other.
+            Organization::query()->whereKey($organization->id)->lockForUpdate()->firstOrFail();
             $member = StaffMember::query()->whereKey($member->id)->lockForUpdate()->firstOrFail();
             abort_unless($member->version === $version, 409, 'Staff member version conflict.');
             if ($member->archived_at !== null) {
@@ -77,8 +79,9 @@ final readonly class ArchiveStaffMember
         if ($actorRole !== OrganizationRole::OrganizationOwner->value && in_array($role, $protected, true)) {
             throw new AuthorizationException('Нямате право да архивирате този човек.');
         }
-        if ($role === OrganizationRole::OrganizationOwner->value && OrganizationMembership::query()->withoutGlobalScopes()
-            ->where('organization_id', $organization->id)->where('role', $role)->where('status', 'active')->count() <= 1) {
+        if ($role === OrganizationRole::OrganizationOwner->value && $membership->getAttribute('status') === 'active'
+            && ! OrganizationMembership::query()->withoutGlobalScopes()->where('organization_id', $organization->id)
+                ->where('role', $role)->where('status', 'active')->where('user_id', '<>', $member->user_id)->exists()) {
             throw ValidationException::withMessages(['member' => 'Организацията трябва да има поне един собственик.']);
         }
     }

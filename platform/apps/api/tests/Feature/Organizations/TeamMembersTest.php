@@ -106,9 +106,37 @@ class TeamMembersTest extends TestCase
         $self = StaffMember::query()->withoutGlobalScopes()->where('user_id', $owner->id)->firstOrFail();
         $this->actingAs($owner)->postJson('/api/v1/team/members/'.$self->id.'/archive', ['version' => 1])
             ->assertUnprocessable()->assertJsonPath('errors.member.0', 'Не можете да архивирате себе си.');
-        // An administrator does not archive the owner.
+        // An administrator archives neither the owner nor another administrator.
         $admin = $this->member($organization, 'organization_admin', 'Администратор');
         $this->actingAs($admin)->postJson('/api/v1/team/members/'.$self->id.'/archive', ['version' => 1])->assertForbidden();
+        $otherAdmin = $this->person($organization, $this->member($organization, 'organization_admin', 'Втори администратор'));
+        $this->actingAs($admin)->postJson('/api/v1/team/members/'.$otherAdmin->id.'/archive', ['version' => 1])->assertForbidden();
+        $this->actingAs($owner)->postJson('/api/v1/team/members/'.$otherAdmin->id.'/archive', ['version' => 1])->assertOk();
+    }
+
+    public function test_the_lead_of_an_offering_and_the_teacher_of_a_coming_session_are_not_archived(): void
+    {
+        $this->travelTo('2026-11-01 10:00:00');
+        [$owner, $organization] = $this->team();
+        $this->withHeader('X-Organization-Id', $organization->id);
+        $person = $this->person($organization, null, 'Анна');
+        $profile = $this->actingAs($owner)->postJson('/api/v1/team/members/'.$person->id.'/instructor-profile')->assertOk()->json('member.instructor_profile_id');
+
+        app(TenantContext::class)->select($organization);
+        $activity = Activity::query()->create(['title' => 'Рисуване', 'slug' => 'risuvane', 'category' => 'Изкуство', 'summary' => 'Рисуване', 'age_label' => '6+']);
+        $offering = $activity->offerings()->create(['title' => 'Следобед', 'lead_instructor_profile_id' => $profile]);
+        $group = $offering->groups()->create(['name' => 'Петък']);
+        $session = $group->sessions()->create(['starts_at' => '2026-11-06 15:00:00', 'ends_at' => '2026-11-06 16:00:00', 'status' => 'scheduled']);
+        $session->instructors()->attach($profile, ['role' => 'lead']);
+        app(TenantContext::class)->clear();
+
+        $this->actingAs($owner)->postJson('/api/v1/team/members/'.$person->id.'/archive', ['version' => 1])
+            ->assertUnprocessable()->assertJsonPath('errors.member.0', 'Първо сменете водещия на „Рисуване · Следобед“.');
+        app(TenantContext::class)->select($organization);
+        $offering->forceFill(['lead_instructor_profile_id' => null])->save();
+        app(TenantContext::class)->clear();
+        $this->actingAs($owner)->postJson('/api/v1/team/members/'.$person->id.'/archive', ['version' => 1])
+            ->assertUnprocessable()->assertJsonPath('errors.member.0', 'Първо сменете преподавателя на заниманието на 06.11.2026 г. в „Рисуване · Петък“.');
     }
 
     public function test_an_existing_teacher_profile_is_linked_once(): void
@@ -149,7 +177,7 @@ class TeamMembersTest extends TestCase
         $this->assertSame('Чужд човек', DB::table('staff_members')->where('id', $foreign->id)->value('full_name'));
     }
 
-    /** @return array{User, Organization} an owner with a person of the team, as the backfill and the invitation give */
+    /** @return array{User, Organization} an owner with a person of the team, as the backfill and accepting an invitation give */
     private function team(string $name = 'Школа'): array
     {
         $owner = User::factory()->create(['name' => 'Собственик '.$name]);

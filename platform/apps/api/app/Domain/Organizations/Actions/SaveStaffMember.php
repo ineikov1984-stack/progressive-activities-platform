@@ -42,7 +42,9 @@ final readonly class SaveStaffMember
             throw ValidationException::withMessages(['idempotency_key' => 'Изпратете валиден ключ за заявката.']);
         }
 
-        // The same request sent twice (a double tap, a retry) adds the person once.
+        // The same request sent twice (a double tap, a retry) adds the person once. The lock and the key live in the
+        // database cache store (CACHE_STORE=database), inside the request's transaction, so a second request waits
+        // for the first one to commit. With another store a key in the database would be needed.
         $key = 'team.member_added:'.$organization->id.':'.$actor->id.':'.hash('sha256', $idempotencyKey);
 
         return Cache::lock($key.':lock', 10)->block(5, function () use ($actor, $data, $then, $key): array {

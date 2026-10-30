@@ -177,8 +177,10 @@ final readonly class SaveGroupSchedule
      */
     private function setCurrentTeachers(Group $group, array $ids): void
     {
-        $archived = InstructorProfile::query()->whereKey($ids)->whereNotNull('staff_member_id')
-            ->whereIn('staff_member_id', StaffMember::query()->whereNotNull('archived_at')->select('id'))->exists();
+        // Under a lock, like assigning: archiving a ticked person at the same moment waits for this save.
+        $archived = StaffMember::query()
+            ->whereIn('id', InstructorProfile::query()->whereKey($ids)->whereNotNull('staff_member_id')->select('staff_member_id'))
+            ->orderBy('id')->lockForUpdate()->get()->contains(fn (StaffMember $person): bool => $person->archived_at !== null);
         if ($archived) {
             throw ValidationException::withMessages(['instructor_ids' => 'Преподавателят е архивиран.']);
         }
