@@ -44,11 +44,11 @@ class PaymentTermsCopySchemaTest extends TestCase
                 $this->choose($pdo, $first, 'full_period', $secondCourse);
                 $this->checkKeys($pdo);
             }, '23503');
-            // A row of one organization never points at another organization's activity.
-            $this->refused($pdo, function () use ($pdo, $first, $second): void {
+            // A row of one organization never points at another organization's activity (checked at once).
+            $this->refused($pdo, function () use ($pdo, $first, $second, $secondCourse): void {
                 $pdo->prepare('INSERT INTO offering_payment_terms (offering_id, organization_id, billing_kind, payment_terms_id, created_at, updated_at) '
-                    ."VALUES (:offering, :organization, 'monthly', :terms, NOW(), NOW())")
-                    ->execute(['offering' => $first['offering'], 'organization' => $second['organization'], 'terms' => $second['terms']]);
+                    ."VALUES (:offering, :organization, 'full_period', :terms, NOW(), NOW())")
+                    ->execute(['offering' => $first['offering'], 'organization' => $second['organization'], 'terms' => $secondCourse]);
             }, '23503');
             $this->refused($pdo, function () use ($pdo, $first): void {
                 $this->choose($pdo, $first, 'visit', $first['terms']);
