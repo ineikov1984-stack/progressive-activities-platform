@@ -14,9 +14,9 @@ use App\Domain\Organizations\Models\StaffMember;
 use App\Domain\Organizations\Services\TeamRoles;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Mail\TeamInvitationMail;
+use App\Mail\TeamInvitationSender;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -25,16 +25,22 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 /**
  * Invites a person of the team to log in, or sends the invitation again (docs/product/team.md, т. 7.1, 7.2, 7.5).
- * Sending again gives a new link: the old token stops working. The e-mail goes out after the commit; the audit keeps
- * identifiers and the role, never the address or the token.
+ * Two tokens (DECISIONS 31.10.2026): the e-mail's may make a new profile, the inviter's link for copying only joins an
+ * existing one. Sending again replaces both: the old links stop working. The e-mail goes out right after the commit;
+ * the audit keeps identifiers and the role, never the address or a token.
  */
 final readonly class InviteStaffMember
 {
-    public function __construct(private TenantContext $context, private TeamRoles $roles, private AuditRecorder $audit) {}
+    public function __construct(
+        private TenantContext $context,
+        private TeamRoles $roles,
+        private AuditRecorder $audit,
+        private TeamInvitationSender $sender,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $payload
-     * @return array{invitation: Invitation, link: string, created: bool}
+     * @return array{invitation: Invitation, link: string, created: bool} `link` is the inviter's link for copying
      */
     public function handle(User $actor, StaffMember $member, array $payload): array
     {
@@ -82,11 +88,13 @@ final readonly class InviteStaffMember
 
             $invitation = $this->replaceable($member, $organization, $email);
             $created = $invitation === null;
-            $token = Str::random(64);
+            $mailToken = Str::random(64);
+            $copyToken = Str::random(64);
             $values = [
                 'email' => $email,
                 'role' => $role,
-                'token_hash' => hash('sha256', $token),
+                'token_hash' => hash('sha256', $mailToken),
+                'copy_token_hash' => hash('sha256', $copyToken),
                 'active_key' => $this->activeKey($organization, $email),
                 'expires_at' => now()->addMinutes((int) config('invitations.expires_after_minutes')),
                 'invited_by' => $actor->id,
@@ -95,19 +103,20 @@ final readonly class InviteStaffMember
             if ($invitation === null) {
                 $invitation = Invitation::query()->create([...$values, 'organization_id' => $organization->id]);
             } else {
-                // A new token in the same row: the old link is no longer found.
+                // New tokens in the same row: the old links are no longer found.
                 $invitation->forceFill($values)->save();
             }
 
             $this->audit->record(AuditAction::TeamInvitationSent, new AuditableReference('staff_member', $member->id), [
                 'invitation_id' => $invitation->id, 'role' => $role->value, 'resent' => ! $created,
             ]);
-            $link = rtrim((string) config('platform.web_url'), '/').'/invite/'.$token;
-            Mail::to($email)->queue(new TeamInvitationMail(
-                $organization->name, $actor->name, $role->label(), $link, $invitation->expires_at,
+            // The token is in the fragment, which the browser never sends to a server or its logs.
+            $page = rtrim((string) config('platform.web_url'), '/').'/invite#';
+            $this->sender->afterCommit($invitation->id, $email, new TeamInvitationMail(
+                $organization->name, $actor->name, $role->label(), $page.$mailToken, $invitation->expires_at,
             ));
 
-            return ['invitation' => $invitation, 'link' => $link, 'created' => $created];
+            return ['invitation' => $invitation, 'link' => $page.$copyToken, 'created' => $created];
         });
     }
 

@@ -107,8 +107,8 @@ class TeamController extends Controller
     }
 
     /**
-     * Invites the person to log in, or sends the invitation again with a new link (т. 7). The link is shown only here,
-     * for copying; the e-mail carries the same one.
+     * Invites the person to log in, or sends the invitation again with new links (т. 7). The link for copying is shown
+     * only here and only joins an existing profile; the e-mail carries another token, the one that may make a profile.
      */
     public function invite(Request $request, InviteStaffMember $invite, string $member): JsonResponse
     {

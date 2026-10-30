@@ -16,23 +16,33 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\GoneHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * Accepts an invitation by its link (docs/product/team.md, т. 7.4). The organization is the invitation's, never the
  * session's. In one transaction: the membership with the invited role, the person of the team linked to the login,
- * the invitation used. The same person accepting again gets the same membership.
+ * the invitation used. The same person accepting again gets the same membership. A new profile is made only from the
+ * e-mail's token (DECISIONS 31.10.2026).
  */
 final readonly class AcceptTeamInvitation
 {
     public function __construct(private InvitationTokens $tokens, private AuditRecorder $audit) {}
 
-    /** @return array{organization: Organization, membership: OrganizationMembership} */
-    public function handle(User $user, string $token): array
+    /**
+     * @param  bool  $fromMailOnly  the profile was just made for the invitation's address: only the e-mail's token proves it
+     * @return array{organization: Organization, membership: OrganizationMembership}
+     */
+    public function handle(User $user, string $token, bool $fromMailOnly = false): array
     {
-        return $this->tokens->within($token, $user->id, function (Invitation $found) use ($user): array {
+        return $this->tokens->within($token, $user->id, function (Invitation $found, string $hash) use ($user, $fromMailOnly): array {
             // The organization first, then the invitation, the person and the membership (as when inviting).
             $organization = Organization::query()->whereKey($found->organization_id)->lockForUpdate()->firstOrFail();
             $invitation = Invitation::query()->whereKey($found->id)->lockForUpdate()->firstOrFail();
+            // Sent again meanwhile: the old token no longer matches the locked row.
+            $kind = InvitationTokens::kind($invitation, $hash) ?? throw new NotFoundHttpException('Поканата не е намерена.');
+            if ($fromMailOnly && $kind !== InvitationTokens::MAIL) {
+                throw new AuthorizationException('За нов профил отворете връзката от писмото.');
+            }
             $email = Str::lower(trim($user->email));
             if (! hash_equals($invitation->email, $email)) {
                 throw new AuthorizationException('Поканата е изпратена на друг имейл. Влезте с профила, на който я получихте.');

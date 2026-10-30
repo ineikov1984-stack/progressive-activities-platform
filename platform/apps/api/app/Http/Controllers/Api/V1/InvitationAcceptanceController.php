@@ -20,44 +20,54 @@ use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
 /**
- * The page "/invite/{token}" (docs/product/team.md, т. 7.4): what the invitation is, then a login or a new profile,
- * then the organization of the invitation becomes the active one. The e-mail of the invitation is never shown.
+ * The page "/invite#{token}" (docs/product/team.md, т. 7.4): what the invitation is, then a login or a new profile,
+ * then the organization of the invitation becomes the active one. The token comes in the request body, never in the
+ * path (it would reach the access logs); the invitation's e-mail is never shown.
  */
 class InvitationAcceptanceController extends Controller
 {
-    /** Public: the organization, the role, until when, and whether the address already has a profile. */
-    public function show(InvitationTokens $tokens, string $token): JsonResponse
+    /** Public: the organization, the role, until when. */
+    public function lookup(Request $request, InvitationTokens $tokens): JsonResponse
     {
-        $body = $tokens->within($token, null, fn (Invitation $invitation): array => [
+        $body = $tokens->within($this->token($request), null, fn (Invitation $invitation): array => [
             'organization_name' => (string) Organization::query()->whereKey($invitation->organization_id)->value('name'),
             'role' => $invitation->role->value,
             'role_label' => $invitation->role->label(),
             'expires_at' => $invitation->expires_at->toIso8601String(),
             'status' => $invitation->status(),
-            'has_account' => User::query()->where('email', $invitation->email)->exists(),
         ]);
 
         return response()->json(['invitation' => $body]);
     }
 
-    public function accept(Request $request, AcceptTeamInvitation $accept, string $token): JsonResponse
+    /** Signed in with the invitation's address: either link joins. */
+    public function join(Request $request, AcceptTeamInvitation $accept): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
-        $result = $accept->handle($user, $token);
+        $result = $accept->handle($user, $this->token($request));
         $request->session()->put('active_organization_id', $result['organization']->id);
 
         return response()->json($this->accepted($result['organization'], $result['membership']));
     }
 
-    /** A new profile for the invitation's e-mail, logged in, then the invitation accepted. */
-    public function register(Request $request, InvitationTokens $tokens, RegisterUser $register, AcceptTeamInvitation $accept, string $token): JsonResponse
+    /**
+     * A new profile for the invitation's address, logged in, then the invitation accepted — only from the e-mail's
+     * link, which proves the address (DECISIONS 31.10.2026); the inviter's link for copying does not.
+     */
+    public function register(Request $request, InvitationTokens $tokens, RegisterUser $register, AcceptTeamInvitation $accept): JsonResponse
     {
         if (Auth::guard('web')->check()) {
             return response()->json(['message' => 'Вече сте влезли. Приемете поканата с профила си или излезте.'], Response::HTTP_CONFLICT);
         }
-        // The address is the invitation's, never the request's: the invitation proves it.
-        $email = $tokens->within($token, null, fn (Invitation $invitation): string => $invitation->email);
+        $token = $this->token($request);
+        // The address is the invitation's, never the request's.
+        $found = $tokens->within($token, null, fn (Invitation $invitation, string $hash): array => [
+            'email' => $invitation->email, 'kind' => InvitationTokens::kind($invitation, $hash),
+        ]);
+        if ($found['kind'] !== InvitationTokens::MAIL) {
+            return response()->json(['message' => 'За нов профил отворете връзката от писмото.'], Response::HTTP_FORBIDDEN);
+        }
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string', 'max:1024', 'confirmed', Password::min(10)],
@@ -70,16 +80,16 @@ class InvitationAcceptanceController extends Controller
             'password.confirmed' => 'Паролите не съвпадат.',
         ]);
         $exists = fn (): JsonResponse => response()->json(['message' => 'Вече имате профил. Влезте, за да приемете поканата.'], Response::HTTP_CONFLICT);
-        if (User::query()->where('email', $email)->exists()) {
+        if (User::query()->where('email', $found['email'])->exists()) {
             return $exists();
         }
 
         try {
-            $result = DB::transaction(function () use ($register, $accept, $validated, $email, $token): array {
-                $user = $register->execute((string) $validated['name'], $email, (string) $validated['password'], emailVerified: true);
+            $result = DB::transaction(function () use ($register, $accept, $validated, $found, $token): array {
+                $user = $register->execute((string) $validated['name'], $found['email'], (string) $validated['password'], emailVerified: true);
                 // The acceptance's audit has its actor; the session changes only after the commit.
                 Auth::guard('web')->setUser($user);
-                $accepted = $accept->handle($user, $token);
+                $accepted = $accept->handle($user, $token, fromMailOnly: true);
 
                 return ['user' => $user, 'organization' => $accepted['organization'], 'membership' => $accepted['membership']];
             });
@@ -99,6 +109,17 @@ class InvitationAcceptanceController extends Controller
         $request->session()->put('active_organization_id', $result['organization']->id);
 
         return response()->json($this->accepted($result['organization'], $result['membership']), Response::HTTP_CREATED);
+    }
+
+    private function token(Request $request): string
+    {
+        $validated = $request->validate(['token' => ['required', 'string', 'max:128']], [
+            'token.required' => 'Липсва връзката от поканата.',
+            'token.string' => 'Липсва връзката от поканата.',
+            'token.max' => 'Връзката от поканата не е вярна.',
+        ]);
+
+        return (string) $validated['token'];
     }
 
     /** @return array{organization: array{id: string, name: string, slug: string, status: string}, membership: array{id: string, role: string, status: string}} */

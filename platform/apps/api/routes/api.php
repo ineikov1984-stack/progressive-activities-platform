@@ -34,13 +34,13 @@ Route::prefix('v1')->group(function (): void {
     Route::get('/public/organizations/{organizationSlug}/open-days/{campaignSlug}', [PublicCatalogController::class, 'openDay']);
     Route::get('/public/organizations/{organizationSlug}/media/{filename}', [PublicCatalogController::class, 'media'])
         ->where('filename', '[0-9a-f-]{36}\\.(?:jpg|png|webp)');
-    // An invitation link, before any login (docs/product/team.md, т. 7.4): never the e-mail.
-    Route::get('/invitations/{token}', [InvitationAcceptanceController::class, 'show'])->middleware('throttle:30,1');
+    // An invitation, before any login (docs/product/team.md, т. 7.4): the token in the body, never in the path; never the e-mail.
+    Route::post('/invitations/lookup', [InvitationAcceptanceController::class, 'lookup'])->middleware('throttle:30,1');
 
     Route::middleware('web')->group(function (): void {
         Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
-        // A new profile from an invitation: the same session and CSRF as the login.
-        Route::post('/invitations/{token}/register', [InvitationAcceptanceController::class, 'register'])->middleware('throttle:10,1');
+        // A new profile from the invitation's e-mail: the same session and CSRF as the login.
+        Route::post('/invitations/register', [InvitationAcceptanceController::class, 'register'])->middleware('throttle:10,1');
 
         Route::middleware('auth:sanctum')->group(function (): void {
             Route::post('/auth/logout', [AuthController::class, 'logout']);
@@ -66,7 +66,7 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/invitations', [InvitationController::class, 'index'])->middleware('tenant');
             Route::post('/invitations/accept', [InvitationController::class, 'accept']);
             // The organization comes from the invitation, not from the session (docs/product/team.md, т. 7.4).
-            Route::post('/invitations/{token}/accept', [InvitationAcceptanceController::class, 'accept'])->middleware('throttle:30,1');
+            Route::post('/invitations/join', [InvitationAcceptanceController::class, 'join'])->middleware('throttle:30,1');
             Route::get('/audit-events', [AuditEventController::class, 'index'])->middleware('tenant');
             // The team: people with or without a login (docs/product/team.md, т. 9).
             Route::prefix('team')->middleware('tenant')->group(function (): void {

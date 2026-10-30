@@ -18,7 +18,7 @@ class InvitationTenantSchemaTest extends TestCase
     use RefreshDatabase;
 
     #[TestGroup('tenant-isolation')]
-    public function test_a_token_hash_gives_only_its_organization_and_the_invitations_stay_under_rls(): void
+    public function test_either_token_hash_gives_only_its_organization_and_the_invitations_stay_under_rls(): void
     {
         if (! $this->postgresIsAvailable()) {
             $this->markTestSkipped('PostgreSQL is required for the database-layer invitation checks.');
@@ -36,17 +36,21 @@ class InvitationTenantSchemaTest extends TestCase
             $pdo->prepare("INSERT INTO users (id, name, email, password, created_at, updated_at) VALUES (:id, 'Синтетичен', :email, 'x', NOW(), NOW())")
                 ->execute(['id' => $inviter, 'email' => $inviter.'@example.test']);
             $hash = hash('sha256', Str::random(64));
-            $pdo->prepare('INSERT INTO invitations (id, organization_id, email, role, token_hash, expires_at, invited_by, created_at, updated_at) '
-                ."VALUES (:id, :organization, 'teacher@example.test', 'instructor', :hash, NOW() + interval '1 day', :inviter, NOW(), NOW())")
-                ->execute(['id' => (string) Str::uuid(), 'organization' => $organization, 'hash' => $hash, 'inviter' => $inviter]);
+            $copy = hash('sha256', Str::random(64));
+            $pdo->prepare('INSERT INTO invitations (id, organization_id, email, role, token_hash, copy_token_hash, expires_at, invited_by, created_at, updated_at) '
+                ."VALUES (:id, :organization, 'teacher@example.test', 'instructor', :hash, :copy, NOW() + interval '1 day', :inviter, NOW(), NOW())")
+                ->execute(['id' => (string) Str::uuid(), 'organization' => $organization, 'hash' => $hash, 'copy' => $copy, 'inviter' => $inviter]);
 
             $pdo->exec('SET LOCAL ROLE progressive_app');
             $pdo->prepare("SELECT set_config('app.current_organization_id', '', true)")->execute();
             $this->assertSame([], $pdo->query('SELECT id FROM invitations')->fetchAll(\PDO::FETCH_COLUMN));
 
+            // Either token of the invitation: the e-mail's and the inviter's link for copying.
             $tenant = $pdo->prepare('SELECT public.invitation_tenant(:hash)');
-            $tenant->execute(['hash' => $hash]);
-            $this->assertSame($organization, $tenant->fetchColumn());
+            foreach ([$hash, $copy] as $known) {
+                $tenant->execute(['hash' => $known]);
+                $this->assertSame($organization, $tenant->fetchColumn());
+            }
             $tenant->execute(['hash' => hash('sha256', Str::random(64))]);
             $this->assertNull($tenant->fetchColumn());
             // Still nothing readable without the organization in the setting.

@@ -8,16 +8,19 @@ use App\Domain\Organizations\Models\OrganizationMembership;
 use App\Domain\Organizations\Models\StaffMember;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Mail\TeamInvitationMail;
-use Illuminate\Contracts\Encryption\Encrypter;
-use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Mail\SendQueuedMailable;
+use Illuminate\Log\Events\MessageLogged;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Group as TestGroup;
+use Symfony\Component\Mailer\Exception\TransportException;
+use Symfony\Component\Mailer\SentMessage;
+use Symfony\Component\Mailer\Transport\AbstractTransport;
 use Tests\TestCase;
 
 /** The invitation that works and the roles (docs/product/team.md, т. 4, 7, 9, 11 — PR 2б). */
@@ -25,7 +28,7 @@ class TeamInvitationsTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_the_owner_invites_a_person_and_the_e_mail_waits_in_the_queue(): void
+    public function test_the_owner_invites_a_person_and_the_e_mail_goes_out_after_the_commit(): void
     {
         Mail::fake();
         [$owner, $organization] = $this->team();
@@ -37,75 +40,123 @@ class TeamInvitationsTest extends TestCase
             ->assertJsonPath('invitation.role', 'instructor')
             ->assertJsonPath('invitation.staff_member_id', $person->id)
             ->assertJsonMissingPath('invitation.token_hash')
+            ->assertJsonMissingPath('invitation.copy_token_hash')
             ->assertJsonMissingPath('token');
         $link = (string) $response->json('link');
-        $token = $this->tokenOf($response);
-        $this->assertSame(config('platform.web_url').'/invite/'.$token, $link);
-        $this->assertSame(64, strlen($token));
+        $copy = $this->tokenOf($response);
+        $mailed = $this->mailedToken('petar@example.test');
+        // The token is in the fragment, never in the path; the e-mail and the inviter get different tokens.
+        $this->assertSame(config('platform.web_url').'/invite#'.$copy, $link);
+        $this->assertSame(64, strlen($copy));
+        $this->assertSame(64, strlen($mailed));
+        $this->assertNotSame($copy, $mailed);
         $this->assertDatabaseHas('invitations', [
-            'staff_member_id' => $person->id, 'email' => 'petar@example.test', 'token_hash' => hash('sha256', $token), 'role' => 'instructor',
+            'staff_member_id' => $person->id, 'email' => 'petar@example.test', 'role' => 'instructor',
+            'token_hash' => hash('sha256', $mailed), 'copy_token_hash' => hash('sha256', $copy),
         ]);
         // The person had no e-mail: the invitation's is kept on them.
         $this->assertSame('petar@example.test', DB::table('staff_members')->where('id', $person->id)->value('email'));
 
-        Mail::assertQueued(TeamInvitationMail::class, fn (TeamInvitationMail $mail): bool => $mail->hasTo('petar@example.test')
-            && $mail->url === $link && $mail->role === 'Преподавател' && $mail->organization === 'Школа');
-        $mail = Mail::queued(TeamInvitationMail::class)->first();
-        $this->assertInstanceOf(ShouldQueue::class, $mail);
-        $this->assertInstanceOf(ShouldBeEncrypted::class, $mail);
+        Mail::assertSent(TeamInvitationMail::class, fn (TeamInvitationMail $mail): bool => $mail->hasTo('petar@example.test')
+            && $mail->url === config('platform.web_url').'/invite#'.$mailed && $mail->role === 'Преподавател' && $mail->organization === 'Школа');
+        Mail::assertNothingQueued();
+        $mail = Mail::sent(TeamInvitationMail::class)->first();
+        $this->assertNotInstanceOf(ShouldQueue::class, $mail);
         $html = $mail->render();
-        foreach (['Приеми поканата', 'Покана от', 'Поканата важи до', 'Преподавател', 'Собственик Школа', $link] as $text) {
+        foreach (['Приеми поканата', 'Покана от', 'Поканата важи до', 'Преподавател', 'Собственик Школа', '/invite#'.$mailed] as $text) {
             $this->assertStringContainsString($text, $html);
         }
+        $this->assertStringNotContainsString($copy, $html);
 
-        // The audit keeps ids and the role, never the address or the token.
+        // The audit keeps ids and the role, never the address or a token.
         $metadata = (string) DB::table('audit_events')->where('action', 'team.invitation_sent')->value('metadata');
         $this->assertStringContainsString('instructor', $metadata);
         $this->assertStringNotContainsString('petar', Str::lower($metadata));
-        $this->assertStringNotContainsString($token, $metadata);
-        $this->assertStringNotContainsString(hash('sha256', $token), $metadata);
+        foreach ([$copy, $mailed, hash('sha256', $copy), hash('sha256', $mailed)] as $secret) {
+            $this->assertStringNotContainsString($secret, $metadata);
+        }
         $this->assertStringNotContainsString('petar', Str::lower((string) DB::table('audit_events')->where('action', 'team.member_updated')->value('metadata')));
     }
 
-    public function test_the_e_mail_is_encrypted_in_the_queue_table(): void
+    public function test_the_e_mail_is_sent_at_once_and_nothing_waits_in_a_queue(): void
     {
         config(['queue.default' => 'database']);
         [$owner, $organization] = $this->team();
         $person = $this->person($organization, 'petar@example.test');
         $this->withHeader('X-Organization-Id', $organization->id);
-        $token = $this->tokenOf($this->invite($owner, $person)->assertCreated());
+        $this->invite($owner, $person)->assertCreated();
 
-        $jobs = DB::table('jobs')->get();
-        $this->assertCount(1, $jobs);
-        $payload = (string) $jobs[0]->payload;
-        foreach ([$token, 'petar@example.test', '/invite/', 'Школа'] as $secret) {
-            $this->assertStringNotContainsString($secret, $payload);
-        }
-        $command = json_decode($payload, true, flags: JSON_THROW_ON_ERROR)['data']['command'];
-        $job = unserialize(app(Encrypter::class)->decrypt($command));
-        $this->assertInstanceOf(SendQueuedMailable::class, $job);
-        $this->assertTrue($job->shouldBeEncrypted);
-        $this->assertInstanceOf(TeamInvitationMail::class, $job->mailable);
-        $this->assertStringEndsWith('/invite/'.$token, $job->mailable->url);
+        $this->assertDatabaseCount('jobs', 0);
+        $this->assertDatabaseCount('failed_jobs', 0);
+        $messages = app('mail.manager')->mailer()->getSymfonyTransport()->messages();
+        $this->assertCount(1, $messages);
+        $email = $messages->first()->getOriginalMessage();
+        $this->assertSame('petar@example.test', $email->getTo()[0]->getAddress());
+        $this->assertSame('Покана за екипа на Школа', $email->getSubject());
+        $this->assertStringContainsString('Приеми поканата', (string) $email->getHtmlBody());
+        $this->assertStringContainsString('/invite#', (string) $email->getTextBody());
     }
 
-    public function test_sending_again_gives_a_new_link_and_the_old_one_stops_working(): void
+    public function test_a_mail_server_error_keeps_the_invitation_and_logs_no_address(): void
+    {
+        Mail::extend('refusing', fn (): AbstractTransport => new class extends AbstractTransport
+        {
+            protected function doSend(SentMessage $message): void
+            {
+                throw new TransportException('Expected response code 250 but got 550 <petar@example.test>', 550);
+            }
+
+            public function __toString(): string
+            {
+                return 'refusing';
+            }
+        });
+        config(['mail.mailers.refusing' => ['transport' => 'refusing'], 'mail.default' => 'refusing']);
+        $logged = [];
+        Event::listen(MessageLogged::class, function (MessageLogged $entry) use (&$logged): void {
+            $logged[] = $entry;
+        });
+        [$owner, $organization] = $this->team();
+        $person = $this->person($organization, 'petar@example.test');
+        $this->withHeader('X-Organization-Id', $organization->id);
+
+        $copy = $this->tokenOf($this->invite($owner, $person)->assertCreated());
+
+        $this->assertDatabaseHas('invitations', ['staff_member_id' => $person->id, 'copy_token_hash' => hash('sha256', $copy)]);
+        $warnings = array_values(array_filter($logged, fn (MessageLogged $entry): bool => $entry->level === 'warning'));
+        $this->assertCount(1, $warnings);
+        $this->assertSame('TransportException:550', $warnings[0]->context['error']);
+        foreach ($logged as $entry) {
+            $this->assertStringNotContainsString('petar', json_encode([$entry->message, $entry->context], JSON_THROW_ON_ERROR));
+            $this->assertStringNotContainsString('/invite', json_encode([$entry->message, $entry->context], JSON_THROW_ON_ERROR));
+        }
+        // Sending again is the way out.
+        $this->invite($owner, $person)->assertOk();
+    }
+
+    public function test_sending_again_gives_new_links_and_the_old_ones_stop_working(): void
     {
         Mail::fake();
         [$owner, $organization] = $this->team();
         $person = $this->person($organization, 'petar@example.test');
         $this->withHeader('X-Organization-Id', $organization->id);
 
-        $first = $this->tokenOf($this->invite($owner, $person)->assertCreated());
-        $second = $this->tokenOf($this->invite($owner, $person, ['role' => 'coordinator'])->assertOk()
+        $firstCopy = $this->tokenOf($this->invite($owner, $person)->assertCreated());
+        $firstMail = $this->mailedToken('petar@example.test');
+        $secondCopy = $this->tokenOf($this->invite($owner, $person, ['role' => 'coordinator'])->assertOk()
             ->assertJsonPath('invitation.role', 'coordinator'));
+        $secondMail = $this->mailedToken('petar@example.test');
 
-        $this->assertNotSame($first, $second);
+        $this->assertNotSame($firstCopy, $secondCopy);
+        $this->assertNotSame($firstMail, $secondMail);
         $this->assertSame(1, DB::table('invitations')->count());
-        $this->getJson('/api/v1/invitations/'.$first)->assertNotFound()->assertJsonPath('message', 'Поканата не е намерена.');
-        $this->getJson('/api/v1/invitations/'.$second)->assertOk()
-            ->assertJsonPath('invitation.status', 'pending')->assertJsonPath('invitation.role_label', 'Координатор');
-        Mail::assertQueuedCount(2);
+        foreach ([$firstCopy, $firstMail] as $old) {
+            $this->lookup($old)->assertNotFound()->assertJsonPath('message', 'Поканата не е намерена.');
+        }
+        foreach ([$secondCopy, $secondMail] as $current) {
+            $this->lookup($current)->assertOk()->assertJsonPath('invitation.status', 'pending')->assertJsonPath('invitation.role_label', 'Координатор');
+        }
+        Mail::assertSentCount(2);
         $sent = DB::table('audit_events')->where('action', 'team.invitation_sent')->pluck('metadata')
             ->map(fn (mixed $metadata): array => json_decode((string) $metadata, true, flags: JSON_THROW_ON_ERROR));
         $this->assertSame([false, true], $sent->pluck('resent')->sort()->values()->all());
@@ -124,7 +175,7 @@ class TeamInvitationsTest extends TestCase
 
         $this->assertSame(1, DB::table('invitations')->count());
         $this->assertDatabaseHas('invitations', ['staff_member_id' => $person->id, 'token_hash' => hash('sha256', $token)]);
-        $this->getJson('/api/v1/invitations/'.$old)->assertNotFound();
+        $this->lookup($old)->assertNotFound();
         // The same address for another person while this invitation is active.
         $this->invite($owner, $this->person($organization, null, 'Друг човек'), ['role' => 'viewer', 'email' => 'petar@example.test'])
             ->assertConflict();
@@ -148,7 +199,7 @@ class TeamInvitationsTest extends TestCase
 
         $this->invite($admin, $person, ['role' => 'finance'])->assertCreated();
         $this->invite($owner, $person, ['role' => 'organization_admin'])->assertOk()->assertJsonPath('invitation.role', 'organization_admin');
-        Mail::assertQueuedCount(2);
+        Mail::assertSentCount(2);
     }
 
     public function test_an_archived_person_a_person_with_a_login_and_a_person_without_an_address_are_not_invited(): void
@@ -171,7 +222,7 @@ class TeamInvitationsTest extends TestCase
 
         $this->assertDatabaseCount('invitations', 0);
         $this->assertNull(DB::table('staff_members')->where('id', $noAddress->id)->value('email'));
-        Mail::assertNothingQueued();
+        Mail::assertNothingSent();
     }
 
     public function test_the_invitation_page_shows_only_what_it_needs_without_a_login(): void
@@ -180,26 +231,30 @@ class TeamInvitationsTest extends TestCase
         [$owner, $organization] = $this->team();
         $person = $this->person($organization, 'petar@example.test');
         $this->withHeader('X-Organization-Id', $organization->id);
-        $token = $this->tokenOf($this->invite($owner, $person));
+        $copy = $this->tokenOf($this->invite($owner, $person));
+        $mailed = $this->mailedToken('petar@example.test');
         $this->flushHeaders();
         $this->app['auth']->forgetGuards();
-
-        $page = $this->getJson('/api/v1/invitations/'.$token)->assertOk()
-            ->assertJsonPath('invitation.organization_name', 'Школа')
-            ->assertJsonPath('invitation.role', 'instructor')
-            ->assertJsonPath('invitation.role_label', 'Преподавател')
-            ->assertJsonPath('invitation.status', 'pending')
-            ->assertJsonPath('invitation.has_account', false)
-            ->assertJsonMissingPath('invitation.email');
-        $this->assertStringNotContainsString('petar', (string) $page->getContent());
-        $this->assertStringNotContainsString(hash('sha256', $token), (string) $page->getContent());
-
         User::factory()->create(['email' => 'petar@example.test']);
-        $this->getJson('/api/v1/invitations/'.$token)->assertOk()->assertJsonPath('invitation.has_account', true);
+
+        foreach ([$copy, $mailed] as $token) {
+            $page = $this->lookup($token)->assertOk()
+                ->assertJsonPath('invitation.organization_name', 'Школа')
+                ->assertJsonPath('invitation.role', 'instructor')
+                ->assertJsonPath('invitation.role_label', 'Преподавател')
+                ->assertJsonPath('invitation.status', 'pending')
+                // Whether an address has a profile is not told: the page offers both and relies on the 409.
+                ->assertJsonMissingPath('invitation.has_account')
+                ->assertJsonMissingPath('invitation.email');
+            $this->assertStringNotContainsString('petar', (string) $page->getContent());
+            $this->assertStringNotContainsString(hash('sha256', $token), (string) $page->getContent());
+        }
+
         DB::table('invitations')->update(['expires_at' => now()->subMinute()]);
-        $this->getJson('/api/v1/invitations/'.$token)->assertOk()->assertJsonPath('invitation.status', 'expired');
-        $this->getJson('/api/v1/invitations/'.Str::random(64))->assertNotFound()->assertJsonPath('message', 'Поканата не е намерена.');
-        $this->getJson('/api/v1/invitations/short')->assertNotFound()->assertJsonPath('message', 'Поканата не е намерена.');
+        $this->lookup($copy)->assertOk()->assertJsonPath('invitation.status', 'expired');
+        $this->lookup(Str::random(64))->assertNotFound()->assertJsonPath('message', 'Поканата не е намерена.');
+        $this->lookup('short')->assertNotFound()->assertJsonPath('message', 'Поканата не е намерена.');
+        $this->postJson('/api/v1/invitations/lookup')->assertUnprocessable()->assertJsonValidationErrors('token');
     }
 
     #[TestGroup('tenant-isolation')]
@@ -211,11 +266,13 @@ class TeamInvitationsTest extends TestCase
         $teacher = $this->member($other, 'instructor', 'Петър', 'petar@example.test');
         $person = $this->person($organization, 'petar@example.test');
         $this->withHeader('X-Organization-Id', $organization->id);
-        $token = $this->tokenOf($this->invite($owner, $person));
+        $copy = $this->tokenOf($this->invite($owner, $person));
+        $mailed = $this->mailedToken('petar@example.test');
         $this->flushHeaders();
 
+        // The inviter's link joins an existing profile with the invitation's address.
         $accepted = $this->actingAs($teacher)->withSession(['active_organization_id' => $other->id])
-            ->postJson('/api/v1/invitations/'.$token.'/accept')->assertOk()
+            ->postJson('/api/v1/invitations/join', ['token' => $copy])->assertOk()
             ->assertJsonPath('organization.id', $organization->id)
             ->assertJsonPath('membership.role', 'instructor')
             ->assertSessionHas('active_organization_id', $organization->id);
@@ -227,15 +284,15 @@ class TeamInvitationsTest extends TestCase
         // The next request works in the organization of the invitation.
         $this->getJson('/api/v1/context/organization')->assertOk()->assertJsonPath('organization.id', $organization->id);
 
-        // Accepting again is the same membership.
-        $this->postJson('/api/v1/invitations/'.$token.'/accept')->assertOk()->assertJsonPath('membership.id', $accepted->json('membership.id'));
+        // Accepting again, also with the e-mail's link, is the same membership.
+        $this->postJson('/api/v1/invitations/join', ['token' => $mailed])->assertOk()->assertJsonPath('membership.id', $accepted->json('membership.id'));
         $this->assertSame(1, DB::table('organization_memberships')->where('organization_id', $organization->id)->where('user_id', $teacher->id)->count());
         $this->assertSame(1, DB::table('staff_members')->where('organization_id', $organization->id)->where('user_id', $teacher->id)->count());
         $this->assertSame(1, DB::table('audit_events')->where('action', 'team.invitation_accepted')->count());
         $metadata = (string) DB::table('audit_events')->where('action', 'team.invitation_accepted')->value('metadata');
         $this->assertStringContainsString('instructor', $metadata);
         $this->assertStringNotContainsString('petar', Str::lower($metadata));
-        $this->assertStringNotContainsString($token, $metadata);
+        $this->assertStringNotContainsString($copy, $metadata);
         // The other organization is untouched.
         $this->assertDatabaseHas('organization_memberships', ['organization_id' => $other->id, 'user_id' => $teacher->id, 'role' => 'instructor']);
     }
@@ -260,16 +317,16 @@ class TeamInvitationsTest extends TestCase
         $twiceUser = User::factory()->create(['email' => 'twice@example.test']);
         $this->person($organization, null, 'Стар запис', $twiceUser);
 
-        $this->actingAs(User::factory()->create(['email' => 'expired@example.test']))->postJson('/api/v1/invitations/'.$expired.'/accept')
+        $this->actingAs(User::factory()->create(['email' => 'expired@example.test']))->postJson('/api/v1/invitations/join', ['token' => $expired])
             ->assertGone()->assertJsonPath('message', 'Поканата е изтекла. Поискайте нова покана от организацията.');
-        $this->actingAs(User::factory()->create(['email' => 'other@example.test']))->postJson('/api/v1/invitations/'.$archived.'/accept')
+        $this->actingAs(User::factory()->create(['email' => 'other@example.test']))->postJson('/api/v1/invitations/join', ['token' => $archived])
             ->assertForbidden();
-        $this->actingAs(User::factory()->create(['email' => 'archived@example.test']))->postJson('/api/v1/invitations/'.$archived.'/accept')
+        $this->actingAs(User::factory()->create(['email' => 'archived@example.test']))->postJson('/api/v1/invitations/join', ['token' => $archived])
             ->assertUnprocessable()->assertJsonValidationErrors('invitation');
-        $this->actingAs(User::factory()->create(['email' => 'linked@example.test']))->postJson('/api/v1/invitations/'.$linked.'/accept')
+        $this->actingAs(User::factory()->create(['email' => 'linked@example.test']))->postJson('/api/v1/invitations/join', ['token' => $linked])
             ->assertConflict()->assertJsonPath('message', 'Поканата е свързана с друг профил.');
-        $this->actingAs($twiceUser)->postJson('/api/v1/invitations/'.$twice.'/accept')->assertConflict();
-        $this->postJson('/api/v1/invitations/'.Str::random(64).'/accept')->assertNotFound();
+        $this->actingAs($twiceUser)->postJson('/api/v1/invitations/join', ['token' => $twice])->assertConflict();
+        $this->postJson('/api/v1/invitations/join', ['token' => Str::random(64)])->assertNotFound();
 
         $this->assertSame(0, DB::table('invitations')->whereNotNull('accepted_at')->count());
         $this->assertSame(1, DB::table('organization_memberships')->where('organization_id', $organization->id)->count());
@@ -281,21 +338,24 @@ class TeamInvitationsTest extends TestCase
         [$owner, $organization] = $this->team();
         $person = $this->person($organization, 'new@example.test', 'Нов човек');
         $this->withHeader('X-Organization-Id', $organization->id);
-        $token = $this->tokenOf($this->invite($owner, $person));
+        $this->invite($owner, $person)->assertCreated();
+        $token = $this->mailedToken('new@example.test');
         $this->flushHeaders();
         $this->app['auth']->forgetGuards();
-        $url = '/api/v1/invitations/'.$token.'/register';
+        $url = '/api/v1/invitations/register';
 
-        $this->postJson($url, ['name' => 'Нов човек', 'password' => 'kratka', 'password_confirmation' => 'kratka'])
+        $this->postJson($url, ['token' => $token, 'name' => 'Нов човек', 'password' => 'kratka', 'password_confirmation' => 'kratka'])
             ->assertUnprocessable()->assertJsonPath('errors.password.0', 'Паролата трябва да е поне 10 знака.');
-        $this->postJson($url, ['name' => 'Нов човек', 'password' => 'dalga-parola-1', 'password_confirmation' => 'druga-parola-1'])
+        $this->postJson($url, ['token' => $token, 'name' => 'Нов човек', 'password' => 'dalga-parola-1', 'password_confirmation' => 'druga-parola-1'])
             ->assertUnprocessable()->assertJsonPath('errors.password.0', 'Паролите не съвпадат.');
         $this->assertGuest();
         $this->assertDatabaseMissing('users', ['email' => 'new@example.test']);
 
         // The address is the invitation's; one in the request is ignored.
-        $this->postJson($url, ['name' => 'Нов човек', 'email' => 'someone@example.test', 'password' => 'dalga-parola-1', 'password_confirmation' => 'dalga-parola-1'])
-            ->assertCreated()
+        $this->postJson($url, [
+            'token' => $token, 'name' => 'Нов човек', 'email' => 'someone@example.test',
+            'password' => 'dalga-parola-1', 'password_confirmation' => 'dalga-parola-1',
+        ])->assertCreated()
             ->assertJsonPath('organization.id', $organization->id)
             ->assertJsonPath('membership.role', 'instructor')
             ->assertSessionHas('active_organization_id', $organization->id);
@@ -307,8 +367,31 @@ class TeamInvitationsTest extends TestCase
         $this->getJson('/api/v1/context/organization')->assertOk()->assertJsonPath('organization.id', $organization->id);
 
         // Signed in: no second profile.
-        $this->postJson($url, ['name' => 'Пак', 'password' => 'dalga-parola-1', 'password_confirmation' => 'dalga-parola-1'])->assertConflict();
+        $this->postJson($url, ['token' => $token, 'name' => 'Пак', 'password' => 'dalga-parola-1', 'password_confirmation' => 'dalga-parola-1'])->assertConflict();
         $this->assertSame(1, DB::table('users')->where('email', 'new@example.test')->count());
+    }
+
+    public function test_the_inviters_link_does_not_make_a_profile(): void
+    {
+        Mail::fake();
+        [$owner, $organization] = $this->team();
+        $this->withHeader('X-Organization-Id', $organization->id);
+        // The inviter sees this link: with it they could give someone else's address a password of their own.
+        $copy = $this->tokenOf($this->invite($owner, $this->person($organization, 'ivan@example.test', 'Иван')));
+        // The old dashboard form showed its one token to the inviter too.
+        $old = $this->actingAs($owner)->postJson('/api/v1/invitations', ['email' => 'maria@example.test', 'role' => 'viewer'])
+            ->assertCreated()->json('token');
+        $this->flushHeaders();
+        $this->app['auth']->forgetGuards();
+
+        foreach ([$copy, $old] as $token) {
+            $this->postJson('/api/v1/invitations/register', ['token' => $token, 'name' => 'Чужд', 'password' => 'dalga-parola-1', 'password_confirmation' => 'dalga-parola-1'])
+                ->assertForbidden()->assertJsonPath('message', 'За нов профил отворете връзката от писмото.');
+        }
+        $this->assertGuest();
+        $this->assertDatabaseMissing('users', ['email' => 'ivan@example.test']);
+        $this->assertDatabaseMissing('users', ['email' => 'maria@example.test']);
+        $this->assertSame(0, DB::table('invitations')->whereNotNull('accepted_at')->count());
     }
 
     public function test_an_address_with_a_profile_logs_in_to_accept(): void
@@ -316,15 +399,17 @@ class TeamInvitationsTest extends TestCase
         Mail::fake();
         [$owner, $organization] = $this->team();
         $this->withHeader('X-Organization-Id', $organization->id);
-        $token = $this->tokenOf($this->invite($owner, $this->person($organization, 'known@example.test')));
+        $this->invite($owner, $this->person($organization, 'known@example.test'))->assertCreated();
+        $token = $this->mailedToken('known@example.test');
         User::factory()->create(['email' => 'known@example.test']);
         $this->flushHeaders();
         $this->app['auth']->forgetGuards();
+        $body = ['name' => 'Някой', 'password' => 'dalga-parola-1', 'password_confirmation' => 'dalga-parola-1'];
 
-        $this->postJson('/api/v1/invitations/'.$token.'/register', ['name' => 'Някой', 'password' => 'dalga-parola-1', 'password_confirmation' => 'dalga-parola-1'])
+        $this->postJson('/api/v1/invitations/register', ['token' => $token, ...$body])
             ->assertConflict()->assertJsonPath('message', 'Вече имате профил. Влезте, за да приемете поканата.');
-        $this->postJson('/api/v1/invitations/'.Str::random(64).'/register', ['name' => 'Някой', 'password' => 'dalga-parola-1', 'password_confirmation' => 'dalga-parola-1'])
-            ->assertNotFound();
+        $this->postJson('/api/v1/invitations/register', ['token' => Str::random(64), ...$body])->assertNotFound();
+        $this->postJson('/api/v1/invitations/register', $body)->assertUnprocessable()->assertJsonValidationErrors('token');
         $this->assertGuest();
         $this->assertSame(1, DB::table('users')->where('email', 'known@example.test')->count());
         $this->assertNull(DB::table('invitations')->value('accepted_at'));
@@ -391,9 +476,81 @@ class TeamInvitationsTest extends TestCase
             ->postJson($base.$foreign->id.'/invitation', ['role' => 'instructor'])->assertNotFound();
 
         $this->assertDatabaseCount('invitations', 0);
-        Mail::assertNothingQueued();
+        Mail::assertNothingSent();
         $this->assertDatabaseHas('organization_memberships', ['user_id' => $foreignOwner->id, 'role' => 'organization_owner']);
         $this->assertSame('Чужд човек', DB::table('staff_members')->where('id', $foreign->id)->value('full_name'));
+    }
+
+    /**
+     * The whole way under the application's database role (RLS on): the invitation of A is found without any
+     * organization in the setting only through `invitation_tenant`, and joining or registering writes only in A.
+     */
+    #[TestGroup('tenant-isolation')]
+    public function test_postgresql_application_role_invites_looks_up_and_joins_only_in_the_invitations_organization(): void
+    {
+        try {
+            DB::connection('pgsql_admin')->getPdo();
+        } catch (\Throwable) {
+            $this->markTestSkipped('PostgreSQL is required for the application-role invitation check.');
+        }
+        Artisan::call('migrate', ['--database' => 'pgsql_admin', '--force' => true]);
+        Mail::fake();
+        $original = DB::getDefaultConnection();
+        DB::setDefaultConnection('pgsql_admin');
+        DB::beginTransaction();
+        try {
+            // As the owner of the database: two organizations, their owners and people.
+            [$owner, $first] = $this->team('Школа А');
+            [$otherOwner, $second] = $this->team('Школа Б');
+            $teacherPerson = $this->person($first, 'petar@example.test');
+            $newcomerPerson = $this->person($first, 'new@example.test', 'Нов човек');
+            $foreignPerson = $this->person($second, 'foreign@example.test', 'Чужд човек');
+            $teacher = User::factory()->create(['email' => 'petar@example.test']);
+            app(TenantContext::class)->clear();
+
+            DB::statement('SET LOCAL ROLE progressive_app');
+            $this->assertSame('progressive_app', DB::selectOne('SELECT current_user AS role')->role);
+            $this->withHeader('X-Organization-Id', $second->id);
+            $this->invite($otherOwner, $foreignPerson, ['role' => 'viewer'])->assertCreated();
+            $this->withHeader('X-Organization-Id', $first->id);
+            $copy = $this->tokenOf($this->invite($owner, $teacherPerson)->assertCreated());
+            $this->invite($owner, $newcomerPerson)->assertCreated();
+            $mailed = $this->mailedToken('new@example.test');
+            $this->flushHeaders();
+
+            // No organization in the setting: no invitation is readable, yet the link finds its own.
+            $this->blankTenant();
+            $this->assertSame(0, DB::table('invitations')->count());
+            $this->lookup($copy)->assertOk()->assertJsonPath('invitation.organization_name', 'Школа А');
+            $this->blankTenant();
+            $this->actingAs($teacher)->postJson('/api/v1/invitations/join', ['token' => $copy])->assertOk()
+                ->assertJsonPath('organization.id', $first->id);
+            $this->blankTenant();
+            $this->app['auth']->forgetGuards();
+            $this->postJson('/api/v1/invitations/register', [
+                'token' => $mailed, 'name' => 'Нов човек', 'password' => 'dalga-parola-1', 'password_confirmation' => 'dalga-parola-1',
+            ])->assertCreated()->assertJsonPath('organization.id', $first->id);
+
+            // In A's setting, B's invitation stays out of reach.
+            DB::select("SELECT set_config('app.current_organization_id', ?, true)", [$first->id]);
+            $this->assertSame(0, DB::table('invitations')->where('organization_id', $second->id)->count());
+            $this->assertSame(0, DB::table('invitations')->where('organization_id', $second->id)->update(['expires_at' => now()]));
+
+            // As the owner of the database again: memberships and people only in A, the audit written.
+            DB::statement('RESET ROLE');
+            $newcomer = User::query()->where('email', 'new@example.test')->firstOrFail();
+            foreach ([$teacher, $newcomer] as $user) {
+                $this->assertSame([$first->id], DB::table('organization_memberships')->where('user_id', $user->id)->pluck('organization_id')->all());
+                $this->assertSame([$first->id], DB::table('staff_members')->where('user_id', $user->id)->pluck('organization_id')->all());
+            }
+            $this->assertSame(2, DB::table('audit_events')->where('organization_id', $first->id)->where('action', 'team.invitation_accepted')->count());
+            $this->assertSame(0, DB::table('audit_events')->where('organization_id', $second->id)->where('action', 'team.invitation_accepted')->count());
+            $this->assertNull(DB::table('invitations')->where('organization_id', $second->id)->value('accepted_at'));
+        } finally {
+            DB::rollBack();
+            DB::setDefaultConnection($original);
+            app(TenantContext::class)->clear();
+        }
     }
 
     /** @return array{User, Organization} an owner with a person of the team, as the backfill gives */
@@ -440,8 +597,29 @@ class TeamInvitationsTest extends TestCase
         return $this->actingAs($actor)->postJson('/api/v1/team/members/'.$person->id.'/invitation', $body);
     }
 
+    /** The token of the inviter's link for copying. */
     private function tokenOf(TestResponse $response): string
     {
-        return Str::after((string) $response->json('link'), '/invite/');
+        return Str::after((string) $response->json('link'), '/invite#');
+    }
+
+    /** The token of the latest e-mail sent to the address. */
+    private function mailedToken(string $address): string
+    {
+        $mail = Mail::sent(TeamInvitationMail::class, fn (TeamInvitationMail $mail): bool => $mail->hasTo($address))->last();
+        $this->assertInstanceOf(TeamInvitationMail::class, $mail);
+
+        return Str::after($mail->url, '/invite#');
+    }
+
+    private function lookup(string $token): TestResponse
+    {
+        return $this->postJson('/api/v1/invitations/lookup', ['token' => $token]);
+    }
+
+    /** No organization in the PostgreSQL setting, as at the start of a request without a tenant. */
+    private function blankTenant(): void
+    {
+        DB::select("SELECT set_config('app.current_organization_id', '', true)");
     }
 }
