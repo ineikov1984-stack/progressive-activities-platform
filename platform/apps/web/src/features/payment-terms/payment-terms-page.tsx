@@ -278,13 +278,13 @@ export function PaymentTermsPage() {
       <div className={styles.layout}>
         <section className={styles.editor} aria-labelledby="terms-title" ref={editorRef}>
           <div className={styles.editorHead}>
-            <h2 id="terms-title">3. Проверете условията за {info.label.toLowerCase()}</h2>
+            <h2 id="terms-title">3. Проверете условията за „{info.label}“</h2>
             <p className={styles.muted}>
               {saved?.current_version
                 ? `Запазени на ${savedOn(saved.current_version.created_at)} като „${saved.preset_label}“.${dirty ? ' Имате незапазени промени.' : ''}`
                 : 'Организацията още не е запазила свои условия за този начин на плащане — важат „Стандартни“.'}
             </p>
-            {kind === 'monthly' ? <p className={styles.muted}>Пример навсякъде: такса 60 € на месец, 4 занимания в ноември — по 15 € всяко.</p> : null}
+            {kind === 'monthly' ? <p className={styles.muted}>Всички примери са за месечна такса 60,00 € и 4 занимания през ноември, по 15,00 € всяко.</p> : null}
           </div>
           {violations.length ? (
             <div className={styles.warning} role="note">
@@ -318,7 +318,7 @@ export function PaymentTermsPage() {
         <aside className={styles.aside} aria-label="Как го четат родителите">
           <section ref={linesRef} className={allLines ? styles.card : `${styles.card} ${styles.cardFolded}`}>
             <h2>Така го четат родителите</h2>
-            {lines.map((line) => <p key={line.title} tabIndex={-1}><strong>{line.title}.</strong> {line.text}</p>)}
+            {lines.map((line) => <p key={line.title} tabIndex={-1}><strong>{line.title}:</strong> {line.text}</p>)}
             {lines.length > 1 && !allLines ? (
               <button type="button" className={styles.unfold} onClick={() => {
                 setAllLines(true);
@@ -350,7 +350,7 @@ export function PaymentTermsPage() {
             <p className={styles.muted}>Няма промени за запазване. Сменете нещо по-горе и бутонът „Запази“ ще се появи.</p>
           ) : (
             <button type="button" className={styles.primary} onClick={save} disabled={saving}>
-              {saving ? 'Запазване…' : <>Запази условията<span className={styles.saveKind}> за {info.label.toLowerCase()}</span></>}
+              {saving ? 'Запазване…' : <>Запази условията<span className={styles.saveKind}> за „{info.label}“</span></>}
             </button>
           )}
           {dirty ? (

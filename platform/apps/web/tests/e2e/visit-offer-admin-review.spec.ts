@@ -145,7 +145,7 @@ test('a trial on chosen dates shows its step-6 price and visit terms, and cannot
   await expect(page.getByLabel('Цена за деня')).toHaveCount(0);
   const priceStep = page.locator('#visit-step-3');
   await expect(priceStep.getByText('Условията на организацията — Стандартни')).toBeVisible();
-  await expect(priceStep.getByText('Неявяване:')).toBeVisible();
+  await expect(priceStep.getByText('Пропуснато посещение:')).toBeVisible();
   await expect(priceStep.getByText('Пробното е веднъж на дете за тази дейност', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: '5. Преглед и публикуване', exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Поправете следното' })).toContainText('Добавете цена „Пробно занимание“');
