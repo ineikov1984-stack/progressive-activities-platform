@@ -164,6 +164,7 @@ function RecordSection({ details }: { details: ChildDetailsResponse }) {
       <h3 id="details-record">Записване</h3>
       <p className={styles.recordTitle}>{enrollment.activity.title} · {enrollment.group.name}</p>
       <dl className={styles.facts}>
+        {enrollment.status === 'cancelled' ? <Fact label="Състояние">Отменено</Fact> : null}
         {!fullPeriod ? <Fact label="Вид">{kindLabels[enrollment.scope] ?? 'Посещение'}{enrollment.session_starts_at ? ` · ${dateTimeText(enrollment.session_starts_at)}` : ''}</Fact> : null}
         {scheduleText(enrollment.schedule) ? <Fact label="Дни и час">{scheduleText(enrollment.schedule)}</Fact> : null}
         {enrollment.price.amount_cents !== null && enrollment.price.unit ? (

@@ -284,6 +284,7 @@ export function recordStatusText(record: ChildRecord, today: string): string {
     const label = scopeLabels[record.scope] ?? 'Посещение';
     return record.session_starts_at ? `${label} · ${dateTimeText(record.session_starts_at)}` : label;
   }
+  if (record.status === 'cancelled') return 'Отменено';
   if (record.moves_to) return `Премества се в „${record.moves_to.group_name ?? 'друга група'}“ от ${shortDay(record.moves_to.starts_on)}`;
   if (record.status === 'ended' && record.ends_on) {
     return record.ends_on >= today ? `Последен ден ${shortDay(record.ends_on)}` : `Приключило на ${shortDay(record.ends_on)}`;
@@ -296,7 +297,7 @@ export function recordStatusText(record: ChildRecord, today: string): string {
 /** The kind of state, for its colour — the text always says it too. */
 export function recordTone(record: ChildRecord, today: string): 'active' | 'waiting' | 'paused' | 'ending' {
   if (record.kind === 'application') return 'waiting';
-  if (record.moves_to || record.status === 'ended') return 'ending';
+  if (record.moves_to || record.status === 'ended' || record.status === 'cancelled') return 'ending';
   if (record.paused_until) return 'paused';
   return record.starts_on > today ? 'waiting' : 'active';
 }
