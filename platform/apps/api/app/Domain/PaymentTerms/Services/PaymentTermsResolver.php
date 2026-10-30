@@ -2,7 +2,6 @@
 
 namespace App\Domain\PaymentTerms\Services;
 
-use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Domain\PaymentTerms\Enums\BillingKind;
 use App\Domain\PaymentTerms\Models\PaymentTerms;
 use Illuminate\Validation\ValidationException;
@@ -11,15 +10,10 @@ use Illuminate\Validation\ValidationException;
  * Which terms apply to a price (docs/product/payment-policies.md, т. 7.2): the set chosen for the activity when
  * it is for the price's way of paying, otherwise the organization's default for it, otherwise the platform's
  * "Стандартни". Reads the current organization only (tenant scope and RLS); other domains call it instead of
- * reading the sets themselves.
+ * reading the sets themselves. Keeps nothing between calls: a controller may outlive one request.
  */
 final class PaymentTermsResolver
 {
-    /** @var array<string, AppliedTerms> */
-    private array $resolved = [];
-
-    public function __construct(private readonly TenantContext $context) {}
-
     /** The terms for a price with this enrollment mode, in an activity that chose `$chosenTermsId` (or none). */
     public function forPrice(string $enrollmentMode, ?string $chosenTermsId): ?AppliedTerms
     {
@@ -27,9 +21,8 @@ final class PaymentTermsResolver
         if ($kind === null) {
             return null;
         }
-        $key = $this->context->organizationId().'|'.$kind->value.'|'.($chosenTermsId ?? '');
 
-        return $this->resolved[$key] ??= $this->resolve($kind, $chosenTermsId);
+        return $this->resolve($kind, $chosenTermsId);
     }
 
     /**

@@ -142,7 +142,7 @@ class PaymentTermsCopyTest extends TestCase
 
             return [$second, $this->price($second, 'monthly'), $third, $this->price($third, 'package')];
         });
-        $enrollment = fn () => $this->inOrganization($f['organization'], fn () => Enrollment::query()->where('status', 'active')->sole());
+        $enrollment = fn () => $this->inOrganization($f['organization'], fn () => Enrollment::query()->with('application')->where('status', 'active')->sole());
 
         // The same way of paying: the parent's copy moves with the child.
         $this->as($f['owner'], $f['organization'])->postJson("/api/v1/enrollment/enrollments/{$enrollment()->id}/transfer", [
