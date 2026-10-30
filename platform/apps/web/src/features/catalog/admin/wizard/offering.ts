@@ -38,8 +38,15 @@ export const modeHints: Record<string, string> = {
   full_period: 'Една цена за определен период — например учебен срок, модул или сезон.',
   package: 'Определен брой посещения за фиксирана цена. Напишете броя и срока в условията.',
   single: 'Плащане за едно посещение, без записване за период.',
-  trial: 'Първо посещение, за да опитат. Безплатни пробни посещения се правят в стъпка 8.',
+  trial: 'Едно пробно занимание на дете за тази дейност в учебната година. Родителят избира дата като при еднократното посещение.',
 };
+
+/** Only a trial may be free (docs/product/visits.md, т. 5.5). */
+export function isFreeTrial(price: Pick<PriceDraft, 'enrollment_mode' | 'amount'>): boolean {
+  return price.enrollment_mode === 'trial' && /^0+(?:[.,]0{1,2})?$/.test(price.amount.trim());
+}
+
+export const freeAmount = '0,00';
 
 /** A sensible unit for each way of enrolling, so most people never touch the unit. */
 export const defaultUnit: Record<string, string> = { monthly: 'month', full_period: 'period', package: 'package', single: 'session', trial: 'session' };
@@ -96,7 +103,7 @@ export function checkOffering(draft: OfferingDraft): OfferingCheck {
       prices.push({
         enrollment_mode: price.enrollment_mode,
         unit: price.unit,
-        amount_cents: parseEuroCents(price.amount),
+        amount_cents: isFreeTrial(price) ? 0 : parseEuroCents(price.amount),
         currency: 'EUR',
         terms: price.terms?.trim() || null,
         is_available: price.is_available !== false,

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect } from 'react';
 import { formatEur, parseEuroCents } from '../presentation';
-import { blankPrice, defaultUnit, enrollmentModes, modeHints, type OfferingDraft, type PriceDraft, priceUnits } from './offering';
+import { blankPrice, defaultUnit, enrollmentModes, freeAmount, isFreeTrial, modeHints, type OfferingDraft, type PriceDraft, priceUnits } from './offering';
 import { PriceTerms, useTermsWorkspace } from './step-price-terms';
 import { fittingChoices, kindOfMode, kindsOf } from './terms-choice';
 import { Field, Icon, icons } from './ui';
@@ -45,7 +45,8 @@ export function StepPrice({ organizationId, offering, groupModes, problems, lock
       </div>
       {prices.length === 0 ? <p className={styles.muted}>Все още няма цена. Без цена дейността не може да бъде публикувана.</p> : null}
       {prices.map((price, index) => {
-        const shown = preview(price.amount);
+        const free = isFreeTrial(price);
+        const shown = free ? 'Безплатно' : preview(price.amount);
         const problem = problems[`price_${index}`];
         const kind = kindOfMode(price.enrollment_mode);
         const shared = kind === 'visit' ? prices.find((other, at) => at !== index && kindOfMode(other.enrollment_mode) === kind) : undefined;
@@ -53,15 +54,15 @@ export function StepPrice({ organizationId, offering, groupModes, problems, lock
           <div key={index} className={styles.priceCard}>
             <div className={styles.twoFields}>
               <Field id={`price-mode-${index}`} label="Начин на записване" hint={modeHints[price.enrollment_mode]}>
-                <select id={`price-mode-${index}`} className={styles.input} value={price.enrollment_mode} onChange={(event) => setPrice(index, { enrollment_mode: event.target.value, unit: defaultUnit[event.target.value] ?? price.unit })}>
+                <select id={`price-mode-${index}`} className={styles.input} value={price.enrollment_mode} onChange={(event) => setPrice(index, { enrollment_mode: event.target.value, unit: defaultUnit[event.target.value] ?? price.unit, ...(free && event.target.value !== 'trial' ? { amount: '' } : {}) })}>
                   {enrollmentModes.map((mode) => <option key={mode.value} value={mode.value}>{mode.label}</option>)}
                 </select>
               </Field>
               <div className={styles.amountRow}>
                 <Field id={`price-amount-${index}`} label="Цена">
                   <span className={styles.amountInput}>
-                    <input id={`price-amount-${index}`} className={styles.input} inputMode="decimal" value={price.amount} placeholder="30,00" aria-invalid={problem ? true : undefined} aria-describedby={problem ? `price-problem-${index}` : undefined} onChange={(event) => setPrice(index, { amount: event.target.value })} />
-                    <span aria-hidden="true">€</span>
+                    <input id={`price-amount-${index}`} className={styles.input} inputMode="decimal" value={free ? 'Безплатно' : price.amount} disabled={free} placeholder="30,00" aria-invalid={problem ? true : undefined} aria-describedby={problem ? `price-problem-${index}` : undefined} onChange={(event) => setPrice(index, { amount: event.target.value })} />
+                    {free ? null : <span aria-hidden="true">€</span>}
                   </span>
                 </Field>
                 <Field id={`price-unit-${index}`} label="За">
@@ -71,7 +72,16 @@ export function StepPrice({ organizationId, offering, groupModes, problems, lock
                 </Field>
               </div>
             </div>
-            {problem ? <p className={styles.fieldError} id={`price-problem-${index}`}>{problem}</p> : shown ? <p className={styles.pricePreview}>Родителите виждат: <strong>{shown} {priceUnits.find((unit) => unit.value === price.unit)?.label}</strong></p> : null}
+            {price.enrollment_mode === 'trial' ? (
+              <label className={styles.toggle}>
+                <input type="checkbox" checked={free} onChange={(event) => setPrice(index, { amount: event.target.checked ? freeAmount : '' })} />
+                Безплатно
+              </label>
+            ) : null}
+            {problem ? <p className={styles.fieldError} id={`price-problem-${index}`}>{problem}</p> : shown ? <p className={styles.pricePreview}>Родителите виждат: <strong>{free ? shown : `${shown} ${priceUnits.find((unit) => unit.value === price.unit)?.label ?? ''}`.trim()}</strong></p> : null}
+            {price.enrollment_mode === 'single' ? (
+              <div className={styles.tip}><Icon path={icons.calendar} /><span>Родителят избира дата от графика на групите, които приемат еднократни посещения (стъпка 7), ако в групата има свободно място. Нищо друго не е нужно.</span></div>
+            ) : null}
             {kind ? (
               <PriceTerms
                 id={`price-terms-${index}`}

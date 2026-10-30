@@ -14,6 +14,7 @@ import { checkOffering, enrollmentModes, priceUnits, type OfferingDraft } from '
 import { StepGroups } from './step-groups';
 import { StepPeople } from './step-people';
 import { StepPrice } from './step-price';
+import { StepSpecial } from './step-special';
 import { agePresets, completedSteps, contentBlocker, contentFromActivity, draftActivity, savedAgo, sectionsPayload, stepByNumber, storedBasics, summaryLimit, type WizardContent, type WizardStep, wizardSteps } from './steps';
 import { Field, Icon, icons, ListEditor } from './ui';
 import styles from './wizard.module.css';
@@ -441,10 +442,12 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
             ) : null}
 
             {step.id === 'trials' ? (
-              <div className={styles.classic}>
-                <p>Пробни и еднократни посещения помагат на родителите да опитат, преди да се запишат. Стъпката е по избор.</p>
-                <Link className={styles.secondary} href={`/dashboard/activities/${activityId}/visit-offers`}>Управлявай пробните посещения</Link>
-              </div>
+              <StepSpecial
+                organizationId={organization.id}
+                activityId={activityId}
+                groups={groups}
+                hasVisits={(content.offering?.prices ?? []).some((price) => price.enrollment_mode === 'trial' || price.enrollment_mode === 'single')}
+              />
             ) : null}
 
             {step.id === 'review' ? (
@@ -520,7 +523,7 @@ const stepHeadings: Record<WizardStep['id'], string> = {
   people: 'Къде и с кого',
   price: 'Цени и записване',
   groups: 'Групи и график',
-  trials: 'Пробни и еднократни посещения',
+  trials: 'Специални посещения',
   review: 'Преглед преди публикуване',
 };
 
@@ -532,6 +535,6 @@ const stepIntros: Record<WizardStep['id'], string> = {
   people: 'Изберете зала или адрес и водещ преподавател.',
   price: 'Колко струва и как се записват децата.',
   groups: 'Дни, часове и капацитет на всяка група.',
-  trials: 'По избор: пробно занимание или еднократно посещение.',
+  trials: 'По избор: ден на отворените врати или посещения само на определени дати.',
   review: 'Проверете какво липсва. Публикувайте, когато всичко е готово.',
 };

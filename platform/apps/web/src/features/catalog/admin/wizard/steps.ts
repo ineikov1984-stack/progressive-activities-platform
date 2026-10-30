@@ -20,7 +20,7 @@ export const wizardSteps: WizardStep[] = [
   { id: 'people', number: 5, title: 'Места и преподаватели', note: 'Къде и с кого' },
   { id: 'price', number: 6, title: 'Цени и записване', note: 'Цени и условия' },
   { id: 'groups', number: 7, title: 'Групи и график', note: 'Дни, часове, места' },
-  { id: 'trials', number: 8, title: 'Пробни и еднократни', note: 'По избор', optional: true },
+  { id: 'trials', number: 8, title: 'Специални посещения', note: 'По избор', optional: true },
   { id: 'review', number: 9, title: 'Преглед и публикуване', note: 'Проверка преди родителите' },
 ];
 

@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { type FormEvent, useState } from 'react';
 import { type ActivityGroup, type InstructorProfile, type Location, saveGroup } from '../api';
 import { buildSchedulePattern, conflictPresentation, summarizeSchedule } from '../presentation';
@@ -31,6 +30,13 @@ type Props = {
   onGroup: (group: ActivityGroup) => void;
 };
 
+const visitModes = ['trial', 'single'];
+
+/** Whether the group takes trials or single visits (docs/product/visits.md). */
+function takesVisits(modes: GroupMode[], takes: string[] | null): boolean {
+  return modes.some((mode) => visitModes.includes(mode.value) && (takes === null || takes.includes(mode.value)));
+}
+
 function modesText(modes: GroupMode[], takes: string[] | null): string {
   if (takes === null) return 'всички начини';
   return modes.filter((mode) => takes.includes(mode.value)).map((mode) => mode.label.toLocaleLowerCase('bg')).join(', ') || 'няма избран начин';
@@ -46,6 +52,9 @@ export function StepGroups({ organizationId, activityId, modes, ageLabel, groups
   const [approval, setApproval] = useState<'manual' | 'automatic'>('manual');
   // null — every way of enrolling the activity has, including ones added later.
   const [takes, setTakes] = useState<string[] | null>(null);
+  // Children on a trial or single visit in one session: every free place, or up to a number.
+  const [visitLimit, setVisitLimit] = useState(false);
+  const [visitPlaces, setVisitPlaces] = useState('2');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -58,6 +67,8 @@ export function StepGroups({ organizationId, activityId, modes, ageLabel, groups
     setFrequency(group?.schedule_pattern.frequency ?? 'weekly');
     setApproval(group?.enrollment_approval_mode ?? 'manual');
     setTakes(group?.enrollment_modes ?? null);
+    setVisitLimit(group?.visit_places != null);
+    setVisitPlaces(String(group?.visit_places ?? 2));
     setError(''); setNotice('');
   }
 
@@ -68,6 +79,11 @@ export function StepGroups({ organizationId, activityId, modes, ageLabel, groups
     const value = (name: string) => String(form.get(name) ?? '').trim();
     const chosen = takes === null ? null : modes.map((mode) => mode.value).filter((mode) => takes.includes(mode));
     if (chosen !== null && chosen.length === 0) { setError('Изберете поне един начин на записване за групата.'); return; }
+    const visits = takesVisits(modes, takes);
+    const places = Number(visitPlaces);
+    const capacity = Number(value('capacity_max'));
+    if (visits && visitLimit && (!Number.isInteger(places) || places < 1 || places > 500)) { setError('Въведете колко деца на посещение може да има в едно занятие — например 2.'); return; }
+    if (visits && visitLimit && capacity > 0 && places > capacity) { setError('Местата за посещения не може да са повече от максимума деца в групата.'); return; }
     setBusy(true); setError(''); setNotice('');
     try {
       const group = await saveGroup(organizationId, activityId, {
@@ -81,6 +97,8 @@ export function StepGroups({ organizationId, activityId, modes, ageLabel, groups
         enrollment_approval_mode: approval,
         // All ways chosen means "all", so a way added later in step 6 applies to the group too.
         enrollment_modes: chosen === null || chosen.length === modes.length ? null : chosen,
+        // Kept as it is when the group takes no visits.
+        ...(visits ? { visit_places: visitLimit ? places : null } : {}),
         schedule_pattern: buildSchedulePattern({ startDate: value('start_date'), endDate: value('end_date'), frequency, slots, excludedDates: excluded.filter(Boolean).join('\n'), addedDates: extraDates.filter((item) => item.date) }),
       }, existing?.id);
       onGroup(group);
@@ -108,6 +126,7 @@ export function StepGroups({ organizationId, activityId, modes, ageLabel, groups
               <span className={styles.muted}>{group.sessions.length} занятия · до {group.capacity_max} деца{group.location_id ? ` · ${locations.find((item) => item.id === group.location_id)?.name ?? ''}` : ''}</span>
               <span className={styles.muted}>{group.enrollment_approval_mode === 'automatic' ? 'Заявките се одобряват автоматично, ако има място' : 'Заявките се одобряват от екипа'}</span>
               {modes.length > 1 ? <span className={styles.muted}>Записване: {modesText(modes, group.enrollment_modes ?? null)}</span> : null}
+              {takesVisits(modes, group.enrollment_modes ?? null) ? <span className={styles.muted}>{group.visit_places != null ? `Посещения: до ${group.visit_places} ${group.visit_places === 1 ? 'дете' : 'деца'} в едно занятие` : 'Посещения: при всяко свободно място'}</span> : null}
               {group.conflicts.map((conflict, index) => {
                 const view = conflictPresentation(conflict);
                 return <span key={index} className={view.tone === 'danger' ? styles.conflictDanger : styles.conflictWarning}><Icon path={icons.warn} /><span><strong>{view.label}.</strong> {view.message}</span></span>;
@@ -185,6 +204,26 @@ export function StepGroups({ organizationId, activityId, modes, ageLabel, groups
               </div>
             </fieldset>
           ) : null}
+          {takesVisits(modes, takes) ? (
+            <fieldset className={styles.fieldset}>
+              <legend className={styles.label}>Места за пробни и еднократни посещения в едно занятие</legend>
+              <div className={styles.choiceGrid}>
+                <label className={`${styles.choice} ${!visitLimit ? styles.choiceOn : ''}`}>
+                  <input type="radio" name="visit_places_mode" checked={!visitLimit} onChange={() => setVisitLimit(false)} />
+                  <span className={styles.choiceText}><strong>Всички свободни места</strong><span>Ако в занятието има свободно място, родителят може да запише дете за посещение.</span></span>
+                </label>
+                <label className={`${styles.choice} ${visitLimit ? styles.choiceOn : ''}`}>
+                  <input type="radio" name="visit_places_mode" checked={visitLimit} onChange={() => setVisitLimit(true)} />
+                  <span className={styles.choiceText}><strong>Ограничен брой</strong><span>Така посетителите не изпълват групата.</span></span>
+                </label>
+              </div>
+              {visitLimit ? (
+                <Field id="g-visit-places" label="Най-много деца на посещение в едно занятие">
+                  <input id="g-visit-places" type="number" min={1} max={500} inputMode="numeric" className={`${styles.input} ${styles.narrowInput}`} required value={visitPlaces} onChange={(event) => setVisitPlaces(event.target.value)} />
+                </Field>
+              ) : null}
+            </fieldset>
+          ) : null}
           <fieldset className={styles.fieldset}>
             <legend className={styles.label}>Как се одобряват заявките</legend>
             <div className={styles.choiceGrid}>
@@ -244,7 +283,7 @@ export function StepGroups({ organizationId, activityId, modes, ageLabel, groups
       ) : (
         <button type="button" className={styles.secondary} onClick={() => open()}><Icon path={icons.plus} />Добави група</button>
       )}
-      <p className={styles.hint}>Пробни занимания и еднократни посещения по групите се добавят в <Link href={`/dashboard/activities/${activityId}/visit-offers`}>Предложения за посещение</Link>.</p>
+      <p className={styles.hint}>Пробните и еднократните посещения са с цените от стъпка 6 — родителят избира дата от графика на групата. Ден на отворените врати и посещения само на определени дати — в стъпка 8 „Специални посещения“.</p>
     </>
   );
 }
