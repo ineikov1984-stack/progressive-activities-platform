@@ -8,6 +8,7 @@ use App\Domain\Catalog\Models\Session;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Enrollment\Models\EnrollmentEvent;
+use App\Domain\Enrollment\Models\EnrollmentPause;
 use App\Domain\Enrollment\Services\SessionApplicability;
 use Carbon\CarbonImmutable;
 
@@ -116,13 +117,18 @@ final class EnrollmentMessages
                 $from = $enrollment?->transferredFrom;
                 $day = $text('effective_date');
                 $first = $enrollment === null ? null : $this->firstSession($enrollment, $day ?: null);
+                // The last session the child still has in the old group (the mock-up); else its last day.
+                $lastOld = $from === null ? null : $this->sessions->sessionsFor($from)
+                    ->filter(fn (Session $session): bool => $session->starts_at->isFuture())->last();
+                $oldName = '„'.($from->group->name ?? 'старата група').'“';
 
                 return $mail(
                     "{$child} се премества в {$where}".($day !== '' ? ' от '.BulgarianDates::day($day) : ''),
                     "{$child} се премества в {$where}",
                     ['Мястото в новата група е запазено.'],
                     [
-                        $from?->ends_on === null ? null : $fact('Последен ден в „'.($from->group->name ?? 'старата група').'“', BulgarianDates::weekdayDay($from->ends_on->toDateString())),
+                        $lastOld !== null ? $fact("Последно в {$oldName}", $this->sessionText($lastOld, $from->group))
+                            : ($from?->ends_on === null ? null : $fact("Последен ден в {$oldName}", BulgarianDates::weekdayDay($from->ends_on->toDateString()))),
                         $first === null ? null : $fact('Първо в новата група', $this->sessionText($first, $group)),
                         $fact('Дни и час', $weekly),
                         $placeFact,
@@ -151,12 +157,15 @@ final class EnrollmentMessages
                 // A cancelled pause never happened: the next session is simply the next one. A pause ended early:
                 // the child is back from the day the team chose.
                 $next = $enrollment === null ? null : $this->firstSession($enrollment, $cancelled ? null : ($text('resume_on') ?: null));
+                // Which pause: a child may have more than one.
+                $pause = is_string($payload['pause_id'] ?? null) ? EnrollmentPause::query()->find($payload['pause_id']) : null;
+                $range = $pause === null ? '' : 'от '.BulgarianDates::weekdayDay($pause->starts_on->toDateString()).' до '.BulgarianDates::weekdayDay($pause->ends_on->toDateString());
 
                 return $mail(
                     $cancelled ? "Паузата за {$child} е отменена" : "{$child} се връща от паузата на ".BulgarianDates::day($text('resume_on')),
                     $cancelled ? "Паузата за {$child} е отменена" : "{$child} се връща от паузата",
                     [$cancelled ? "{$child} продължава в {$where} без пауза." : "{$child} продължава в {$where}."],
-                    [$sessionFact($cancelled ? 'Следващо занимание' : 'Връща се', $next), $fact('Дни и час', $weekly), $placeFact],
+                    [$fact($cancelled ? 'Отменена пауза' : 'Пауза', $range), $sessionFact($cancelled ? 'Следващо занимание' : 'Връща се', $next), $fact('Дни и час', $weekly), $placeFact],
                     button: $mapButton,
                     after: [$question],
                 );
@@ -206,7 +215,11 @@ final class EnrollmentMessages
                         "{$child} пропуска заниманието на {$day}",
                         "{$child} пропуска заниманието на {$day}",
                         ["Заниманието на {$day} в {$where} не се брои за {$child}."],
-                        [$sessionFact('Пропуска', $session), $sessionFact('Връща се', $next)],
+                        [
+                            $session === null ? null : $fact('Пропуска', $this->sessionText($session, $group),
+                                $next === null && $enrollment?->scope->value === 'full_period' ? "След него няма други занимания за {$child} в този период." : null),
+                            $sessionFact('Връща се', $next),
+                        ],
                         quoteBlock: $quote,
                         after: [$reply("Грешка ли е? Отговорете на този имейл — ще го получи екипът на {$org}.")],
                     );
