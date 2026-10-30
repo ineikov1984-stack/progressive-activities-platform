@@ -17,7 +17,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Условия за плащане: поправки след UX ревюто на по-ясния екран | Claude | claude/payment-terms-ux-round | `apps/web/src/features/payment-terms` | в работа |
+| Етап Б, PR 4: контейнер `worker` — имейлите тръгват сами всяка минута | Claude | claude/scheduler-worker | `platform/compose.yaml` (горещ), `apps/api/Dockerfile`, ADR 0005 | в работа |
 
 ## Опашка (по приоритет)
 
