@@ -58,6 +58,8 @@ export function PaymentTermsPage() {
   const [saving, setSaving] = useState(false);
   const [allKinds, setAllKinds] = useState(false);
   const [allLines, setAllLines] = useState(false);
+  const [extrasShown, setExtrasShown] = useState(false);
+  const linesRef = useRef<HTMLElement>(null);
   const noticeRef = useRef<HTMLParagraphElement>(null);
   const editorRef = useRef<HTMLElement>(null);
 
@@ -104,8 +106,25 @@ export function PaymentTermsPage() {
   useEffect(() => {
     if (!anyDirty) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
+    // A link to another page of the administration asks first (the menu, the header).
+    const guard = (event: MouseEvent) => {
+      const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+      if (!(link instanceof HTMLAnchorElement) || link.target === '_blank' || link.origin !== window.location.origin) return;
+      if (link.pathname === window.location.pathname) return;
+      if (!window.confirm('Имате незапазени промени в условията. Да ги изоставите ли?')) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
     window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
+    document.addEventListener('click', guard, true);
+    // The sticky save bar never covers the field being typed in.
+    document.documentElement.style.scrollPaddingBottom = '9rem';
+    return () => {
+      window.removeEventListener('beforeunload', warn);
+      document.removeEventListener('click', guard, true);
+      document.documentElement.style.scrollPaddingBottom = '';
+    };
   }, [anyDirty]);
 
   if (loadError) {
@@ -158,6 +177,8 @@ export function PaymentTermsPage() {
     disabled: !canManage || saving,
     errors,
     inMarketplace: workspace.in_marketplace,
+    // Opened on a phone by its button, or by itself when the server refused something inside.
+    extrasOpen: extrasShown || Object.keys(errors).some((key) => key.startsWith('rules.refund') || key.startsWith('self_service')),
     change: (path: string, value: Json) => changeDraft({ ...draft, rules: withValue(draft.rules, path, value) }),
   };
 
@@ -197,12 +218,12 @@ export function PaymentTermsPage() {
   const example = kind === 'monthly' ? null : exampleFor(kind, draft.rules);
   const usage = workspace.usage ?? {};
   const used = workspace.billing_kinds.filter((item) => (usage[item.value] ?? []).length > 0).map((item) => item.value);
-  const primary = new Set<BillingKind>([...(used.length ? used : COMMON_KINDS), kind, ...dirtyKinds,
+  const primary = new Set<BillingKind>([...COMMON_KINDS, ...used, kind, ...dirtyKinds,
     ...workspace.payment_terms.filter((set) => set.status === 'active').map((set) => set.billing_kind)]);
   const shownKinds = workspace.billing_kinds.filter((item) => allKinds || primary.has(item.value));
   const hiddenKinds = workspace.billing_kinds.filter((item) => !primary.has(item.value));
   const violations = saved ? Object.values(saved.marketplace_violations) : [];
-  const unsaved = workspace.billing_kinds.filter((item) => dirtyKinds.has(item.value)).map((item) => `„${item.label}“`);
+  const unsavedElsewhere = workspace.billing_kinds.filter((item) => item.value !== kind && dirtyKinds.has(item.value)).map((item) => `„${item.label}“`);
   const selfServiceErrors = errorsFor(errors, ['self_service']);
 
   return (
@@ -212,7 +233,7 @@ export function PaymentTermsPage() {
       {!canManage ? <p className={styles.info}>Само собственикът и администраторът могат да променят условията. Вие ги виждате така, както са запазени.</p> : null}
 
       <fieldset className={styles.part}>
-        <legend className={styles.partTitle}>1. За кой начин на плащане настройвате?</legend>
+        <legend className={styles.partTitle}><h2>1. За кой начин на плащане настройвате?</h2></legend>
         <div className={styles.kindGrid}>
           {shownKinds.map((item) => (
             <label key={item.value} className={item.value === kind ? `${styles.option} ${styles.optionOn}` : styles.option}>
@@ -229,14 +250,17 @@ export function PaymentTermsPage() {
           ))}
         </div>
         {hiddenKinds.length && !allKinds ? (
-          <button type="button" className={styles.linkButton} onClick={() => setAllKinds(true)}>
-            Още {hiddenKinds.length} {hiddenKinds.length === 1 ? 'начин' : 'начина'}: {hiddenKinds.map((item) => item.label.toLowerCase()).join(', ')} — ще ги видите, щом добавите такава дейност
+          <button type="button" className={styles.linkButton} onClick={() => {
+            setAllKinds(true);
+            requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`input[name="billing-kind"][value="${hiddenKinds[0].value}"]`)?.focus());
+          }}>
+            Покажи още {hiddenKinds.length} {hiddenKinds.length === 1 ? 'начин' : 'начина'}: {hiddenKinds.map((item) => item.label.toLowerCase()).join(', ')} — още нямате такива дейности
           </button>
         ) : null}
       </fieldset>
 
       <fieldset className={styles.part} disabled={!canManage || saving}>
-        <legend className={styles.partTitle}>2. Изберете готови условия</legend>
+        <legend className={styles.partTitle}><h2>2. Изберете готови условия</h2></legend>
         <div className={styles.presets}>
           {[...READY_PRESETS, 'custom' as const].map((item) => (
             <label key={item} className={[styles.option, item === preset ? styles.optionOn : '', item === 'custom' ? styles.optionCustom : ''].join(' ')}>
@@ -257,7 +281,7 @@ export function PaymentTermsPage() {
             <h2 id="terms-title">3. Проверете условията за {info.label.toLowerCase()}</h2>
             <p className={styles.muted}>
               {saved?.current_version
-                ? `Запазени на ${savedOn(saved.current_version.created_at)} като „${preset === 'custom' ? 'Собствени' : info.presets[preset].label}“.${dirty ? ' Имате незапазени промени.' : ''}`
+                ? `Запазени на ${savedOn(saved.current_version.created_at)} като „${saved.preset_label}“.${dirty ? ' Имате незапазени промени.' : ''}`
                 : 'Организацията още не е запазила свои условия за този начин на плащане — важат „Стандартни“.'}
             </p>
             {kind === 'monthly' ? <p className={styles.muted}>Пример навсякъде: такса 60 € на месец, 4 занимания в ноември — по 15 € всяко.</p> : null}
@@ -272,7 +296,7 @@ export function PaymentTermsPage() {
 
           <RuleEditor kind={kind} context={context} />
 
-          <fieldset className={styles.rule}>
+          <fieldset className={context.extrasOpen ? styles.rule : `${styles.rule} ${styles.foldOnPhone}`}>
             <legend className={styles.ruleTitle}><RuleIcon name="person" />Какво може родителят сам, без да ви пита</legend>
             <div className={styles.ruleBody}>
               <p className={styles.hint}>Ще работи, когато родителите имат профил в платформата. Дотогава ви пишат или се обаждат.</p>
@@ -283,13 +307,24 @@ export function PaymentTermsPage() {
               {selfServiceErrors.map((message) => <p key={message} className={styles.fieldError}>{message}</p>)}
             </div>
           </fieldset>
+          {!context.extrasOpen ? (
+            <button type="button" className={`${styles.extrasToggle} ${styles.phoneOnly}`} onClick={() => {
+              setExtrasShown(true);
+              requestAnimationFrame(() => editorRef.current?.querySelector<HTMLElement>('fieldset[data-extra] input:not([disabled])')?.focus());
+            }}>Връщане на пари и какво може родителят сам</button>
+          ) : null}
         </section>
 
         <aside className={styles.aside} aria-label="Как го четат родителите">
-          <section className={allLines ? styles.card : `${styles.card} ${styles.cardFolded}`}>
+          <section ref={linesRef} className={allLines ? styles.card : `${styles.card} ${styles.cardFolded}`}>
             <h2>Така го четат родителите</h2>
-            {lines.map((line) => <p key={line.title}><strong>{line.title}.</strong> {line.text}</p>)}
-            {lines.length > 1 && !allLines ? <button type="button" className={styles.unfold} onClick={() => setAllLines(true)}>Виж всички условия</button> : null}
+            {lines.map((line) => <p key={line.title} tabIndex={-1}><strong>{line.title}.</strong> {line.text}</p>)}
+            {lines.length > 1 && !allLines ? (
+              <button type="button" className={styles.unfold} onClick={() => {
+                setAllLines(true);
+                requestAnimationFrame(() => linesRef.current?.querySelectorAll<HTMLElement>('p').item(1)?.focus());
+              }}>Виж всички условия</button>
+            ) : null}
           </section>
           {example ? (
             <section className={`${styles.card} ${styles.cardExample}`}>
@@ -311,9 +346,13 @@ export function PaymentTermsPage() {
 
       {canManage ? (
         <div className={dirty ? `${styles.saveBar} ${styles.saveBarSticky}` : styles.saveBar}>
-          <button type="button" className={styles.primary} onClick={save} disabled={saving || (!!saved && !dirty)}>
-            {saving ? 'Запазване…' : `Запази условията за ${info.label.toLowerCase()}`}
-          </button>
+          {saved && !dirty ? (
+            <p className={styles.muted}>Няма промени за запазване. Сменете нещо по-горе и бутонът „Запази“ ще се появи.</p>
+          ) : (
+            <button type="button" className={styles.primary} onClick={save} disabled={saving}>
+              {saving ? 'Запазване…' : <>Запази условията<span className={styles.saveKind}> за {info.label.toLowerCase()}</span></>}
+            </button>
+          )}
           {dirty ? (
             <button type="button" className={styles.secondary} disabled={saving} onClick={() => {
               setDrafts((current) => ({ ...current, [kind]: undefined }));
@@ -322,7 +361,8 @@ export function PaymentTermsPage() {
               setNotice(undefined);
             }}>Върни запазените</button>
           ) : null}
-          <span className={styles.muted}>Записаните досега деца остават с условията, които са приели.</span>
+          {unsavedElsewhere.length ? <p className={styles.unsaved}><span className={styles.dot} aria-hidden="true" />Незапазени промени има и при: {unsavedElsewhere.join(', ')}.</p> : null}
+          <span className={`${styles.muted} ${styles.saveNote}`}>Записаните досега деца остават с условията, които са приели.</span>
           {notice ? (
             <p ref={noticeRef} tabIndex={-1} className={notice.tone === 'ok' ? styles.ok : styles.error} role={notice.tone === 'ok' ? 'status' : 'alert'}>{notice.text}</p>
           ) : null}
