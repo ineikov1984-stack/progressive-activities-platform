@@ -65,7 +65,9 @@ test('group setup detour restores unfinished fields while normal dirty navigatio
   await page.getByRole('link', { name: 'Добавете група и график в редактора на дейността.' }).click();
   await expect(page).toHaveURL(/activities\/activity-1\?step=7$/);
   state.groups = [group];
-  await page.getByRole('link', { name: 'Предложения за посещение', exact: true }).click();
+  // Step 8 "Специални посещения" leads to the dates-only visits (docs/product/visits.md, т. 8).
+  await page.getByRole('button', { name: 'Напред: Специални посещения', exact: true }).click();
+  await page.getByRole('link', { name: 'Избери дати за посещения', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Група и занятия', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '1. Вид и съдържание', exact: true }).click();
   await expect(page.getByLabel('Публично заглавие')).toHaveValue('Незавършено предложение');

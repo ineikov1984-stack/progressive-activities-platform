@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ActivityDraft } from '../src/features/catalog/admin/api';
-import { amountText, blankPrice, checkOffering, offeringFromActivity, type OfferingDraft } from '../src/features/catalog/admin/wizard/offering';
+import { amountText, blankPrice, checkOffering, freeAmount, isFreeTrial, offeringFromActivity, type OfferingDraft } from '../src/features/catalog/admin/wizard/offering';
 
 const draft = (changes: Partial<OfferingDraft> = {}): OfferingDraft => ({
   location_id: null, lead_instructor_profile_id: null, contact_email: 'info@example.test', enrollment_instructions: '', cancellation_policy: '', terms: '', payment_terms: {},
@@ -20,6 +20,21 @@ describe('checkOffering', () => {
     expect(payload.price_options).toBeUndefined();
     expect(payload.contact_email).toBeUndefined();
     expect(payload.enrollment_instructions).toBe('Пишете ни');
+  });
+
+  it('lets only a trial be free (docs/product/visits.md)', () => {
+    const trial = { ...blankPrice(), enrollment_mode: 'trial', unit: 'session', amount: freeAmount };
+    expect(isFreeTrial(trial)).toBe(true);
+    expect(isFreeTrial({ ...trial, amount: '0' })).toBe(true);
+    expect(isFreeTrial({ ...trial, amount: '0,50' })).toBe(false);
+    expect(isFreeTrial({ ...trial, enrollment_mode: 'single' })).toBe(false);
+    const { payload, problems } = checkOffering(draft({ prices: [trial] }));
+    expect(problems).toEqual({});
+    expect(payload.price_options?.[0]).toMatchObject({ enrollment_mode: 'trial', amount_cents: 0 });
+    // A single visit at 0 is a mistake, not a free visit.
+    expect(checkOffering(draft({ prices: [{ ...trial, enrollment_mode: 'single' }] })).problems.price_0).toBeTruthy();
+    // A loaded free trial shows as free again.
+    expect(amountText(0)).toBe(freeAmount);
   });
 
   it('rejects the same way of enrolling twice', () => {
