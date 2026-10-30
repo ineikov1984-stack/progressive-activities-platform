@@ -245,7 +245,7 @@ class EnrollmentEmailTest extends TestCase
         $subjects = collect($this->mailer->sent)->map(fn (array $sent): string => $sent['to'].' | '.$sent['mail']->envelope()->subject)->sort()->values()->all();
         $this->assertSame([
             'info@zvezda.example | Родител прекрати записване в „Шахмат · Група 2“',
-            $f['parent']->email.' | Пауза за Ния: 9 ноември – 15 ноември',
+            $f['parent']->email.' | Пауза за Ния: 9–15 ноември',
             $f['parent']->email.' | Последен ден на Ния в „Шахмат · Група 2“: 30 ноември',
         ], $subjects);
         $byTo = collect($this->mailer->sent);
@@ -414,7 +414,7 @@ class EnrollmentEmailTest extends TestCase
 
         $html = $this->html($this->mailer->sent[0]['mail']);
         // The mock-up: the last session in the old group, not the calendar day before the move.
-        foreach (['Последно в „Група 2“', 'сряда, 18 ноември · 17:30–18:30', 'Първо в новата група', 'понеделник, 23 ноември · 16:00–17:00', 'Всеки понеделник · 16:00–17:00'] as $expected) {
+        foreach (['Последно занимание в „Група 2“', 'сряда, 18 ноември · 17:30–18:30', 'Първо занимание в новата група', 'понеделник, 23 ноември · 16:00–17:00', 'Всеки понеделник · 16:00–17:00'] as $expected) {
             $this->assertStringContainsString($expected, $html);
         }
         $this->assertStringNotContainsString('22 ноември', $html);

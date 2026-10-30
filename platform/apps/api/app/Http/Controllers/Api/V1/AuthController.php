@@ -32,7 +32,7 @@ class AuthController extends Controller
 
         if (! $authenticated) {
             throw ValidationException::withMessages([
-                'credentials' => ['Невалиден имейл или парола.'],
+                'credentials' => ['Грешен имейл или парола.'],
             ])->status(Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
@@ -77,7 +77,7 @@ class AuthController extends Controller
         $validated = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
-        ], ['name.required' => 'Напишете името си.', 'name.max' => 'Името е твърде дълго.', 'phone.max' => 'Проверете телефона — например 0888 123 456 или +44 7700 900123.']);
+        ], ['name.required' => 'Напишете името си.', 'name.max' => 'Името е твърде дълго.', 'phone.max' => 'Проверете телефона — например 0888 123 456 или +359 888 123 456.']);
 
         $changes = [];
         if (array_key_exists('name', $validated)) {
@@ -87,7 +87,7 @@ class AuthController extends Controller
             $raw = trim((string) $validated['phone']);
             $phone = $raw === '' ? null : PhoneNumber::normalize($raw);
             if ($raw !== '' && $phone === null) {
-                throw ValidationException::withMessages(['phone' => 'Проверете телефона — например 0888 123 456 или +44 7700 900123.']);
+                throw ValidationException::withMessages(['phone' => 'Проверете телефона — например 0888 123 456 или +359 888 123 456.']);
             }
             $changes['phone'] = $phone;
         }

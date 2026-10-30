@@ -29,7 +29,7 @@ final readonly class SessionAllocation
             ->with(['group', 'sessionExceptions', 'pauses'])
             ->get()->contains(fn (Enrollment $enrollment): bool => $this->applicability->appliesTo($enrollment, $session));
         if ($pending || $allocated) {
-            throw ValidationException::withMessages(['session_id' => 'Детето вече има заявка или потвърдено място за това занятие.']);
+            throw ValidationException::withMessages(['session_id' => 'Детето вече има заявка или потвърдено място за това занимание.']);
         }
     }
 }
