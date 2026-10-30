@@ -280,7 +280,9 @@ function MonthChoice({ context, part }: { context: EditorContext; part: 'start' 
         title: 'Плаща част от месеца според датата',
         hint: mode === 'cutoff'
           ? monthChoiceExample(context.rules, part, 'cutoff')
-          : part === 'end' ? 'Напр. спре ли до 15-то число — половината, след това — цялата такса.' : 'Напр. започне ли до 15-то — цялата такса, след това — половината.',
+          : part === 'end'
+            ? 'Например: ако последният ден е до 15-о число включително, родителят плаща половината от таксата. Ако е по-късно, плаща цялата такса.'
+            : 'Например: ако детето започне до 15-о число включително, родителят плаща цялата такса. Ако започне по-късно, плаща половината.',
         details: (
           <Line>
             <span>{part === 'end' ? 'Спре ли до' : 'Започне ли до'}</span>
@@ -534,7 +536,7 @@ export function RuleEditor({ kind, context }: { kind: BillingKind; context: Edit
             {context.inMarketplace ? <Hint>Най-много 30 дни: {FRAME}</Hint> : null}
             <Choices context={context} name="deposit" value={String(numberAt(context.rules, 'deposit_months') ?? 0)} onPick={(next) => context.change('deposit_months', Number(next))} choices={[
               { value: '0', title: 'Без депозит' },
-              { value: '1', title: 'Депозит — една месечна такса', hint: 'Връща се или се приспада от последния месец.' },
+              { value: '1', title: 'Депозит — една месечна такса', hint: 'Приспада се от таксата за последния месец.' },
             ]} />
           </RuleRow>
           <RuleRow icon="absences" title="Храна и болест" paths={['meals_by_attendance', 'sick_over_working_days', 'sick_next_month_kept']} context={context}>

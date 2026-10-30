@@ -38,7 +38,7 @@ function workspace(canManage: boolean, saved: PaymentTermsSet[] = []): PaymentTe
         standard: { label: 'Стандартни', rules: monthly.standard, self_service: self.standard },
         strict: { label: 'Строги', rules: monthly.strict, self_service: self.strict },
       } },
-      { value: 'visit', label: 'Единично или пробно посещение', presets: {
+      { value: 'visit', label: 'Пробно занимание или еднократно посещение', presets: {
         flexible: { label: 'Гъвкави', rules: visit([[12, 0], [0, 50]]), self_service: self.flexible },
         standard: { label: 'Стандартни', rules: visit([[24, 0], [12, 50], [0, 100]]), self_service: self.standard },
         strict: { label: 'Строги', rules: visit([[48, 0], [0, 100]]), self_service: self.strict },
@@ -84,16 +84,16 @@ test('the owner starts from "Стандартни", changes a number and saves t
 
   await expect(page.getByRole('heading', { name: 'Такси, отсъствия и отказ', level: 1 })).toBeVisible();
   await expect(page.getByRole('radio', { name: /^Стандартни/ })).toBeChecked();
-  await expect(page.getByText('Спрете ли до 15-то число, плащате половината от таксата за месеца; след това — цялата.')).toBeVisible();
+  await expect(page.getByText('Ако последният ден на детето в групата е до 15-о число включително, за този месец плащате половината от месечната такса. Ако е след 15-о число, плащате цялата такса.')).toBeVisible();
   await expect(page.getByText('Ползва се при: Футбол (6–8 г.)')).toBeVisible();
   await expect(page.getByText('Организацията още не е запазила свои условия за този начин на плащане — важат „Стандартни“.', { exact: false })).toBeVisible();
 
   await page.getByLabel('Ден от месеца').first().fill('10');
   await expect(page.getByRole('radio', { name: /^Собствени/ })).toBeChecked();
-  await expect(page.getByText('Спрете ли до 10-то число', { exact: false })).toBeVisible();
+  await expect(page.getByText('е до 10-о число включително', { exact: false })).toBeVisible();
 
   await page.getByRole('radio', { name: /^Строги/ }).check();
-  await expect(page.getByText('Месецът, в който спирате, се плаща цял.')).toBeVisible();
+  await expect(page.getByText('Ако прекратите записването, за месеца, в който е последният ден на детето, плащате цялата месечна такса.')).toBeVisible();
   await page.getByRole('radio', { name: /^Стандартни/ }).check();
   await page.getByLabel('Дни предизвестие за пауза').fill('10');
 

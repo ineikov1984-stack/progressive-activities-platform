@@ -106,6 +106,7 @@
 .visitTerms dd { display: inline; margin: 0; }
 .visitTerms summary { cursor: pointer; color: var(--navy); font-weight: 700; }
 .visitTerms details dl { margin-top: .35rem; }
+.visitTerms details p { margin: .35rem 0 0; }
 .offerDetails > .sameTerms, .offerDetails > .trialRule { font-size: .83rem; color: var(--body); }
 .offerCard .locationBlock { border-top: 1px solid var(--border); padding-block: 1rem .4rem; margin-top: .8rem; }
 .offerCard .actionState { font-weight: 750; color: var(--navy); padding-top: 1rem; margin-top: auto; }

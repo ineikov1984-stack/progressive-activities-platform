@@ -23,8 +23,11 @@ describe('public visit card — terms from step 6 (docs/product/visits.md, т. 8
     expect(html).toContain('До 12 часа преди началото');
     expect(html).toContain('Такси, отсъствия и отказ');
     expect(html).toContain('Отказ:');
-    expect(html).toContain('Неявяване:');
-    expect(html).toContain('Пълни условия');
+    expect(html).toContain('Пропуснато посещение:');
+    expect(html).toContain('Ако откажете посещението поне 24');
+    expect(html).toContain('Всички условия');
+    // A free visit has nothing to pay, so no example in euro.
+    expect(html).not.toContain('Например:');
     expect(html).toContain('Всяко дете може да посети едно пробно занимание по тази дейност през учебната година.');
     expect(html).not.toContain('Срок за отказ');
     expect(html).not.toContain('При отказ в срок');
@@ -36,6 +39,11 @@ describe('public visit card — terms from step 6 (docs/product/visits.md, т. 8
     expect(same.match(/Всяко дете може да посети едно пробно занимание/g)).toHaveLength(1);
     const other = renderToStaticMarkup(createElement(VisitOfferList, { offers: [offer(), offer({ visit_offer_id: 'offer-2', payment_terms: terms('visit:set-2:1') })] }));
     expect(other).not.toContain('Същите такси');
-    expect(other.match(/Неявяване:/g)).toHaveLength(2);
+    expect(other.match(/Пропуснато посещение:/g)).toHaveLength(2);
+  });
+
+  it('works an example out at the price of a paid visit', () => {
+    const html = renderToStaticMarkup(createElement(VisitOfferList, { offers: [offer({ type: 'single', title: 'Еднократно посещение', fee_type: 'paid', amount_cents: 1500 })] }));
+    expect(html.replace(/\u00A0/g, ' ')).toContain('Например: посещението струва 15,00 €. Ако го откажете 30 часа преди началото, не плащате нищо. Ако го откажете 12 часа преди началото, плащате 15,00 €. Ако детето не дойде, без да сте отказали, плащате 15,00 €.');
   });
 });
