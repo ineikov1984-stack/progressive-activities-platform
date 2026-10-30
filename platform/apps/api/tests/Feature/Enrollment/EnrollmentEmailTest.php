@@ -353,7 +353,7 @@ class EnrollmentEmailTest extends TestCase
         $this->event($f, 'enrollment.application_submitted', ['status' => 'submitted']);
         app(DeliverEvents::class)->run();
         $html = $parentHtml();
-        $this->assertStringNotContainsString('<img', $html);
+        $this->assertStringNotContainsString('/media/', $html);
         $this->assertStringContainsString('ШЗ', $html);
 
         Storage::disk('local')->put("catalog/{$f['organization']->id}/{$id}.png", 'png');

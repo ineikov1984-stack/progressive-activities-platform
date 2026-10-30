@@ -372,7 +372,7 @@ final class EnrollmentMessages
      * The small grey line icon beside a fact (the approved mock-up): a PNG from the web app's public folder,
      * decorative only. Dates, the weekly rhythm, the place, the group, places and waiting.
      */
-    private function icon(string $label, string $webUrl): ?string
+    private function icon(string $label, string $webUrl): string
     {
         $name = match (true) {
             in_array($label, ['После', 'Дни и час', 'Ден и час'], true) => 'repeat',
