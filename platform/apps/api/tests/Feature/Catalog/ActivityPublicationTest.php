@@ -145,7 +145,8 @@ class ActivityPublicationTest extends TestCase
         $this->assertDatabaseHas('activities', [
             'id' => $activity->id, 'status' => 'draft', 'published_at' => null, 'version' => 1,
         ]);
-        $this->assertDatabaseCount('audit_events', 0);
+        // Only the teacher put in each group; the refused publication records nothing.
+        $this->assertSame(['catalog.assignment_added', 'catalog.assignment_added'], DB::table('audit_events')->pluck('action')->all());
     }
 
     public function test_publish_is_atomic_versioned_and_records_exactly_one_audit_event(): void

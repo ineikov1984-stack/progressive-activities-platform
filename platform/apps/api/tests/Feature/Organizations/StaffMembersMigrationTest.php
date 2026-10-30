@@ -64,8 +64,8 @@ class StaffMembersMigrationTest extends TestCase
         // Back: an ended and a not yet started assignment would become current without their period, so they go.
         $later = $this->addProfile($organization, 'Нов треньор', null);
         DB::table('activity_group_instructors')->insert([
-            ['group_id' => $group, 'instructor_profile_id' => $unlinked, 'organization_id' => $organization, 'ends_on' => '2020-01-31', 'created_at' => $now, 'updated_at' => $now],
-            ['group_id' => $group, 'instructor_profile_id' => $later, 'organization_id' => $organization, 'starts_on' => '2999-01-01', 'created_at' => $now, 'updated_at' => $now],
+            ['group_id' => $group, 'instructor_profile_id' => $unlinked, 'organization_id' => $organization, 'starts_on' => null, 'ends_on' => '2020-01-31', 'created_at' => $now, 'updated_at' => $now],
+            ['group_id' => $group, 'instructor_profile_id' => $later, 'organization_id' => $organization, 'starts_on' => '2999-01-01', 'ends_on' => null, 'created_at' => $now, 'updated_at' => $now],
         ]);
         Artisan::call('migrate:rollback', ['--step' => 1, '--force' => true]);
         $this->assertSame([$linked], DB::table('activity_group_instructors')->where('group_id', $group)->pluck('instructor_profile_id')->all());

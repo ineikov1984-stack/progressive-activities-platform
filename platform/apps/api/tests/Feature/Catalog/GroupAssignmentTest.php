@@ -38,7 +38,8 @@ class GroupAssignmentTest extends TestCase
             ['id' => $group['sessions'][1]['id'], 'instructor_ids' => [$chris->id]],
             ['id' => $group['sessions'][5]['id'], 'instructor_ids' => []],
         ]])->assertOk();
-        Group::query()->whereKey($group['id'])->update(['status' => 'published']);
+        app(TenantContext::class)->select($organization);
+        $this->assertSame(1, Group::query()->whereKey($group['id'])->update(['status' => 'published']));
         $url = '/api/v1/catalog/groups/'.$group['id'].'/assignments';
 
         $this->postJson($url, ['instructor_profile_id' => $boris->id, 'role' => 'assistant', 'starts_on' => '2026-11-15'])
