@@ -157,35 +157,38 @@ class ParentEnrollmentApplicationTest extends TestCase
         $this->assertNull($event->expanded_at);
     }
 
-    public function test_legacy_trial_and_single_prices_require_a_published_visit_offer(): void
+    public function test_trial_and_single_prices_need_an_upcoming_date_of_the_group(): void
     {
         [, $parent, $child, $group, $session, $trialPrice] = $this->fixture('trial');
 
+        // A visit is for one session: without a date, or with a past one, there is nothing to book.
         $this->actingAs($parent)->withHeader('Idempotency-Key', 'trial-missing-session')
             ->postJson('/api/v1/parent/enrollment-applications', $this->payload($child->id, $group->id, $trialPrice->id))
-            ->assertUnprocessable()->assertJsonValidationErrors('visit_offer_id');
+            ->assertUnprocessable()->assertJsonValidationErrors('session_id');
 
         app(TenantContext::class)->select($group->organization_id);
-        $foreignSession = $this->addSession($group, '2026-10-27T14:00:00Z');
+        $pastSession = $this->addSession($group, '2026-10-27T14:00:00Z');
         app(TenantContext::class)->clear();
         $this->actingAs($parent)->withHeader('Idempotency-Key', 'trial-past-session')
             ->postJson('/api/v1/parent/enrollment-applications', [
                 ...$this->payload($child->id, $group->id, $trialPrice->id),
-                'session_id' => $foreignSession->id,
-            ])->assertUnprocessable()->assertJsonValidationErrors('visit_offer_id');
+                'session_id' => $pastSession->id,
+            ])->assertUnprocessable()->assertJsonValidationErrors('session_id');
 
+        // With an upcoming date of the group the trial is booked from its price (docs/product/visits.md).
         $this->actingAs($parent)->withHeader('Idempotency-Key', 'trial-valid-session')
             ->postJson('/api/v1/parent/enrollment-applications', [
                 ...$this->payload($child->id, $group->id, $trialPrice->id),
                 'session_id' => $session->id,
-            ])->assertUnprocessable()->assertJsonValidationErrors('visit_offer_id');
+            ])->assertCreated()->assertJsonPath('application.scope', 'trial')
+            ->assertJsonPath('application.session_id', $session->id);
 
         [, $singleParent, $singleChild, $singleGroup, $singleSession, $singlePrice] = $this->fixture('single');
         $this->actingAs($singleParent)->withHeader('Idempotency-Key', 'single-valid-session')
             ->postJson('/api/v1/parent/enrollment-applications', [
                 ...$this->payload($singleChild->id, $singleGroup->id, $singlePrice->id),
                 'session_id' => $singleSession->id,
-            ])->assertUnprocessable()->assertJsonValidationErrors('visit_offer_id');
+            ])->assertCreated()->assertJsonPath('application.scope', 'single');
     }
 
     public function test_foreign_child_is_not_found_and_unavailable_catalog_resources_are_rejected(): void

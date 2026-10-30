@@ -17,6 +17,7 @@ use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
 use App\Domain\Enrollment\Services\SessionAllocation;
 use App\Domain\Enrollment\Services\SessionApplicability;
+use App\Domain\Enrollment\Services\VisitBooking;
 use App\Domain\Identity\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -29,6 +30,7 @@ final class ReviewEnrollmentApplication
         private readonly VisitOfferEligibility $eligibility,
         private readonly SessionAllocation $allocation,
         private readonly SessionApplicability $applicability,
+        private readonly VisitBooking $visits,
     ) {}
 
     public function handle(
@@ -62,7 +64,12 @@ final class ReviewEnrollmentApplication
                 ]);
             }
 
+            // A trial or a single visit from a price: a date with a free place or none (docs/product/visits.md, т. 2.7).
+            $visitFromPrice = $offer === null && $current->scope !== EnrollmentScope::FullPeriod;
             if ($decision === 'waitlist') {
+                if ($visitFromPrice) {
+                    throw ValidationException::withMessages(['decision' => 'За посещение няма списък на чакащите. Одобрете или откажете заявката.']);
+                }
                 if (! $group->waitlist_enabled || ($offer !== null && ! $offer->waitlist_enabled)) {
                     throw ValidationException::withMessages(['decision' => 'Списъкът с чакащи за тази група е изключен.']);
                 }
@@ -111,14 +118,24 @@ final class ReviewEnrollmentApplication
                 if ($eligibilityOverrideReason !== null) {
                     $this->eligibility->assertOverride($actor, $eligibilityOverrideReason);
                 }
+            } elseif ($visitFromPrice) {
+                if ($current->session === null || now()->greaterThanOrEqualTo($current->session->starts_at)) {
+                    throw ValidationException::withMessages(['session_id' => 'Избраната дата вече е започнала.']);
+                }
+                if ($current->scope === EnrollmentScope::Trial) {
+                    $this->visits->assertTrialOnce($current->child, $group, $current->session, $current->id);
+                }
             }
             $remaining = $offer !== null
                 ? $this->capacity->remainingForOffer($offer, $current->session, forAllocation: true)
                 : ($current->scope === EnrollmentScope::FullPeriod
                 ? $this->capacity->remainingForGroup($group, forAllocation: true)
-                : $this->capacity->remainingForSession($current->session()->firstOrFail(), forAllocation: true));
+                : $this->capacity->remainingForVisit($current->session()->firstOrFail(), forAllocation: true));
 
             if ($remaining !== null && $remaining < 1) {
+                if ($visitFromPrice) {
+                    throw ValidationException::withMessages(['capacity' => 'Няма свободни места на тази дата. Откажете заявката с обяснение за родителя.']);
+                }
                 if ($current->status === EnrollmentApplicationStatus::Waitlisted) {
                     throw ValidationException::withMessages(['capacity' => 'Все още няма свободно място в групата.']);
                 }

@@ -9,6 +9,8 @@ use App\Domain\Enrollment\Enums\EnrollmentScope;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Enrollment;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 final class EnrollmentCapacity
@@ -174,6 +176,68 @@ final class EnrollmentCapacity
         $offerRemaining = max(0, $offer->visit_limit - count($enrollments->get()->all()));
 
         return $total === null ? $offerRemaining : min($total, $offerRemaining);
+    }
+
+    /**
+     * Places for a trial or a single visit booked from a price (docs/product/visits.md, т. 5.3): the free
+     * places of the session, and no more than the group's places for such visits. Visits from an offer
+     * have their own limit and are not counted here. Null — no limit.
+     */
+    public function remainingForVisit(Session $session, bool $forAllocation = false): ?int
+    {
+        $free = $this->remainingForSession($session, $forAllocation);
+        $limit = Group::query()->whereKey($session->group_id)->value('visit_places');
+        if ($limit === null) {
+            return $free;
+        }
+        $visits = $this->visitsFromPrices()->where('session_id', $session->id);
+        if ($forAllocation) {
+            $visits->orderBy('id')->lockForUpdate();
+        }
+        $left = max(0, (int) $limit - count($visits->get(['id'])->all()));
+
+        return $free === null ? $left : min($free, $left);
+    }
+
+    /**
+     * The next sessions a parent can book a visit for, with their places — the same rule as
+     * remainingForVisit(), from one query for the group's enrollments (read-only, no locks).
+     *
+     * @param  Collection<int, Session>  $sessions  the group's scheduled sessions, earliest first
+     * @return list<array{session: Session, remaining: int|null}>
+     */
+    public function visitDays(Group $group, Collection $sessions, CarbonImmutable $now, int $limit = 10): array
+    {
+        $open = $sessions->filter(fn (Session $session): bool => $session->group_id === $group->id
+            && $session->status === 'scheduled'
+            && $now->lessThan($session->starts_at->subHours(VisitBooking::CLOSES_HOURS_BEFORE)))
+            ->take($limit)->values();
+        if ($open->isEmpty()) {
+            return [];
+        }
+        $enrollments = Enrollment::query()->where('group_id', $group->id)
+            ->whereIn('status', [EnrollmentStatus::Active, EnrollmentStatus::Paused, EnrollmentStatus::Ended])
+            ->with(['group', 'sessionExceptions', 'pauses'])->get();
+        $fromPrices = $this->visitsFromPrices()->where('group_id', $group->id)
+            ->whereIn('session_id', $open->pluck('id'))->pluck('session_id')->countBy();
+
+        return $open->map(function (Session $session) use ($group, $enrollments, $fromPrices): array {
+            $capacity = $session->capacity ?? $group->capacity_max;
+            $free = $capacity === null ? null : max(0, $capacity - $enrollments
+                ->filter(fn (Enrollment $enrollment): bool => $this->applicability->appliesTo($enrollment, $session))->count());
+            $left = $group->visit_places === null ? null : max(0, $group->visit_places - ($fromPrices[$session->id] ?? 0));
+            $remaining = $free === null ? $left : ($left === null ? $free : min($free, $left));
+
+            return ['session' => $session, 'remaining' => $remaining];
+        })->all();
+    }
+
+    /** @return Builder<Enrollment> trials and single visits booked from a price, holding or having used their place */
+    private function visitsFromPrices(): Builder
+    {
+        return Enrollment::query()->whereIn('scope', [EnrollmentScope::Trial, EnrollmentScope::Single])
+            ->whereIn('status', [EnrollmentStatus::Active, EnrollmentStatus::Paused, EnrollmentStatus::Ended])
+            ->whereHas('application', fn ($query) => $query->whereNull('visit_offer_id'));
     }
 
     private function requireTransaction(): void

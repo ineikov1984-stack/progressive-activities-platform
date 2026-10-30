@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * @property array<string, mixed>|null $schedule_pattern
  * @property list<string>|null $enrollment_modes the activity's ways of enrolling this group takes; null — all
+ * @property int|null $visit_places children on a trial or single visit from a price in one session; null — every free place
  */
 #[Fillable([
     'offering_id',
@@ -28,6 +29,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'schedule_pattern',
     'enrollment_approval_mode',
     'enrollment_modes',
+    'visit_places',
     'waitlist_enabled',
     'status',
     'version',
@@ -146,6 +148,7 @@ class Group extends Model
             'capacity_max' => 'integer',
             'schedule_pattern' => 'array',
             'enrollment_modes' => 'array',
+            'visit_places' => 'integer',
             'waitlist_enabled' => 'boolean',
             'version' => 'integer',
         ];

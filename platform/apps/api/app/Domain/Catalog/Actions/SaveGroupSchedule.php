@@ -55,7 +55,7 @@ final readonly class SaveGroupSchedule
                 'location_id' => $group->location_id, 'capacity' => $group->capacity_max,
                 'instructor_ids' => $group->instructors()->pluck('instructor_profiles.id')->all(),
             ] : null;
-            $group->fill(Arr::only($data, ['name', 'age_label', 'capacity_min', 'capacity_max', 'location_id', 'enrollment_approval_mode', 'enrollment_modes']));
+            $group->fill(Arr::only($data, ['name', 'age_label', 'capacity_min', 'capacity_max', 'location_id', 'enrollment_approval_mode', 'enrollment_modes', 'visit_places']));
             if (($data['enrollment_modes'] ?? null) !== null) {
                 $this->assertActivityHasModes($offering, $group, $data['enrollment_modes']);
             }
@@ -70,6 +70,9 @@ final readonly class SaveGroupSchedule
             }
             if ($group->capacity_max !== null && $group->capacity_max < $group->capacity_min) {
                 throw ValidationException::withMessages(['capacity_max' => 'Максималният капацитет трябва да е поне минималния.']);
+            }
+            if ($group->visit_places !== null && $group->capacity_max !== null && $group->visit_places > $group->capacity_max) {
+                throw ValidationException::withMessages([array_key_exists('visit_places', $data) ? 'visit_places' : 'capacity_max' => 'Местата за посещения не може да са повече от максимума деца в групата.']);
             }
 
             $generated = null;
@@ -183,6 +186,8 @@ final readonly class SaveGroupSchedule
             // Which of the activity's ways of enrolling this group takes; null — all of them.
             'enrollment_modes' => ['sometimes', 'nullable', 'array', 'min:1', 'max:5'],
             'enrollment_modes.*' => ['required', 'string', Rule::in(['trial', 'single', 'monthly', 'full_period', 'package']), 'distinct'],
+            // Children on a trial or single visit from a price in one session; null — every free place (docs/product/visits.md).
+            'visit_places' => ['sometimes', 'nullable', 'integer', 'between:1,500'],
             'location_id' => ['sometimes', ...$location],
             'instructor_ids' => ['sometimes', 'array', 'max:100'],
             'instructor_ids.*' => $instructor,
