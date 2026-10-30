@@ -200,6 +200,7 @@ class PaymentTermsApiTest extends TestCase
             $this->assertTrue(PaymentTerms::query()->findOrFail($second)->is_default);
             $this->assertTrue(PaymentTerms::query()->findOrFail($visit)->is_default, 'Another way of paying keeps its default.');
         });
+        $this->assertFalse(AuditEvent::query()->where('action', 'payment_terms.updated')->where('subject_id', $first)->sole()->metadata['is_default']);
 
         // A set that is not the default is archived, is not edited while archived, and comes back.
         $this->as($owner, $organization)->patchJson("/api/v1/payment-terms/{$first}", ['version' => 2, 'status' => 'archived'])

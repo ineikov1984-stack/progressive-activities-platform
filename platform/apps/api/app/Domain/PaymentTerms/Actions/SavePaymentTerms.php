@@ -220,6 +220,12 @@ final readonly class SavePaymentTerms
                 $previous->is_default = false;
                 $previous->version++;
                 $previous->save();
+                $this->audit->record(AuditAction::PaymentTermsUpdated, new AuditableReference('payment_terms', $previous->id), [
+                    'billing_kind' => $previous->billing_kind->value,
+                    'is_default' => false,
+                    'version' => $previous->version,
+                    'rules_changed' => false,
+                ]);
             });
     }
 

@@ -57,11 +57,23 @@ class PaymentTermsSchemaTest extends TestCase
             $this->refused($pdo, fn () => $pdo->exec("DELETE FROM payment_terms_versions WHERE id = '{$first['version']}'"), 'P0001');
             $this->refused($pdo, fn () => $pdo->exec("DELETE FROM payment_terms WHERE id = '{$first['terms']}'"), 'P0001');
 
+            // Removing a user only clears who wrote a version; the numbers stay.
+            $user = (string) Str::uuid();
+            $pdo->prepare("INSERT INTO users (id, name, email, password, created_at, updated_at) VALUES (:id, 'Синтетичен', :email, 'x', NOW(), NOW())")
+                ->execute(['id' => $user, 'email' => "terms-{$user}@example.test"]);
+            $kept = $this->insertVersion($pdo, $first['organization'], $first['terms'], 2, $user);
+            $pdo->prepare('DELETE FROM users WHERE id = :id')->execute(['id' => $user]);
+            $row = $pdo->prepare('SELECT created_by, rules FROM payment_terms_versions WHERE id = :id');
+            $row->execute(['id' => $kept]);
+            $this->assertSame([null, '{"refund": "parent_choice"}'], $row->fetch(\PDO::FETCH_NUM));
+
             // Removing a whole organization still removes its sets and versions.
             $pdo->prepare('DELETE FROM organizations WHERE id = :id')->execute(['id' => $second['organization']]);
-            $left = $pdo->prepare('SELECT count(*) FROM payment_terms_versions WHERE organization_id = :id');
-            $left->execute(['id' => $second['organization']]);
-            $this->assertSame(0, (int) $left->fetchColumn());
+            foreach (['payment_terms', 'payment_terms_versions'] as $table) {
+                $left = $pdo->prepare("SELECT count(*) FROM {$table} WHERE organization_id = :id");
+                $left->execute(['id' => $second['organization']]);
+                $this->assertSame(0, (int) $left->fetchColumn(), $table);
+            }
         } finally {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
@@ -110,12 +122,12 @@ class PaymentTermsSchemaTest extends TestCase
         return $id;
     }
 
-    private function insertVersion(\PDO $pdo, string $organization, string $terms, int $number): string
+    private function insertVersion(\PDO $pdo, string $organization, string $terms, int $number, ?string $createdBy = null): string
     {
         $id = (string) Str::uuid();
-        $pdo->prepare('INSERT INTO payment_terms_versions (id, organization_id, terms_id, number, schema_version, rules, created_at) '
-            ."VALUES (:id, :organization, :terms, :number, 1, '{\"refund\": \"parent_choice\"}', NOW())")
-            ->execute(['id' => $id, 'organization' => $organization, 'terms' => $terms, 'number' => $number]);
+        $pdo->prepare('INSERT INTO payment_terms_versions (id, organization_id, terms_id, number, schema_version, rules, created_by, created_at) '
+            ."VALUES (:id, :organization, :terms, :number, 1, '{\"refund\": \"parent_choice\"}', :created_by, NOW())")
+            ->execute(['id' => $id, 'organization' => $organization, 'terms' => $terms, 'number' => $number, 'created_by' => $createdBy]);
 
         return $id;
     }
