@@ -122,6 +122,9 @@ final class ReviewEnrollmentApplication
                 if ($current->session === null || now()->greaterThanOrEqualTo($current->session->starts_at)) {
                     throw ValidationException::withMessages(['session_id' => 'Избраната дата вече е започнала.']);
                 }
+                if ($current->session->status !== 'scheduled') {
+                    throw ValidationException::withMessages(['session_id' => 'Занятието е отменено. Откажете заявката с обяснение за родителя.']);
+                }
                 if ($current->scope === EnrollmentScope::Trial) {
                     $this->visits->assertTrialOnce($current->child, $group, $current->session, $current->id);
                 }

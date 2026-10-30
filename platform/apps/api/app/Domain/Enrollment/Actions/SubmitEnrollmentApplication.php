@@ -160,7 +160,7 @@ final class SubmitEnrollmentApplication
                     }
                 } elseif ($session !== null) {
                     // A trial or a single visit from a price and a date (docs/product/visits.md, т. 5.1).
-                    if (! $this->visits->isOpen($session, now()->toImmutable())) {
+                    if (! VisitBooking::isOpen($session, now()->toImmutable())) {
                         throw ValidationException::withMessages(['session_id' => 'Записването за тази дата е затворено.']);
                     }
                     $this->allocation->assertAvailable($child, $session);

@@ -25,6 +25,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Validation\ValidationException;
+use PHPUnit\Framework\Attributes\Group as TestGroup;
 use Tests\Support\AcceptsPaymentTerms;
 use Tests\TestCase;
 
@@ -80,14 +81,18 @@ class VisitFromPriceTest extends TestCase
         $this->inTenant($f['organization'], fn () => $f['group']->update(['enrollment_modes' => null]));
 
         // Another group's session, another organization's session.
-        $sibling = $this->inTenant($f['organization'], fn () => $this->group($f['group']->offering_id));
-        $siblingSession = $this->inTenant($f['organization'], fn () => $this->session($sibling, '2026-11-03T14:00:00Z'));
+        $sibling = $this->inTenant($f['organization'], fn () => $this->addGroup($f['group']->offering_id));
+        $siblingSession = $this->inTenant($f['organization'], fn () => $this->addSession($sibling, '2026-11-03T14:00:00Z'));
         $this->book($f['parent'], $f['child'], $f['group'], $single, $siblingSession, 'other-group')
             ->assertUnprocessable()->assertJsonValidationErrors('session_id');
         $this->book($f['parent'], $f['child'], $f['group'], $single, $other['sessions'][0], 'other-organization')
             ->assertUnprocessable()->assertJsonValidationErrors('session_id');
 
-        // Booking closes 2 hours before the start.
+        // Booking opens 60 days ahead…
+        $far = $this->inTenant($f['organization'], fn () => $this->addSession($f['group'], '2026-12-28T14:00:00Z'));
+        $this->book($f['parent'], $f['child'], $f['group'], $single, $far, 'too-early')
+            ->assertUnprocessable()->assertJsonValidationErrors('session_id');
+        // …and closes 2 hours before the start.
         $this->travelTo('2026-11-02T12:00:00Z');
         $this->book($f['parent'], $f['child'], $f['group'], $single, $f['sessions'][0], 'closed')
             ->assertUnprocessable()->assertJsonValidationErrors('session_id');
@@ -121,19 +126,64 @@ class VisitFromPriceTest extends TestCase
 
         // Another child, or the same child in the next school year, may still take one.
         $sibling = $f['parent']->children()->create(['first_name' => 'Боби', 'last_name' => 'Иванов']);
-        $nextYear = $this->inTenant($f['organization'], fn () => $this->session($f['group'], '2027-09-06T14:00:00Z'));
+        $nextYear = $this->inTenant($f['organization'], fn () => $this->addSession($f['group'], '2027-09-06T14:00:00Z'));
         $this->book($f['parent'], $sibling, $f['group'], $trial, $first, 'sibling')->assertCreated();
+        $this->travelTo('2027-08-20T10:00:00Z');
         $this->book($f['parent'], $f['child'], $f['group'], $trial, $nextYear, 'next-year')->assertCreated();
+    }
+
+    public function test_a_session_the_organization_cancelled_does_not_use_up_the_trial(): void
+    {
+        $f = $this->fixture(['enrollment_approval_mode' => 'automatic']);
+        $trial = $this->price($f, 'trial', 1000);
+        [$first, $second] = $f['sessions'];
+        $this->book($f['parent'], $f['child'], $f['group'], $trial, $first, 'booked')->assertCreated()->assertJsonPath('application.status', 'approved');
+
+        $this->inTenant($f['organization'], fn () => $first->update(['status' => 'cancelled']));
+        $this->book($f['parent'], $f['child'], $f['group'], $trial, $second, 'again')->assertCreated();
+
+        // A waiting application for a cancelled session is not approved.
+        $g = $this->fixture();
+        $gTrial = $this->price($g, 'trial', 1000);
+        $waiting = $this->book($g['parent'], $g['child'], $g['group'], $gTrial, $g['sessions'][0], 'waiting')->assertCreated()->json('application.id');
+        $this->inTenant($g['organization'], fn () => $g['sessions'][0]->update(['status' => 'cancelled']));
+        $this->assertValidationError('session_id', fn () => $this->approve($g, $waiting));
+        $this->book($g['parent'], $g['child'], $g['group'], $gTrial, $g['sessions'][1], 'after-cancel')->assertCreated();
+    }
+
+    #[TestGroup('tenant-isolation')]
+    public function test_another_organizations_price_group_or_session_is_refused(): void
+    {
+        $f = $this->fixture();
+        $single = $this->price($f, 'single', 1500);
+        $other = $this->fixture();
+        $otherSingle = $this->price($other, 'single', 900);
+
+        // Our group with their price, or their group with our price and session.
+        $this->book($f['parent'], $f['child'], $f['group'], $otherSingle, $f['sessions'][0], 'their-price')
+            ->assertUnprocessable()->assertJsonValidationErrors('price_option_id');
+        $this->book($f['parent'], $f['child'], $other['group'], $single, $f['sessions'][0], 'their-group')
+            ->assertUnprocessable()->assertJsonValidationErrors('price_option_id');
+        $this->book($f['parent'], $f['child'], $other['group'], $otherSingle, $f['sessions'][0], 'our-session')
+            ->assertUnprocessable()->assertJsonValidationErrors('session_id');
+        $this->assertSame(0, EnrollmentApplication::query()->withoutGlobalScopes()->count());
     }
 
     public function test_a_trial_from_an_offer_counts_and_another_activity_does_not(): void
     {
         $f = $this->fixture();
         $trial = $this->price($f, 'trial', 1000);
-        // A trial already used in another group of the same activity (from an offer, say).
-        $sibling = $this->inTenant($f['organization'], fn () => $this->group($f['group']->offering_id));
-        $this->inTenant($f['organization'], fn () => $this->usedTrial($f['child'], $sibling, '2026-10-20'));
+        // A trial already used from an offer in another group of the same activity.
+        $sibling = $this->inTenant($f['organization'], fn () => $this->addGroup($f['group']->offering_id));
+        $this->inTenant($f['organization'], fn () => $this->usedTrial($f['child'], $sibling, '2026-10-20', offer: true));
         $this->book($f['parent'], $f['child'], $f['group'], $trial, $f['sessions'][0], 'used')
+            ->assertUnprocessable()->assertJsonValidationErrors('trial_limit');
+
+        // A trial from an offer still waiting for the team counts too.
+        $w = $this->fixture();
+        $wTrial = $this->price($w, 'trial', 1000);
+        $this->inTenant($w['organization'], fn () => $this->usedTrial($w['child'], $w['group'], '2026-11-05', offer: true, status: 'submitted'));
+        $this->book($w['parent'], $w['child'], $w['group'], $wTrial, $w['sessions'][0], 'pending-offer')
             ->assertUnprocessable()->assertJsonValidationErrors('trial_limit');
 
         $g = $this->fixture();
@@ -144,7 +194,7 @@ class VisitFromPriceTest extends TestCase
                 'slug' => (string) Str::uuid(), 'title' => 'Рисуване', 'category' => 'Изкуство',
                 'summary' => 'Рисуване.', 'age_label' => '7+', 'status' => 'published',
             ]);
-            $this->usedTrial($g['child'], $this->group($activity->offerings()->create([])->id), '2026-10-20');
+            $this->usedTrial($g['child'], $this->addGroup($activity->offerings()->create([])->id), '2026-10-20');
         });
         $this->book($g['parent'], $g['child'], $g['group'], $gTrial, $g['sessions'][0], 'other-activity')->assertCreated();
     }
@@ -153,7 +203,7 @@ class VisitFromPriceTest extends TestCase
     {
         $f = $this->fixture();
         $trial = $this->price($f, 'trial', 1000);
-        $sibling = $this->inTenant($f['organization'], fn () => $this->group($f['group']->offering_id));
+        $sibling = $this->inTenant($f['organization'], fn () => $this->addGroup($f['group']->offering_id));
         $id = $this->book($f['parent'], $f['child'], $f['group'], $trial, $f['sessions'][0], 'pending')->assertCreated()->json('application.id');
         // Meanwhile the child used a trial elsewhere in the activity.
         $this->inTenant($f['organization'], fn () => $this->usedTrial($f['child'], $sibling, '2026-10-29'));
@@ -284,12 +334,12 @@ class VisitFromPriceTest extends TestCase
         $trial = $this->price($f, 'trial', 0);
         [$first, $second] = $f['sessions'];
         // Closed: less than 2 hours to the start.
-        $soon = $this->inTenant($f['organization'], fn () => $this->session($f['group'], '2026-10-28T11:30:00Z'));
+        $soon = $this->inTenant($f['organization'], fn () => $this->addSession($f['group'], '2026-10-28T11:30:00Z'));
         $this->book($f['parent'], $f['child'], $f['group'], $trial, $first, 'taken')->assertCreated();
         // A group without visits has no dates.
         $plain = $this->inTenant($f['organization'], function () use ($f): Group {
-            $group = $this->group($f['group']->offering_id, ['enrollment_modes' => ['monthly']]);
-            $this->session($group, '2026-11-04T14:00:00Z');
+            $group = $this->addGroup($f['group']->offering_id, ['enrollment_modes' => ['monthly']]);
+            $this->addSession($group, '2026-11-04T14:00:00Z');
 
             return $group;
         });
@@ -347,8 +397,8 @@ class VisitFromPriceTest extends TestCase
                 'slug' => (string) Str::uuid(), 'title' => 'Шахмат', 'category' => 'Игри',
                 'summary' => 'Шахмат.', 'age_label' => '7–10 г.', 'status' => 'published',
             ]);
-            $group = $this->group($activity->offerings()->create([])->id, $groupAttributes);
-            $sessions = [$this->session($group, '2026-11-02T14:00:00Z'), $this->session($group, '2026-11-09T14:00:00Z')];
+            $group = $this->addGroup($activity->offerings()->create([])->id, $groupAttributes);
+            $sessions = [$this->addSession($group, '2026-11-02T14:00:00Z'), $this->addSession($group, '2026-11-09T14:00:00Z')];
             $parent = User::factory()->create();
             $child = $parent->children()->create(['first_name' => 'Ния', 'last_name' => 'Иванова']);
 
@@ -356,7 +406,7 @@ class VisitFromPriceTest extends TestCase
         });
     }
 
-    private function group(string $offeringId, array $attributes = []): Group
+    private function addGroup(string $offeringId, array $attributes = []): Group
     {
         return Group::query()->create([
             'offering_id' => $offeringId, 'name' => 'Група '.Str::random(4), 'capacity_min' => 1, 'capacity_max' => 12,
@@ -364,7 +414,7 @@ class VisitFromPriceTest extends TestCase
         ]);
     }
 
-    private function session(Group $group, string $startsAt): Session
+    private function addSession(Group $group, string $startsAt): Session
     {
         return $group->sessions()->create([
             'starts_at' => $startsAt, 'ends_at' => date('c', strtotime($startsAt.' +1 hour')), 'status' => 'scheduled',
@@ -379,10 +429,13 @@ class VisitFromPriceTest extends TestCase
         ]));
     }
 
-    /** A trial the child already has in the group, without a copy of the terms: a used place (from an offer, when asked). */
-    private function usedTrial(Child $child, Group $group, string $day, ?Session $session = null, bool $offer = false, string $status = 'ended'): Enrollment
+    /**
+     * A trial the child already has in the group, without a copy of the terms (from an offer, when asked): a used or
+     * held place, or — with status "submitted" — an application waiting for the team.
+     */
+    private function usedTrial(Child $child, Group $group, string $day, ?Session $session = null, bool $offer = false, string $status = 'ended'): ?Enrollment
     {
-        $session ??= $this->session($group, $day.'T14:00:00Z');
+        $session ??= $this->addSession($group, $day.'T14:00:00Z');
         $price = $group->offering->priceOptions()->create([
             'group_id' => $group->id, 'enrollment_mode' => 'trial', 'unit' => 'session', 'amount_cents' => 0, 'currency' => 'EUR', 'is_available' => true,
         ]);
@@ -392,10 +445,13 @@ class VisitFromPriceTest extends TestCase
         $application = EnrollmentApplication::query()->create([
             'parent_user_id' => $child->owner_user_id, 'child_id' => $child->id, 'group_id' => $group->id,
             'price_option_id' => $price->id, 'session_id' => $session->id, 'visit_offer_id' => $visitOffer?->id, 'scope' => 'trial',
-            'source' => 'organization_catalog', 'status' => 'approved', 'idempotency_key' => (string) Str::uuid(),
+            'source' => 'organization_catalog', 'status' => $status === 'submitted' ? 'submitted' : 'approved', 'idempotency_key' => (string) Str::uuid(),
             'accepted_terms_version' => 'v1', 'accepted_terms_at' => now(), 'amount_cents_snapshot' => 0,
             'currency_snapshot' => 'EUR', 'unit_snapshot' => 'session',
         ]);
+        if ($status === 'submitted') {
+            return null;
+        }
 
         return Enrollment::query()->create([
             'application_id' => $application->id, 'child_id' => $child->id, 'group_id' => $group->id,

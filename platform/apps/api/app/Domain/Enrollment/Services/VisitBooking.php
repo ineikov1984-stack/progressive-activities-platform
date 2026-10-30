@@ -19,16 +19,21 @@ final class VisitBooking
     /** Booking closes this long before the session starts (т. 2.6). */
     public const CLOSES_HOURS_BEFORE = 2;
 
-    public function isOpen(Session $session, CarbonImmutable $now): bool
+    /** Booking opens this far ahead, so one far-off visit does not hold the group for months (т. 2.6). */
+    public const OPENS_DAYS_BEFORE = 60;
+
+    public static function isOpen(Session $session, CarbonImmutable $now): bool
     {
         return $session->status === 'scheduled'
-            && $now->lessThan($session->starts_at->subHours(self::CLOSES_HOURS_BEFORE));
+            && $now->lessThan($session->starts_at->subHours(self::CLOSES_HOURS_BEFORE))
+            && $session->starts_at->lessThanOrEqualTo($now->addDays(self::OPENS_DAYS_BEFORE));
     }
 
     /**
      * One trial of an activity for a child in a school year (1 September – 31 August by the session's day in the
      * group's time zone), by any route: a held or used place, or an application still waiting for a date that has
-     * not started (т. 2.3). A trial cancelled in time, a rejected or a withdrawn application leave the trial free.
+     * not started (т. 2.3). A trial cancelled in time, a rejected or a withdrawn application, and a trial whose
+     * session the organization cancelled leave the trial free.
      */
     public function assertTrialOnce(Child $child, Group $group, Session $session, ?string $exceptApplicationId = null): void
     {
@@ -43,12 +48,13 @@ final class VisitBooking
         $used = Enrollment::query()->where('child_id', $child->id)->where('scope', EnrollmentScope::Trial)
             ->whereIn('status', [EnrollmentStatus::Active, EnrollmentStatus::Paused, EnrollmentStatus::Ended])
             ->whereDate('starts_on', '>=', $from->toDateString())->whereDate('starts_on', '<', $until->toDateString())
+            ->whereHas('session', fn ($query) => $query->where('status', 'scheduled'))
             ->where($sameActivity)->exists()
             || EnrollmentApplication::query()->where('child_id', $child->id)->where('scope', EnrollmentScope::Trial)
                 ->whereIn('status', [EnrollmentApplicationStatus::Submitted, EnrollmentApplicationStatus::Waitlisted])
                 ->when($exceptApplicationId !== null, fn ($query) => $query->whereKeyNot($exceptApplicationId))
                 // A forgotten application stops counting once its date has started.
-                ->whereHas('session', fn ($query) => $query->where('starts_at', '>', now())
+                ->whereHas('session', fn ($query) => $query->where('status', 'scheduled')->where('starts_at', '>', now())
                     ->where('starts_at', '>=', $from->utc())->where('starts_at', '<', $until->utc()))
                 ->where($sameActivity)->exists();
         if ($used) {

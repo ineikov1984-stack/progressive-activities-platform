@@ -206,11 +206,10 @@ final class EnrollmentCapacity
      * @param  Collection<int, Session>  $sessions  the group's scheduled sessions, earliest first
      * @return list<array{session: Session, remaining: int|null}>
      */
-    public function visitDays(Group $group, Collection $sessions, CarbonImmutable $now, int $limit = 10): array
+    public function visitDays(Group $group, Collection $sessions, CarbonImmutable $now, int $limit = 30): array
     {
         $open = $sessions->filter(fn (Session $session): bool => $session->group_id === $group->id
-            && $session->status === 'scheduled'
-            && $now->lessThan($session->starts_at->subHours(VisitBooking::CLOSES_HOURS_BEFORE)))
+            && VisitBooking::isOpen($session, $now))
             ->take($limit)->values();
         if ($open->isEmpty()) {
             return [];
