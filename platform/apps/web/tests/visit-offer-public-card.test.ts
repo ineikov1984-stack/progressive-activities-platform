@@ -25,7 +25,7 @@ describe('public visit card — terms from step 6 (docs/product/visits.md, т. 8
     expect(html).toContain('Отказ:');
     expect(html).toContain('Неявяване:');
     expect(html).toContain('Пълни условия');
-    expect(html).toContain('Пробното е веднъж на дете за тази дейност в учебната година.');
+    expect(html).toContain('Всяко дете може да посети едно пробно занимание по тази дейност през учебната година.');
     expect(html).not.toContain('Срок за отказ');
     expect(html).not.toContain('При отказ в срок');
   });
@@ -33,7 +33,7 @@ describe('public visit card — terms from step 6 (docs/product/visits.md, т. 8
   it('says the next card has the same terms once, and repeats them when they differ', () => {
     const same = renderToStaticMarkup(createElement(VisitOfferList, { offers: [offer(), offer({ visit_offer_id: 'offer-2', type: 'single', title: 'Еднократно посещение', fee_type: 'paid', amount_cents: 1500 })] }));
     expect(same.match(/Същите такси, отсъствия и отказ\./g)).toHaveLength(1);
-    expect(same.match(/Пробното е веднъж/g)).toHaveLength(1);
+    expect(same.match(/Всяко дете може да посети едно пробно занимание/g)).toHaveLength(1);
     const other = renderToStaticMarkup(createElement(VisitOfferList, { offers: [offer(), offer({ visit_offer_id: 'offer-2', payment_terms: terms('visit:set-2:1') })] }));
     expect(other).not.toContain('Същите такси');
     expect(other.match(/Неявяване:/g)).toHaveLength(2);

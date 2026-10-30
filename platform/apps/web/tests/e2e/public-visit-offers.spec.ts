@@ -77,20 +77,20 @@ test('catalog uses server labels, separate audience, two badges and campaign tar
   await expect(cards.first().getByText('6–8 г. · I–II клас', { exact: true })).toBeVisible();
   await expect(cards.first().locator('[data-status-badges] > *')).toHaveCount(2);
   await expect(cards.first().getByText('От 0,00 € / посещение', { exact: true })).toBeVisible();
-  await expect(cards.first().getByRole('link', { name: /Отворени врати/ })).toHaveAttribute('href', '/o/school/open-days/discovery');
+  await expect(cards.first().getByRole('link', { name: /Към деня на отворените врати/ })).toHaveAttribute('href', '/o/school/open-days/discovery');
 });
 
 test('multiple offers require a choice, preserve server states and use only the matching session location', async ({ page }) => {
   await page.goto(`${origin}/o/school/activities/balanced`);
-  await page.getByRole('link', { name: 'Избери посещение', exact: true }).click();
+  await page.getByRole('link', { name: 'Изберете посещение', exact: true }).click();
   await expect(page.locator('input[type="radio"]:checked')).toHaveCount(0);
   await page.getByRole('radio', { name: /Следваща среща/ }).check();
   await expect(page.getByRole('status')).toContainText('Следваща среща');
-  const offers = page.getByRole('region', { name: 'Посещения и предложения' });
-  await expect(offers.getByText('Има списък на чакащи', { exact: true })).toBeVisible();
+  const offers = page.getByRole('region', { name: 'Пробни занимания и посещения' });
+  await expect(offers.getByText('Местата са заети — има списък на чакащите', { exact: true })).toBeVisible();
   await expect(offers.getByText('От 12,50 € / посещение', { exact: true })).toBeVisible();
-  await expect(offers.getByRole('article').nth(1).getByRole('link', { name: /Навигация/ })).toHaveCount(0);
-  await expect(offers.getByRole('article').first().getByRole('link', { name: /Навигация/ })).toHaveAttribute('href', 'https://maps.example/safe');
+  await expect(offers.getByRole('article').nth(1).getByRole('link', { name: /Как да стигнете/ })).toHaveCount(0);
+  await expect(offers.getByRole('article').first().getByRole('link', { name: /Как да стигнете/ })).toHaveAttribute('href', 'https://maps.example/safe');
   await expect(page.getByRole('link', { name: /Запиши|Вход/ })).toHaveCount(0);
   await expect(page.locator('[data-category-art="chess"]').first()).toBeVisible();
   await expect(page.getByRole('img', { name: /Шахмат —/ })).toHaveCount(0);
@@ -104,7 +104,7 @@ test('catalog and campaign remain balanced at phone, tablet and desktop sizes', 
     for (const width of [390, 768, 820, 1024, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
       await page.goto(`${origin}${route}`);
-      await expect(page.getByRole('heading', { level: 1, name: name === 'catalog' ? 'Открийте занимание, което вдъхновява' : 'Дни на откритията' })).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1, name: name === 'catalog' ? 'Открийте занимание, което ще вдъхнови детето ви' : 'Дни на откритията' })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       if (name === 'catalog' && width >= 768 && width <= 1024) {
         const cards = page.getByRole('region', { name: 'Дейности' }).getByRole('article');
@@ -119,8 +119,8 @@ test('minimal content has no empty optional section or actionable closed offer',
   await page.goto(`${origin}/o/school/activities/minimal`);
   await expect(page.getByRole('heading', { level: 1, name: 'Шахмат — мисли с въображение' })).toBeVisible();
   await expect(page.getByRole('heading', { name: /За дейността|Какво развива|Как протичат|Условия за участие|Нашият екип|Моменти|Често задавани/ })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: /Навигация/ })).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Посещения и предложения' }).getByText('Записването е затворено')).toBeVisible();
+  await expect(page.getByRole('link', { name: /Как да стигнете/ })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Пробни занимания и посещения' }).getByText('Записването е затворено')).toBeVisible();
   await expect(page.getByRole('radio')).toHaveCount(0);
 });
 
@@ -132,18 +132,18 @@ test('campaign keeps actual local day/activity groups and mixed prices without i
   await expect(page.getByRole('heading', { name: 'Музика', exact: true })).toBeVisible();
   await expect(page.getByText('Безплатно', { exact: true })).toHaveCount(2);
   await expect(page.getByText('12,50 € / посещение', { exact: true })).toBeVisible();
-  await expect(page.locator('article time').filter({ hasText: '08:30–09:30 · Asia/Tokyo' })).toHaveCount(3);
-  await expect(page.getByRole('link', { name: /Навигация/ })).toHaveCount(0);
-  await expect(page.getByText(/Локация|ул\. „Открития“/)).toHaveCount(0);
+  await expect(page.locator('article time').filter({ hasText: '08:30–09:30' })).toHaveCount(3);
+  await expect(page.getByRole('link', { name: /Как да стигнете/ })).toHaveCount(0);
+  await expect(page.getByText(/МЯСТО|Мястото ще бъде уточнено|ул\. „Открития“/)).toHaveCount(0);
   await page.goto(`${origin}/o/school/open-days/inactive`);
-  await expect(page.getByRole('heading', { name: 'Кампанията вече не е активна' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Денят на отворените врати вече приключи' })).toBeVisible();
   await expect(page.getByRole('link', { name: /Всички дейности/ })).toBeVisible();
 });
 
 test('public service failure provides an understandable retry state', async ({ page }) => {
   await page.goto(`${origin}/o/school/open-days/unavailable`);
   await expect(page.getByRole('heading', { name: 'Не успяхме да заредим страницата' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Опитай отново' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Опитайте отново' })).toBeVisible();
 });
 
 for (const mode of ['rich', 'balanced', 'minimal']) {

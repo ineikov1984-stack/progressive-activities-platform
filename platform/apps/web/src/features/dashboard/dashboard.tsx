@@ -168,7 +168,7 @@ export function Dashboard() {
       {loadError ? <p className={styles.error} role="alert">{loadError}</p> : null}
 
       <section aria-labelledby="tasks-title" className={styles.section}>
-        <h2 id="tasks-title" className={styles.sectionTitle}>Какво чака вас</h2>
+        <h2 id="tasks-title" className={styles.sectionTitle}>Какво ви чака</h2>
         {!isLoaded ? (
           <div className={styles.taskGrid} aria-busy="true">{[0, 1, 2].map((item) => <span className={styles.skeleton} key={item} />)}</div>
         ) : tasks.length === 0 ? (

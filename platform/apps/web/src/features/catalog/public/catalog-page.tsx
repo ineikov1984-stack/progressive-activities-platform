@@ -17,7 +17,7 @@ export function CatalogPage({ catalog }: { catalog: PublicCatalog }) {
         <span>{organization.public_name}</span>
       </div>
       <p className={styles.eyebrow}>СВЯТ ОТ ВЪЗМОЖНОСТИ</p>
-      <h1>Открийте занимание, което вдъхновява</h1>
+      <h1>Открийте занимание, което ще вдъхнови детето ви</h1>
       {meaningfulText(organization.intro) && <p className={styles.lead}>{organization.intro!.trim()}</p>}
     </header>
     {activities.length === 0 ? <section className={styles.emptyState}><h2>Скоро ще има нови дейности</h2><p>Организацията подготвя своя каталог.</p></section> :
@@ -31,7 +31,7 @@ export function CatalogPage({ catalog }: { catalog: PublicCatalog }) {
             {audienceLabel(activity) && <p className={styles.audience}>{audienceLabel(activity)}</p>}
             {meaningfulText(activity.summary) && <p className={styles.cardSummary}>{activity.summary.trim()}</p>}
             <div className={styles.cardPractical}><strong className={styles.cardPrice}>{cardPriceLabel(activity.price)}</strong><p>{summarizePublicSchedule(activity.schedule)}</p></div>
-            <Link className={styles.textLink} href={activity.special_offer_url || `/o/${organization.slug}/activities/${activity.slug}`}>{activity.special_offer_url ? 'Отворени врати' : 'Научи повече'} <span aria-hidden="true">↗</span></Link>
+            <Link className={styles.textLink} href={activity.special_offer_url || `/o/${organization.slug}/activities/${activity.slug}`}>{activity.special_offer_url ? 'Към деня на отворените врати' : 'Повече за дейността'} <span aria-hidden="true">→</span></Link>
           </div>
         </article>)}
       </section>}

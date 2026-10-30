@@ -25,7 +25,7 @@ export function LoginForm() {
       router.push('/dashboard');
       router.refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Невалиден имейл или парола.');
+      setError(reason instanceof Error ? reason.message : 'Грешен имейл или парола.');
     } finally {
       setIsLoading(false);
     }
@@ -48,7 +48,7 @@ export function LoginForm() {
       <div className={styles.field}>
         <div className={styles.labelRow}>
           <label htmlFor="password">Парола</label>
-          <span className={styles.comingSoon}>Възстановяване на парола — скоро</span>
+          <span className={styles.comingSoon}>Забравена парола? Скоро ще можете да я възстановите оттук.</span>
         </div>
         <input
           id="password"

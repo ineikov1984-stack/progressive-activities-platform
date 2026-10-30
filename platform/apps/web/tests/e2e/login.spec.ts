@@ -23,7 +23,7 @@ test('login is accessible and returns a generic error', async () => {
   await page.getByLabel('Парола').fill('wrong-password');
   await page.getByRole('button', { name: 'Вход' }).click();
 
-  await expect(page.locator('form [role="alert"]')).toHaveText('Невалиден имейл или парола.');
+  await expect(page.locator('form [role="alert"]')).toHaveText('Грешен имейл или парола.');
   await expect(page.getByRole('button', { name: 'Вход' })).toBeEnabled();
 
   await page.close();

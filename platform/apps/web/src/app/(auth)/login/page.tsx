@@ -19,10 +19,10 @@ export default function LoginPage() {
           <p className={styles.eyebrow}>Семейства · училища · партньори</p>
           <h1 id="login-heading">Вход в системата</h1>
           <p className={styles.lead}>
-            Управлявайте занимания, записвания и посещения от едно сигурно място.
+            Занимания, записвания и посещения — на едно място.
           </p>
         </div>
-        <p className={styles.privacy}>Личните данни се обработват с повишена защита и само за необходимите цели.</p>
+        <p className={styles.privacy}>Пазим личните данни и ги използваме само доколкото е необходимо.</p>
       </section>
 
       <section className={styles.panel} aria-label="Форма за вход">

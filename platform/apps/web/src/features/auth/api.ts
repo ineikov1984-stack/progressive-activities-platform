@@ -3,7 +3,7 @@ export type LoginCredentials = {
   password: string;
 };
 
-const genericCredentialsError = 'Невалиден имейл или парола.';
+const genericCredentialsError = 'Грешен имейл или парола.';
 
 function readCookie(name: string): string | undefined {
   const prefix = `${name}=`;
@@ -35,7 +35,7 @@ export async function login(credentials: LoginCredentials): Promise<void> {
     throw new Error(
       response.status === 422
         ? genericCredentialsError
-        : 'Входът временно не е достъпен. Моля, опитайте отново.',
+        : 'Входът временно не работи. Опитайте отново след малко.',
     );
   }
 }
