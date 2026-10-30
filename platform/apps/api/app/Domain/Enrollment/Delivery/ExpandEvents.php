@@ -27,7 +27,7 @@ final class ExpandEvents
     public function handle(string $organizationId): int
     {
         $ids = TenantTransaction::run($organizationId, fn (): array => EnrollmentEvent::query()->whereNull('expanded_at')
-            ->orderBy('occurred_at')->limit(self::BATCH)->pluck('id')->map(fn (mixed $id): string => (string) $id)->all());
+            ->orderBy('occurred_at')->orderBy('id')->limit(self::BATCH)->pluck('id')->map(fn (mixed $id): string => (string) $id)->all());
 
         foreach ($ids as $eventId) {
             try {

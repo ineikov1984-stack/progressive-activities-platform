@@ -2,6 +2,7 @@
 
 namespace App\Domain\Enrollment\Services;
 
+use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Enrollment\Enums\EnrollmentScope;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
@@ -85,6 +86,23 @@ final class SessionApplicability
     }
 
     /** The group's time zone; enrollment dates are calendar days there. */
+    /**
+     * The local day of the group's first session that has not started, on or after a day — where a new
+     * enrollment for the period begins (decision of 30.10.2026): ending it before that day is a cancellation,
+     * not an end. Null when the group has no such session yet.
+     */
+    public function firstSessionDay(Group $group, string $fromDay): ?string
+    {
+        $timezone = $group->schedule_pattern['timezone'] ?? null;
+        $timezone = is_string($timezone) && $timezone !== '' ? $timezone : 'Europe/Sofia';
+        $session = Session::query()->where('group_id', $group->id)->where('status', 'scheduled')
+            ->where('starts_at', '>=', CarbonImmutable::parse($fromDay, $timezone)->startOfDay()->utc())
+            ->where('starts_at', '>', now())
+            ->orderBy('starts_at')->first(['starts_at']);
+
+        return $session?->starts_at->setTimezone($timezone)->toDateString();
+    }
+
     public static function timezone(Enrollment $enrollment): string
     {
         $timezone = $enrollment->group?->schedule_pattern['timezone'] ?? null;

@@ -21,6 +21,7 @@ use App\Domain\Enrollment\Models\EnrollmentPause;
 use App\Domain\Enrollment\Models\EnrollmentSessionException;
 use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
+use App\Domain\Enrollment\Services\EnrollmentChain;
 use App\Domain\Enrollment\Services\SessionAllocation;
 use App\Domain\Enrollment\Services\SessionApplicability;
 use App\Domain\Identity\Models\User;
@@ -53,6 +54,7 @@ final class ChangeEnrollment
         private readonly SessionAllocation $allocation,
         private readonly SessionApplicability $applicability,
         private readonly AuditRecorder $audit,
+        private readonly EnrollmentChain $chain,
     ) {}
 
     public function transfer(
@@ -162,7 +164,8 @@ final class ChangeEnrollment
                 'price_option_id' => $price->id,
                 'scope' => EnrollmentScope::FullPeriod,
                 'status' => EnrollmentStatus::Active,
-                'starts_on' => $date->toDateString(),
+                // From the first session in the new group on or after the day (decision of 30.10.2026).
+                'starts_on' => $this->applicability->firstSessionDay($target, $date->toDateString()) ?? $date->toDateString(),
                 'transferred_from_id' => $current->id,
             ]);
             $transition = $this->transition($actor, $moved, null, EnrollmentStatus::Active->value, $reason, ['transferred_from_id' => $current->id]);
@@ -202,7 +205,7 @@ final class ChangeEnrollment
             $start = $this->day($startsOn, $timezone, 'starts_on');
             $end = $this->day($endsOn, $timezone, 'ends_on');
             if ($start->toDateString() < $current->starts_on->toDateString()) {
-                throw ValidationException::withMessages(['starts_on' => 'Паузата започва преди началото на записването.']);
+                throw ValidationException::withMessages(['starts_on' => 'Записването започва на '.$current->starts_on->format('d.m.Y').'. Изберете начало на паузата от тогава.']);
             }
             $this->assertNotStarted($group, $start, 'starts_on');
             if ($end->lt($start) || $start->diffInDays($end) >= self::MAX_PAUSE_DAYS
@@ -274,7 +277,17 @@ final class ChangeEnrollment
             if ($current->status !== EnrollmentStatus::Active) {
                 throw ValidationException::withMessages(['enrollment' => 'Записването вече има дата на прекратяване или е приключило.']);
             }
-            $last = $this->day($lastDay, $this->timezone($this->groupOf($current, $groups)), 'last_day');
+            $group = $this->groupOf($current, $groups);
+            $timezone = $this->timezone($group);
+            $startsOn = CarbonImmutable::createFromFormat('!Y-m-d', $current->starts_on->toDateString(), $timezone);
+            // An enrollment that begins today can still be cancelled before its first session: the day
+            // before its start is accepted as the last day (it is before today, so day() would refuse it).
+            $cancelToday = $startsOn instanceof CarbonImmutable && $startsOn->toDateString() === CarbonImmutable::now($timezone)->toDateString()
+                && $lastDay === $startsOn->subDay()->toDateString();
+            if ($cancelToday) {
+                $this->assertNotStarted($group, $startsOn, 'last_day');
+            }
+            $last = $cancelToday ? $startsOn->subDay() : $this->day($lastDay, $timezone, 'last_day');
             if ($current->ends_on !== null && $last->toDateString() > $current->ends_on->toDateString()) {
                 throw ValidationException::withMessages(['last_day' => 'Записването приключва на '.$current->ends_on->format('d.m.Y').'. Изберете дата до тогава.']);
             }
@@ -425,22 +438,10 @@ final class ChangeEnrollment
         return [$current, $groups];
     }
 
-    /**
-     * Where the enrollment continues after a move that was not cancelled, also further down a chain
-     * (A → B cancelled → C, or back to A). The chain is short; the loop is bounded anyway.
-     */
+    /** Where the enrollment continues after a move that was not cancelled, on any branch of the moves. */
     private function continuation(Enrollment $enrollment): ?Enrollment
     {
-        $id = $enrollment->id;
-        for ($step = 0; $step < 50; $step++) {
-            $next = Enrollment::query()->where('transferred_from_id', $id)->first(['id', 'group_id', 'status']);
-            if ($next === null || $next->status !== EnrollmentStatus::Cancelled) {
-                return $next;
-            }
-            $id = $next->id;
-        }
-
-        throw ValidationException::withMessages(['enrollment' => 'Историята на преместванията е твърде дълга. Обърнете се към поддръжката.']);
+        return $this->chain->next($enrollment);
     }
 
     /** Another full-period place of the same child in the group on or after the day (not cancelled). */

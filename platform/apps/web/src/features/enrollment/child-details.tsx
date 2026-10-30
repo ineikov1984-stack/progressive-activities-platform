@@ -179,6 +179,7 @@ function RecordSection({ details }: { details: ChildDetailsResponse }) {
             {pauseReasonLabels[pause.reason_category] ? ` · ${pauseReasonLabels[pause.reason_category]}` : ''}
           </Fact>
         ) : null}
+        {pause?.note ? <Fact label="Бележка към паузата">{pause.note}</Fact> : null}
         <Fact label="Следващо занимание">{enrollment.next_session_at ? sessionText(enrollment.next_session_at) : 'Няма насрочено'}</Fact>
         {enrollment.skipped_sessions.length > 0 ? (
           <Fact label="Пропуска">{enrollment.skipped_sessions.map((item) => dateText(item.starts_at)).filter(Boolean).join(', ')}</Fact>
