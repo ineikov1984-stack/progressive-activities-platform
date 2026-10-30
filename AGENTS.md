@@ -29,7 +29,7 @@ Multi-tenant SaaS и marketplace за извънкласни дейности, �
 ## Команди
 
 ```bash
-cd platform && docker compose up --build                        # локална среда: web :3000, api :8080, mailpit :8025
+cd platform && docker compose up --build                        # локална среда: web :3000, api :8080, mailpit :8025; worker праща имейлите всяка минута
 docker compose exec api php artisan migrate --database=pgsql_admin --force   # миграциите — с ролята-собственик; API-то работи с ограничената роля
 docker compose exec api php artisan db:seed --class='Database\Seeders\LocalDemoSeeder' --force
 

@@ -12,7 +12,7 @@ docker compose exec api php artisan db:seed --class='Database\Seeders\LocalDemoS
 
 - Web: http://localhost:3000
 - API: http://localhost:8080/api/v1/health
-- Mailpit: http://localhost:8025
+- Mailpit: http://localhost:8025 — имейлите за записванията идват тук до минута; изпраща ги контейнерът `worker` (`docker compose logs -f worker`)
 - Демо вход: http://localhost:3000/login с локалните `DEMO_USER_EMAIL` и `DEMO_USER_PASSWORD` от `compose.yaml`
 - Администрация на дейностите: http://localhost:3000/dashboard/activities
 - Публичен демо каталог: http://localhost:3000/o/progressive-academy-demo

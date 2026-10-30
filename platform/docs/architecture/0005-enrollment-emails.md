@@ -24,5 +24,5 @@ Parents must hear about decisions and changes (approved, waiting, rejected, move
 
 - Delivery is "at least once": a duplicate is possible only if the process stops between sending and marking. The Message-ID comes from the delivery, so a duplicate is recognisable.
 - Locally the command sends to Mailpit; staging uses Mailpit or a provider's sandbox; the production provider (EU data, data processing agreement) is chosen by the owner before the pilot.
-- A `worker` container that runs the scheduler is added to `compose.yaml` in a separate change (hot file). Until then the command can be run by hand.
+- Locally the `worker` container in `compose.yaml` runs `schedule:work`, so the emails go out within a minute without anyone running the command. It connects only as the application's role (it gets no owner-role credentials), reads the logos from the shared storage read-only, and on `docker compose stop` lets a run that is sending finish (up to 60 s). The command can still be run by hand; a run by hand next to the worker is safe, because claiming uses `FOR UPDATE SKIP LOCKED`.
 - Team messages (stage Б, PR 5) create their deliveries in their own transaction and use the same sending loop.

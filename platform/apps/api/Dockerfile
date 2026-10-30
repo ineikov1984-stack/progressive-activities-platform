@@ -4,8 +4,9 @@ COPY composer.json composer.lock* ./
 RUN composer install --no-interaction --prefer-dist --no-scripts
 
 FROM php:8.4-cli-alpine AS development
+# pcntl: `schedule:work` in the worker container hears `docker compose stop` and lets a running send finish.
 RUN apk add --no-cache icu-dev libzip-dev postgresql-dev \
-    && docker-php-ext-install intl pdo_pgsql zip
+    && docker-php-ext-install intl pcntl pdo_pgsql zip
 COPY docker/catalog-uploads.ini /usr/local/etc/php/conf.d/catalog-uploads.ini
 WORKDIR /app
 COPY --from=vendor /usr/bin/composer /usr/local/bin/composer

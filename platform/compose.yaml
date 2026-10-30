@@ -1,22 +1,32 @@
 name: progressive-activities
 
+# The API and the worker run the same image with the same settings. Only the API gets the owner role
+# (migrations) and the demo login; the worker connects as the application's role (ADR 0005).
+x-api-build: &api-build
+  context: ./apps/api
+  target: development
+
+x-api-environment: &api-environment
+  APP_ENV: local
+  APP_DEBUG: "true"
+  APP_KEY: base64:cHJvZ3Jlc3NpdmUtbG9jYWwtYXBwLWtleS0wMDAwMDA=
+  APP_URL: http://localhost:8080
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_DATABASE: progressive
+  DB_PGSQL_DATABASE: progressive
+  DB_USERNAME: progressive_app
+  DB_PASSWORD: progressive-app-local-only
+  MAIL_MAILER: smtp
+  MAIL_HOST: mailpit
+  MAIL_PORT: 1025
+
 services:
   api:
-    build:
-      context: ./apps/api
-      target: development
+    build: *api-build
     environment:
-      APP_ENV: local
-      APP_DEBUG: "true"
-      APP_KEY: base64:cHJvZ3Jlc3NpdmUtbG9jYWwtYXBwLWtleS0wMDAwMDA=
-      APP_URL: http://localhost:8080
-      DB_CONNECTION: pgsql
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_DATABASE: progressive
-      DB_PGSQL_DATABASE: progressive
-      DB_USERNAME: progressive_app
-      DB_PASSWORD: progressive-app-local-only
+      <<: *api-environment
       DB_ADMIN_USERNAME: progressive
       DB_ADMIN_PASSWORD: progressive-local-only
       DEMO_USER_EMAIL: owner@demo.progressive.local
@@ -24,15 +34,29 @@ services:
       REDIS_HOST: redis
       SESSION_DRIVER: database
       SANCTUM_STATEFUL_DOMAINS: localhost:3000,127.0.0.1:3000
-      MAIL_MAILER: smtp
-      MAIL_HOST: mailpit
-      MAIL_PORT: 1025
     ports: ["8080:8080"]
     # Uploaded catalog media (logos, covers, gallery) must survive `docker compose up --build`.
     volumes: ["api-storage:/app/storage/app"]
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+
+  # Runs the schedule in routes/console.php: the enrollment emails go out every minute, without the
+  # command by hand. No queue: the finished emails never sit in a table without RLS.
+  worker:
+    build: *api-build
+    command: ["php", "artisan", "schedule:work"]
+    environment: *api-environment
+    # Reads the organizations' logos for the emails; never writes them.
+    volumes: ["api-storage:/app/storage/app:ro"]
+    # Passes `docker compose stop` on to the scheduler, which lets a run that is sending finish first.
+    init: true
+    stop_grace_period: 60s
+    # The image's check asks the API's web server, which the worker does not run.
+    healthcheck: { disable: true }
+    depends_on:
+      postgres: { condition: service_healthy }
+      mailpit: { condition: service_started }
 
   web:
     build:
