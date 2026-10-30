@@ -7,7 +7,6 @@ use App\Domain\Catalog\Enums\EnrollmentMode;
 use App\Domain\Catalog\Enums\VisitOfferType;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\OrganizationCatalogProfile;
-use App\Domain\Catalog\Models\PriceOption;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Catalog\Models\VisitOffer;
 use App\Domain\Catalog\Services\VisitOfferEligibility;
@@ -117,9 +116,9 @@ final class SubmitEnrollmentApplication
                 }
 
                 $offer = $offerId === null ? null : VisitOffer::query()->whereKey($offerId)->lockForUpdate()->firstOrFail();
-                $price = $offer === null ? PriceOption::query()->whereKey($payload['price_option_id'] ?? null)
-                    ->where('group_id', $group->id)->where('is_available', true)->first()
-                    : null;
+                // The group's own prices and the activity's for the ways of enrolling the group takes.
+                $price = $offer === null ? $group->pricesForEnrollment()->where('is_available', true)
+                    ->firstWhere('id', $payload['price_option_id'] ?? null) : null;
                 if ($offer === null && $price === null) {
                     throw ValidationException::withMessages(['price_option_id' => 'Избраната цена не е достъпна.']);
                 }

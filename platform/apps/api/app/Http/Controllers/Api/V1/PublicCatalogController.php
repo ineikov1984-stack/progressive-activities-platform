@@ -285,13 +285,12 @@ final class PublicCatalogController extends Controller
             'schedule' => $group->schedule_pattern,
             'availability' => $this->availabilityPresenter->groupAvailability(collect([$group]), CarbonImmutable::now()),
             'location' => $location ? $this->presentLocation($location) : null,
-            'prices' => $group->priceOptions
-                ->concat($publicOffering->priceOptions)
-                ->unique('id')->values()->map(fn (PriceOption $price) => [
-                    ...$this->presentPrice($price),
-                    // What the parent reads and accepts before applying (docs/product/payment-policies.md, т. 8).
-                    'payment_terms' => $this->paymentTerms->forPrice($price->enrollment_mode, $publicOffering->paymentTermsByKind())?->presentForParent(),
-                ])->all(),
+            // The ways of enrolling this group takes (its own prices win over the activity's).
+            'prices' => $group->pricesForEnrollment($publicOffering->priceOptions)->map(fn (PriceOption $price) => [
+                ...$this->presentPrice($price),
+                // What the parent reads and accepts before applying (docs/product/payment-policies.md, т. 8).
+                'payment_terms' => $this->paymentTerms->forPrice($price->enrollment_mode, $publicOffering->paymentTermsByKind())?->presentForParent(),
+            ])->all(),
             'sessions' => $group->sessions->map(fn (Session $session) => [
                 'id' => $session->id,
                 'starts_at' => $session->starts_at->toIso8601String(),

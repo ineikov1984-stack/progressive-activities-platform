@@ -99,7 +99,7 @@ final readonly class PublishActivityInternally
     private function validateMarketplaceTerms(iterable $groups): void
     {
         foreach ($groups as $group) {
-            $prices = $group->priceOptions->concat($group->offering->priceOptions->whereNull('group_id'))->where('is_available', true);
+            $prices = $group->pricesForEnrollment()->where('is_available', true);
             foreach ($prices as $price) {
                 if ($this->paymentTerms->forPrice($price->enrollment_mode, $group->offering->paymentTermsByKind())?->marketplaceViolations()) {
                     throw ValidationException::withMessages(['payment_terms' => 'Правилата за такси, отсъствия и отказ на тази дейност не са в рамките на каталога на платформата. Променете ги в „Такси, отсъствия и отказ“.']);
@@ -114,7 +114,8 @@ final readonly class PublishActivityInternally
             throw ValidationException::withMessages(['sessions' => 'Групата трябва да има поне едно предстоящо занятие.']);
         }
 
-        $prices = $group->priceOptions->concat($group->offering->priceOptions->whereNull('group_id'));
+        // Only the prices the group takes count (docs: the owner's review of 30.10.2026).
+        $prices = $group->pricesForEnrollment();
         $validPrice = $prices->contains(fn ($price) => $price->is_available
             && $price->currency === 'EUR'
             && $price->amount_cents > 0

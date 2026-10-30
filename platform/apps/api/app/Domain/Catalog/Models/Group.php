@@ -7,13 +7,17 @@ use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-/** @property array<string, mixed>|null $schedule_pattern */
+/**
+ * @property array<string, mixed>|null $schedule_pattern
+ * @property list<string>|null $enrollment_modes the activity's ways of enrolling this group takes; null — all
+ */
 #[Fillable([
     'offering_id',
     'location_id',
@@ -23,6 +27,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'capacity_max',
     'schedule_pattern',
     'enrollment_approval_mode',
+    'enrollment_modes',
     'waitlist_enabled',
     'status',
     'version',
@@ -62,6 +67,29 @@ class Group extends Model
     public function priceOptions(): HasMany
     {
         return $this->hasMany(PriceOption::class);
+    }
+
+    /**
+     * The prices a child can be enrolled with in this group: the group's own prices, and the activity's prices for
+     * the ways of enrolling the group takes (a group's own price for a way wins). Pass the activity's prices when
+     * they are already loaded with the needed filter.
+     *
+     * @param  Collection<int, PriceOption>|null  $offeringPrices
+     * @return Collection<int, PriceOption>
+     */
+    public function pricesForEnrollment(?Collection $offeringPrices = null): Collection
+    {
+        $own = $this->priceOptions;
+        $shared = ($offeringPrices ?? $this->offering->priceOptions)->whereNull('group_id')
+            ->filter(fn (PriceOption $price): bool => $this->takesMode($price->enrollment_mode)
+                && ! $own->contains(fn (PriceOption $mine): bool => $mine->enrollment_mode === $price->enrollment_mode));
+
+        return $own->concat($shared)->values();
+    }
+
+    public function takesMode(string $mode): bool
+    {
+        return $this->enrollment_modes === null || in_array($mode, $this->enrollment_modes, true);
     }
 
     /** @return HasMany<VisitOffer, $this> */
@@ -117,6 +145,7 @@ class Group extends Model
             'capacity_min' => 'integer',
             'capacity_max' => 'integer',
             'schedule_pattern' => 'array',
+            'enrollment_modes' => 'array',
             'waitlist_enabled' => 'boolean',
             'version' => 'integer',
         ];

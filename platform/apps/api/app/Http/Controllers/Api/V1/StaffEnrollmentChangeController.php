@@ -54,8 +54,7 @@ final class StaffEnrollmentChangeController extends Controller
 
         $groups = Group::query()->where('status', 'published')->whereKeyNot($record->group_id)
             ->whereHas('offering', fn ($query) => $query->where('activity_id', $activityId))
-            ->with(['priceOptions' => fn ($query) => $query->where('is_available', true)
-                ->whereIn('enrollment_mode', ChangeEnrollment::FULL_PERIOD_MODES)->orderBy('amount_cents')])
+            ->with(['priceOptions', 'offering.priceOptions'])
             ->orderBy('name')
             ->get();
 
@@ -74,13 +73,15 @@ final class StaffEnrollmentChangeController extends Controller
                 // The next session days with the places a move from that day would find.
                 'starts' => $capacity->moveInDays($group),
                 'waitlist_count' => (int) ($waiting[$group->id] ?? 0),
-                'prices' => $group->priceOptions->map(fn (PriceOption $price): array => [
-                    'id' => $price->id,
-                    'enrollment_mode' => $price->enrollment_mode,
-                    'unit' => $price->unit,
-                    'amount_cents' => $price->amount_cents,
-                    'currency' => $price->currency,
-                ])->values()->all(),
+                // The prices the group takes (its own and the activity's for its ways of enrolling), for a period.
+                'prices' => $group->pricesForEnrollment()->where('is_available', true)
+                    ->whereIn('enrollment_mode', ChangeEnrollment::FULL_PERIOD_MODES)->sortBy('amount_cents')->map(fn (PriceOption $price): array => [
+                        'id' => $price->id,
+                        'enrollment_mode' => $price->enrollment_mode,
+                        'unit' => $price->unit,
+                        'amount_cents' => $price->amount_cents,
+                        'currency' => $price->currency,
+                    ])->values()->all(),
             ])->values()->all(),
         ]);
     }

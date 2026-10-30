@@ -7,6 +7,7 @@ use App\Domain\Catalog\Enums\EnrollmentMode;
 use App\Domain\Catalog\Enums\PriceUnit;
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
+use App\Domain\Catalog\Models\Offering;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Catalog\Services\SessionScheduleGenerator;
 use App\Domain\Catalog\ValueObjects\SchedulePattern;
@@ -54,7 +55,10 @@ final readonly class SaveGroupSchedule
                 'location_id' => $group->location_id, 'capacity' => $group->capacity_max,
                 'instructor_ids' => $group->instructors()->pluck('instructor_profiles.id')->all(),
             ] : null;
-            $group->fill(Arr::only($data, ['name', 'age_label', 'capacity_min', 'capacity_max', 'location_id', 'enrollment_approval_mode']));
+            $group->fill(Arr::only($data, ['name', 'age_label', 'capacity_min', 'capacity_max', 'location_id', 'enrollment_approval_mode', 'enrollment_modes']));
+            if (($data['enrollment_modes'] ?? null) !== null) {
+                $this->assertActivityHasModes($offering, $data['enrollment_modes']);
+            }
             if (! $group->exists) {
                 $group->offering_id = $offering->id;
                 $group->capacity_min ??= 1;
@@ -176,6 +180,9 @@ final readonly class SaveGroupSchedule
             'capacity_max' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:100000'],
             // Automatic: an application with a free place is approved at once; a full group puts it on the waiting list.
             'enrollment_approval_mode' => ['sometimes', Rule::in(['manual', 'automatic'])],
+            // Which of the activity's ways of enrolling this group takes; null — all of them.
+            'enrollment_modes' => ['sometimes', 'nullable', 'array', 'min:1', 'max:5'],
+            'enrollment_modes.*' => ['required', 'string', Rule::in(['trial', 'single', 'monthly', 'full_period', 'package']), 'distinct'],
             'location_id' => ['sometimes', ...$location],
             'instructor_ids' => ['sometimes', 'array', 'max:100'],
             'instructor_ids.*' => $instructor,
@@ -218,6 +225,21 @@ final readonly class SaveGroupSchedule
             'price_options.*.cancellation_policy' => ['sometimes', 'nullable', 'string'],
             'price_options.*.payment_due' => ['sometimes', 'nullable', 'string', 'max:255'],
         ])->validate();
+    }
+
+    /**
+     * A group takes only ways of enrolling its activity has a price for (step 6 of the editor).
+     *
+     * @param  array<int, string>  $modes
+     */
+    private function assertActivityHasModes(Offering $offering, array $modes): void
+    {
+        $priced = $offering->priceOptions()->pluck('enrollment_mode')->all();
+        foreach ($modes as $index => $mode) {
+            if (! in_array($mode, $priced, true)) {
+                throw ValidationException::withMessages(["enrollment_modes.{$index}" => 'Дейността няма такъв начин на записване. Добавете го в стъпка 6 „Цени и записване“.']);
+            }
+        }
     }
 
     /** @param array<string, mixed> $override */
