@@ -13,7 +13,7 @@ describe('dashboard navigation', () => {
     expect(groups.map((group) => group.label)).toEqual(['Управление', 'Организация']);
     expect(groups.map((group) => group.items.map((item) => item.label))).toEqual([
       ['Начало', 'Дейности', 'Записвания', 'Отворени врати'],
-      ['Екип'],
+      ['Екип', 'Условия за плащане'],
     ]);
     expect(groups.flatMap((group) => group.items).every((item) => item.isAvailable && item.href)).toBe(true);
   });
@@ -34,6 +34,7 @@ describe('dashboard navigation', () => {
     expect(active('/dashboard')).toEqual(['Начало']);
     expect(active('/dashboard/open-days')).toEqual(['Отворени врати']);
     expect(active('/dashboard/enrollments')).toEqual(['Записвания']);
+    expect(active('/dashboard/settings/payment-terms')).toEqual(['Условия за плащане']);
   });
 
   it('starts expanded on desktop, compact on tablet and leaves mobile to the drawer', () => {
