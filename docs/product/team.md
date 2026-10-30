@@ -134,8 +134,8 @@
 | `POST /team/members/{id}/archive` | `team.manage` | т. 6 |
 | `POST /team/members/{id}/invitation` | `team.manage` | създава или изпраща наново (т. 7) |
 | `POST /team/members/{id}/instructor-profile` | `team.manage` | свързва съществуващ профил или създава нов |
-| `POST /groups/{group}/assignments` | `catalog.manage` | профил, роля, от, до |
-| `POST /assignments/{id}/end` | `catalog.manage` | дата на край; `version` |
+| `POST /catalog/groups/{group}/assignments` | `catalog.manage` | профил, роля, от, до; приключило назначение се отваря отново |
+| `POST /catalog/groups/{group}/assignments/{instructor}/end` | `catalog.manage` | дата на край; `version` на назначението |
 | `GET /invitations/{token}` | без вход | само организация, роля, срок (без имейл в отговора на чужд) |
 | `POST /invitations/{token}/accept` | вход | т. 7.4 |
 | `GET /me/teaching` | вход + свързан профил | т. 8 |

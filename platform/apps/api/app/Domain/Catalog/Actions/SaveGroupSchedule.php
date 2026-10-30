@@ -9,6 +9,7 @@ use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\Offering;
 use App\Domain\Catalog\Models\Session;
+use App\Domain\Catalog\Services\GroupTeachers;
 use App\Domain\Catalog\Services\SessionScheduleGenerator;
 use App\Domain\Catalog\ValueObjects\SchedulePattern;
 use App\Domain\Organizations\Models\Organization;
@@ -28,6 +29,7 @@ final readonly class SaveGroupSchedule
         private TenantContext $context,
         private SessionScheduleGenerator $generator,
         private SyncPriceOptions $prices,
+        private GroupTeachers $teachers,
     ) {}
 
     /** @param array<string, mixed> $payload */
@@ -101,18 +103,19 @@ final readonly class SaveGroupSchedule
             }
             $group->save();
             if (array_key_exists('instructor_ids', $data)) {
-                $group->instructors()->sync($data['instructor_ids']);
+                // A draft group: the list replaces the assignments; a new one leads with no period (docs/product/team.md, т. 5.3).
+                $group->assignments()->sync($data['instructor_ids']);
             }
             if ($generated !== null) {
                 // An explicit pattern replaces a draft series. Metadata-only edits preserve overrides.
                 $group->sessions()->delete();
-                $instructors = $group->instructors()->pluck('instructor_profiles.id')->all();
+                $assignments = $group->assignments()->get();
                 foreach ($generated as $occurrence) {
                     $session = $group->sessions()->create([
                         'starts_at' => $occurrence['starts_at']->utc(), 'ends_at' => $occurrence['ends_at']->utc(),
                         'location_id' => $group->location_id, 'capacity' => $group->capacity_max,
                     ]);
-                    $session->instructors()->sync($instructors);
+                    $session->instructors()->sync($this->teachers->forSession($group, $session->starts_at, $assignments));
                 }
             } elseif ($previousDefaults !== null) {
                 $this->updateInheritedAssignments($group, $previousDefaults, $data);
@@ -141,26 +144,21 @@ final readonly class SaveGroupSchedule
         if (array_intersect(['location_id', 'capacity_max', 'instructor_ids'], array_keys($data)) === []) {
             return;
         }
-        $oldInstructors = $previous['instructor_ids'];
-        sort($oldInstructors);
-        foreach ($group->sessions()->where('status', 'scheduled')->with('instructors')->lockForUpdate()->get() as $session) {
+        foreach ($group->sessions()->where('status', 'scheduled')->lockForUpdate()->get() as $session) {
             if (array_key_exists('location_id', $data) && $session->location_id === $previous['location_id']) {
                 $session->location_id = $group->location_id;
             }
             if (array_key_exists('capacity_max', $data) && $session->capacity === $previous['capacity']) {
                 $session->capacity = $group->capacity_max;
             }
-            $currentInstructors = $session->instructors->modelKeys();
-            sort($currentInstructors);
-            $changedInstructors = false;
-            if (array_key_exists('instructor_ids', $data) && $currentInstructors === $oldInstructors) {
-                $changes = $session->instructors()->sync($data['instructor_ids']);
-                $changedInstructors = $changes['attached'] !== [] || $changes['detached'] !== [];
-            }
-            if ($session->isDirty() || $changedInstructors) {
+            if ($session->isDirty()) {
                 $session->version++;
                 $session->save();
             }
+        }
+        if (array_key_exists('instructor_ids', $data)) {
+            // Sessions changed by hand keep their teachers (docs/product/team.md, т. 5.2).
+            $this->teachers->apply($group);
         }
     }
 
@@ -264,7 +262,8 @@ final readonly class SaveGroupSchedule
         $session->version++;
         $session->save();
         if (array_key_exists('instructor_ids', $override)) {
-            $session->instructors()->sync(array_unique($override['instructor_ids']));
+            // Changed by hand: the group's assignments no longer change this session's teachers.
+            $session->instructors()->sync(array_fill_keys(array_unique($override['instructor_ids']), ['role' => 'lead', 'source' => 'manual']));
         }
     }
 }

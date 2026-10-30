@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domain\Catalog\Actions\AssignGroupInstructor;
+use App\Domain\Catalog\Actions\EndGroupAssignment;
 use App\Domain\Catalog\Actions\SaveGroupSchedule;
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
@@ -23,7 +25,7 @@ final class ActivityGroupController extends Controller
         Gate::forUser($request->user())->authorize('catalog.view', Organization::query()->findOrFail($context->organizationId()));
         $record = Activity::query()->findOrFail($activity);
         $groups = Group::query()->whereHas('offering', fn ($query) => $query->where('activity_id', $record->id))
-            ->with(['instructors', 'sessions.instructors'])->orderBy('created_at')->orderBy('id')->get();
+            ->with(['instructors', 'assignments', 'sessions.instructors'])->orderBy('created_at')->orderBy('id')->get();
 
         return response()->json(['groups' => $groups->map($this->present(...))->all()]);
     }
@@ -46,6 +48,21 @@ final class ActivityGroupController extends Controller
         return response()->json(['group' => $this->present($updated)]);
     }
 
+    /** Lead or assistant in a group, also a published one (docs/product/team.md, т. 5.3). */
+    public function assign(Request $request, string $group, AssignGroupInstructor $action): JsonResponse
+    {
+        $record = Group::query()->findOrFail($group);
+
+        return response()->json(['group' => $this->present($action->handle($request->user(), $record, $request->all()))], 201);
+    }
+
+    public function endAssignment(Request $request, string $group, string $instructor, EndGroupAssignment $action): JsonResponse
+    {
+        $record = Group::query()->findOrFail($group);
+
+        return response()->json(['group' => $this->present($action->handle($request->user(), $record, $instructor, $request->all()))]);
+    }
+
     /** @return array<string, mixed> */
     private function present(Group $group): array
     {
@@ -60,6 +77,13 @@ final class ActivityGroupController extends Controller
             'enrollment_modes' => $group->enrollment_modes,
             'visit_places' => $group->visit_places,
             'location_id' => $group->location_id, 'instructor_ids' => $group->instructors->modelKeys(),
+            // Lead or assistant with a period, ended ones included (docs/product/team.md, т. 5).
+            'assignments' => $group->assignments->map(fn ($profile) => [
+                'instructor_profile_id' => $profile->id, 'role' => $profile->pivot->role,
+                'starts_on' => $profile->pivot->starts_on === null ? null : substr((string) $profile->pivot->starts_on, 0, 10),
+                'ends_on' => $profile->pivot->ends_on === null ? null : substr((string) $profile->pivot->ends_on, 0, 10),
+                'version' => (int) $profile->pivot->version,
+            ])->values()->all(),
             'schedule_pattern' => $group->schedule_pattern,
             'price_options' => $group->priceOptions->map(fn ($price) => [
                 'id' => $price->id, 'enrollment_mode' => $price->enrollment_mode, 'unit' => $price->unit,

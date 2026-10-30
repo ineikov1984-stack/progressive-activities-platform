@@ -58,6 +58,8 @@ class Session extends Model
     {
         return $this->belongsToMany(InstructorProfile::class, 'activity_session_instructors', 'session_id', 'instructor_profile_id')
             ->withPivotValue('organization_id', $this->organization_id ?? app(TenantContext::class)->organizationId())
+            // "assignment" — from the group's assignments; "manual" — changed by hand for this session (docs/product/team.md, т. 5.2).
+            ->withPivot(['role', 'source'])
             ->withTimestamps();
     }
 
