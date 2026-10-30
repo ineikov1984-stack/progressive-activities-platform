@@ -127,7 +127,7 @@ final class EnrollmentMessages
                     "{$child} се премества в {$where}",
                     ['Мястото в новата група е запазено.'],
                     [
-                        $lastOld !== null ? $fact("Последно в {$oldName}", $this->sessionText($lastOld, $from?->group))
+                        $lastOld !== null ? $fact("Последно в {$oldName}", $this->sessionText($lastOld, $from->group))
                             : ($from?->ends_on === null ? null : $fact("Последен ден в {$oldName}", BulgarianDates::weekdayDay($from->ends_on->toDateString()))),
                         $first === null ? null : $fact('Първо в новата група', $this->sessionText($first, $group)),
                         $fact('Дни и час', $weekly),
