@@ -3,7 +3,9 @@
 namespace Tests\Feature\PaymentTerms;
 
 use App\Domain\Audit\Models\AuditEvent;
+use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\OrganizationCatalogProfile;
+use App\Domain\Catalog\Models\VisitOffer;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
@@ -58,6 +60,39 @@ class PaymentTermsApiTest extends TestCase
             ->assertStatus($canManage ? 201 : 403);
         $this->as($member, $organization)->patchJson("/api/v1/payment-terms/{$id}", ['version' => 1, 'name' => 'Нови'])
             ->assertStatus($canManage ? 200 : 403);
+    }
+
+    public function test_the_screen_learns_which_activities_use_each_way_of_paying(): void
+    {
+        $organization = $this->organization();
+        $owner = $this->member($organization, 'organization_owner');
+        $this->as($owner, $organization)->getJson('/api/v1/payment-terms')->assertOk()->assertJsonPath('usage', []);
+
+        $this->inOrganization($organization, function (): void {
+            foreach (['Футбол' => 'published', 'Стара група' => 'archived'] as $title => $status) {
+                $activity = Activity::query()->create([
+                    'slug' => 'terms-'.Str::lower(Str::random(8)), 'title' => $title, 'category' => 'Спорт',
+                    'summary' => 'Описание', 'age_label' => '6–8 г.', 'status' => $status,
+                ]);
+                $offering = $activity->offerings()->create([]);
+                $group = $offering->groups()->create([
+                    'name' => 'Група 1', 'capacity_max' => 10, 'status' => 'published', 'waitlist_enabled' => true, 'enrollment_approval_mode' => 'manual',
+                ]);
+                $offering->priceOptions()->create([
+                    'group_id' => $group->id, 'enrollment_mode' => 'monthly', 'unit' => 'month', 'amount_cents' => 6000, 'currency' => 'EUR', 'is_available' => true,
+                ]);
+                if ($status === 'published') {
+                    VisitOffer::query()->create(['activity_id' => $activity->id, 'group_id' => $group->id, 'type' => 'trial', 'title' => 'Пробно по футбол', 'visit_limit' => 1]);
+                }
+            }
+        });
+
+        // An archived activity does not count; the trial offer counts for visits.
+        $this->as($owner, $organization)->getJson('/api/v1/payment-terms')
+            ->assertOk()
+            ->assertJsonPath('usage.monthly', ['Футбол'])
+            ->assertJsonPath('usage.visit', ['Пробно по футбол'])
+            ->assertJsonPath('billing_kinds.1.label', 'Цял курс наведнъж');
     }
 
     public function test_a_restricted_organization_reads_but_does_not_change(): void

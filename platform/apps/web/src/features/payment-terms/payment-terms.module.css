@@ -3,66 +3,69 @@
 .header { display: grid; gap: var(--space-2); }
 .header h1 { margin: 0; color: var(--ink); font-size: clamp(26px, 4vw, 36px); font-weight: 700; line-height: 1.17; letter-spacing: -0.02em; }
 .eyebrow { margin: 0; color: var(--action-hover); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.lead { margin: 0; max-width: 46rem; color: var(--ink-body); font-size: 16px; line-height: 24px; }
+.lead { margin: 0; max-width: 52rem; color: var(--ink-body); font-size: 16px; line-height: 24px; }
 .muted { margin: 0; color: var(--ink-muted); font-size: 14px; line-height: 20px; }
 .small { margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 18px; }
 .hint { margin: 0; color: var(--ink-muted); font-size: 14px; line-height: 20px; }
 .info { margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); color: var(--ink); background: var(--status-info-soft); font-size: 15px; line-height: 22px; }
 
-/* Ways of paying: a list on a phone, pills from a tablet up. */
-.kinds { display: none; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; border: 0; }
-.kind { position: relative; display: inline-flex; align-items: center; gap: var(--space-2); min-height: 44px; box-sizing: border-box; padding: 0 18px; border: 1px solid var(--border); border-radius: var(--radius-pill); color: var(--ink); background: var(--surface); font-size: 14px; font-weight: 600; cursor: pointer; }
-.kind input { position: absolute; opacity: 0; pointer-events: none; }
-.kind:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
-.kind:hover { background: var(--surface-sunken); }
-.kindOn, .kindOn:hover { border-color: var(--ink); color: var(--ink-inverse); background: var(--ink); }
-.dot { width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--action); box-shadow: 0 0 0 2px var(--surface); }
-.kindSelect { display: grid; gap: var(--space-1); min-width: 0; color: var(--ink); font-size: 14px; font-weight: 600; }
-/* 16 px in fields, so a phone does not zoom in on each of them. A select never gets wider than its column. */
-.kindSelect select, .choice select { width: auto; max-width: 100%; min-width: 0; min-height: 44px; box-sizing: border-box; padding: 0 var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-sm); color: var(--ink); background: var(--surface); font: inherit; font-size: 16px; font-weight: 500; }
-.kindSelect select { width: 100%; }
-.unsaved { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--ink); font-size: 14px; font-weight: 600; line-height: 20px; }
-
-/* The ready-made sets. */
-.presets { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); margin: 0; padding: 0; border: 0; min-width: 0; }
-.presetsLegend { padding: 0 0 var(--space-2); color: var(--ink); font-size: 14px; font-weight: 600; }
-.preset { display: grid; gap: var(--space-1); min-height: 44px; box-sizing: border-box; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); cursor: pointer; }
-.preset:hover { background: var(--surface-warm); }
-.presetOn, .presetOn:hover { padding: calc(var(--space-3) - 1px) calc(var(--space-4) - 1px); border: 2px solid var(--action); background: var(--brand-soft); }
-.presetCustom { border-style: dashed; border-color: var(--border-control); }
-.presetCustom.presetOn { border-style: solid; border-color: var(--action); }
-.presetHead { display: flex; align-items: center; gap: var(--space-2); }
-.presetHead input { width: 20px; height: 20px; margin: 0; accent-color: var(--action); }
-.presetName { color: var(--ink); font-size: 17px; font-weight: 650; line-height: 24px; }
+/* The three steps: a way of paying, a ready-made set, the numbers. */
+.part { display: grid; gap: var(--space-3); min-width: 0; margin: 0; padding: 0; border: 0; }
+.partTitle { padding: 0 0 var(--space-1); color: var(--ink); font-size: 20px; font-weight: 700; line-height: 28px; }
+.kindGrid, .presets { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+.option { display: grid; align-content: start; gap: var(--space-1); min-height: 44px; box-sizing: border-box; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); cursor: pointer; }
+.option:hover { background: var(--surface-warm); }
+.optionOn, .optionOn:hover { padding: calc(var(--space-3) - 1px) calc(var(--space-4) - 1px); border: 2px solid var(--action); background: var(--brand-soft); }
+.optionCustom { border-style: dashed; border-color: var(--border-control); }
+.optionCustom.optionOn { border-style: solid; border-color: var(--action); }
+.optionHead { display: flex; align-items: center; gap: var(--space-2); }
+.optionHead input { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--action); }
+.optionName { color: var(--ink); font-size: 17px; font-weight: 650; line-height: 24px; }
+.usage { color: var(--ink); font-size: 14px; line-height: 20px; }
+.part:disabled .option { cursor: default; }
 .recommended { margin-left: auto; padding: 2px 10px; border-radius: var(--radius-pill); color: var(--status-available); background: var(--status-available-soft); font-size: 12px; font-weight: 600; line-height: 18px; }
-.presetText { display: none; color: var(--ink-muted); font-size: 14px; line-height: 20px; }
-.presets:disabled .preset { cursor: default; }
+.dot { flex: none; width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--action); box-shadow: 0 0 0 2px var(--surface); }
+.unsaved { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--ink); font-size: 14px; font-weight: 600; line-height: 20px; }
 
 .layout { display: grid; gap: var(--space-6); align-items: start; }
 .editor { display: grid; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
 .editorHead { display: grid; gap: var(--space-1); padding: var(--space-4) var(--space-4) var(--space-3); }
-.editorHead h2 { margin: 0; color: var(--ink); font-size: 22px; font-weight: 700; line-height: 28px; letter-spacing: -0.01em; }
+.editorHead h2 { margin: 0; color: var(--ink); font-size: 20px; font-weight: 700; line-height: 28px; letter-spacing: -0.01em; }
 .warning { display: grid; gap: var(--space-1); margin: 0 var(--space-4) var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); color: var(--ink); background: var(--status-limited-soft); font-size: 15px; line-height: 22px; }
 .warning p { margin: 0; }
 
-/* One rule: a title with its icon, then sentences with numbers inside. */
+/* One rule: a question with its icon, then choices or sentences with numbers inside and an example. */
 .rule { display: grid; gap: var(--space-3); min-width: 0; margin: 0; padding: var(--space-4); border: 0; border-top: 1px solid var(--border); }
 .ruleInvalid { box-shadow: inset 4px 0 0 var(--status-full); background: var(--status-full-soft); }
-.ruleTitle { display: flex; align-items: center; gap: 12px; padding: 0; color: var(--ink); font-size: 16px; font-weight: 650; line-height: 24px; }
+.ruleTitle { display: flex; align-items: center; gap: 12px; padding: 0; color: var(--ink); font-size: 17px; font-weight: 650; line-height: 24px; }
 .icon { flex: none; color: var(--ink-muted); }
 .ruleBody { display: grid; gap: var(--space-3); min-width: 0; }
 .line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--ink-body); font-size: 15px; line-height: 22px; }
 .step { display: grid; gap: var(--space-2); }
+.example { margin: 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); color: var(--ink-body); background: var(--surface-sunken); font-size: 14px; line-height: 20px; }
+/* 16 px in fields, so a phone does not zoom in on each of them. */
 .number { width: 64px; height: 44px; box-sizing: border-box; padding: 0 var(--space-1); border: 1px solid var(--border-control); border-radius: var(--radius-sm); color: var(--ink); background: var(--surface); font: inherit; font-size: 16px; font-weight: 600; text-align: center; }
 .numberWide { width: 76px; }
 .number[aria-invalid="true"] { border: 2px solid var(--status-full); }
-.number:disabled, .choice select:disabled { color: var(--ink-body); background: var(--surface-sunken); }
+.number:disabled { color: var(--ink-body); background: var(--surface-sunken); }
 .check { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; color: var(--ink-body); font-size: 15px; line-height: 22px; cursor: pointer; }
 .check input { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--action); }
-.choice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; color: var(--ink-body); font-size: 15px; line-height: 22px; }
+.choices { display: grid; gap: var(--space-2); }
+.choiceCard { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.choiceCardOn { padding: calc(var(--space-3) - 1px); border: 2px solid var(--action); background: var(--brand-soft); }
+.choiceLabel { display: flex; align-items: flex-start; gap: var(--space-3); min-height: 24px; cursor: pointer; }
+.choiceLabel input { flex: none; width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--action); }
+.choiceText { display: grid; gap: 2px; }
+.choiceTitle { color: var(--ink); font-size: 16px; font-weight: 600; line-height: 24px; }
+.choiceDetails { padding-left: 32px; }
+.more summary { min-height: 44px; display: flex; align-items: center; color: var(--ink); font-size: 15px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; list-style: none; }
+.more summary::-webkit-details-marker { display: none; }
+.more summary::before { content: "+"; display: inline-block; width: 1.2em; text-decoration: none; }
+.more[open] summary::before { content: "−"; }
+.moreBody { display: grid; gap: var(--space-3); padding-top: var(--space-2); }
 .fieldError { margin: 0; color: var(--status-full); font-size: 14px; font-weight: 600; line-height: 20px; }
 .fieldError::before { content: "! "; }
-.linkButton { justify-self: start; min-height: 44px; padding: 0 var(--space-1); border: 0; color: var(--ink); background: transparent; font: inherit; font-size: 15px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.linkButton { justify-self: start; min-height: 44px; padding: 0 var(--space-1); border: 0; color: var(--ink); background: transparent; font: inherit; font-size: 15px; font-weight: 600; text-align: left; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .linkButton:hover { color: var(--action-hover); }
 
 /* What parents read. */
@@ -72,6 +75,9 @@
 .card p { margin: 0; }
 .card strong { color: var(--ink); }
 .card ul { display: grid; gap: var(--space-1); margin: 0; padding-left: 1.2rem; }
+/* On a narrow screen the parents' words start folded to their first line. */
+.cardFolded p:nth-of-type(n + 2) { display: none; }
+.unfold { justify-self: start; min-height: 44px; padding: 0; border: 0; color: var(--ink); background: transparent; font: inherit; font-size: 15px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .cardExample { border-color: transparent; background: var(--status-info-soft); }
 .cardAlways { background: var(--surface-sunken); font-size: 14px; line-height: 20px; }
 .cardAlways h2 { font-size: 16px; }
@@ -97,28 +103,27 @@
 .skeleton span:last-child { height: 360px; }
 
 @container terms (min-width: 560px) {
-  .presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .presetsLegend { grid-column: 1 / -1; }
-  .presetText { display: block; }
-  .preset { padding: var(--space-4) var(--space-4); border-radius: var(--radius-lg); }
-  .presetOn, .presetOn:hover { padding: calc(var(--space-4) - 1px); }
+  .kindGrid, .presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .option { padding: var(--space-4); border-radius: var(--radius-lg); }
+  .optionOn, .optionOn:hover { padding: calc(var(--space-4) - 1px); }
 }
 
 @container terms (min-width: 720px) {
-  .kinds { display: flex; }
-  .kindSelect { display: none; }
   .editorHead { padding: var(--space-6) var(--space-6) var(--space-3); }
   .warning { margin: 0 var(--space-6) var(--space-3); }
-  .rule { padding: var(--space-4) var(--space-6); }
+  .rule { padding: var(--space-6); }
   .ruleBody { padding-left: 34px; }
-  .line, .check, .choice { font-size: 16px; line-height: 24px; }
-}
-
-@container terms (min-width: 960px) {
-  .presets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .line, .check { font-size: 16px; line-height: 24px; }
 }
 
 @container terms (min-width: 880px) {
   .layout { grid-template-columns: minmax(0, 1fr) 320px; }
   .aside { position: sticky; top: var(--space-4); }
+  /* Wide enough: every line the parents read is shown. */
+  .cardFolded p:nth-of-type(n + 2) { display: block; }
+  .unfold { display: none; }
+}
+
+@container terms (min-width: 960px) {
+  .kindGrid, .presets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }

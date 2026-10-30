@@ -2,21 +2,25 @@
 
 import { useId, useRef, type ReactNode } from 'react';
 import type { BillingKind, Json, Rules } from './api';
-import { booleanAt, errorsFor, numberAt, ordinalSuffix, valueAt } from './rules';
+import { absenceExample, booleanAt, errorsFor, monthChoiceExample, numberAt, ordinalSuffix, pauseExample, valueAt } from './rules';
 import styles from './payment-terms.module.css';
 
 /**
- * The rows of "Условия за плащане" for each way of paying, as sentences with numbers inside (the approved
- * mockup "Условия за плащане — макет"). A percentage in the rules is the share kept; camps are phrased as
- * the share that comes back.
+ * The rules of "Условия за плащане" for each way of paying, asked as plain questions with numbers inside and an
+ * example under them (the approved mockup "Предложение: по-ясни текстове", 30.10.2026). A percentage in the
+ * rules is the share kept ("плаща"); camps are phrased as the share that comes back ("връщаме").
  */
 
 export type EditorContext = {
   rules: Rules;
   disabled: boolean;
   errors: Record<string, string[]>;
+  /** The organization takes applications through the platform's catalog, so its frame applies. */
+  inMarketplace: boolean;
   change: (path: string, value: Json) => void;
 };
+
+const FRAME = 'родителите се записват при вас през платформата и това е общо правило за всички.';
 
 const ICONS: Record<string, string[]> = {
   end: ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'M16 17l5-5-5-5', 'M21 12H9'],
@@ -39,7 +43,7 @@ export function RuleIcon({ name }: { name: string }) {
   );
 }
 
-/** One rule: an icon, a title and sentences; the server's messages for these paths appear under it. */
+/** One rule, asked as a question; the server's messages for these paths appear under it. */
 export function RuleRow({ icon, title, paths, context, children }: { icon: string; title: string; paths: string[]; context: EditorContext; children: ReactNode }) {
   const messages = errorsFor(context.errors, paths.map((path) => `rules.${path}`));
   const errorId = useId();
@@ -56,6 +60,24 @@ export function RuleRow({ icon, title, paths, context, children }: { icon: strin
 
 export function Line({ children }: { children: ReactNode }) {
   return <div className={styles.line}>{children}</div>;
+}
+
+export function Hint({ children }: { children: ReactNode }) {
+  return <p className={styles.hint}>{children}</p>;
+}
+
+function Example({ children }: { children: ReactNode }) {
+  return <p className={styles.example}>{children}</p>;
+}
+
+/** Rarely needed settings, folded under a link. */
+function More({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <details className={styles.more}>
+      <summary>{label}</summary>
+      <div className={styles.moreBody}>{children}</div>
+    </details>
+  );
 }
 
 type NumberProps = { context: EditorContext; path: string; label: string; min?: number; max?: number; wide?: boolean; returned?: boolean };
@@ -97,19 +119,33 @@ export function Check({ context, path, children }: { context: EditorContext; pat
   );
 }
 
-export function Choice({ context, path, label, options, onPick }: { context: EditorContext; path: string; label: string; options: Array<[string, string]>; onPick?: (value: string) => void }) {
-  const value = valueAt(context.rules, path);
+type Choice = { value: string; title: string; hint?: string; details?: ReactNode };
+
+/** Choices as cards; the chosen one shows its numbers. Inputs sit outside the label (a label holds one control). */
+function Choices({ context, name, value, choices, onPick }: { context: EditorContext; name: string; value: string; choices: Choice[]; onPick: (value: string) => void }) {
+  const group = useId();
   return (
-    <label className={styles.choice}>
-      <span>{label}</span>
-      <select value={typeof value === 'string' || typeof value === 'number' ? String(value) : ''} disabled={context.disabled} onChange={(event) => (onPick ? onPick(event.target.value) : context.change(path, event.target.value))}>
-        {options.map(([option, text]) => <option key={option} value={option}>{text}</option>)}
-      </select>
-    </label>
+    <div className={styles.choices}>
+      {choices.map((choice) => {
+        const on = choice.value === value;
+        return (
+          <div key={choice.value} className={on ? `${styles.choiceCard} ${styles.choiceCardOn}` : styles.choiceCard}>
+            <label className={styles.choiceLabel}>
+              <input type="radio" name={`${group}-${name}`} value={choice.value} checked={on} disabled={context.disabled} onChange={() => onPick(choice.value)} />
+              <span className={styles.choiceText}>
+                <span className={styles.choiceTitle}>{choice.title}</span>
+                {choice.hint ? <span className={styles.hint}>{choice.hint}</span> : null}
+              </span>
+            </label>
+            {on && choice.details ? <div className={styles.choiceDetails}>{choice.details}</div> : null}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
-/** "Поне N часа/дни преди → …%", the last step is "по-късно"; 1 to `max` steps. */
+/** "Откаже ли поне N часа/дни преди → плаща/връщаме %"; the last step is "по-късно"; 1 to `max` steps. */
 function Ladder({ context, path, unit, max, returned, creditFor, before }: {
   context: EditorContext; path: string; unit: 'min_hours' | 'min_days'; max: number; returned: boolean; creditFor: string | null; before: string;
 }) {
@@ -118,7 +154,7 @@ function Ladder({ context, path, unit, max, returned, creditFor, before }: {
   const list = valueAt(context.rules, path);
   const steps = Array.isArray(list) ? list : [];
   const word = unit === 'min_hours' ? 'часа' : 'дни';
-  const verb = returned ? 'връща се' : 'дължи се';
+  const verb = returned ? 'връщаме' : 'плаща';
   const replace = (next: Json[]) => context.change(path, next);
   const remove = (index: number) => {
     replace(steps.filter((__, other) => other !== index));
@@ -144,10 +180,10 @@ function Ladder({ context, path, unit, max, returned, creditFor, before }: {
           <div key={index} className={styles.step}>
             <Line>
               {last
-                ? <span>{steps.length === 1 ? `При отказ по всяко време ${before}` : 'По-късно'} → {verb}</span>
-                : <><span>Поне</span><NumberInput context={context} path={`${path}.${index}.${unit}`} label={`${unit === 'min_hours' ? 'Часове' : 'Дни'} преди, стъпало ${index + 1}`} min={1} /><span>{word} {before} → {verb}</span></>}
-              <NumberInput context={context} path={`${path}.${index}.kept`} label={`Процент, който ${returned ? 'се връща' : 'се дължи'}, стъпало ${index + 1}`} max={100} returned={returned} />
-              <span>%</span>
+                ? <span>{steps.length === 1 ? `При отказ по всяко време ${before} → ${verb}` : `По-късно → ${verb}`}</span>
+                : <><span>Откаже ли поне</span><NumberInput context={context} path={`${path}.${index}.${unit}`} label={`${unit === 'min_hours' ? 'Часове' : 'Дни'} преди, стъпало ${index + 1}`} min={1} /><span>{word} {before} → {verb}</span></>}
+              <NumberInput context={context} path={`${path}.${index}.kept`} label={`Процент, който ${returned ? 'се връща' : 'се плаща'}, стъпало ${index + 1}`} max={100} returned={returned} />
+              <span>%.</span>
               {!last && !context.disabled && steps.length > 1 ? (
                 <button type="button" className={styles.linkButton} onClick={() => remove(index)}>
                   Махни<span className="sr-only"> стъпало {index + 1}</span>
@@ -159,6 +195,7 @@ function Ladder({ context, path, unit, max, returned, creditFor, before }: {
         );
       })}
       {!context.disabled && steps.length < max ? <button type="button" ref={addRef} className={styles.linkButton} onClick={add}>Добави срок</button> : null}
+      {context.inMarketplace ? <Hint>При ранен отказ винаги се връща нещо: {FRAME}</Hint> : null}
     </>
   );
 }
@@ -177,10 +214,10 @@ function AbsenceTiers({ context }: { context: EditorContext }) {
         return (
           <Line key={index}>
             {last
-              ? <span>{steps.length === 1 ? 'При отсъствия → дължи се' : 'Повече →'}</span>
-              : <><span>До</span><NumberInput context={context} path={`${path}.${index}.up_to`} label={`Брой отсъствия, стъпало ${index + 1}`} max={31} /><span>отсъствия в месеца → дължи се</span></>}
+              ? <span>{steps.length === 1 ? 'При отсъствия → плаща' : 'Повече → плаща'}</span>
+              : <><span>До</span><NumberInput context={context} path={`${path}.${index}.up_to`} label={`Брой отсъствия, стъпало ${index + 1}`} max={31} /><span>отсъствия в месеца → плаща</span></>}
             <NumberInput context={context} path={`${path}.${index}.kept`} label={`Процент от таксата, стъпало ${index + 1}`} max={100} />
-            <span>% от таксата за месеца.</span>
+            <span>% от таксата.</span>
             {!last && !context.disabled ? (
               <button type="button" className={styles.linkButton} onClick={() => {
                 replace(steps.filter((__, other) => other !== index));
@@ -204,7 +241,8 @@ function AbsenceTiers({ context }: { context: EditorContext }) {
   );
 }
 
-function MonthPart({ context, part }: { context: EditorContext; part: 'start' | 'end' }) {
+/** The month a child stops or starts in: by sessions, by the day of the month, or the whole month. */
+function MonthChoice({ context, part }: { context: EditorContext; part: 'start' | 'end' }) {
   const mode = valueAt(context.rules, `${part}.mode`);
   const pick = (next: string) => {
     const base = valueAt(context.rules, part);
@@ -214,48 +252,65 @@ function MonthPart({ context, part }: { context: EditorContext; part: 'start' | 
       : { cutoff_day: null, kept_until_cutoff: null, kept_after_cutoff: null };
     context.change(part, { ...current, mode: next, ...cutoff });
   };
+  const day = numberAt(context.rules, `${part}.cutoff_day`) ?? 15;
   return (
-    <>
-      <Choice context={context} path={`${part}.mode`} label={part === 'end' ? 'Месецът, в който спира:' : 'Месецът, в който започва:'} onPick={pick} options={[
-        ['by_sessions', 'само заниманията до последния ден'],
-        ['cutoff', 'според деня от месеца'],
-        ['full_month', 'целият месец'],
-      ].map(([value, text]) => [value, part === 'start' && value === 'by_sessions' ? 'само заниманията от първия ден' : text] as [string, string])} />
-      {mode === 'cutoff' ? (
-        <Line>
-          <span>{part === 'end' ? 'Последен ден до' : 'Начало до'}</span>
-          <NumberInput context={context} path={`${part}.cutoff_day`} label="Ден от месеца" min={1} max={28} />
-          <span>-{ordinalSuffix(numberAt(context.rules, `${part}.cutoff_day`) ?? 15)} число → дължи се</span>
-          <NumberInput context={context} path={`${part}.kept_until_cutoff`} label="Процент от таксата до този ден" max={100} />
-          <span>% от таксата за месеца. След това →</span>
-          <NumberInput context={context} path={`${part}.kept_after_cutoff`} label="Процент от таксата след този ден" max={100} />
-          <span>%.</span>
-        </Line>
-      ) : null}
-    </>
+    <Choices context={context} name={part} value={typeof mode === 'string' ? mode : 'by_sessions'} onPick={pick} choices={[
+      {
+        value: 'by_sessions',
+        title: part === 'end' ? 'Плаща само заниманията до последния ден' : 'Плаща само заниманията от първия ден',
+        hint: monthChoiceExample(context.rules, part, 'by_sessions'),
+      },
+      {
+        value: 'cutoff',
+        title: 'Плаща част от месеца според датата',
+        hint: mode === 'cutoff' ? monthChoiceExample(context.rules, part, 'cutoff') : 'Напр. до 15-то число — половината, след това — цялата такса.',
+        details: (
+          <Line>
+            <span>{part === 'end' ? 'Спре ли до' : 'Започне ли до'}</span>
+            <NumberInput context={context} path={`${part}.cutoff_day`} label="Ден от месеца" min={1} max={28} />
+            <span>-{ordinalSuffix(day)} число → плаща</span>
+            <NumberInput context={context} path={`${part}.kept_until_cutoff`} label="Процент от таксата до този ден" max={100} />
+            <span>% от таксата. След това →</span>
+            <NumberInput context={context} path={`${part}.kept_after_cutoff`} label="Процент от таксата след този ден" max={100} />
+            <span>%.</span>
+          </Line>
+        ),
+      },
+      { value: 'full_month', title: 'Плаща целия месец', hint: monthChoiceExample(context.rules, part, 'full_month') },
+    ]} />
   );
 }
 
-function PauseRow({ context }: { context: EditorContext }) {
+function PauseRow({ context, example }: { context: EditorContext; example: boolean }) {
   return (
-    <RuleRow icon="pause" title="Пауза" paths={['pause']} context={context}>
+    <RuleRow icon="pause" title="Пауза — ваканция, болест, пътуване" paths={['pause']} context={context}>
+      <Hint>Детето пази мястото си, а за заниманията в паузата плаща по-малко или нищо.</Hint>
       <Line>
-        <span>Заявена поне</span>
+        <span>Ако родителят ви каже поне</span>
         <NumberInput context={context} path="pause.notice_days" label="Дни предизвестие за пауза" max={60} />
-        <span>дни по-рано → дължи се</span>
-        <NumberInput context={context} path="pause.kept_on_time" label="Процент за заниманията при навременна пауза" max={100} />
-        <span>% от заниманията в паузата. По-късно →</span>
-        <NumberInput context={context} path="pause.kept_late" label="Процент за заниманията при късно заявена пауза" max={100} />
+        <span>дни по-рано → за заниманията в паузата плаща</span>
+        <NumberInput context={context} path="pause.kept_on_time" label="Процент при навременна пауза" max={100} />
+        <span>%.</span>
+      </Line>
+      <Line>
+        <span>Ако каже по-късно → плаща</span>
+        <NumberInput context={context} path="pause.kept_late" label="Процент при късна пауза" max={100} />
         <span>%.</span>
       </Line>
       <Line>
         <span>Така — до</span>
         <NumberInput context={context} path="pause.free_days_per_school_year" label="Дни пауза в учебната година при тези условия" max={183} wide />
-        <span>дни пауза в учебната година (61 дни ≈ 2 месеца); над тях — като късно заявена. Най-кратка пауза</span>
-        <NumberInput context={context} path="pause.min_days" label="Най-кратка пауза в дни" max={183} />
-        <span>дни.</span>
+        <span>дни в учебната година (61 дни ≈ 2 месеца). Над тях — като казано късно.</span>
       </Line>
-      <Check context={context} path="pause.document_required">Пауза само с документ от лекар</Check>
+      {example ? <Example>{pauseExample(context.rules)}</Example> : null}
+      <More label="Още за паузата: най-кратка пауза, само с бележка от лекар">
+        <Line>
+          <span>Най-кратка пауза</span>
+          <NumberInput context={context} path="pause.min_days" label="Най-кратка пауза в дни" max={183} />
+          <span>дни (0 — без ограничение).</span>
+        </Line>
+        <Check context={context} path="pause.document_required">Пауза само с бележка от лекар</Check>
+      </More>
     </RuleRow>
   );
 }
@@ -264,29 +319,37 @@ function MakeupLines({ context }: { context: EditorContext }) {
   return (
     <>
       <Line>
-        <Check context={context} path="makeup.enabled">Наваксване до</Check>
+        <Check context={context} path="makeup.enabled">Пропуснато занимание може да се навакса до</Check>
         <NumberInput context={context} path="makeup.within_days" label="Дни за наваксване" min={1} max={60} />
-        <span>дни, ако отсъствието е заявено поне</span>
+        <span>дни, ако родителят каже поне</span>
         <NumberInput context={context} path="makeup.notice_hours" label="Часове предварително" max={72} />
-        <span>ч по-рано.</span>
+        <span>часа по-рано.</span>
       </Line>
+    </>
+  );
+}
+
+function MakeupMore({ context }: { context: EditorContext }) {
+  return (
+    <More label="Още за наваксването: колко в месеца, само ако има място">
       <Line>
         <span>Най-много</span>
         <NumberInput context={context} path="makeup.per_month" label="Наваксвания в месеца (празно — без ограничение)" min={1} max={31} />
         <span>наваксвания в месеца (празно — без ограничение).</span>
       </Line>
       <Check context={context} path="makeup.only_if_space">Само ако в групата има свободно място</Check>
-    </>
+    </More>
   );
 }
 
 function RefundRow({ context }: { context: EditorContext }) {
+  const value = valueAt(context.rules, 'refund');
+  // Only as credit is not offered: a credit is always the parent's choice (spec, т. 3.3).
   return (
-    <RuleRow icon="money" title="Връщане на пари" paths={['refund']} context={context}>
-      {/* Only as credit is not offered: a credit is always the parent's choice (spec, т. 3.3). */}
-      <Choice context={context} path="refund" label="Върнатата сума:" options={[
-        ['parent_choice', 'пари или кредит — по избор на родителя'],
-        ['money', 'пари, по същия начин на плащане'],
+    <RuleRow icon="money" title="Как се връщат пари" paths={['refund']} context={context}>
+      <Choices context={context} name="refund" value={typeof value === 'string' ? value : 'parent_choice'} onPick={(next) => context.change('refund', next)} choices={[
+        { value: 'parent_choice', title: 'Родителят избира — пари или кредит', hint: 'Кредитът се приспада от следващото плащане.' },
+        { value: 'money', title: 'Винаги пари', hint: 'По същия начин, по който е платено, до 14 дни.' },
       ]} />
     </RuleRow>
   );
@@ -297,21 +360,24 @@ export function RuleEditor({ kind, context }: { kind: BillingKind; context: Edit
     case 'monthly':
       return (
         <>
-          <RuleRow icon="end" title="Прекратяване" paths={['end']} context={context}>
-            <MonthPart context={context} part="end" />
+          <RuleRow icon="end" title="Ако детето спре по средата на месеца" paths={['end']} context={context}>
+            <MonthChoice context={context} part="end" />
             <Line>
-              <span>Предизвестие</span>
-              <NumberInput context={context} path="end.notice_days" label="Дни предизвестие за прекратяване" max={30} />
-              <span>дни (0 — без предизвестие).</span>
+              <span>Колко дни по-рано трябва да ви каже родителят?</span>
+              <NumberInput context={context} path="end.notice_days" label="Дни предизвестие" max={30} />
+              <span>дни</span>
             </Line>
+            <Hint>0 — може и в деня, в който спира.{context.inMarketplace ? ` Най-много 30 дни: ${FRAME}` : ''}</Hint>
           </RuleRow>
-          <RuleRow icon="start" title="Начало в средата на месеца" paths={['start']} context={context}>
-            <MonthPart context={context} part="start" />
+          <RuleRow icon="start" title="Ако детето започне по средата на месеца" paths={['start']} context={context}>
+            <MonthChoice context={context} part="start" />
           </RuleRow>
-          <PauseRow context={context} />
-          <RuleRow icon="absences" title="Отсъствия" paths={['absences', 'makeup']} context={context}>
+          <PauseRow context={context} example />
+          <RuleRow icon="absences" title="Отсъствия — детето не идва, без да е в пауза" paths={['absences', 'makeup']} context={context}>
             <AbsenceTiers context={context} />
             <MakeupLines context={context} />
+            <Example>{absenceExample(context.rules)}</Example>
+            <MakeupMore context={context} />
           </RuleRow>
           <RefundRow context={context} />
         </>
@@ -319,21 +385,22 @@ export function RuleEditor({ kind, context }: { kind: BillingKind; context: Edit
     case 'full_period':
       return (
         <>
-          <RuleRow icon="end" title="Отказ преди началото" paths={['before_start']} context={context}>
+          <RuleRow icon="end" title="Ако се откаже преди началото" paths={['before_start']} context={context}>
             <Ladder context={context} path="before_start.tiers" unit="min_days" max={6} returned creditFor={null} before="преди началото" />
           </RuleRow>
-          <RuleRow icon="clock" title="Отказ след началото" paths={['after_start']} context={context}>
+          <RuleRow icon="clock" title="Ако се откаже след началото" paths={['after_start']} context={context}>
             <Line>
               <span>През първите</span>
               <NumberInput context={context} path="after_start.full_refund_days" label="Дни с пълно връщане след началото" max={60} />
-              <span>дни се връща всичко за оставащите занимания. След това се връща</span>
+              <span>дни връщаме всичко за оставащите занимания. След това връщаме</span>
               <NumberInput context={context} path="after_start.kept_of_remaining" label="Процент, който се връща от оставащите занимания" max={100} returned />
               <span>% от тях.</span>
             </Line>
           </RuleRow>
-          <PauseRow context={context} />
-          <RuleRow icon="absences" title="Отсъствия" paths={['makeup']} context={context}>
+          <PauseRow context={context} example={false} />
+          <RuleRow icon="absences" title="Отсъствия — детето не идва, без да е в пауза" paths={['makeup']} context={context}>
             <MakeupLines context={context} />
+            <MakeupMore context={context} />
           </RuleRow>
           <RefundRow context={context} />
         </>
@@ -341,12 +408,12 @@ export function RuleEditor({ kind, context }: { kind: BillingKind; context: Edit
     case 'visit':
       return (
         <>
-          <RuleRow icon="clock" title="Отказ от посещение" paths={['cancellation']} context={context}>
+          <RuleRow icon="clock" title="Ако откаже посещението" paths={['cancellation']} context={context}>
             <Ladder context={context} path="cancellation.tiers" unit="min_hours" max={3} returned={false} creditFor={null} before="преди началото" />
           </RuleRow>
-          <RuleRow icon="person" title="Неявяване" paths={['no_show_kept']} context={context}>
+          <RuleRow icon="person" title="Ако не дойде, без да откаже" paths={['no_show_kept']} context={context}>
             <Line>
-              <span>Детето не дойде без отказ → дължи се</span>
+              <span>Плаща</span>
               <NumberInput context={context} path="no_show_kept" label="Процент при неявяване" max={100} />
               <span>% от сумата.</span>
             </Line>
@@ -357,10 +424,10 @@ export function RuleEditor({ kind, context }: { kind: BillingKind; context: Edit
     case 'package':
       return (
         <>
-          <RuleRow icon="pause" title="Замразяване и удължаване" paths={['freeze_days_with_document', 'extension_days_on_request']} context={context}>
+          <RuleRow icon="pause" title="Замразяване и удължаване на картата" paths={['freeze_days_with_document', 'extension_days_on_request']} context={context}>
             <Line>
-              <span>С документ от лекар картата се замразява до</span>
-              <NumberInput context={context} path="freeze_days_with_document" label="Дни замразяване с документ" max={90} />
+              <span>С бележка от лекар картата се замразява до</span>
+              <NumberInput context={context} path="freeze_days_with_document" label="Дни замразяване с бележка" max={90} />
               <span>дни.</span>
             </Line>
             <Line>
@@ -375,14 +442,14 @@ export function RuleEditor({ kind, context }: { kind: BillingKind; context: Edit
     case 'day_camp':
       return (
         <>
-          <RuleRow icon="end" title="Отказ преди началото на седмицата" paths={['before_start']} context={context}>
+          <RuleRow icon="end" title="Ако се откаже преди седмицата" paths={['before_start']} context={context}>
             <Ladder context={context} path="before_start.tiers" unit="min_days" max={6} returned creditFor="друга седмица" before="преди седмицата" />
           </RuleRow>
-          <RuleRow icon="absences" title="Отсъствия в записана седмица" paths={['absences']} context={context}>
+          <RuleRow icon="absences" title="Ако отсъства в записана седмица" paths={['absences']} context={context}>
             <Line>
               <span>Първите</span>
               <NumberInput context={context} path="absences.kept_first_days" label="Дни отсъствие без връщане" max={5} />
-              <span>дни → не се връщат. Всеки следващ → връща се</span>
+              <span>дни → не връщаме. За всеки следващ → връщаме</span>
               <NumberInput context={context} path="absences.kept_after" label="Процент, който се връща за следващите дни" max={100} returned />
               <span>% от дневната цена.</span>
             </Line>
@@ -401,15 +468,15 @@ export function RuleEditor({ kind, context }: { kind: BillingKind; context: Edit
       return (
         <>
           <RuleRow icon="money" title="Капаро" paths={['deposit']} context={context}>
-            <DepositLines context={context} />
+            <DepositChoice context={context} />
           </RuleRow>
-          <RuleRow icon="end" title="Отказ преди тръгване" paths={['before_start']} context={context}>
+          <RuleRow icon="end" title="Ако се откаже преди тръгване" paths={['before_start']} context={context}>
             <Ladder context={context} path="before_start.tiers" unit="min_days" max={6} returned creditFor="друга смяна" before="преди тръгване" />
-            <p className={styles.hint}>Задържаната сума не бива да е по-голяма от реалните ви разходи.</p>
+            <Hint>Задържаната сума не бива да е по-голяма от реалните ви разходи.</Hint>
           </RuleRow>
-          <RuleRow icon="document" title="Болест и друго дете" paths={['illness_with_document', 'transfer_to_another_child_until_days']} context={context}>
+          <RuleRow icon="document" title="Болест и друго дете на мястото" paths={['illness_with_document', 'transfer_to_another_child_until_days']} context={context}>
             <Line>
-              <span>Болест преди тръгване с документ от лекар → връща се</span>
+              <span>Болест преди тръгване с бележка от лекар → връщаме</span>
               <NumberInput context={context} path="illness_with_document.kept" label="Процент, който се връща при болест" max={100} returned />
               <span>%.</span>
             </Line>
@@ -420,9 +487,9 @@ export function RuleEditor({ kind, context }: { kind: BillingKind; context: Edit
               <span>дни преди тръгване — без такса.</span>
             </Line>
           </RuleRow>
-          <RuleRow icon="home" title="Ранно прибиране" paths={['early_departure_kept']} context={context}>
+          <RuleRow icon="home" title="Ако се прибере по-рано" paths={['early_departure_kept']} context={context}>
             <Line>
-              <span>Връща се</span>
+              <span>Връщаме</span>
               <NumberInput context={context} path="early_departure_kept" label="Процент, който се връща от неизползваните дни" max={100} returned />
               <span>% от неизползваните дни.</span>
             </Line>
@@ -433,21 +500,24 @@ export function RuleEditor({ kind, context }: { kind: BillingKind; context: Edit
     case 'kindergarten':
       return (
         <>
-          <RuleRow icon="end" title="Напускане и депозит" paths={['notice_days', 'deposit_months']} context={context}>
+          <RuleRow icon="end" title="Ако детето напусне" paths={['notice_days', 'deposit_months']} context={context}>
             <Line>
-              <span>Предизвестие</span>
+              <span>Родителят ви казва поне</span>
               <NumberInput context={context} path="notice_days" label="Дни предизвестие" max={30} />
-              <span>дни.</span>
+              <span>дни по-рано.</span>
             </Line>
-            <Choice context={context} path="deposit_months" label="Депозит:" options={[['0', 'без депозит'], ['1', 'една месечна такса']]}
-              onPick={(value) => context.change('deposit_months', Number(value))} />
+            {context.inMarketplace ? <Hint>Най-много 30 дни: {FRAME}</Hint> : null}
+            <Choices context={context} name="deposit" value={String(numberAt(context.rules, 'deposit_months') ?? 0)} onPick={(next) => context.change('deposit_months', Number(next))} choices={[
+              { value: '0', title: 'Без депозит' },
+              { value: '1', title: 'Депозит — една месечна такса', hint: 'Връща се или се приспада от последния месец.' },
+            ]} />
           </RuleRow>
           <RuleRow icon="absences" title="Храна и болест" paths={['meals_by_attendance', 'sick_over_working_days', 'sick_next_month_kept']} context={context}>
             <Check context={context} path="meals_by_attendance">Храната се плаща според присъствието</Check>
             <Line>
               <span>Болест над</span>
               <NumberInput context={context} path="sick_over_working_days" label="Работни дни болест" max={60} />
-              <span>работни дни в месеца → за следващия месец се дължи</span>
+              <span>работни дни в месеца → за следващия месец плаща</span>
               <NumberInput context={context} path="sick_next_month_kept" label="Процент за следващия месец" max={100} />
               <span>% от таксата.</span>
             </Line>
@@ -458,31 +528,44 @@ export function RuleEditor({ kind, context }: { kind: BillingKind; context: Edit
   }
 }
 
-function DepositLines({ context }: { context: EditorContext }) {
+function DepositChoice({ context }: { context: EditorContext }) {
   const mode = valueAt(context.rules, 'deposit.mode');
+  const cents = numberAt(context.rules, 'deposit.amount_cents');
   const pick = (next: string) => context.change('deposit', {
     mode: next,
     amount_cents: next === 'amount' ? numberAt(context.rules, 'deposit.amount_cents') ?? 15000 : null,
     percent: next === 'percent' ? numberAt(context.rules, 'deposit.percent') ?? 25 : null,
   });
-  const cents = numberAt(context.rules, 'deposit.amount_cents');
   return (
-    <>
-      <Choice context={context} path="deposit.mode" label="При записване:" onPick={pick} options={[['none', 'без капаро'], ['percent', 'процент от цената'], ['amount', 'фиксирана сума']]} />
-      {mode === 'percent' ? (
-        <Line>
-          <NumberInput context={context} path="deposit.percent" label="Процент капаро" max={30} />
-          <span>% от цената — приспада се от нея.</span>
-        </Line>
-      ) : null}
-      {mode === 'amount' ? (
-        <Line>
-          <input className={`${styles.number} ${styles.numberWide}`} type="number" inputMode="numeric" min={0} step={1} aria-label="Капаро в евро"
-            value={cents === null ? '' : String(Math.round(cents / 100))} disabled={context.disabled}
-            onChange={(event) => context.change('deposit.amount_cents', event.target.value.trim() === '' ? null : Math.round(Number(event.target.value)) * 100)} />
-          <span>€ — приспада се от цената.</span>
-        </Line>
-      ) : null}
-    </>
+    <Choices context={context} name="deposit" value={typeof mode === 'string' ? mode : 'none'} onPick={pick} choices={[
+      { value: 'none', title: 'Без капаро' },
+      {
+        value: 'percent',
+        title: 'Процент от цената',
+        hint: 'Приспада се от цената.',
+        details: (
+          <>
+            <Line>
+              <NumberInput context={context} path="deposit.percent" label="Процент капаро" max={30} />
+              <span>% от цената при записване.</span>
+            </Line>
+            {context.inMarketplace ? <Hint>Най-много 30 %: {FRAME}</Hint> : null}
+          </>
+        ),
+      },
+      {
+        value: 'amount',
+        title: 'Фиксирана сума',
+        hint: 'Приспада се от цената.',
+        details: (
+          <Line>
+            <input className={`${styles.number} ${styles.numberWide}`} type="number" inputMode="numeric" min={0} step={1} aria-label="Капаро в евро"
+              value={cents === null ? '' : String(Math.round(cents / 100))} disabled={context.disabled}
+              onChange={(event) => context.change('deposit.amount_cents', event.target.value.trim() === '' ? null : Math.round(Number(event.target.value)) * 100)} />
+            <span>€ при записване.</span>
+          </Line>
+        ),
+      },
+    ]} />
   );
 }
