@@ -116,7 +116,9 @@ final class DeliverEvents
 
             $rows = EnrollmentEventDelivery::query()->where('status', 'pending')
                 ->where(fn ($query) => $query->whereNull('next_attempt_at')->orWhere('next_attempt_at', '<=', $now))
-                ->orderBy('created_at')->orderBy('id')
+                // In the order things happened (event ids are time-ordered UUIDv7): a parent reads "skipped",
+                // then "paused", never the other way round; the parent's copy before the team's.
+                ->orderBy('event_id')->orderBy('audience')->orderBy('id')
                 ->limit(self::BATCH)
                 ->lock(DB::getDriverName() === 'pgsql' ? 'for update skip locked' : true)
                 ->get(['id', 'attempts']);

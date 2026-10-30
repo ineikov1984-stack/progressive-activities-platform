@@ -162,7 +162,8 @@ final class ChangeEnrollment
                 'price_option_id' => $price->id,
                 'scope' => EnrollmentScope::FullPeriod,
                 'status' => EnrollmentStatus::Active,
-                'starts_on' => $date->toDateString(),
+                // From the first session in the new group on or after the day (decision of 30.10.2026).
+                'starts_on' => $this->applicability->firstSessionDay($target, $date->toDateString()) ?? $date->toDateString(),
                 'transferred_from_id' => $current->id,
             ]);
             $transition = $this->transition($actor, $moved, null, EnrollmentStatus::Active->value, $reason, ['transferred_from_id' => $current->id]);
@@ -202,7 +203,7 @@ final class ChangeEnrollment
             $start = $this->day($startsOn, $timezone, 'starts_on');
             $end = $this->day($endsOn, $timezone, 'ends_on');
             if ($start->toDateString() < $current->starts_on->toDateString()) {
-                throw ValidationException::withMessages(['starts_on' => 'Паузата започва преди началото на записването.']);
+                throw ValidationException::withMessages(['starts_on' => 'Записването започва на '.$current->starts_on->format('d.m.Y').'. Изберете начало на паузата от тогава.']);
             }
             $this->assertNotStarted($group, $start, 'starts_on');
             if ($end->lt($start) || $start->diffInDays($end) >= self::MAX_PAUSE_DAYS

@@ -16,13 +16,20 @@ use App\Domain\Enrollment\Models\EnrollmentEvent;
 use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
 use App\Domain\Enrollment\Services\SessionAllocation;
+use App\Domain\Enrollment\Services\SessionApplicability;
 use App\Domain\Identity\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 final class ReviewEnrollmentApplication
 {
-    public function __construct(private readonly EnrollmentCapacity $capacity, private readonly VisitOfferEligibility $eligibility, private readonly SessionAllocation $allocation) {}
+    public function __construct(
+        private readonly EnrollmentCapacity $capacity,
+        private readonly VisitOfferEligibility $eligibility,
+        private readonly SessionAllocation $allocation,
+        private readonly SessionApplicability $applicability,
+    ) {}
 
     public function handle(
         User $actor,
@@ -129,6 +136,8 @@ final class ReviewEnrollmentApplication
                 $actor, $current, EnrollmentApplicationStatus::Approved, $publicReason, $internalNote, $eligibilityOverrideReason,
             );
             $reviewed = $current->refresh();
+            $timezone = is_string($group->schedule_pattern['timezone'] ?? null) && $group->schedule_pattern['timezone'] !== ''
+                ? $group->schedule_pattern['timezone'] : 'Europe/Sofia';
             $enrollment = Enrollment::query()->create([
                 'application_id' => $reviewed->id,
                 'child_id' => $reviewed->child_id,
@@ -137,8 +146,12 @@ final class ReviewEnrollmentApplication
                 'session_id' => $reviewed->session_id,
                 'scope' => $reviewed->scope,
                 'status' => EnrollmentStatus::Active,
-                // Calendar day in the group's time zone (docs/product/staff-enrollment.md, т. 9.1).
-                'starts_on' => ($reviewed->session->starts_at ?? now())->setTimezone($group->schedule_pattern['timezone'] ?? 'Europe/Sofia')->toDateString(),
+                // Calendar day in the group's time zone (docs/product/staff-enrollment.md, т. 9.1): a visit on its
+                // session's day; the period from the group's first session that has not started (decision of
+                // 30.10.2026), so ending it before then is a cancellation. Without sessions yet — today.
+                'starts_on' => $reviewed->session !== null
+                    ? $reviewed->session->starts_at->setTimezone($timezone)->toDateString()
+                    : ($this->applicability->firstSessionDay($group, CarbonImmutable::now($timezone)->toDateString()) ?? CarbonImmutable::now($timezone)->toDateString()),
             ]);
             $this->event('enrollment.application_approved', $reviewed, $enrollment, $transition);
 

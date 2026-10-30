@@ -267,13 +267,15 @@ test('the team pauses a child from the group roster and undoes it', async () => 
   await expect(row.getByText(/^Пауза \d/)).toHaveCount(0);
 
   // The parent's own route goes through the same rules on PostgreSQL with RLS.
-  const roster = JSON.parse((await api(page, `enrollment/groups/${demo.groupId}/roster`, { organizationId: demo.organizationId })).body) as { enrollments: { id: string; child: { name: string } }[] };
-  const enrollmentId = roster.enrollments.find((item) => item.child.name === childName)?.id;
+  const roster = JSON.parse((await api(page, `enrollment/groups/${demo.groupId}/roster`, { organizationId: demo.organizationId })).body) as { enrollments: { id: string; starts_on: string; child: { name: string } }[] };
+  const enrolled = roster.enrollments.find((item) => item.child.name === childName);
+  const enrollmentId = enrolled?.id;
   expect(enrollmentId).toBeTruthy();
   const tomorrow = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Sofia' }).format(new Date(Date.now() + 86_400_000));
   const ended = await api(page, `parent/enrollments/${enrollmentId}/end-from`, { method: 'POST', body: { effective_date: tomorrow, reason: 'Синтетична проверка' } });
   expect(ended.status, ended.body).toBe(200);
-  expect(JSON.parse(ended.body).enrollment.status).toBe('ended');
+  // The enrollment begins with the group's first session: ending before it cancels, after it ends.
+  expect(JSON.parse(ended.body).enrollment.status).toBe(tomorrow < (enrolled?.starts_on ?? '') ? 'cancelled' : 'ended');
 });
 
 test('a published activity is locked in the editor', async () => {

@@ -238,7 +238,9 @@ function PauseForm({ organizationId, roster, enrollment, name, onDone, onFailed,
   const today = sofiaDay();
   // From today when today's session has not started yet ("болен е от днес"), otherwise from tomorrow.
   const todayStillAhead = (roster.upcoming_sessions ?? []).some((session) => sofiaDay(session.starts_at) === today);
-  const firstDay = todayStillAhead ? today : addDays(today, 1);
+  const soonest = todayStillAhead ? today : addDays(today, 1);
+  // Not before the enrollment begins — its first session (decision of 30.10.2026).
+  const firstDay = enrollment.starts_on > soonest ? enrollment.starts_on : soonest;
   const [from, setFrom] = useState(firstDay);
   const [until, setUntil] = useState(addDays(firstDay, 6));
   const [category, setCategory] = useState<PauseReason>();
@@ -252,6 +254,7 @@ function PauseForm({ organizationId, roster, enrollment, name, onDone, onFailed,
     // Wrong order or a too long pause is already explained next to the dates.
     if (order || tooLong) return;
     const missing = !from || from < today ? 'Изберете начало от днес нататък.'
+      : from < enrollment.starts_on ? `Записването започва на ${shortDay(enrollment.starts_on)}. Изберете начало на паузата от тогава.`
       : !until ? 'Изберете крайна дата.'
         : !category ? 'Изберете причина.' : '';
     if (missing || !category) { fail(missing); return; }
@@ -267,7 +270,7 @@ function PauseForm({ organizationId, roster, enrollment, name, onDone, onFailed,
       <div className={styles.fieldRow}>
         <div className={styles.field}>
           <label htmlFor={`pause-from-${enrollment.id}`}>От</label>
-          <input id={`pause-from-${enrollment.id}`} type="date" min={today} max={addDays(today, 365)} value={from} onChange={(event) => setFrom(event.target.value)} />
+          <input id={`pause-from-${enrollment.id}`} type="date" min={firstDay} max={addDays(today, 365)} value={from} onChange={(event) => setFrom(event.target.value)} />
         </div>
         <div className={styles.field}>
           <label htmlFor={`pause-until-${enrollment.id}`}>До (включително)</label>
@@ -285,9 +288,9 @@ function PauseForm({ organizationId, roster, enrollment, name, onDone, onFailed,
         ))}
       </fieldset>
       <div className={styles.field}>
-        <label htmlFor={`pause-note-${enrollment.id}`}>Бележка за родителя (по желание)</label>
+        <label htmlFor={`pause-note-${enrollment.id}`}>Бележка за екипа (по желание)</label>
         <textarea id={`pause-note-${enrollment.id}`} value={note} maxLength={300} aria-describedby={`pause-note-hint-${enrollment.id}`} onChange={(event) => setNote(event.target.value)} />
-        <p id={`pause-note-hint-${enrollment.id}`} className={styles.hint}>{reasonHint}</p>
+        <p id={`pause-note-hint-${enrollment.id}`} className={styles.hint}>Родителят не я вижда — в писмото до него са само датите. Без диагнози.</p>
       </div>
       {until && !order && !tooLong && from >= today ? <p className={styles.summary}>Заниманията от {shortDay(from)} до {shortDay(until)} няма да се броят. Мястото в групата се пази.</p> : null}
       <FormButtons busy={busy} label="Запиши паузата" error={error} onBack={onBack} />
