@@ -60,7 +60,7 @@ export function StepPrice({ organizationId, offering, groupModes, problems, lock
               </Field>
               <div className={styles.amountRow}>
                 <Field id={`price-amount-${index}`} label="Цена">
-                  <span className={styles.amountInput}>
+                  <span className={`${styles.amountInput} ${free ? styles.amountFree : ''}`}>
                     <input id={`price-amount-${index}`} className={styles.input} inputMode="decimal" value={free ? 'Безплатно' : price.amount} disabled={free} placeholder="30,00" aria-invalid={problem ? true : undefined} aria-describedby={problem ? `price-problem-${index}` : undefined} onChange={(event) => setPrice(index, { amount: event.target.value })} />
                     {free ? null : <span aria-hidden="true">€</span>}
                   </span>
