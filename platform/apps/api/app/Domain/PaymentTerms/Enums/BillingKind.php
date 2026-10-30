@@ -32,10 +32,10 @@ enum BillingKind: string
     {
         return match ($this) {
             self::Monthly => 'Месечна такса',
-            self::FullPeriod => 'Цял курс наведнъж',
-            self::Visit => 'Пробно или единично посещение',
-            self::Package => 'Карта с посещения',
-            self::DayCamp => 'Дневен кемп',
+            self::FullPeriod => 'За целия период',
+            self::Visit => 'Пробно занимание или еднократно посещение',
+            self::Package => 'Карта за посещения',
+            self::DayCamp => 'Дневен лагер',
             self::ResidentialCamp => 'Лагер с нощувки',
             self::Kindergarten => 'Градина и занималня',
         };
