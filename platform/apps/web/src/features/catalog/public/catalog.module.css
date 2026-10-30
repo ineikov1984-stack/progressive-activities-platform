@@ -99,6 +99,14 @@
 .offerTerms { display: grid; gap: .7rem; border-top: 1px solid var(--border); padding-top: 1rem; font-size: .83rem; margin: 1rem 0 .6rem; }
 .offerTerms dt { font-weight: 750; color: var(--navy); }
 .offerTerms dd { margin: .1rem 0 0; }
+.visitTerms { display: grid; gap: .45rem; font-size: .83rem; }
+.visitTerms > strong { color: var(--navy); }
+.visitTerms dl { display: grid; gap: .35rem; margin: 0; }
+.visitTerms dt { display: inline; font-weight: 750; color: var(--navy); }
+.visitTerms dd { display: inline; margin: 0; }
+.visitTerms summary { cursor: pointer; color: var(--navy); font-weight: 700; }
+.visitTerms details dl { margin-top: .35rem; }
+.offerDetails > .sameTerms, .offerDetails > .trialRule { font-size: .83rem; color: var(--body); }
 .offerCard .locationBlock { border-top: 1px solid var(--border); padding-block: 1rem .4rem; margin-top: .8rem; }
 .offerCard .actionState { font-weight: 750; color: var(--navy); padding-top: 1rem; margin-top: auto; }
 .offerChoice { display: flex; align-items: center; gap: .75rem; margin-top: 1rem; padding: .8rem; border-radius: .75rem; background: #f5f7f8; cursor: pointer; font-size: .88rem; color: var(--navy); font-weight: 700; }

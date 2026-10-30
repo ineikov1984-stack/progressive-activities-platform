@@ -44,10 +44,6 @@ export function offerAction(action: PublicVisitOffer['action']): { label: string
   return { label: { apply: 'Има възможност за записване', waitlist: 'Има списък на чакащи', closed: 'Записването е затворено' }[action] };
 }
 
-export function cancellationSummary(outcome: PublicVisitOffer['cancellation_outcome']): string {
-  return { refund: 'Възстановяване на сумата', credit: 'Кредит за бъдещо посещение', non_refundable: 'Сумата не се възстановява' }[outcome];
-}
-
 export function offerTarget(count: number): { href: string; label: string } {
   return count === 0 ? { href: '#groups', label: 'Виж графика' } : { href: '#visit-offers', label: count === 1 ? 'Виж посещението' : 'Избери посещение' };
 }

@@ -17,3 +17,13 @@
 .preview h3 { font-size: 1.7rem; }
 .page .errorLink { padding: .3rem 0; color: #8a271f !important; background: transparent; text-align: left; text-decoration: underline; }
 @media (max-width: 760px) { .actions > button { flex: 1 1 auto; } .steps { position: static; } }
+/* Step 4 "Цена и условия" (docs/product/visits.md, т. 8a): the step-6 price and the visit terms, read only. */
+.priceBox, .termsBox { display: grid; gap: var(--space-2); max-width: 44rem; margin: var(--space-4) 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-sunken); }
+.priceBox .boxLabel, .termsBox .boxLabel { margin: 0; color: var(--ink-muted); font-size: .78rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.priceBox p { margin: 0; }
+.termsName { margin: 0; color: var(--ink); font-weight: 750; }
+.termsLines { display: grid; gap: var(--space-1); margin: 0; color: var(--ink-body); }
+.termsLines div { margin: 0; }
+.termsLines dt { display: inline; font-weight: 750; }
+.termsLines dd { display: inline; margin: 0; }
+.termsSkeleton { height: 4.5rem; border-radius: var(--radius-sm); background: var(--surface); }

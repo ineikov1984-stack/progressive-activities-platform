@@ -12,8 +12,8 @@ const offer: PublicVisitOffer = {
   visit_offer_id: 'offer-1', session_id: 'session-1', campaign_slug: null, type: 'trial', title: 'Първа среща с шахмата',
   description: 'Открийте играта с нашия екип.', audience: '6–8 г. · I–II клас',
   starts_at: '2035-11-03T23:30:00Z', ends_at: '2035-11-04T00:30:00Z', timezone: 'Asia/Tokyo', fee_type: 'free', amount_cents: 0,
-  currency: 'EUR', fee_reason: null, booking_deadline_hours: 12, cancellation_deadline_hours: 24,
-  cancellation_policy: 'Отказ до предходния ден.', cancellation_outcome: 'non_refundable', terms_version: 'v1',
+  currency: 'EUR', fee_reason: null, booking_deadline_hours: 12,
+  payment_terms: { version: 'visit:standard:1', billing_kind: 'visit', billing_kind_label: 'Посещение', name: 'Стандартни', preset: 'standard', preset_label: 'Стандартни', schema_version: 1, rules: { cancellation: { tiers: [{ min_hours: 24, kept: 0 }, { min_hours: 0, kept: 100 }] }, no_show_kept: 100, refund: 'money' } },
   availability: { status: 'last_place', remaining_total_places: 8, remaining_offer_places: 1, waitlist_available: false }, action: 'apply',
 };
 

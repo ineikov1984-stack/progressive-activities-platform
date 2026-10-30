@@ -91,3 +91,9 @@ export function freeName(workspace: PaymentTermsWorkspace, kind: BillingKind, wa
     if (!taken.has(name.toLocaleLowerCase('bg'))) return name;
   }
 }
+
+/** The terms an activity uses for one way of paying: the set chosen for it, else the organization's (`own`). */
+export function chosenTerms(workspace: PaymentTermsWorkspace, kind: BillingKind, chosenId?: string | null): TermsSummary & { own: boolean } {
+  const option = chosenId ? otherOptions(workspace, kind).find((item) => 'set' in item && item.set.id === chosenId) : undefined;
+  return option ? { ...optionSummary(workspace, option), own: false } : { ...organizationTerms(workspace, kind), own: true };
+}

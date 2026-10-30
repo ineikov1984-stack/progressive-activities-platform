@@ -23,6 +23,13 @@ describe('unfinished visit offer setup draft', () => {
     saveVisitOfferSetupDraft(store, key, { draft: newVisitOfferDraft('a'), step: 1, offerId: 'offer-1', offerVersion: 7 });
     expect(restoreVisitOfferSetupDraft(store, key, 'a')).toMatchObject({ offerId: 'offer-1', offerVersion: 7 });
   });
+  it('drops a snapshot from the earlier six-step editor', () => {
+    const store = storage();
+    store.setItem('key', JSON.stringify({ schema: 1, draft: { ...newVisitOfferDraft('a'), cancellation_outcome: 'refund', terms_version: 'v1' }, step: 5 }));
+    expect(restoreVisitOfferSetupDraft(store, 'key', 'a')).toBeNull();
+    saveVisitOfferSetupDraft(store, 'key', { draft: newVisitOfferDraft('a'), step: 5 });
+    expect(restoreVisitOfferSetupDraft(store, 'key', 'a')).toBeNull();
+  });
   it('ignores corrupt data and drafts for another activity', () => {
     const store = storage(); store.setItem('key', '{invalid');
     expect(restoreVisitOfferSetupDraft(store, 'key', 'a')).toBeNull();

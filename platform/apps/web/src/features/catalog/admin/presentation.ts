@@ -1,4 +1,4 @@
-import type { ActivityDraft, ActivityGroup, ActivitySections, CampaignMembershipInput, OpenDayCampaign, PriceOption, ScheduleConflict, SchedulePattern, VisitOffer, VisitOfferFields, VisitOfferInput } from './api';
+import type { ActivityDraft, ActivityGroup, ActivitySections, CampaignMembershipInput, OpenDayCampaign, PriceOption, ScheduleConflict, SchedulePattern, VisitOffer, VisitOfferFields, VisitOfferInput, VisitOfferType } from './api';
 
 const statusLabels: Record<string, string> = { draft: 'Чернова', published: 'Публикувана', archived: 'Архивирана' };
 const weekdays: Record<number, string> = { 1: 'понеделник', 2: 'вторник', 3: 'сряда', 4: 'четвъртък', 5: 'петък', 6: 'събота', 7: 'неделя' };
@@ -84,24 +84,41 @@ export function conflictPresentation(conflict: ScheduleConflict): { label: strin
 
 export type VisitOfferDraft = Omit<VisitOfferFields, 'amount_cents'> & { amount: string; session_ids: string[]; campaign_id: string };
 export type VisitOfferErrors = Record<string, string>;
+/** The steps of the offer editor (docs/product/visits.md, т. 8a.13). */
+export const visitOfferSteps = ['Вид и съдържание', 'Група и занятия', 'Места и срок', 'Цена и условия', 'Преглед и публикуване'] as const;
+const reviewStep = visitOfferSteps.length - 1;
 const visitOfferFieldSteps: Record<string, number> = {
   type: 0, title: 0, description: 0, audience_age_label: 0, audience_class_label: 0, campaign_id: 0,
   activity_id: 1, group_id: 1, session_ids: 1,
-  visit_limit: 2, trial_limit_per_academic_year: 2, single_visit_limit: 2, single_visit_window_days: 2, no_show_trial_limit: 2, waitlist_enabled: 2, unlimited_single_visits: 2,
-  fee_type: 3, currency: 3, amount_cents: 3, fee_reason: 3,
-  booking_deadline_hours: 4, cancellation_deadline_hours: 4, cancellation_policy: 4, cancellation_outcome: 4, terms_version: 4,
+  visit_limit: 2, booking_deadline_hours: 2, waitlist_enabled: 2,
+  fee_type: 3, currency: 3, amount_cents: 3, fee_reason: 3, price_option_id: 3, payment_terms: 3,
 };
 export function visitOfferErrorTarget(key = ''): { step: number; controlId: string } {
   const field = key.startsWith('session_ids.') ? 'session_ids' : key;
-  return { step: visitOfferFieldSteps[field] ?? 5, controlId: field in visitOfferFieldSteps ? `visit-field-${field}` : 'visit-heading-5' };
+  return { step: visitOfferFieldSteps[field] ?? reviewStep, controlId: field in visitOfferFieldSteps ? `visit-field-${field}` : `visit-heading-${reviewStep}` };
+}
+const modeNames: Record<string, string> = { trial: 'Пробно занимание', single: 'Еднократно посещение' };
+const unitNames: Record<string, string> = { session: 'за занимание', month: 'на месец', period: 'за периода', package: 'за пакета' };
+/**
+ * The step-6 price of a trial or single visit on chosen dates: the group's own available price, else the
+ * activity's (docs/product/visits.md, т. 8a.1). None for an open day, which has its own fee.
+ */
+export function stepSixPrice(activity: Pick<ActivityDraft, 'offering'> | undefined, group: Pick<ActivityGroup, 'price_options'> | undefined, type: VisitOfferType): PriceOption | undefined {
+  if (type === 'open_day') return undefined;
+  const fits = (price: PriceOption) => price.enrollment_mode === type && price.is_available !== false;
+  return group?.price_options.find(fits) ?? activity?.offering?.price_options.find(fits);
+}
+export function stepSixPriceText(price: Pick<PriceOption, 'amount_cents' | 'unit'>): string {
+  return price.amount_cents === 0 ? 'Безплатно' : `${formatEur(price.amount_cents)} ${unitNames[price.unit] ?? ''}`.trim();
+}
+export function missingPriceMessage(type: VisitOfferType): string {
+  return `Добавете цена „${modeNames[type] ?? type}“ в стъпка 6 „Цени и записване“.`;
 }
 export const cancelledCampaignMembershipMessage = 'Кампанията е отменена. Предложението не може да се премества или отделя от нея. Можете да редактирате останалото съдържание.';
 export class CampaignMembershipLockedError extends Error {}
 export function newVisitOfferDraft(activityId: string): VisitOfferDraft {
   return { activity_id: activityId, group_id: '', type: 'trial', title: '', description: '', audience_age_label: '', audience_class_label: '', visit_limit: 3,
-    fee_type: 'free', amount: '', currency: 'EUR', fee_reason: '', booking_deadline_hours: 12, cancellation_deadline_hours: 24,
-    cancellation_policy: '', cancellation_outcome: 'non_refundable', terms_version: '', trial_limit_per_academic_year: 1,
-    single_visit_limit: 2, single_visit_window_days: 30, unlimited_single_visits: false, no_show_trial_limit: null, waitlist_enabled: true, session_ids: [], campaign_id: '' };
+    fee_type: 'free', amount: '', currency: 'EUR', fee_reason: '', booking_deadline_hours: 12, waitlist_enabled: true, session_ids: [], campaign_id: '' };
 }
 export function visitOfferDraftFromRecord(offer: VisitOffer): VisitOfferDraft {
   const draft = newVisitOfferDraft(offer.activity_id);
@@ -113,16 +130,16 @@ export function visitOfferDraftFromRecord(offer: VisitOffer): VisitOfferDraft {
 export function visitOfferPayload(draft: VisitOfferDraft, version?: number): VisitOfferInput {
   const { amount, campaign_id: _campaign, ...fields } = draft;
   void _campaign;
-  const payload: VisitOfferInput = { ...fields, title: draft.title.trim(), amount_cents: draft.fee_type === 'free' ? 0 : parseEuroCents(amount), ...(version === undefined ? {} : { version }) };
-  if (draft.type !== 'trial') { delete payload.trial_limit_per_academic_year; delete payload.no_show_trial_limit; }
-  if (draft.type !== 'single') { delete payload.single_visit_limit; delete payload.single_visit_window_days; delete payload.unlimited_single_visits; }
-  else if (draft.unlimited_single_visits) { delete payload.single_visit_limit; delete payload.single_visit_window_days; }
+  const payload: VisitOfferInput = { ...fields, title: draft.title.trim(), ...(version === undefined ? {} : { version }) };
+  // Only an open day has a fee of its own; a trial or single visit is priced from step 6.
+  if (draft.type === 'open_day') payload.amount_cents = draft.fee_type === 'free' ? 0 : parseEuroCents(amount);
+  else { delete payload.fee_type; delete payload.currency; delete payload.fee_reason; }
   return payload;
 }
 export function changeVisitOfferGroup(draft: VisitOfferDraft, groupId: string): VisitOfferDraft {
   return { ...draft, group_id: groupId, session_ids: draft.group_id === groupId ? draft.session_ids : [] };
 }
-export function visitOfferErrors(draft: VisitOfferDraft, groups: ActivityGroup[], publish: boolean, now = Date.now(), retainedSessionIds: string[] = []): VisitOfferErrors {
+export function visitOfferErrors(draft: VisitOfferDraft, groups: ActivityGroup[], publish: boolean, now = Date.now(), retainedSessionIds: string[] = [], priceMissing = false): VisitOfferErrors {
   const errors: VisitOfferErrors = {};
   if (!draft.title.trim()) errors.title = 'Въведете публично заглавие.';
   const group = groups.find((item) => item.id === draft.group_id);
@@ -130,10 +147,8 @@ export function visitOfferErrors(draft: VisitOfferDraft, groups: ActivityGroup[]
   const integer = (key: keyof VisitOfferDraft, minimum: number) => {
     const value = draft[key]; if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < minimum) errors[key] = `Въведете цяло число, не по-малко от ${minimum}.`;
   };
-  integer('visit_limit', 1); integer('booking_deadline_hours', 0); integer('cancellation_deadline_hours', 0);
-  if (draft.type === 'trial') { integer('trial_limit_per_academic_year', 1); if (draft.no_show_trial_limit !== null) integer('no_show_trial_limit', 1); }
-  if (draft.type === 'single' && !draft.unlimited_single_visits) { integer('single_visit_limit', 1); integer('single_visit_window_days', 1); }
-  if (draft.fee_type !== 'free') {
+  integer('visit_limit', 1); integer('booking_deadline_hours', 0);
+  if (draft.type === 'open_day' && draft.fee_type !== 'free') {
     try { parseEuroCents(draft.amount); } catch { errors.amount_cents = invalidPriceMessage; }
     if (!draft.fee_reason?.trim()) errors.fee_reason = 'Обяснете публично какво покрива таксата.';
   }
@@ -142,7 +157,7 @@ export function visitOfferErrors(draft: VisitOfferDraft, groups: ActivityGroup[]
     if (!draft.session_ids.length || draft.session_ids.some((id) => !retainedSessionIds.includes(id) && !group?.sessions.some((s) => s.id === id && s.status === 'scheduled' && Date.parse(s.starts_at) > now))) errors.session_ids = 'Новите занятия трябва да са бъдещи и неотменени. Изберете поне едно занятие.';
     const conflicts = group?.conflicts.filter((item) => item.severity === 'blocking');
     if (conflicts?.length) errors.session_ids = conflicts.map((item) => item.message).join(' ');
-    if (!draft.terms_version?.trim()) errors.terms_version = 'Посочете издание на условията преди публикуване.';
+    if (draft.type !== 'open_day' && priceMissing) errors.price_option_id = missingPriceMessage(draft.type);
   }
   return errors;
 }
