@@ -208,9 +208,12 @@ final class StaffEnrollmentDetailsController extends Controller
     {
         // Current, ahead or ended up to 90 days ago — the same rule as the contacts' window, so a visit
         // ends with its session (a child has few enrollments; the rule is applied after loading).
+        // Cancelled ones too, inside the window (owner's decision of 30.10.2026) — except a move made before
+        // the start, where the child simply continues in the new group.
         $enrollments = Enrollment::query()->where('child_id', $childId)
             ->when($exceptEnrollment, fn ($query, string $id) => $query->whereKeyNot($id))
-            ->where('status', '!=', EnrollmentStatus::Cancelled->value)
+            ->where(fn ($query) => $query->where('status', '!=', EnrollmentStatus::Cancelled->value)
+                ->orWhereNotExists(fn ($moved) => $moved->selectRaw('1')->from('enrollments as moved')->whereColumn('moved.transferred_from_id', 'enrollments.id')))
             ->with([
                 'group.offering.activity', 'session',
                 'pauses' => fn ($query) => $query->whereNull('cancelled_at')->orderBy('starts_on'),

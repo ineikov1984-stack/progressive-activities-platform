@@ -154,22 +154,63 @@ class StaffEnrollmentDetailsTest extends TestCase
         $this->getJson("/api/v1/enrollment/applications/{$f['application']->id}")
             ->assertJsonPath('contact', null)->assertJsonPath('parent_note', null)->assertJsonMissingPath('application.parent_name');
 
-        // Ended up to 90 days ago: still shown; longer ago or cancelled: not.
+        // Ended up to 90 days ago: still shown; longer ago: not.
         $this->withTenant($f['organization'], fn () => $f['enrollment']->forceFill(['status' => 'ended', 'starts_on' => '2026-05-01', 'ends_on' => '2026-07-30'])->save());
         $this->assertSame('shown', $contactFor("/api/v1/enrollment/enrollments/{$f['enrollment']->id}"));
         $this->withTenant($f['organization'], fn () => $f['enrollment']->forceFill(['ends_on' => '2026-07-29'])->save());
         $this->assertSame('outside_window', $contactFor("/api/v1/enrollment/enrollments/{$f['enrollment']->id}"));
+
+        // Cancelled: up to 90 days after the cancellation, so the team can ask why (owner's decision, 30.10.2026).
         $this->withTenant($f['organization'], fn () => $f['enrollment']->forceFill(['status' => 'cancelled', 'ends_on' => null])->save());
+        // Without a known cancellation day: never.
+        $this->assertSame('outside_window', $contactFor("/api/v1/enrollment/enrollments/{$f['enrollment']->id}"));
+        $cancel = fn () => $this->withTenant($f['organization'], fn () => EnrollmentTransition::query()->create([
+            'enrollment_id' => $f['enrollment']->id, 'actor_user_id' => $owner->id, 'from_status' => 'active', 'to_status' => 'cancelled',
+        ]));
+        $now = now()->toImmutable();
+        $this->travelTo($now->subDays(91));
+        $cancel();
+        $this->travelTo($now);
         $this->getJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}")
             ->assertJsonPath('contact_status', 'outside_window')->assertJsonPath('contact', null);
+        $cancel();
+        $this->assertSame('shown', $contactFor("/api/v1/enrollment/enrollments/{$f['enrollment']->id}"));
 
-        $this->assertSame(2, AuditEvent::query()->where('action', 'enrollment.contact_viewed')->count());
+        $this->assertSame(3, AuditEvent::query()->where('action', 'enrollment.contact_viewed')->count());
+    }
+
+    public function test_here_shows_a_cancelled_enrollment_but_not_one_left_behind_by_a_move(): void
+    {
+        $f = $this->fixture();
+        $owner = $this->member($f['organization'], 'organization_owner');
+        $records = fn (): array => array_map(
+            fn (array $record): array => [$record['kind'], $record['group_name'], $record['status']],
+            $this->actAs($owner, $f['organization'])->getJson("/api/v1/enrollment/applications/{$f['application']->id}")->assertOk()->json('records'),
+        );
+        // Група 2 cancelled before it started: still "here", so the team can call and ask why.
+        $this->withTenant($f['organization'], function () use ($f, $owner): void {
+            $f['enrollment']->forceFill(['status' => 'cancelled'])->save();
+            EnrollmentTransition::query()->create([
+                'enrollment_id' => $f['enrollment']->id, 'actor_user_id' => $owner->id, 'from_status' => 'active', 'to_status' => 'cancelled',
+            ]);
+        });
+        $this->assertSame([['enrollment', 'Група 2', 'cancelled']], $records());
+
+        // A move made before the start cancels the old enrollment; the child goes on in the new group — only that shows.
+        $this->withTenant($f['organization'], function () use ($f): void {
+            $moved = $this->application($f, $f['groupOne'], $f['priceOne'], 'approved');
+            Enrollment::query()->create([
+                'application_id' => $moved->id, 'child_id' => $f['child']->id, 'group_id' => $f['groupOne']->id, 'price_option_id' => $f['priceOne']->id,
+                'scope' => 'full_period', 'status' => 'active', 'starts_on' => '2026-11-03', 'transferred_from_id' => $f['enrollment']->id,
+            ]);
+        });
+        $this->assertSame([['enrollment', 'Група 1', 'active']], $records());
     }
 
     public function test_a_visit_closes_the_window_with_its_session(): void
     {
         $f = $this->fixture();
-        [$recent, $old, $stale] = $this->withTenant($f['organization'], function () use ($f): array {
+        [$recent, $old, $stale, $cancelledRecent, $cancelledOld] = $this->withTenant($f['organization'], function () use ($f): array {
             // A trial visit keeps its status after the outcome ("attended" = ended) and has no end date.
             $visit = function (string $day, string $status) use ($f): Enrollment {
                 $session = $f['groupTwo']->sessions()->create(['starts_at' => "{$day}T14:00:00Z", 'ends_at' => "{$day}T15:00:00Z", 'status' => 'scheduled']);
@@ -186,20 +227,25 @@ class StaffEnrollmentDetailsTest extends TestCase
                 ]);
             };
 
-            return [$visit('2026-08-15', 'ended'), $visit('2026-07-01', 'ended'), $visit('2026-06-01', 'active')];
+            // A visit cancelled in time: its window too ends 90 days after its session (today is 28.10).
+            return [$visit('2026-08-15', 'ended'), $visit('2026-07-01', 'ended'), $visit('2026-06-01', 'active'), $visit('2026-07-30', 'cancelled'), $visit('2026-07-29', 'cancelled')];
         });
         $this->actAs($this->member($f['organization'], 'organization_owner'), $f['organization']);
 
-        $this->getJson("/api/v1/enrollment/enrollments/{$recent->id}")->assertOk()->assertJsonPath('contact_status', 'shown');
-        foreach ([$old, $stale] as $closed) {
+        foreach ([$recent, $cancelledRecent] as $open) {
+            $this->getJson("/api/v1/enrollment/enrollments/{$open->id}")->assertOk()->assertJsonPath('contact_status', 'shown');
+        }
+        foreach ([$old, $stale, $cancelledOld] as $closed) {
             $this->getJson("/api/v1/enrollment/enrollments/{$closed->id}")->assertOk()
                 ->assertJsonPath('contact_status', 'outside_window')->assertJsonPath('contact', null)->assertJsonPath('parent_note', null);
         }
         // "При нас" follows the same rule: the recent visit is there, the old ones are not.
         $ids = array_column($this->getJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}")->json('records'), 'id');
         $this->assertContains($recent->id, $ids);
+        $this->assertContains($cancelledRecent->id, $ids);
         $this->assertNotContains($old->id, $ids);
         $this->assertNotContains($stale->id, $ids);
+        $this->assertNotContains($cancelledOld->id, $ids);
     }
 
     public function test_a_reason_the_parent_wrote_follows_the_contact_rules(): void
