@@ -15,6 +15,11 @@ return new class extends Migration
         if (DB::getDriverName() !== 'pgsql') {
             return;
         }
+        // The function reads past RLS only when it belongs to the owner (docs/process/DECISIONS.md, "Миграции с ролята-собственик").
+        $owner = DB::selectOne('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user');
+        if ($owner !== null && ! $owner->rolsuper && ! $owner->rolbypassrls) {
+            throw new RuntimeException('Run migrations as the database owner: php artisan migrate --database=pgsql_admin --force');
+        }
         DB::unprepared(<<<'SQL'
             CREATE FUNCTION public.invitation_tenant(selected_token_hash text)
             RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
