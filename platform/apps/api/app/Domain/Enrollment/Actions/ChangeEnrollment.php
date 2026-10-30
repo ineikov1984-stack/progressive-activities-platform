@@ -7,6 +7,7 @@ use App\Domain\Audit\Enums\AuditAction;
 use App\Domain\Audit\ValueObjects\AuditableReference;
 use App\Domain\Catalog\Enums\EnrollmentMode;
 use App\Domain\Catalog\Models\Group;
+use App\Domain\Catalog\Models\OrganizationCatalogProfile;
 use App\Domain\Catalog\Models\PriceOption;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Enrollment\Enums\EnrollmentApplicationStatus;
@@ -620,6 +621,10 @@ final class ChangeEnrollment
         $terms = $this->paymentTerms->forPrice($price->enrollment_mode, $target->offering?->payment_terms_id);
         if ($terms === null) {
             throw ValidationException::withMessages(['price_option_id' => 'Изберете цена на новата група.']);
+        }
+        // In the public catalog the team accepts for the parent only terms a parent could accept (т. 7.5).
+        if ($terms->marketplaceViolations() !== [] && OrganizationCatalogProfile::query()->where('is_published', true)->exists()) {
+            throw ValidationException::withMessages(['price_option_id' => 'Условията за тази цена не са в рамките на каталога на платформата. Променете ги в „Настройки → Условия за плащане“.']);
         }
         $now = CarbonImmutable::now();
 

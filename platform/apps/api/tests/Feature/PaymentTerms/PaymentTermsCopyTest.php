@@ -167,6 +167,46 @@ class PaymentTermsCopyTest extends TestCase
         $this->assertSame('accepted_by_team', $this->transitionTerms($f, $renewed));
     }
 
+    public function test_the_team_does_not_accept_terms_outside_the_catalog_frame_for_the_parent(): void
+    {
+        $f = $this->fixture();
+        $id = $this->apply($f, AppliedTerms::standard(BillingKind::Monthly)->key(), 'frame')->assertCreated()->json('application.id');
+        $this->as($f['owner'], $f['organization'])->postJson("/api/v1/enrollment/applications/{$id}/review", ['decision' => 'approve', 'version' => 1])->assertOk();
+        // A whole-course set saved before the organization joined the catalog: nothing comes back, ever.
+        $harsh = Presets::rules(BillingKind::FullPeriod, TermsPreset::Standard);
+        $harsh['before_start']['tiers'] = array_map(fn (array $tier): array => [...$tier, 'kept' => 100], $harsh['before_start']['tiers']);
+        [$group, $price, $enrollment] = $this->inOrganization($f['organization'], function () use ($f, $harsh): array {
+            $terms = PaymentTerms::query()->create([
+                'billing_kind' => 'full_period', 'name' => 'Отпреди каталога', 'preset' => 'custom', 'is_default' => true,
+                'self_service' => Presets::selfService(TermsPreset::Standard), 'status' => 'active', 'version' => 1,
+            ]);
+            $terms->versions()->create(['number' => 1, 'schema_version' => 1, 'rules' => $harsh]);
+            $group = $this->group($f['offering'], 'Събота');
+
+            return [$group, $this->price($group, 'full_period'), Enrollment::query()->where('status', 'active')->sole()];
+        });
+
+        $this->as($f['owner'], $f['organization'])->postJson("/api/v1/enrollment/enrollments/{$enrollment->id}/transfer", [
+            'target_group_id' => $group->id, 'price_option_id' => $price->id, 'effective_date' => '2026-11-14',
+            'reason' => 'Семейството избра целия курс.', 'version' => 1,
+        ])->assertUnprocessable()->assertJsonPath('errors.price_option_id.0',
+            'Условията за тази цена не са в рамките на каталога на платформата. Променете ги в „Настройки → Условия за плащане“.');
+    }
+
+    #[TestGroup('tenant-isolation')]
+    public function test_another_organizations_terms_never_apply(): void
+    {
+        $f = $this->fixture();
+        $g = $this->fixture();
+        $foreign = $this->saveTerms($g, TermsPreset::Strict, isDefault: true);
+
+        // Even pointed at directly, another organization's set is not read: its own terms apply.
+        DB::table('offerings')->where('id', $f['offering']->id)->update(['payment_terms_id' => $foreign['id']]);
+        $this->publicPrice($f)->assertJsonPath('payment_terms.version', AppliedTerms::standard(BillingKind::Monthly)->key());
+        $this->apply($f, $foreign['version'], 'foreign')->assertUnprocessable()->assertJsonValidationErrors('accepted_terms_version');
+        $this->publicPrice($g)->assertJsonPath('payment_terms.version', $foreign['version']);
+    }
+
     #[TestGroup('tenant-isolation')]
     public function test_the_editor_chooses_only_an_own_active_set_for_a_price_the_activity_has(): void
     {
@@ -235,7 +275,10 @@ class PaymentTermsCopyTest extends TestCase
     private function price(Group $group, string $mode): PriceOption
     {
         return $group->offering->priceOptions()->create([
-            'group_id' => $group->id, 'enrollment_mode' => $mode, 'unit' => $mode === 'package' ? 'package' : 'month',
+            'group_id' => $group->id, 'enrollment_mode' => $mode,
+            'unit' => match ($mode) {
+                'package' => 'package', 'full_period' => 'period', default => 'month'
+            },
             'amount_cents' => 6000, 'currency' => 'EUR', 'is_available' => true,
         ]);
     }

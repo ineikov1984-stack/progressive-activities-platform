@@ -85,11 +85,22 @@ return new class extends Migration
                 BEFORE UPDATE OF payment_terms_version_id, payment_terms_snapshot, accepted_terms_version, accepted_terms_at
                 ON enrollment_applications FOR EACH ROW EXECUTE FUNCTION protect_accepted_payment_terms();
             SQL);
+
+        // No application code deletes an application; without the right, a copy cannot be replaced by deleting
+        // the row and writing it again. Cascades from an organization, a child or a group still remove them.
+        $username = config('database.connections.pgsql.username');
+        if (is_string($username) && $username !== '') {
+            DB::unprepared('REVOKE DELETE ON enrollment_applications FROM "'.str_replace('"', '""', $username).'"');
+        }
     }
 
     public function down(): void
     {
         if (DB::getDriverName() === 'pgsql') {
+            $username = config('database.connections.pgsql.username');
+            if (is_string($username) && $username !== '') {
+                DB::unprepared('GRANT DELETE ON enrollment_applications TO "'.str_replace('"', '""', $username).'"');
+            }
             DB::unprepared(<<<'SQL'
                 DROP TRIGGER IF EXISTS enrollment_applications_terms_no_update ON enrollment_applications;
                 DROP FUNCTION IF EXISTS protect_accepted_payment_terms();

@@ -62,6 +62,8 @@ class PaymentTermsCopySchemaTest extends TestCase
             $this->refused($pdo, fn () => $pdo->exec("UPDATE enrollment_applications SET accepted_terms_version = 'друга' WHERE id = '{$application}'"), 'P0001');
             $this->refused($pdo, fn () => $pdo->exec("UPDATE enrollment_applications SET accepted_terms_at = NOW() - INTERVAL '1 day' WHERE id = '{$application}'"), 'P0001');
             $this->assertSame(1, $pdo->exec("UPDATE enrollment_applications SET status = 'approved', version = 2 WHERE id = '{$application}'"));
+            // Nor is it replaced by deleting the application and writing it again.
+            $this->refused($pdo, fn () => $pdo->exec("DELETE FROM enrollment_applications WHERE id = '{$application}'"), '42501');
             // Not even the database owner changes it.
             $pdo->exec('RESET ROLE');
             $this->refused($pdo, fn () => $pdo->exec("UPDATE enrollment_applications SET payment_terms_version_id = NULL, payment_terms_snapshot = NULL WHERE id = '{$application}'"), 'P0001');

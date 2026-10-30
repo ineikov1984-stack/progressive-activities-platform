@@ -289,7 +289,9 @@ final class PublicCatalogController extends Controller
                 ->unique('id')->values()->map(fn (PriceOption $price) => [
                     ...$this->presentPrice($price),
                     // What the parent reads and accepts before applying (docs/product/payment-policies.md, т. 8).
-                    'payment_terms' => $this->paymentTerms->forPrice($price->enrollment_mode, $publicOffering->payment_terms_id)?->presentForParent(),
+                    // Visits keep their offer's own terms until step 2d-3, so no set is shown for them yet.
+                    'payment_terms' => in_array($price->enrollment_mode, ['trial', 'single'], true) ? null
+                        : $this->paymentTerms->forPrice($price->enrollment_mode, $publicOffering->payment_terms_id)?->presentForParent(),
                 ])->all(),
             'sessions' => $group->sessions->map(fn (Session $session) => [
                 'id' => $session->id,
