@@ -96,6 +96,8 @@ class InvitationTest extends TestCase
             ->assertJsonPath('membership.id', $firstMembership);
 
         $this->assertDatabaseCount('organization_memberships', 2);
+        // The person of the team for the login, once (docs/product/team.md, т. 3).
+        $this->assertSame(1, DB::table('staff_members')->where('organization_id', $organization->id)->where('user_id', $teacher->id)->count());
     }
 
     public function test_invitation_cannot_be_accepted_by_a_different_email(): void

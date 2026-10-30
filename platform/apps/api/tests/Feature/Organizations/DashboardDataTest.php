@@ -36,6 +36,7 @@ class DashboardDataTest extends TestCase
                 'create', 'update', 'invite', 'finance', 'view',
                 'catalog.view', 'catalog.manage', 'catalog.publish',
                 'enrollment.view', 'enrollment.manage', 'enrollment.contacts', 'terms.manage',
+                'team.view', 'team.manage',
             ]);
     }
 

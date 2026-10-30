@@ -10,6 +10,7 @@ use App\Domain\Organizations\Enums\OrganizationRole;
 use App\Domain\Organizations\Models\Invitation;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
+use App\Domain\Organizations\Models\StaffMember;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
@@ -121,6 +122,16 @@ class InviteMember
                     'status' => 'active',
                 ],
             );
+
+            // The person of the team for the login (docs/product/team.md, т. 3): the team page lists and archives them.
+            $person = StaffMember::query()->withoutGlobalScopes()->where('organization_id', $invitation->organization_id)
+                ->where('user_id', $user->id)->first();
+            if ($person === null) {
+                (new StaffMember)->forceFill([
+                    'organization_id' => $invitation->organization_id, 'user_id' => $user->id, 'full_name' => $user->name,
+                    'email' => Str::lower(trim($user->email)), 'phone' => $user->getAttribute('phone'), 'version' => 1,
+                ])->save();
+            }
 
             $invitation->update([
                 'accepted_at' => now(),
