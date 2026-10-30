@@ -89,12 +89,17 @@ async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function loadOrganizationContext(): Promise<Pick<DashboardData, 'user' | 'organization' | 'organizations'>> {
+/**
+ * The organization to open: the one a link names (`?organization=` in an email to the team), if the user
+ * belongs to it; otherwise the one they own, otherwise the first.
+ */
+export async function loadOrganizationContext(preferredId?: string | null): Promise<Pick<DashboardData, 'user' | 'organization' | 'organizations'>> {
   const [{ user }, { organizations }] = await Promise.all([
     requestJson<{ user: DashboardUser }>('/backend/api/v1/me'),
     requestJson<{ organizations: DashboardOrganization[] }>('/backend/api/v1/organizations'),
   ]);
-  const organization = organizations.find((item) => item.role === 'organization_owner') ?? organizations[0];
+  const organization = organizations.find((item) => preferredId && item.id === preferredId)
+    ?? organizations.find((item) => item.role === 'organization_owner') ?? organizations[0];
   if (!organization) throw new Error('Профилът няма активна организация.');
   return { user, organization, organizations };
 }
