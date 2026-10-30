@@ -203,7 +203,7 @@ final class SubmitEnrollmentApplication
                     'unit_snapshot' => $price !== null ? $price->unit : 'session',
                     'visit_offer_id' => $offer?->id,
                     'visit_offer_title_snapshot' => $offer?->title,
-                    'fee_reason_snapshot' => $price === null ? $offer?->fee_reason : null,
+                    'fee_reason_snapshot' => $price === null ? $offer->fee_reason : null,
                     'cancellation_policy_snapshot' => null,
                 ]);
                 $transition = null;
