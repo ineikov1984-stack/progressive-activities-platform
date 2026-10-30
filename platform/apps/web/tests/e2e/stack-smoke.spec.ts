@@ -278,6 +278,28 @@ test('the team pauses a child from the group roster and undoes it', async () => 
   expect(JSON.parse(ended.body).enrollment.status).toBe(tomorrow < (enrolled?.starts_on ?? '') ? 'cancelled' : 'ended');
 });
 
+test('the owner saves payment terms and they load again from the database', async () => {
+  // Real PostgreSQL: a saved set is read back with its newest version (SQLite tests cannot show this).
+  const terms = { organizationId: demo.organizationId };
+  const listed = await api(page, 'payment-terms', terms);
+  expect(listed.status, listed.body).toBe(200);
+  const kind = JSON.parse(listed.body).billing_kinds.find((item: { value: string }) => item.value === 'package');
+  const existing = JSON.parse(listed.body).payment_terms.find((set: { billing_kind: string; is_default: boolean }) => set.billing_kind === 'package' && set.is_default);
+  const saved = existing
+    ? await api(page, `payment-terms/${existing.id}`, { ...terms, method: 'PATCH', body: { version: existing.version, rules: kind.presets.strict.rules } })
+    : await api(page, 'payment-terms', { ...terms, method: 'POST', body: { billing_kind: 'package', name: 'Условията на организацията', is_default: true, rules: kind.presets.strict.rules, self_service: kind.presets.strict.self_service } });
+  expect([200, 201], saved.body).toContain(saved.status);
+
+  const again = await api(page, 'payment-terms', terms);
+  expect(again.status, again.body).toBe(200);
+  const set = JSON.parse(again.body).payment_terms.find((item: { billing_kind: string; is_default: boolean }) => item.billing_kind === 'package' && item.is_default);
+  expect(set.current_version.rules.freeze_days_with_document).toBe(0);
+
+  await page.goto('/dashboard/settings/payment-terms');
+  await slow(page.getByRole('heading', { name: 'Условия за плащане', level: 1 })).toBeVisible();
+  await expect(page.getByText('Заявката не беше изпълнена', { exact: false })).toHaveCount(0);
+});
+
 test('a published activity is locked in the editor', async () => {
   await page.goto(`/dashboard/activities/${demo.publishedActivityId}`);
   await slow(page.getByRole('note')).toContainText('публикувана');

@@ -40,10 +40,15 @@ class PaymentTerms extends Model
         return $this->hasMany(PaymentTermsVersion::class, 'terms_id');
     }
 
-    /** @return HasOne<PaymentTermsVersion, $this> */
+    /**
+     * The newest version. Not `ofMany()`: it adds max() over the uuid key as a tie-break, and PostgreSQL has no
+     * max(uuid). Eager loading takes the first row per set in this order (a set has a few versions).
+     *
+     * @return HasOne<PaymentTermsVersion, $this>
+     */
     public function currentVersion(): HasOne
     {
-        return $this->hasOne(PaymentTermsVersion::class, 'terms_id')->ofMany('number', 'max');
+        return $this->hasOne(PaymentTermsVersion::class, 'terms_id')->orderByDesc('number');
     }
 
     /** @return array<string, string> */
