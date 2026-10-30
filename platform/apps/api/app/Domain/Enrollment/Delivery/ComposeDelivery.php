@@ -60,7 +60,7 @@ final class ComposeDelivery
         $platform = (string) config('platform.name');
 
         if ($delivery->audience === 'team') {
-            $group = $enrollment?->group ?? $application->group;
+            $group = $enrollment->group ?? $application->group;
             $today = CarbonImmutable::now('Europe/Sofia')->toDateString();
             $places = $group === null || $group->capacity_max === null ? 'Без ограничение на местата' : (function () use ($group, $today): string {
                 $free = max(0, (int) $group->capacity_max - $this->capacity->placesTaken($group, $today));

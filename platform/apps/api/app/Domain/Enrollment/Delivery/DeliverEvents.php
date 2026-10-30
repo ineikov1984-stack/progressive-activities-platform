@@ -152,7 +152,7 @@ final class DeliverEvents
             $this->mark($organizationId, $deliveryId, [
                 'status' => $failed ? 'failed' : 'pending',
                 'locked_until' => null,
-                'next_attempt_at' => $failed ? null : now()->addMinutes(self::BACKOFF[max(0, $delivery->attempts - 1)] ?? 720),
+                'next_attempt_at' => $failed ? null : now()->addMinutes(self::BACKOFF[min(count(self::BACKOFF) - 1, max(0, $delivery->attempts - 1))]),
                 'last_error' => self::errorCode($exception),
             ]);
             $stats[$failed ? 'failed' : 'retried']++;

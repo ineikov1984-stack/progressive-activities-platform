@@ -27,7 +27,7 @@ final class EnrollmentMessages
     public function parent(EnrollmentEvent $event, EnrollmentApplication $application, ?Enrollment $enrollment, array $context): MailContent
     {
         $child = trim((string) $application->child?->first_name) ?: 'детето';
-        $group = $enrollment?->group ?? $application->group;
+        $group = $enrollment->group ?? $application->group;
         $where = $this->where($group);
         $org = $context['organization'];
         $payload = $event->payload;
@@ -184,7 +184,7 @@ final class EnrollmentMessages
      */
     public function team(EnrollmentEvent $event, EnrollmentApplication $application, ?Enrollment $enrollment, array $context): MailContent
     {
-        $group = $enrollment?->group ?? $application->group;
+        $group = $enrollment->group ?? $application->group;
         $where = $this->where($group);
         $org = $context['organization'];
         $payload = $event->payload;
@@ -193,7 +193,7 @@ final class EnrollmentMessages
         $link = $context['webUrl'].'/dashboard/enrollments?organization='.rawurlencode($context['organizationId']);
         $groupLink = $context['webUrl'].'/dashboard/enrollments?view=groups&group='.rawurlencode((string) $group?->id).'&organization='.rawurlencode($context['organizationId']);
         $footer = match ($context['recipientKind']) {
-            'offering_contact' => 'Получавате това писмо като адрес за контакт на „'.($group?->offering?->activity?->title ?? 'дейността')."“ в {$org}. Изпратено чрез {$context['platform']}.",
+            'offering_contact' => 'Получавате това писмо като адрес за контакт на „'.($group->offering->activity->title ?? 'дейността')."“ в {$org}. Изпратено чрез {$context['platform']}.",
             'organization_contact' => "Получавате това писмо като адрес за контакт на {$org}. Изпратено чрез {$context['platform']}.",
             default => "Получавате това писмо като собственик или администратор на {$org}. Изпратено чрез {$context['platform']}.",
         };
@@ -319,7 +319,7 @@ final class EnrollmentMessages
      */
     private function place(?Group $group): ?array
     {
-        $location = $group?->location ?? $group?->offering?->location;
+        $location = $group->location ?? $group?->offering?->location;
         if (! $location instanceof Location) {
             return null;
         }
