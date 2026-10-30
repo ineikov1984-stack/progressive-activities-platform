@@ -166,8 +166,8 @@ class VisitFromPriceTest extends TestCase
         $full = $this->fixture(['capacity_max' => 1]);
         $fullSingle = $this->price($full, 'single', 1500);
         $pending = $this->book($full['parent'], $full['child'], $full['group'], $fullSingle, $full['sessions'][0], 'full')->assertCreated()->json('application.id');
-        $this->inTenant($full['organization'], fn () => $this->usedTrial(Child::query()->withoutGlobalScopes()->create([
-            'owner_user_id' => $full['parent']->id, 'first_name' => 'Вики', 'last_name' => 'Иванова',
+        $this->inTenant($full['organization'], fn () => $this->usedTrial($full['parent']->children()->create([
+            'first_name' => 'Вики', 'last_name' => 'Иванова',
         ]), $full['group'], '2026-11-02', $full['sessions'][0]));
         $this->assertValidationError('capacity', fn () => $this->approve($full, $pending));
         $this->assertSame('submitted', EnrollmentApplication::query()->withoutGlobalScopes()->findOrFail($pending)->status->value);
@@ -200,8 +200,8 @@ class VisitFromPriceTest extends TestCase
             $f['group']->update(['visit_places' => 2]);
             $this->assertSame(1, app(EnrollmentCapacity::class)->remainingForVisit($first));
             // Visits from an offer have their own limit and do not count here.
-            $this->usedTrial(Child::query()->withoutGlobalScopes()->create([
-                'owner_user_id' => $f['parent']->id, 'first_name' => 'Вики', 'last_name' => 'Иванова',
+            $this->usedTrial($f['parent']->children()->create([
+                'first_name' => 'Вики', 'last_name' => 'Иванова',
             ]), $f['group'], '2026-11-02', $first, offer: true);
             $this->assertSame(1, app(EnrollmentCapacity::class)->remainingForVisit($first));
         });
@@ -307,6 +307,8 @@ class VisitFromPriceTest extends TestCase
     public function test_only_a_trial_may_be_free_and_visit_places_fit_the_group(): void
     {
         $f = $this->fixture();
+        // Only a draft is edited.
+        $this->inTenant($f['organization'], fn () => $f['activity']->update(['status' => 'draft']));
         $this->actingAs($f['staff'])->withSession(['active_organization_id' => $f['organization']->id]);
         $activityVersion = fn (): int => (int) $this->inTenant($f['organization'], fn () => $f['activity']->refresh()->version);
         $prices = fn (string $mode): array => ['offering' => ['price_options' => [
@@ -335,7 +337,7 @@ class VisitFromPriceTest extends TestCase
             'name' => 'Школа', 'slug' => (string) Str::uuid(), 'status' => 'active',
         ]);
         $staff = User::factory()->create();
-        OrganizationMembership::query()->create([
+        OrganizationMembership::query()->withoutGlobalScopes()->create([
             'organization_id' => $organization->id, 'user_id' => $staff->id, 'role' => 'organization_owner', 'status' => 'active',
         ]);
 
