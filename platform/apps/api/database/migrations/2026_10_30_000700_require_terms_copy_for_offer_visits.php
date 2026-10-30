@@ -16,6 +16,10 @@ return new class extends Migration
         }
 
         DB::unprepared(<<<'SQL'
+            CREATE OR REPLACE FUNCTION refuse_visit_without_terms_copy() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+                RAISE EXCEPTION 'a visit needs a copy of its terms';
+            END $$;
             DROP TRIGGER IF EXISTS enrollment_applications_visit_terms_copy ON enrollment_applications;
             CREATE TRIGGER enrollment_applications_visit_terms_copy
                 BEFORE INSERT ON enrollment_applications FOR EACH ROW
@@ -31,6 +35,10 @@ return new class extends Migration
         }
 
         DB::unprepared(<<<'SQL'
+            CREATE OR REPLACE FUNCTION refuse_visit_without_terms_copy() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+                RAISE EXCEPTION 'a visit without an offer needs a copy of its terms';
+            END $$;
             DROP TRIGGER IF EXISTS enrollment_applications_visit_terms_copy ON enrollment_applications;
             CREATE TRIGGER enrollment_applications_visit_terms_copy
                 BEFORE INSERT ON enrollment_applications FOR EACH ROW

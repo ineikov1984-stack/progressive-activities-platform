@@ -130,9 +130,12 @@ final class VisitOfferController extends Controller
                 : $data;
         }
 
-        $fee = $data['fee_type'] ?? ($offer === null ? 'free' : $offer->fee_type->value);
-        $amount = $data['amount_cents'] ?? ($offer === null ? 0 : $offer->amount_cents);
-        $reason = array_key_exists('fee_reason', $data) ? $data['fee_reason'] : $offer?->fee_reason;
+        // A trial or single offer turning into an open day does not bring back a fee it had before step 6 priced
+        // it: the open day is free unless the request sets its fee.
+        $openDay = $offer !== null && $offer->type === VisitOfferType::OpenDay ? $offer : null;
+        $fee = $data['fee_type'] ?? ($openDay === null ? VisitFeeType::Free->value : $openDay->fee_type->value);
+        $amount = $data['amount_cents'] ?? ($openDay === null ? 0 : $openDay->amount_cents);
+        $reason = array_key_exists('fee_reason', $data) ? $data['fee_reason'] : $openDay?->fee_reason;
         if ($fee === 'free' && $amount !== 0) {
             throw ValidationException::withMessages(['amount_cents' => 'Безплатното посещение трябва да е 0 евроцента.']);
         }
@@ -143,7 +146,7 @@ final class VisitOfferController extends Controller
             throw ValidationException::withMessages(['fee_reason' => 'Добавете основание за таксата.']);
         }
 
-        return $data;
+        return [...$data, 'fee_type' => $fee, 'amount_cents' => $amount, 'fee_reason' => $reason];
     }
 
     private function organization(TenantContext $context): Organization

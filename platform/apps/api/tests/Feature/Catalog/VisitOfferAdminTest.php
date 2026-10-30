@@ -124,6 +124,26 @@ class VisitOfferAdminTest extends TestCase
             ->assertOk()->assertJsonPath('visit_offer.status', 'published');
     }
 
+    public function test_an_older_trial_turning_into_an_open_day_does_not_bring_back_its_old_fee(): void
+    {
+        [$organization, $activity, $group, $session] = $this->fixture();
+        $this->login($organization);
+        $id = $this->postJson('/api/v1/catalog/visit-offers', $this->offerPayload($activity, $group, $session))
+            ->assertCreated()->json('visit_offer.id');
+        // A trial saved before step 6 priced it (docs/product/visits.md, т. 8a.1) still carries a fee of its own.
+        DB::table('visit_offers')->where('id', $id)->update(['fee_type' => 'paid', 'amount_cents' => 1250, 'fee_reason' => 'Materials']);
+
+        $this->patchJson("/api/v1/catalog/visit-offers/{$id}", ['version' => 1, 'type' => 'open_day'])
+            ->assertOk()->assertJsonPath('visit_offer.fee_type', 'free')->assertJsonPath('visit_offer.amount_cents', 0)
+            ->assertJsonPath('visit_offer.fee_reason', null);
+        $this->patchJson("/api/v1/catalog/visit-offers/{$id}", ['version' => 2, 'fee_type' => 'paid', 'amount_cents' => 800, 'fee_reason' => 'Entry'])
+            ->assertOk()->assertJsonPath('visit_offer.amount_cents', 800);
+        // An open day keeps its own fee on later edits.
+        $this->patchJson("/api/v1/catalog/visit-offers/{$id}", ['version' => 3, 'title' => 'Open chess day'])
+            ->assertOk()->assertJsonPath('visit_offer.fee_type', 'paid')->assertJsonPath('visit_offer.amount_cents', 800)
+            ->assertJsonPath('visit_offer.fee_reason', 'Entry');
+    }
+
     public function test_update_is_versioned_and_audits_each_material_change(): void
     {
         [$organization, $activity, $group, $session] = $this->fixture();

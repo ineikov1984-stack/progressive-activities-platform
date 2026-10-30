@@ -3,6 +3,7 @@
 namespace Tests\Feature\Enrollment;
 
 use App\Domain\Catalog\Models\OrganizationCatalogProfile;
+use App\Domain\Catalog\Services\VisitOfferEligibility;
 use App\Domain\Enrollment\Actions\ReviewEnrollmentApplication;
 use App\Domain\Enrollment\Actions\SubmitEnrollmentApplication;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
@@ -186,6 +187,38 @@ class ParentVisitOfferApplicationTest extends TestCase
         $offer->update(['type' => 'trial']);
         app(ReviewEnrollmentApplication::class)->handle($child->owner, $first, 'approve', 1, null, null);
         $this->assertDatabaseCount('enrollments', 1);
+    }
+
+    public function test_a_waiting_trial_on_a_closed_or_cancelled_offer_no_longer_holds_the_trial(): void
+    {
+        [$org, , , $session, $offer, $child] = $this->visitFixture();
+        $later = $session->replicate();
+        $later->starts_at = $session->starts_at->addWeek();
+        $later->ends_at = $session->ends_at->addWeek();
+        $later->save();
+        $other = $offer->replicate();
+        $other->title = 'Another trial';
+        $other->save();
+        $other->sessions()->attach($later);
+        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms()];
+        $waiting = app(SubmitEnrollmentApplication::class)->handle($child->owner, $payload, 'trial-on-first-offer');
+        $this->assertSame('submitted', $waiting->status->value);
+
+        // While the first offer is published, its waiting application holds the trial.
+        app(TenantContext::class)->select($org);
+        try {
+            app(VisitOfferEligibility::class)->assertEligible($child, $other, $later);
+            $this->fail('A waiting trial on a published offer must hold the trial.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('trial_limit', $exception->errors());
+        }
+
+        // A closed or cancelled offer cannot approve it any more, so it stops holding the trial (т. 8a.5).
+        $offer->update(['status' => 'closed', 'closed_at' => now()]);
+        app(VisitOfferEligibility::class)->assertEligible($child, $other, $later);
+        $offer->update(['status' => 'cancelled', 'cancelled_at' => now()]);
+        $next = app(SubmitEnrollmentApplication::class)->handle($child->owner, [...$payload, 'visit_offer_id' => $other->id, 'session_id' => $later->id], 'trial-after-cancel');
+        $this->assertSame($other->id, $next->visit_offer_id);
     }
 
     public function test_single_and_open_day_types_are_distinct_accepted_snapshots(): void
