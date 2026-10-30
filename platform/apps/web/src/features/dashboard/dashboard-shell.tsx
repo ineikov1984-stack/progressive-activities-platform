@@ -68,7 +68,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    loadOrganizationContext().then((context) => {
+    loadOrganizationContext(new URLSearchParams(window.location.search).get('organization')).then((context) => {
       setUser(context.user);
       setOrganization(context.organization);
       setOrganizations(context.organizations);

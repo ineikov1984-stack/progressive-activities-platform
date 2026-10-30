@@ -45,7 +45,8 @@ return [
             'port' => env('MAIL_PORT', 2525),
             'username' => env('MAIL_USERNAME'),
             'password' => env('MAIL_PASSWORD'),
-            'timeout' => null,
+            // A batch of enrollment emails must fit inside its 5-minute lease (ADR 0005): 10 × 15 s.
+            'timeout' => (int) env('MAIL_TIMEOUT', 15),
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
 
@@ -79,11 +80,11 @@ return [
             'transport' => 'array',
         ],
 
+        // Never 'log' in a chain: a failing provider would write whole emails (addresses, names) to the log.
         'failover' => [
             'transport' => 'failover',
             'mailers' => [
                 'smtp',
-                'log',
             ],
             'retry_after' => 60,
         ],
