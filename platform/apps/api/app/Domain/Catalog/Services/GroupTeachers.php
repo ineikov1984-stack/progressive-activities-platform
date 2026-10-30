@@ -5,6 +5,7 @@ namespace App\Domain\Catalog\Services;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\InstructorProfile;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 
 /**
@@ -24,10 +25,9 @@ final class GroupTeachers
         $day = $startsAt->setTimezone($timezone)->toDateString();
         $teachers = [];
         foreach ($assignments ?? $group->assignments()->get() as $profile) {
-            $startsOn = $this->day($profile->pivot->starts_on ?? null);
-            $endsOn = $this->day($profile->pivot->ends_on ?? null);
-            if (($startsOn === null || $startsOn <= $day) && ($endsOn === null || $endsOn >= $day)) {
-                $teachers[(string) $profile->getKey()] = ['role' => (string) ($profile->pivot->role ?? 'lead'), 'source' => 'assignment'];
+            $assignment = self::assignment($profile);
+            if (($assignment['starts_on'] === null || $assignment['starts_on'] <= $day) && ($assignment['ends_on'] === null || $assignment['ends_on'] >= $day)) {
+                $teachers[(string) $profile->getKey()] = ['role' => $assignment['role'], 'source' => 'assignment'];
             }
         }
 
@@ -43,7 +43,7 @@ final class GroupTeachers
             ->when($group->status !== 'draft', fn ($query) => $query->where('starts_at', '>', now()))
             ->orderBy('starts_at')->lockForUpdate()->with('instructors')->get();
         foreach ($sessions as $session) {
-            if ($session->instructors->contains(fn (InstructorProfile $teacher): bool => ($teacher->pivot->source ?? 'assignment') === 'manual')) {
+            if ($session->instructors->contains(fn (InstructorProfile $teacher): bool => self::assignment($teacher)['source'] === 'manual')) {
                 continue;
             }
             $changes = $session->instructors()->sync($this->forSession($group, $session->starts_at, $assignments));
@@ -54,12 +54,23 @@ final class GroupTeachers
         }
     }
 
-    private function day(mixed $value): ?string
+    /**
+     * The assignment on a teacher loaded through a group's `assignments()` or a session's `instructors()`.
+     *
+     * @return array{role: string, starts_on: string|null, ends_on: string|null, version: int, source: string}
+     */
+    public static function assignment(InstructorProfile $profile): array
     {
-        if ($value === null || $value === '') {
-            return null;
-        }
+        $pivot = $profile->getRelation('pivot');
+        $value = fn (string $key): mixed => $pivot instanceof Model ? $pivot->getAttribute($key) : null;
+        $day = fn (mixed $date): ?string => $date === null || $date === '' ? null : substr((string) $date, 0, 10);
 
-        return substr((string) $value, 0, 10);
+        return [
+            'role' => (string) ($value('role') ?? 'lead'),
+            'starts_on' => $day($value('starts_on')),
+            'ends_on' => $day($value('ends_on')),
+            'version' => (int) ($value('version') ?? 1),
+            'source' => (string) ($value('source') ?? 'assignment'),
+        ];
     }
 }

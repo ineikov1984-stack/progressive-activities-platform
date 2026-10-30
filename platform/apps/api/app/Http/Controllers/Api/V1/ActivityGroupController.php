@@ -7,13 +7,16 @@ use App\Domain\Catalog\Actions\EndGroupAssignment;
 use App\Domain\Catalog\Actions\SaveGroupSchedule;
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
+use App\Domain\Catalog\Models\InstructorProfile;
 use App\Domain\Catalog\Models\Session;
+use App\Domain\Catalog\Services\GroupTeachers;
 use App\Domain\Catalog\Services\ScheduleConflictDetector;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Gate;
 
 final class ActivityGroupController extends Controller
@@ -78,11 +81,9 @@ final class ActivityGroupController extends Controller
             'visit_places' => $group->visit_places,
             'location_id' => $group->location_id, 'instructor_ids' => $group->instructors->modelKeys(),
             // Lead or assistant with a period, ended ones included (docs/product/team.md, т. 5).
-            'assignments' => $group->assignments->map(fn ($profile) => [
-                'instructor_profile_id' => $profile->id, 'role' => $profile->pivot->role,
-                'starts_on' => $profile->pivot->starts_on === null ? null : substr((string) $profile->pivot->starts_on, 0, 10),
-                'ends_on' => $profile->pivot->ends_on === null ? null : substr((string) $profile->pivot->ends_on, 0, 10),
-                'version' => (int) $profile->pivot->version,
+            'assignments' => $group->assignments->map(fn (InstructorProfile $profile) => [
+                'instructor_profile_id' => $profile->id,
+                ...Arr::only(GroupTeachers::assignment($profile), ['role', 'starts_on', 'ends_on', 'version']),
             ])->values()->all(),
             'schedule_pattern' => $group->schedule_pattern,
             'price_options' => $group->priceOptions->map(fn ($price) => [

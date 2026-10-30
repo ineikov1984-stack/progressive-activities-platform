@@ -40,20 +40,19 @@ final readonly class EndGroupAssignment
             $group = Group::query()->whereKey($group->id)->lockForUpdate()->firstOrFail();
             $assignment = $group->assignments()->where('instructor_profiles.id', $profileId)->first();
             abort_if($assignment === null, 404);
-            abort_unless((int) $assignment->pivot->version === (int) $data['version'], 409, 'Assignment version conflict.');
+            $current = GroupTeachers::assignment($assignment);
+            abort_unless($current['version'] === (int) $data['version'], 409, 'Assignment version conflict.');
 
             $today = CarbonImmutable::now('Europe/Sofia')->toDateString();
-            $endsOn = $assignment->pivot->ends_on === null ? null : substr((string) $assignment->pivot->ends_on, 0, 10);
-            if ($endsOn !== null && $endsOn < $today) {
+            if ($current['ends_on'] !== null && $current['ends_on'] < $today) {
                 throw ValidationException::withMessages(['ends_on' => 'Назначението вече е приключило.']);
             }
-            $startsOn = $assignment->pivot->starts_on === null ? null : substr((string) $assignment->pivot->starts_on, 0, 10);
-            if ($startsOn !== null && $data['ends_on'] < $startsOn) {
+            if ($current['starts_on'] !== null && $data['ends_on'] < $current['starts_on']) {
                 throw ValidationException::withMessages(['ends_on' => 'Краят трябва да е след началото.']);
             }
 
             $group->assignments()->updateExistingPivot($profileId, [
-                'ends_on' => $data['ends_on'], 'version' => (int) $assignment->pivot->version + 1,
+                'ends_on' => $data['ends_on'], 'version' => $current['version'] + 1,
             ]);
             $this->teachers->apply($group);
 

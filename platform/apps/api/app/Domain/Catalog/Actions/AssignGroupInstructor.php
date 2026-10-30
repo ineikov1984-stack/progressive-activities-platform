@@ -63,11 +63,11 @@ final readonly class AssignGroupInstructor
                 'created_by' => $actor->id,
             ];
             if ($existing !== null) {
-                $endsOn = $existing->pivot->ends_on === null ? null : substr((string) $existing->pivot->ends_on, 0, 10);
-                if ($endsOn === null || $endsOn >= $today) {
+                $current = GroupTeachers::assignment($existing);
+                if ($current['ends_on'] === null || $current['ends_on'] >= $today) {
                     throw ValidationException::withMessages(['instructor_profile_id' => 'Този човек вече води групата.']);
                 }
-                $group->assignments()->updateExistingPivot($profile->id, [...$values, 'version' => (int) $existing->pivot->version + 1]);
+                $group->assignments()->updateExistingPivot($profile->id, [...$values, 'version' => $current['version'] + 1]);
             } else {
                 $group->assignments()->attach($profile->id, [...$values, 'version' => 1]);
             }
