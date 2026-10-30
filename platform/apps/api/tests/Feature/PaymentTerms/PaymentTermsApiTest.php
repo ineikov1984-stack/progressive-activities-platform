@@ -199,6 +199,9 @@ class PaymentTermsApiTest extends TestCase
         // Someone else saved in between.
         $this->as($owner, $organization)->patchJson("/api/v1/payment-terms/{$id}", ['version' => 2, 'name' => 'Стари'])
             ->assertConflict()->assertJsonPath('message', 'Условията са променени междувременно. Презаредете страницата и опитайте отново.');
+        // Read back, the set comes with its newest version.
+        $this->as($owner, $organization)->getJson('/api/v1/payment-terms')
+            ->assertOk()->assertJsonPath('payment_terms.0.current_version.number', 2);
 
         $this->inOrganization($organization, function () use ($first): void {
             $old = PaymentTermsVersion::query()->findOrFail($first);
