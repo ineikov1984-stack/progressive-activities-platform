@@ -41,6 +41,7 @@ final class DeliverEvents
         $deadline = microtime(true) + $budgetSeconds;
         $stats = ['expanded' => 0, 'sent' => 0, 'retried' => 0, 'failed' => 0, 'skipped' => 0];
 
+        // One organization's bad data never stops the others: each one is expanded on its own.
         foreach ($this->tenants() as $organizationId) {
             $stats['expanded'] += $this->expand->handle($organizationId);
         }
@@ -48,9 +49,16 @@ final class DeliverEvents
         do {
             $worked = false;
             foreach ($this->tenants() as $organizationId) {
-                foreach ($this->claim($organizationId, $stats) as $deliveryId) {
+                $claimed = $this->claim($organizationId, $stats);
+                foreach ($claimed as $index => [$deliveryId, $attempts]) {
+                    // Out of time: what was taken but not sent goes back at once, its attempt not counted.
+                    if (microtime(true) >= $deadline) {
+                        $this->release($organizationId, array_slice($claimed, $index));
+
+                        return $stats;
+                    }
                     $worked = true;
-                    $this->deliver($organizationId, $deliveryId, $stats);
+                    $this->deliver($organizationId, $deliveryId, $attempts, $stats);
                 }
                 if (microtime(true) >= $deadline) {
                     return $stats;
@@ -91,7 +99,7 @@ final class DeliverEvents
      * email that crashes the sender does not come back forever.
      *
      * @param  array{expanded: int, sent: int, retried: int, failed: int, skipped: int}  $stats
-     * @return list<string>
+     * @return list<array{0: string, 1: int}> each delivery with the attempt this claim made
      */
     private function claim(string $organizationId, array &$stats): array
     {
@@ -106,68 +114,100 @@ final class DeliverEvents
                 ->whereIn('event_id', EnrollmentEvent::query()->where('occurred_at', '<', $now->subHours(self::MAX_AGE_HOURS))->select('id'))
                 ->update(['status' => 'skipped', 'skipped_reason' => 'too_old', 'updated_at' => $now]);
 
-            $ids = EnrollmentEventDelivery::query()->where('status', 'pending')
+            $rows = EnrollmentEventDelivery::query()->where('status', 'pending')
                 ->where(fn ($query) => $query->whereNull('next_attempt_at')->orWhere('next_attempt_at', '<=', $now))
                 ->orderBy('created_at')->orderBy('id')
                 ->limit(self::BATCH)
                 ->lock(DB::getDriverName() === 'pgsql' ? 'for update skip locked' : true)
-                ->pluck('id')->map(fn (mixed $id): string => (string) $id)->values()->all();
-            if ($ids !== []) {
-                EnrollmentEventDelivery::query()->whereKey($ids)->update([
+                ->get(['id', 'attempts']);
+            if ($rows->isNotEmpty()) {
+                EnrollmentEventDelivery::query()->whereKey($rows->pluck('id')->all())->update([
                     'status' => 'sending', 'locked_until' => $now->addMinutes(self::LEASE_MINUTES),
                     'attempts' => DB::raw('attempts + 1'), 'updated_at' => $now,
                 ]);
             }
 
-            return $ids;
+            return array_values($rows->map(fn (EnrollmentEventDelivery $row): array => [(string) $row->id, $row->attempts + 1])->all());
         });
     }
 
-    /** @param  array{expanded: int, sent: int, retried: int, failed: int, skipped: int}  $stats */
-    private function deliver(string $organizationId, string $deliveryId, array &$stats): void
+    /**
+     * Compose under RLS, send after the transaction, mark. Only while this claim still holds the lease
+     * (same attempt, lease not expired): a row another sender has taken back is left alone.
+     *
+     * @param  array{expanded: int, sent: int, retried: int, failed: int, skipped: int}  $stats
+     */
+    private function deliver(string $organizationId, string $deliveryId, int $attempt, array &$stats): void
     {
-        $composed = TenantTransaction::run($organizationId, function () use ($deliveryId): ?array {
-            $delivery = EnrollmentEventDelivery::query()->whereKey($deliveryId)->where('status', 'sending')->first();
+        try {
+            $composed = TenantTransaction::run($organizationId, function () use ($deliveryId, $attempt): ?array {
+                $delivery = EnrollmentEventDelivery::query()->whereKey($deliveryId)->where('status', 'sending')
+                    ->where('attempts', $attempt)->where('locked_until', '>', now())->first();
 
-            return $delivery === null ? null : ['delivery' => $delivery, ...$this->compose->handle($delivery)];
-        });
+                return $delivery === null ? null : $this->compose->handle($delivery);
+            });
+        } catch (Throwable $exception) {
+            // Bad data in one email: it waits and is tried again like a mail server error; the others go on.
+            $this->failed($organizationId, $deliveryId, $attempt, $exception, $stats);
+
+            return;
+        }
         if ($composed === null) {
             return;
         }
         if (isset($composed['skip'])) {
-            $this->mark($organizationId, $deliveryId, ['status' => 'skipped', 'skipped_reason' => $composed['skip'], 'locked_until' => null]);
+            $this->mark($organizationId, $deliveryId, $attempt, ['status' => 'skipped', 'skipped_reason' => $composed['skip'], 'locked_until' => null]);
             $stats['skipped']++;
 
             return;
         }
 
-        /** @var EnrollmentEventDelivery $delivery */
-        $delivery = $composed['delivery'];
         $domain = substr((string) strrchr((string) config('mail.from.address'), '@'), 1) ?: 'localhost';
         try {
             // After the read transaction has ended: a slow mail server never holds a database transaction.
             $this->sender->send($composed['to'], new EnrollmentMail($composed['mail'], $deliveryId.'@'.$domain));
         } catch (Throwable $exception) {
-            $failed = $delivery->attempts >= self::MAX_ATTEMPTS;
-            $this->mark($organizationId, $deliveryId, [
-                'status' => $failed ? 'failed' : 'pending',
-                'locked_until' => null,
-                'next_attempt_at' => $failed ? null : now()->addMinutes(self::BACKOFF[min(count(self::BACKOFF) - 1, max(0, $delivery->attempts - 1))]),
-                'last_error' => self::errorCode($exception),
-            ]);
-            $stats[$failed ? 'failed' : 'retried']++;
+            $this->failed($organizationId, $deliveryId, $attempt, $exception, $stats);
 
             return;
         }
-        $this->mark($organizationId, $deliveryId, ['status' => 'sent', 'sent_at' => now(), 'locked_until' => null, 'last_error' => null]);
+        $this->mark($organizationId, $deliveryId, $attempt, ['status' => 'sent', 'sent_at' => now(), 'locked_until' => null, 'last_error' => null]);
         $stats['sent']++;
     }
 
+    /** @param  array{expanded: int, sent: int, retried: int, failed: int, skipped: int}  $stats */
+    private function failed(string $organizationId, string $deliveryId, int $attempt, Throwable $exception, array &$stats): void
+    {
+        $failed = $attempt >= self::MAX_ATTEMPTS;
+        $this->mark($organizationId, $deliveryId, $attempt, [
+            'status' => $failed ? 'failed' : 'pending',
+            'locked_until' => null,
+            'next_attempt_at' => $failed ? null : now()->addMinutes(self::BACKOFF[min(count(self::BACKOFF) - 1, max(0, $attempt - 1))]),
+            'last_error' => self::errorCode($exception),
+        ]);
+        $stats[$failed ? 'failed' : 'retried']++;
+    }
+
     /** @param  array<string, mixed>  $values */
-    private function mark(string $organizationId, string $deliveryId, array $values): void
+    private function mark(string $organizationId, string $deliveryId, int $attempt, array $values): void
     {
         TenantTransaction::run($organizationId, fn () => EnrollmentEventDelivery::query()->whereKey($deliveryId)
-            ->where('status', 'sending')->update([...$values, 'updated_at' => now()]));
+            ->where('status', 'sending')->where('attempts', $attempt)->update([...$values, 'updated_at' => now()]));
+    }
+
+    /**
+     * Gives claimed rows back to "pending" when the run is out of time, without counting the attempt.
+     *
+     * @param  list<array{0: string, 1: int}>  $claimed
+     */
+    private function release(string $organizationId, array $claimed): void
+    {
+        TenantTransaction::run($organizationId, function () use ($claimed): void {
+            foreach ($claimed as [$deliveryId, $attempt]) {
+                EnrollmentEventDelivery::query()->whereKey($deliveryId)->where('status', 'sending')->where('attempts', $attempt)
+                    ->update(['status' => 'pending', 'locked_until' => null, 'attempts' => $attempt - 1, 'updated_at' => now()]);
+            }
+        });
     }
 
     /** A class name or an SMTP code only — never the message, which can hold an address. */

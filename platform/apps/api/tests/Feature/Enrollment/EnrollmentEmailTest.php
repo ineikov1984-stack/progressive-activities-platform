@@ -217,7 +217,7 @@ class EnrollmentEmailTest extends TestCase
         $this->assertSame(1, DB::table('enrollment_event_deliveries')->where('event_id', $event->id)->count());
     }
 
-    public function test_a_parent_ending_tells_the_team_and_the_words_come_from_the_transition(): void
+    public function test_a_parent_ending_tells_the_team_and_never_repeats_the_parents_words(): void
     {
         $f = $this->fixture();
         $enrollment = $this->withTenant($f['organization'], function () use ($f): Enrollment {
@@ -235,9 +235,6 @@ class EnrollmentEmailTest extends TestCase
         $coordinator = $this->member($f['organization'], 'coordinator');
         $byTeam = $this->transition($f, $enrollment, $coordinator, null);
         $this->event($f, 'enrollment.paused', ['starts_on' => '2026-11-09', 'ends_on' => '2026-11-15', 'reason_category' => 'health'], $enrollment, $byTeam);
-        // The application's text changing later does not change what the email quotes.
-        $this->withTenant($f['organization'], fn () => $f['application']->forceFill(['public_reason' => 'Друг текст'])->save());
-
         app(DeliverEvents::class)->run();
 
         $subjects = collect($this->mailer->sent)->map(fn (array $sent): string => $sent['to'].' | '.$sent['mail']->envelope()->subject)->sort()->values()->all();
@@ -248,8 +245,9 @@ class EnrollmentEmailTest extends TestCase
         ], $subjects);
         $byTo = collect($this->mailer->sent);
         $ended = $byTo->first(fn (array $sent): bool => str_starts_with($sent['mail']->envelope()->subject, 'Последен ден'))['mail'];
-        $this->assertStringContainsString('„Местим се в друг град.“', $ended->render());
-        $this->assertStringNotContainsString('Друг текст', $ended->render());
+        // The parent knows what they wrote; it may be about health — it stays out of the email.
+        $this->assertStringContainsString('30 ноември', $ended->render());
+        $this->assertStringNotContainsString('Местим се', $ended->render());
         $pause = $byTo->first(fn (array $sent): bool => str_starts_with($sent['mail']->envelope()->subject, 'Пауза'))['mail'];
         $this->assertStringNotContainsString('health', $pause->render());
         $this->assertStringNotContainsString('Здравословни', $pause->render());
@@ -258,6 +256,63 @@ class EnrollmentEmailTest extends TestCase
             $this->assertStringNotContainsString($private, $team->render());
         }
         $this->assertStringContainsString('view=groups&amp;group='.$f['group']->id, $team->render());
+    }
+
+    public function test_the_teams_words_come_from_the_transition_not_from_the_application(): void
+    {
+        $f = $this->fixture();
+        $coordinator = $this->member($f['organization'], 'coordinator');
+        $this->actingAs($coordinator)->withSession(['active_organization_id' => $f['organization']->id])
+            ->postJson("/api/v1/enrollment/applications/{$f['application']->id}/review", [
+                'decision' => 'reject', 'version' => 1, 'public_reason' => 'Групата е за по-малки деца.', 'internal_note' => 'Само за екипа.',
+            ])->assertOk();
+        // The application's text is changed later; the email quotes what the parent was told then.
+        $this->withTenant($f['organization'], fn () => $f['application']->forceFill(['public_reason' => 'Друг текст'])->save());
+
+        app(DeliverEvents::class)->run();
+
+        $html = $this->mailer->sent[0]['mail']->render();
+        $this->assertStringContainsString('Обяснение от екипа', $html);
+        $this->assertStringContainsString('„Групата е за по-малки деца.“', $html);
+        $this->assertStringNotContainsString('Друг текст', $html);
+        $this->assertStringNotContainsString('Само за екипа', $html);
+    }
+
+    public function test_one_broken_email_does_not_stop_the_others(): void
+    {
+        $f = $this->fixture();
+        $enrollment = $this->withTenant($f['organization'], function () use ($f): Enrollment {
+            $f['application']->forceFill(['status' => 'rejected'])->save();
+
+            return Enrollment::query()->create([
+                'application_id' => $f['application']->id, 'child_id' => $f['child']->id, 'group_id' => $f['group']->id,
+                'price_option_id' => $f['application']->price_option_id, 'scope' => 'full_period', 'status' => 'active', 'starts_on' => '2026-10-01',
+            ]);
+        });
+        $broken = $this->event($f, 'enrollment.paused', ['starts_on' => 'не е дата', 'ends_on' => 'не е дата'], $enrollment);
+        $this->event($f, 'enrollment.application_rejected', ['status' => 'rejected']);
+
+        app(DeliverEvents::class)->run();
+
+        $this->assertCount(1, $this->mailer->sent);
+        $delivery = $this->withTenant($f['organization'], fn () => EnrollmentEventDelivery::query()->where('event_id', $broken->id)->sole());
+        $this->assertSame('pending', $delivery->status);
+        $this->assertSame(1, $delivery->attempts);
+        $this->assertNotNull($delivery->last_error);
+    }
+
+    public function test_out_of_time_gives_back_what_it_took_without_counting(): void
+    {
+        $f = $this->fixture();
+        $this->withTenant($f['organization'], fn () => $f['application']->forceFill(['status' => 'rejected'])->save());
+        $this->event($f, 'enrollment.application_rejected', ['status' => 'rejected']);
+
+        app(DeliverEvents::class)->run(0);
+
+        $this->assertSame([], $this->mailer->sent);
+        $delivery = $this->withTenant($f['organization'], fn () => EnrollmentEventDelivery::query()->sole());
+        $this->assertSame('pending', $delivery->status);
+        $this->assertSame(0, $delivery->attempts);
     }
 
     #[TestGroup('tenant-isolation')]
@@ -283,14 +338,22 @@ class EnrollmentEmailTest extends TestCase
         }
     }
 
-    public function test_production_refuses_a_mailer_that_only_logs(): void
+    public function test_production_refuses_a_mailer_that_keeps_the_text_and_links_without_https(): void
     {
         $environment = $this->app->environment();
         $this->app->detectEnvironment(fn (): string => 'production');
-        config(['mail.default' => 'log']);
+        config(['platform.web_url' => 'https://app.example.com']);
 
         try {
+            config(['mail.default' => 'log']);
             $this->assertSame(1, Artisan::call('enrollment:deliver-events'));
+            // "log" hidden in a failover chain is refused too.
+            config(['mail.default' => 'failover', 'mail.mailers.failover' => ['transport' => 'failover', 'mailers' => ['smtp', 'log']]]);
+            $this->assertSame(1, Artisan::call('enrollment:deliver-events'));
+            config(['mail.default' => 'smtp', 'platform.web_url' => 'http://app.example.com']);
+            $this->assertSame(1, Artisan::call('enrollment:deliver-events'));
+            config(['platform.web_url' => 'https://app.example.com']);
+            $this->assertSame(0, Artisan::call('enrollment:deliver-events'));
         } finally {
             $this->app->detectEnvironment(fn (): string => $environment);
         }

@@ -33,8 +33,10 @@ final class EnrollmentMessages
         $payload = $event->payload;
         $text = fn (string $key): string => is_string($payload[$key] ?? null) ? $payload[$key] : '';
         $reply = fn (string $line): string => $context['replyTo'] !== null ? $line : "Не отговаряйте на този имейл — свържете се с {$org} по телефона.";
-        $quote = $context['reason'] === null || trim($context['reason']) === '' ? null
-            : ['label' => $context['byParent'] ? 'Вашата бележка' : 'Обяснение от екипа', 'text' => '„'.trim($context['reason']).'“'];
+        // Only what the team wrote for the parent. The parent's own words (a reason for a skip can be
+        // "she is ill") stay out of the email: the parent knows them, the inbox and the provider need not.
+        $quote = $context['byParent'] || $context['reason'] === null || trim($context['reason']) === '' ? null
+            : ['label' => 'Обяснение от екипа', 'text' => '„'.trim($context['reason']).'“'];
         $weekly = BulgarianDates::weekly($group?->weeklySlots());
         $place = $this->place($group);
         $mail = fn (string $subject, string $heading, array $paragraphs, array $facts = [], ?array $callout = null, ?array $quoteBlock = null, ?array $button = null, array $after = []): MailContent => new MailContent(
