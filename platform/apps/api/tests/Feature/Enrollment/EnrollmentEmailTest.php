@@ -14,6 +14,7 @@ use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Enrollment\Models\EnrollmentEvent;
 use App\Domain\Enrollment\Models\EnrollmentEventDelivery;
+use App\Domain\Enrollment\Models\EnrollmentSessionException;
 use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
@@ -314,6 +315,9 @@ class EnrollmentEmailTest extends TestCase
             ]);
         });
         $third = $this->withTenant($f['organization'], fn () => $f['group']->sessions()->orderBy('starts_at')->skip(2)->firstOrFail());
+        $this->withTenant($f['organization'], fn () => EnrollmentSessionException::query()->create([
+            'enrollment_id' => $enrollment->id, 'session_id' => $third->id, 'kind' => 'excluded', 'reason' => 'Състезание в училище.',
+        ]));
         $coordinator = $this->member($f['organization'], 'coordinator');
         $this->event($f, 'enrollment.session_excluded', ['session_id' => $third->id], $enrollment, $this->transition($f, $enrollment, $coordinator, 'Състезание в училище.'));
 
@@ -328,6 +332,42 @@ class EnrollmentEmailTest extends TestCase
         }
         // The session after the skipped one — not the first session of the period.
         $this->assertStringNotContainsString('4 ноември', $html);
+    }
+
+    public function test_a_session_skipped_again_before_sending_does_not_say_we_expect_the_child(): void
+    {
+        $f = $this->fixture();
+        $enrollment = $this->activeEnrollment($f);
+        $session = $this->withTenant($f['organization'], fn () => $f['group']->sessions()->orderBy('starts_at')->firstOrFail());
+        // Restored, then skipped again within the same minute: only the skip is told.
+        $this->event($f, 'enrollment.session_restored', ['session_id' => $session->id], $enrollment);
+        $this->withTenant($f['organization'], fn () => EnrollmentSessionException::query()->create([
+            'enrollment_id' => $enrollment->id, 'session_id' => $session->id, 'kind' => 'excluded', 'reason' => 'Отново не може.',
+        ]));
+        $this->event($f, 'enrollment.session_excluded', ['session_id' => $session->id], $enrollment);
+
+        app(DeliverEvents::class)->run();
+
+        $this->assertSame(['Ния пропуска заниманието на 4 ноември'], array_map(fn (array $sent): string => $sent['mail']->envelope()->subject, $this->mailer->sent));
+        $this->assertSame(1, $this->withTenant($f['organization'], fn () => EnrollmentEventDelivery::query()->where('skipped_reason', 'superseded')->count()));
+    }
+
+    public function test_a_cancelled_pause_names_the_next_session_and_an_early_end_the_return(): void
+    {
+        $f = $this->fixture();
+        $enrollment = $this->activeEnrollment($f);
+        $this->event($f, 'enrollment.pause_ended', ['resume_on' => '2026-11-18', 'cancelled' => true], $enrollment);
+        app(DeliverEvents::class)->run();
+        $cancelled = $this->html($this->mailer->sent[0]['mail']);
+        $this->assertStringContainsString('Следващо занимание', $cancelled);
+        $this->assertStringContainsString('сряда, 4 ноември · 17:30–18:30', $cancelled);
+
+        $this->mailer->sent = [];
+        $this->event($f, 'enrollment.pause_ended', ['resume_on' => '2026-11-18', 'cancelled' => false], $enrollment);
+        app(DeliverEvents::class)->run();
+        $ended = $this->html($this->mailer->sent[0]['mail']);
+        $this->assertStringContainsString('Връща се', $ended);
+        $this->assertStringContainsString('сряда, 18 ноември · 17:30–18:30', $ended);
     }
 
     public function test_the_logo_comes_through_the_web_address_and_only_when_its_file_is_stored(): void
@@ -535,6 +575,19 @@ class EnrollmentEmailTest extends TestCase
         return $this->withTenant($f['organization'], fn () => EnrollmentTransition::query()->create([
             'enrollment_id' => $enrollment->id, 'actor_user_id' => $actor->id, 'from_status' => 'active', 'to_status' => 'ended', 'public_reason' => $reason,
         ]));
+    }
+
+    /** @param  array<string, mixed>  $f */
+    private function activeEnrollment(array $f): Enrollment
+    {
+        return $this->withTenant($f['organization'], function () use ($f): Enrollment {
+            $f['application']->forceFill(['status' => 'approved'])->save();
+
+            return Enrollment::query()->create([
+                'application_id' => $f['application']->id, 'child_id' => $f['child']->id, 'group_id' => $f['group']->id,
+                'price_option_id' => $f['application']->price_option_id, 'scope' => 'full_period', 'status' => 'active', 'starts_on' => '2026-10-01',
+            ]);
+        });
     }
 
     /** The HTML without the word joiners that keep "17:30–18:30" on one line. */
