@@ -624,7 +624,7 @@ final class ChangeEnrollment
         }
         // In the public catalog the team accepts for the parent only terms a parent could accept (т. 7.5).
         if ($terms->marketplaceViolations() !== [] && OrganizationCatalogProfile::query()->where('is_published', true)->exists()) {
-            throw ValidationException::withMessages(['price_option_id' => 'Условията за тази цена не са в рамките на каталога на платформата. Променете ги в „Настройки → Условия за плащане“.']);
+            throw ValidationException::withMessages(['price_option_id' => 'Правилата за такси, отсъствия и отказ за тази цена не са в рамките на каталога на платформата. Променете ги в „Такси, отсъствия и отказ“.']);
         }
         $now = CarbonImmutable::now();
 

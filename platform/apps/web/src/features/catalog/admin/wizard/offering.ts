@@ -57,7 +57,8 @@ export function offeringFromActivity(activity: ActivityDraft): OfferingDraft | n
   return {
     location_id: offering.location_id ?? null,
     lead_instructor_profile_id: offering.lead_instructor_profile_id ?? null,
-    contact_email: offering.contact_email ?? '',
+    // The organization's address unless the activity has its own (decision of 30.10.2026).
+    contact_email: offering.contact_email || offering.organization_contact_email || '',
     enrollment_instructions: offering.enrollment_instructions ?? '',
     cancellation_policy: offering.cancellation_policy ?? '',
     terms: offering.terms ?? '',
@@ -77,7 +78,8 @@ export type OfferingCheck = { payload: NonNullable<ActivityInput['offering']>; p
 export function checkOffering(draft: OfferingDraft): OfferingCheck {
   const problems: Record<string, string> = {};
   const email = draft.contact_email.trim();
-  if (email && !emailPattern.test(email)) problems.contact_email = 'Проверете имейла — например info@vashata-shkola.bg.';
+  if (!email) problems.contact_email = 'Въведете имейл — на него родителите пишат с въпроси.';
+  else if (!emailPattern.test(email)) problems.contact_email = 'Проверете имейла — например info@vashata-shkola.bg.';
 
   const prices: PriceOption[] = [];
   const seenModes = new Set<string>();
@@ -110,7 +112,7 @@ export function checkOffering(draft: OfferingDraft): OfferingCheck {
     terms: draft.terms.trim() || null,
     payment_terms_id: draft.payment_terms_id,
   };
-  if (!problems.contact_email) payload.contact_email = email || null;
+  if (!problems.contact_email) payload.contact_email = email;
   // Prices are replaced as a whole on the server, so they are sent only when all are valid.
   if (!Object.keys(problems).some((key) => key.startsWith('price_'))) payload.price_options = prices;
   return { payload, problems };

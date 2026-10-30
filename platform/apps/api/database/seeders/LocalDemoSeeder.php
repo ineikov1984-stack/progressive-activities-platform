@@ -80,6 +80,8 @@ class LocalDemoSeeder extends Seeder
                     'name' => 'Progressive Academy Demo',
                     'slug' => 'progressive-academy-demo',
                     'status' => 'active',
+                    // Synthetic: parents' questions and the team's copies of enrollment emails go here (Mailpit).
+                    'public_contact_email' => 'kontakt@demo.progressive.local',
                 ],
             );
 

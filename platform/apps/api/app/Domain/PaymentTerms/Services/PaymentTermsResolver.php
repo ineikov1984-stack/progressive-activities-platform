@@ -35,7 +35,7 @@ final class PaymentTermsResolver
     {
         $terms = PaymentTerms::query()->whereKey($termsId)->where('status', 'active')->first();
         if ($terms === null) {
-            throw ValidationException::withMessages([$field => 'Изберете условия от „Настройки → Условия за плащане“.']);
+            throw ValidationException::withMessages([$field => 'Изберете условия от „Такси, отсъствия и отказ“.']);
         }
         $kinds = array_map(fn (mixed $mode): ?BillingKind => BillingKind::fromEnrollmentMode((string) $mode), array_values($enrollmentModes));
         if (! in_array($terms->billing_kind, $kinds, true)) {

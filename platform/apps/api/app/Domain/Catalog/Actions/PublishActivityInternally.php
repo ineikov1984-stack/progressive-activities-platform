@@ -48,6 +48,10 @@ final readonly class PublishActivityInternally
             if ($offerings->isEmpty()) {
                 throw ValidationException::withMessages(['offering' => 'Добавете предлагане преди публикуване.']);
             }
+            // Parents need an address for questions: the activity's own or the organization's.
+            if (blank($organization->public_contact_email) && $offerings->contains(fn ($offering) => blank($offering->contact_email))) {
+                throw ValidationException::withMessages(['contact_email' => 'Добавете имейл за въпроси в стъпка 6 „Цени и записване“.']);
+            }
 
             $groups = $offerings->flatMap->groups;
             if ($groups->isEmpty()) {
@@ -98,7 +102,7 @@ final readonly class PublishActivityInternally
             $prices = $group->priceOptions->concat($group->offering->priceOptions->whereNull('group_id'))->where('is_available', true);
             foreach ($prices as $price) {
                 if ($this->paymentTerms->forPrice($price->enrollment_mode, $group->offering->payment_terms_id)?->marketplaceViolations()) {
-                    throw ValidationException::withMessages(['payment_terms' => 'Условията за плащане на тази дейност не са в рамките на каталога на платформата. Променете ги в „Настройки → Условия за плащане“.']);
+                    throw ValidationException::withMessages(['payment_terms' => 'Правилата за такси, отсъствия и отказ на тази дейност не са в рамките на каталога на платформата. Променете ги в „Такси, отсъствия и отказ“.']);
                 }
             }
         }

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { amountText, blankPrice, checkOffering, type OfferingDraft } from '../src/features/catalog/admin/wizard/offering';
+import type { ActivityDraft } from '../src/features/catalog/admin/api';
+import { amountText, blankPrice, checkOffering, offeringFromActivity, type OfferingDraft } from '../src/features/catalog/admin/wizard/offering';
 
 const draft = (changes: Partial<OfferingDraft> = {}): OfferingDraft => ({
-  location_id: null, lead_instructor_profile_id: null, contact_email: '', enrollment_instructions: '', cancellation_policy: '', terms: '', payment_terms_id: null,
+  location_id: null, lead_instructor_profile_id: null, contact_email: 'info@example.test', enrollment_instructions: '', cancellation_policy: '', terms: '', payment_terms_id: null,
   prices: [{ ...blankPrice(), amount: '30,00' }], ...changes,
 });
 
@@ -24,6 +25,14 @@ describe('checkOffering', () => {
   it('rejects the same way of enrolling twice', () => {
     const { problems } = checkOffering(draft({ prices: [{ ...blankPrice(), amount: '30' }, { ...blankPrice(), amount: '40' }] }));
     expect(problems.price_1).toMatch(/вече има цена/);
+  });
+
+  it('needs an email for questions and offers the organization\'s', () => {
+    expect(checkOffering(draft({ contact_email: ' ' })).problems.contact_email).toBe('Въведете имейл — на него родителите пишат с въпроси.');
+    const activity = { offering: { id: 'o', version: 1, contact_email: null, organization_contact_email: 'school@example.test', price_options: [] } } as unknown as ActivityDraft;
+    expect(offeringFromActivity(activity)?.contact_email).toBe('school@example.test');
+    const own = { offering: { id: 'o', version: 1, contact_email: 'chess@example.test', organization_contact_email: 'school@example.test', price_options: [] } } as unknown as ActivityDraft;
+    expect(offeringFromActivity(own)?.contact_email).toBe('chess@example.test');
   });
 
   it('sends the chosen payment terms, or null for the organization\'s', () => {

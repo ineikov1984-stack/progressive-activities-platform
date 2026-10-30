@@ -82,7 +82,7 @@ test('the owner starts from "Стандартни", changes a number and saves t
   const writes = await fixture(page);
   await page.goto('/dashboard/settings/payment-terms');
 
-  await expect(page.getByRole('heading', { name: 'Условия за плащане', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Такси, отсъствия и отказ', level: 1 })).toBeVisible();
   await expect(page.getByRole('radio', { name: /^Стандартни/ })).toBeChecked();
   await expect(page.getByText('Спрете ли до 15-то число, плащате половината от таксата за месеца; след това — цялата.')).toBeVisible();
   await expect(page.getByText('Ползва се при: Футбол (6–8 г.)')).toBeVisible();
@@ -129,7 +129,7 @@ for (const width of [390, 768, 1440]) {
     await fixture(page);
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/dashboard/settings/payment-terms');
-    await expect(page.getByRole('heading', { name: 'Условия за плащане', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Такси, отсъствия и отказ', level: 1 })).toBeVisible();
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);

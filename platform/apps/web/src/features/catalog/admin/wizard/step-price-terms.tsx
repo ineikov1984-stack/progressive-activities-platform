@@ -56,12 +56,12 @@ export function StepPriceTerms({ organizationId, modes, chosenId, locked, onChoo
   if (loadFailed) {
     return (
       <div className={styles.termsBlock}>
-        <p className={styles.fieldError}>Условията за плащане не се заредиха.</p>
+        <p className={styles.fieldError}>Правилата за такси, отсъствия и отказ не се заредиха.</p>
         <button type="button" className={styles.quiet} onClick={() => { setLoadFailed(false); setAttempt((value) => value + 1); }}>Опитай отново</button>
       </div>
     );
   }
-  if (!workspace) return <div className={styles.termsBlock} aria-busy="true"><div className={styles.termsSkeleton} /><p className={styles.muted}>Зареждане на условията за плащане…</p></div>;
+  if (!workspace) return <div className={styles.termsBlock} aria-busy="true"><div className={styles.termsSkeleton} /><p className={styles.muted}>Зареждане на правилата за такси, отсъствия и отказ…</p></div>;
 
   const options = otherOptions(workspace, kinds);
   const chosen = chosenId ? options.find((option) => 'set' in option && option.set.id === chosenId) : undefined;
@@ -94,7 +94,7 @@ export function StepPriceTerms({ organizationId, modes, chosenId, locked, onChoo
     <fieldset className={styles.termsBlock} disabled={locked || busy} aria-busy={busy || undefined}>
       <legend className={styles.termsLegend}>
         <h3 className={styles.termsTitle}>Какви условия важат за тази дейност?</h3>
-        <span className={styles.hint}>Условията казват какво се плаща при прекратяване, пауза и отсъствия. Родителят ги вижда до цената и ги приема при записване.</span>
+        <span className={styles.hint}>Какво се плаща при прекратяване, пауза и отсъствия и какво се връща при отказ. Родителят ги вижда до цената и ги приема при записване.</span>
       </legend>
 
       <div className={`${styles.termsCard} ${own ? '' : styles.termsCardOn}`}>
@@ -112,7 +112,7 @@ export function StepPriceTerms({ organizationId, modes, chosenId, locked, onChoo
               </div>
             );
           })}
-          <Link className={styles.termsLink} href="/dashboard/settings/payment-terms">Промени в настройките на организацията</Link>
+          <Link className={styles.termsLink} href="/dashboard/settings/payment-terms">Промени в „Такси, отсъствия и отказ“</Link>
         </div>
       </div>
 
