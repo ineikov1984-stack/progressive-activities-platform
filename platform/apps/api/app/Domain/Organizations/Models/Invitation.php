@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property OrganizationRole $role
  * @property CarbonImmutable $expires_at
  * @property CarbonImmutable|null $accepted_at
+ * @property string|null $staff_member_id the person of the team it invites (docs/product/team.md, т. 7); none in the old form
  */
 #[Fillable([
     'organization_id',
@@ -26,6 +27,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'accepted_at',
     'invited_by',
     'accepted_by',
+    'staff_member_id',
 ])]
 class Invitation extends Model
 {
@@ -34,6 +36,16 @@ class Invitation extends Model
     protected static function booted(): void
     {
         static::addGlobalScope(new TenantScope);
+    }
+
+    /** "pending", "expired" or "accepted". */
+    public function status(): string
+    {
+        return match (true) {
+            $this->accepted_at !== null => 'accepted',
+            $this->expires_at->isPast() => 'expired',
+            default => 'pending',
+        };
     }
 
     /** @return BelongsTo<Organization, $this> */

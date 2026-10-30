@@ -17,6 +17,20 @@ enum OrganizationRole: string
         return in_array($ability, $this->abilities(), true);
     }
 
+    /** The role in words, as the team and the invitation say it (docs/product/team.md, т. 4). */
+    public function label(): string
+    {
+        return match ($this) {
+            self::PlatformAdmin => 'Оператор на платформата',
+            self::OrganizationOwner => 'Собственик',
+            self::OrganizationAdmin => 'Администратор',
+            self::Coordinator => 'Координатор',
+            self::Instructor => 'Преподавател',
+            self::Finance => 'Счетоводител',
+            self::Viewer => 'Само преглед',
+        };
+    }
+
     /** @return list<string> */
     public function abilities(): array
     {

@@ -17,7 +17,8 @@ class SessionMiddlewareTest extends TestCase
 {
     public function test_signed_in_api_routes_start_the_session_exactly_once(): void
     {
-        foreach ([['GET', '/api/v1/me'], ['POST', '/api/v1/auth/login'], ['POST', '/api/v1/context/organization']] as [$method, $uri]) {
+        $invitation = '/api/v1/invitations/'.str_repeat('a', 64);
+        foreach ([['GET', '/api/v1/me'], ['POST', '/api/v1/auth/login'], ['POST', '/api/v1/context/organization'], ['POST', $invitation.'/register'], ['POST', $invitation.'/accept']] as [$method, $uri]) {
             $route = app('router')->getRoutes()->match(Request::create($uri, $method));
             $middleware = array_map(
                 fn (mixed $item): string => is_string($item) ? explode(':', $item)[0] : $item::class,

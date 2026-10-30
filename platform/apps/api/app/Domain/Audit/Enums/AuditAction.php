@@ -36,6 +36,9 @@ enum AuditAction: string
     case TeamMemberUpdated = 'team.member_updated';
     case TeamMemberArchived = 'team.member_archived';
     case TeamProfileLinked = 'team.profile_linked';
+    case TeamRoleChanged = 'team.role_changed';
+    case TeamInvitationSent = 'team.invitation_sent';
+    case TeamInvitationAccepted = 'team.invitation_accepted';
     case EnrollmentApplicationReviewed = 'enrollment.application_reviewed';
     case EnrollmentTransferred = 'enrollment.transferred';
     case EnrollmentPaused = 'enrollment.paused';

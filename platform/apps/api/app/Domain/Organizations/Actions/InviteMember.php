@@ -11,6 +11,7 @@ use App\Domain\Organizations\Models\Invitation;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
 use App\Domain\Organizations\Models\StaffMember;
+use App\Domain\Organizations\Services\TeamRoles;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
@@ -25,6 +26,7 @@ class InviteMember
     public function __construct(
         private readonly AuditRecorder $auditRecorder,
         private readonly TenantContext $tenantContext,
+        private readonly TeamRoles $roles,
     ) {}
 
     /** @return array{invitation: Invitation, token: string} */
@@ -159,20 +161,6 @@ class InviteMember
 
     private function authorizeRoleAssignment(User $actor, Organization $organization, OrganizationRole $role): void
     {
-        if ($role === OrganizationRole::PlatformAdmin || $role === OrganizationRole::OrganizationOwner) {
-            throw new AuthorizationException('Тази роля не може да се задава чрез покана.');
-        }
-
-        $actorRole = OrganizationMembership::query()
-            ->withoutGlobalScopes()
-            ->where('organization_id', $organization->id)
-            ->where('user_id', $actor->id)
-            ->where('status', 'active')
-            ->value('role');
-
-        if ($actorRole === OrganizationRole::OrganizationAdmin->value
-            && ! in_array($role, [OrganizationRole::Coordinator, OrganizationRole::Instructor, OrganizationRole::Finance, OrganizationRole::Viewer], true)) {
-            throw new AuthorizationException('Нямате право да зададете тази роля.');
-        }
+        $this->roles->assertMayInvite($actor, $organization, $role);
     }
 }

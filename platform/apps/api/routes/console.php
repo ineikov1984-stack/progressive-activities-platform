@@ -35,3 +35,7 @@ Artisan::command('enrollment:deliver-events {--budget=50 : Seconds to keep sendi
 
 // The overlap lock lasts 10 minutes, not a day: a killed run must not stop the emails for long.
 Schedule::command('enrollment:deliver-events')->everyMinute()->withoutOverlapping(10)->onOneServer();
+
+// Team invitations (docs/product/team.md, т. 7.2) are queued, encrypted e-mails: the worker runs only
+// `schedule:work`, so the scheduler empties the queue every minute and stops before the next run.
+Schedule::command('queue:work --stop-when-empty --max-time=50 --tries=5')->everyMinute()->withoutOverlapping(10)->onOneServer();
