@@ -50,9 +50,10 @@ class VisitFromPriceSchemaTest extends TestCase
             $pdo->exec('RESET ROLE');
 
             // An application written before this step, without a copy, can still be withdrawn or decided.
-            $pdo->exec('ALTER TABLE enrollment_applications DISABLE TRIGGER enrollment_applications_visit_terms_copy');
+            // (Written past the triggers, as the database owner restoring old data would.)
+            $pdo->exec('SET LOCAL session_replication_role = replica');
             $older = $this->insertApplication($pdo, $ids, 'trial', null);
-            $pdo->exec('ALTER TABLE enrollment_applications ENABLE TRIGGER enrollment_applications_visit_terms_copy');
+            $pdo->exec('SET LOCAL session_replication_role = origin');
             $pdo->exec('SET LOCAL ROLE progressive_app');
             $this->tenant($pdo, $ids['organization']);
             $this->assertSame(1, $pdo->exec("UPDATE enrollment_applications SET status = 'withdrawn', version = 2 WHERE id = '{$older}'"));

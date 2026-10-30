@@ -62,9 +62,9 @@ class VisitFromPriceTest extends TestCase
         $this->assertFalse($application->payment_terms_snapshot['early_start']);
         $this->assertSame('2026-11-02T14:00:00+00:00', EnrollmentTransition::query()->withoutGlobalScopes()
             ->where('application_id', $application->id)->whereNotNull('metadata->session_starts_at')->firstOrFail()->metadata['session_starts_at']);
-        $this->assertDatabaseHas('enrollments', [
-            'application_id' => $application->id, 'session_id' => $f['sessions'][0]->id, 'scope' => 'trial',
-            'status' => 'active', 'starts_on' => '2026-11-02',
+        $enrollment = Enrollment::query()->withoutGlobalScopes()->where('application_id', $application->id)->firstOrFail();
+        $this->assertSame([$f['sessions'][0]->id, 'trial', 'active', '2026-11-02'], [
+            $enrollment->session_id, $enrollment->scope->value, $enrollment->status->value, $enrollment->starts_on->toDateString(),
         ]);
     }
 
@@ -358,7 +358,10 @@ class VisitFromPriceTest extends TestCase
     {
         $f = $this->fixture();
         // Only a draft is edited.
-        $this->inTenant($f['organization'], fn () => $f['activity']->update(['status' => 'draft']));
+        $this->inTenant($f['organization'], function () use ($f): void {
+            $f['activity']->update(['status' => 'draft']);
+            $f['group']->update(['status' => 'draft']);
+        });
         $this->actingAs($f['staff'])->withSession(['active_organization_id' => $f['organization']->id]);
         $activityVersion = fn (): int => (int) $this->inTenant($f['organization'], fn () => $f['activity']->refresh()->version);
         $prices = fn (string $mode): array => ['offering' => ['price_options' => [
@@ -437,7 +440,8 @@ class VisitFromPriceTest extends TestCase
     {
         $session ??= $this->addSession($group, $day.'T14:00:00Z');
         $price = $group->offering->priceOptions()->create([
-            'group_id' => $group->id, 'enrollment_mode' => 'trial', 'unit' => 'session', 'amount_cents' => 0, 'currency' => 'EUR', 'is_available' => true,
+            // Not available, so it never hides the activity's trial price from the group.
+            'group_id' => $group->id, 'enrollment_mode' => 'trial', 'unit' => 'session', 'amount_cents' => 0, 'currency' => 'EUR', 'is_available' => false,
         ]);
         $visitOffer = $offer ? $group->offering->activity->visitOffers()->create([
             'group_id' => $group->id, 'type' => 'trial', 'status' => 'published', 'title' => 'Пробно', 'visit_limit' => 5, 'terms_version' => 'v1',
