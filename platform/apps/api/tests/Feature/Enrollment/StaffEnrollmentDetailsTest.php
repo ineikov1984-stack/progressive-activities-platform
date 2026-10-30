@@ -210,7 +210,7 @@ class StaffEnrollmentDetailsTest extends TestCase
     public function test_a_visit_closes_the_window_with_its_session(): void
     {
         $f = $this->fixture();
-        [$recent, $old, $stale] = $this->withTenant($f['organization'], function () use ($f): array {
+        [$recent, $old, $stale, $cancelledRecent, $cancelledOld] = $this->withTenant($f['organization'], function () use ($f): array {
             // A trial visit keeps its status after the outcome ("attended" = ended) and has no end date.
             $visit = function (string $day, string $status) use ($f): Enrollment {
                 $session = $f['groupTwo']->sessions()->create(['starts_at' => "{$day}T14:00:00Z", 'ends_at' => "{$day}T15:00:00Z", 'status' => 'scheduled']);
@@ -227,20 +227,25 @@ class StaffEnrollmentDetailsTest extends TestCase
                 ]);
             };
 
-            return [$visit('2026-08-15', 'ended'), $visit('2026-07-01', 'ended'), $visit('2026-06-01', 'active')];
+            // A visit cancelled in time: its window too ends 90 days after its session (today is 28.10).
+            return [$visit('2026-08-15', 'ended'), $visit('2026-07-01', 'ended'), $visit('2026-06-01', 'active'), $visit('2026-07-30', 'cancelled'), $visit('2026-07-29', 'cancelled')];
         });
         $this->actAs($this->member($f['organization'], 'organization_owner'), $f['organization']);
 
-        $this->getJson("/api/v1/enrollment/enrollments/{$recent->id}")->assertOk()->assertJsonPath('contact_status', 'shown');
-        foreach ([$old, $stale] as $closed) {
+        foreach ([$recent, $cancelledRecent] as $open) {
+            $this->getJson("/api/v1/enrollment/enrollments/{$open->id}")->assertOk()->assertJsonPath('contact_status', 'shown');
+        }
+        foreach ([$old, $stale, $cancelledOld] as $closed) {
             $this->getJson("/api/v1/enrollment/enrollments/{$closed->id}")->assertOk()
                 ->assertJsonPath('contact_status', 'outside_window')->assertJsonPath('contact', null)->assertJsonPath('parent_note', null);
         }
         // "При нас" follows the same rule: the recent visit is there, the old ones are not.
         $ids = array_column($this->getJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}")->json('records'), 'id');
         $this->assertContains($recent->id, $ids);
+        $this->assertContains($cancelledRecent->id, $ids);
         $this->assertNotContains($old->id, $ids);
         $this->assertNotContains($stale->id, $ids);
+        $this->assertNotContains($cancelledOld->id, $ids);
     }
 
     public function test_a_reason_the_parent_wrote_follows_the_contact_rules(): void

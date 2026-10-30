@@ -282,7 +282,8 @@ export function recordStatusText(record: ChildRecord, today: string): string {
   }
   if (record.scope !== 'full_period') {
     const label = scopeLabels[record.scope] ?? 'Посещение';
-    return record.session_starts_at ? `${label} · ${dateTimeText(record.session_starts_at)}` : label;
+    const visit = record.session_starts_at ? `${label} · ${dateTimeText(record.session_starts_at)}` : label;
+    return record.status === 'cancelled' ? `${visit} · отменено` : visit;
   }
   if (record.status === 'cancelled') return 'Отменено';
   if (record.moves_to) return `Премества се в „${record.moves_to.group_name ?? 'друга група'}“ от ${shortDay(record.moves_to.starts_on)}`;

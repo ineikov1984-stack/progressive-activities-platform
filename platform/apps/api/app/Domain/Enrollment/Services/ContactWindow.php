@@ -65,6 +65,8 @@ final class ContactWindow
     {
         $at = EnrollmentTransition::query()->where('enrollment_id', $enrollment->id)
             ->where('to_status', EnrollmentStatus::Cancelled->value)
+            // Only the step into "cancelled": a later step on a cancelled enrollment never restarts the 90 days.
+            ->where('from_status', '!=', EnrollmentStatus::Cancelled->value)
             ->latest('created_at')->first(['created_at'])?->created_at;
 
         return $at === null ? null : CarbonImmutable::instance($at)->setTimezone('Europe/Sofia')->toDateString();
