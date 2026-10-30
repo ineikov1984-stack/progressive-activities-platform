@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { amountText, blankPrice, checkOffering, type OfferingDraft } from '../src/features/catalog/admin/wizard/offering';
 
 const draft = (changes: Partial<OfferingDraft> = {}): OfferingDraft => ({
-  location_id: null, lead_instructor_profile_id: null, contact_email: '', enrollment_instructions: '', cancellation_policy: '', terms: '',
+  location_id: null, lead_instructor_profile_id: null, contact_email: '', enrollment_instructions: '', cancellation_policy: '', terms: '', payment_terms_id: null,
   prices: [{ ...blankPrice(), amount: '30,00' }], ...changes,
 });
 
@@ -24,6 +24,11 @@ describe('checkOffering', () => {
   it('rejects the same way of enrolling twice', () => {
     const { problems } = checkOffering(draft({ prices: [{ ...blankPrice(), amount: '30' }, { ...blankPrice(), amount: '40' }] }));
     expect(problems.price_1).toMatch(/вече има цена/);
+  });
+
+  it('sends the chosen payment terms, or null for the organization\'s', () => {
+    expect(checkOffering(draft()).payload.payment_terms_id).toBeNull();
+    expect(checkOffering(draft({ payment_terms_id: 'set-1' })).payload.payment_terms_id).toBe('set-1');
   });
 
   it('formats cents for the input field', () => {

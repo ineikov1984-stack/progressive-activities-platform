@@ -201,6 +201,14 @@ test('an owner creates, fills in and publishes an activity with the wizard', asy
   await slow(page.getByRole('status').first()).toContainText('Запазено');
   await page.reload();
   await slow(page.getByLabel('Цена', { exact: true }).first()).toHaveValue('25,00');
+  // The activity uses the organization's payment terms unless other terms are chosen for it.
+  const terms = () => page.getByRole('group', { name: /Какви условия важат за тази дейност/ });
+  await slow(terms().getByRole('radio', { name: /^Условията на организацията/ })).toBeChecked();
+  await terms().getByLabel('Условия за тази дейност').selectOption({ label: 'Гъвкави' });
+  await slow(terms().getByRole('radio', { name: 'Други условия само за тази дейност' })).toBeChecked();
+  await slow(page.getByRole('status').first()).toContainText('Запазено');
+  await page.reload();
+  await slow(terms().getByRole('radio', { name: 'Други условия само за тази дейност' })).toBeChecked();
 
   // Step 7: a weekly group creates its sessions.
   await page.getByRole('navigation', { name: 'Стъпки' }).getByRole('button', { name: /Групи и график/ }).click();
