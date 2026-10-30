@@ -2,11 +2,15 @@
 
 import { formatEur, parseEuroCents } from '../presentation';
 import { blankPrice, defaultUnit, enrollmentModes, modeHints, type OfferingDraft, type PriceDraft, priceUnits } from './offering';
+import { StepPriceTerms } from './step-price-terms';
 import { Field, Icon, icons } from './ui';
 import styles from './wizard.module.css';
 
 type Props = {
+  organizationId: string;
   offering: OfferingDraft;
+  /** Enrollment modes of the groups' own prices (step 7). */
+  groupModes: string[];
   problems: Record<string, string>;
   locked: boolean;
   onOffering: (changes: Partial<OfferingDraft>) => void;
@@ -16,7 +20,7 @@ function preview(amount: string): string | undefined {
   try { return formatEur(parseEuroCents(amount)); } catch { return undefined; }
 }
 
-export function StepPrice({ offering, problems, locked, onOffering }: Props) {
+export function StepPrice({ organizationId, offering, groupModes, problems, locked, onOffering }: Props) {
   const prices = offering.prices;
   const setPrice = (index: number, changes: Partial<PriceDraft>) => onOffering({ prices: prices.map((price, at) => at === index ? { ...price, ...changes } : price) });
   const unused = enrollmentModes.find((mode) => !prices.some((price) => price.enrollment_mode === mode.value));
@@ -73,10 +77,18 @@ export function StepPrice({ offering, problems, locked, onOffering }: Props) {
         </button>
       ) : null}
 
+      <StepPriceTerms
+        organizationId={organizationId}
+        modes={[...prices.map((price) => price.enrollment_mode), ...groupModes]}
+        chosenId={offering.payment_terms_id}
+        locked={locked}
+        onChoose={(id) => onOffering({ payment_terms_id: id })}
+      />
+
       <Field id="w-enroll" label="Как се записва детето (по избор)" hint="Какво трябва да направи родителят след заявката.">
         <textarea id="w-enroll" className={`${styles.input} ${styles.textareaSmall}`} value={offering.enrollment_instructions} placeholder="Например: след заявката ще ви се обадим до 2 работни дни." onChange={(event) => onOffering({ enrollment_instructions: event.target.value })} />
       </Field>
-      <Field id="w-cancel" label="Правила за отказ" hint="Кога и как родителят може да прекрати участието.">
+      <Field id="w-cancel" label="Още за отказа (по избор)" hint="Само което условията за плащане не казват — например как да ни съобщите.">
         <textarea id="w-cancel" className={`${styles.input} ${styles.textareaSmall}`} value={offering.cancellation_policy} placeholder="Например: уведомете ни до 25-о число на текущия месец." onChange={(event) => onOffering({ cancellation_policy: event.target.value })} />
       </Field>
       <Field id="w-terms-general" label="Общи условия (по избор)">

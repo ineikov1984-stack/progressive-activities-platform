@@ -411,7 +411,14 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
             ) : null}
 
             {step.id === 'price' && content.offering ? (
-              <StepPrice offering={content.offering} problems={offeringProblems} locked={locked} onOffering={changeOffering} />
+              <StepPrice
+                organizationId={organization.id}
+                offering={content.offering}
+                groupModes={groups.flatMap((group) => group.price_options.map((price) => price.enrollment_mode))}
+                problems={offeringProblems}
+                locked={locked}
+                onOffering={changeOffering}
+              />
             ) : null}
 
             {step.id === 'groups' ? (
