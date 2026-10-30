@@ -58,9 +58,6 @@ export function StepPrice({ organizationId, offering, groupModes, problems, lock
               </div>
             </div>
             {problem ? <p className={styles.fieldError} id={`price-problem-${index}`}>{problem}</p> : shown ? <p className={styles.pricePreview}>Родителите виждат: <strong>{shown} {priceUnits.find((unit) => unit.value === price.unit)?.label}</strong></p> : null}
-            <Field id={`price-terms-${index}`} label="Условия за тази цена (по избор)">
-              <textarea id={`price-terms-${index}`} className={`${styles.input} ${styles.textareaSmall}`} value={price.terms ?? ''} placeholder="Например: плаща се до 5-о число на месеца." onChange={(event) => setPrice(index, { terms: event.target.value })} />
-            </Field>
             <div className={styles.priceActions}>
               <label className={styles.toggle}>
                 <input type="checkbox" checked={price.is_available !== false} onChange={(event) => setPrice(index, { is_available: event.target.checked })} />
@@ -88,14 +85,8 @@ export function StepPrice({ organizationId, offering, groupModes, problems, lock
       <Field id="w-enroll" label="Как се записва детето (по избор)" hint="Какво трябва да направи родителят след заявката.">
         <textarea id="w-enroll" className={`${styles.input} ${styles.textareaSmall}`} value={offering.enrollment_instructions} placeholder="Например: след заявката ще ви се обадим до 2 работни дни." onChange={(event) => onOffering({ enrollment_instructions: event.target.value })} />
       </Field>
-      <Field id="w-cancel" label="Още за отказа (по избор)" hint="Само което условията за плащане не казват — например как да ни съобщите.">
-        <textarea id="w-cancel" className={`${styles.input} ${styles.textareaSmall}`} value={offering.cancellation_policy} placeholder="Например: уведомете ни до 25-о число на текущия месец." onChange={(event) => onOffering({ cancellation_policy: event.target.value })} />
-      </Field>
-      <Field id="w-terms-general" label="Общи условия (по избор)">
-        <textarea id="w-terms-general" className={`${styles.input} ${styles.textareaSmall}`} value={offering.terms} onChange={(event) => onOffering({ terms: event.target.value })} />
-      </Field>
-      <Field id="w-email" label="Имейл за въпроси (по избор)">
-        <input id="w-email" type="email" className={styles.input} value={offering.contact_email} aria-invalid={problems.contact_email ? true : undefined} aria-describedby={problems.contact_email ? 'w-email-problem' : undefined} onChange={(event) => onOffering({ contact_email: event.target.value })} />
+      <Field id="w-email" label="Имейл за въпроси" hint="Родителите пишат на него. Попълнен е с имейла на организацията — сменете го, ако за тази дейност отговаря друг.">
+        <input id="w-email" type="email" required className={styles.input} value={offering.contact_email} aria-invalid={problems.contact_email ? true : undefined} aria-describedby={problems.contact_email ? 'w-email-problem w-email-hint' : 'w-email-hint'} onChange={(event) => onOffering({ contact_email: event.target.value })} />
       </Field>
       {problems.contact_email ? <p className={styles.fieldError} id="w-email-problem">{problems.contact_email}</p> : null}
     </fieldset>

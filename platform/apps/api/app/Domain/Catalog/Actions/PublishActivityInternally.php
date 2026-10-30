@@ -48,6 +48,10 @@ final readonly class PublishActivityInternally
             if ($offerings->isEmpty()) {
                 throw ValidationException::withMessages(['offering' => 'Добавете предлагане преди публикуване.']);
             }
+            // Parents need an address for questions: the activity's own or the organization's.
+            if (blank($organization->public_contact_email) && $offerings->contains(fn ($offering) => blank($offering->contact_email))) {
+                throw ValidationException::withMessages(['contact_email' => 'Добавете имейл за въпроси в стъпка 6 „Цени и записване“.']);
+            }
 
             $groups = $offerings->flatMap->groups;
             if ($groups->isEmpty()) {

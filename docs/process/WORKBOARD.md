@@ -17,6 +17,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
+| Редактор, стъпка 6: без свободните полета за условия, задължителен имейл от организацията | Claude | claude/activity-terms-fields | `apps/web/src/features/catalog/admin/wizard`, `ActivityController`, `PublishActivityInternally` | в работа |
 
 ## Опашка (по приоритет)
 

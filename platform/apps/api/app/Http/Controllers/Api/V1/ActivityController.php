@@ -23,10 +23,12 @@ final class ActivityController extends Controller
 {
     public function index(Request $request, TenantContext $context): JsonResponse
     {
-        Gate::forUser($request->user())->authorize('catalog.view', $this->organization($context));
+        $organization = $this->organization($context);
+        Gate::forUser($request->user())->authorize('catalog.view', $organization);
 
         return response()->json([
-            'activities' => Activity::query()->with('offerings.priceOptions')->latest()->get()->map($this->present(...))->all(),
+            'activities' => Activity::query()->with('offerings.priceOptions')->latest()->get()
+                ->map(fn (Activity $activity): array => $this->present($activity, $organization))->all(),
         ]);
     }
 
@@ -38,15 +40,16 @@ final class ActivityController extends Controller
         $this->validateImages($validated, $media);
         $activity = $action->handle($request->user(), $organization, $validated);
 
-        return response()->json(['activity' => $this->present($activity)], Response::HTTP_CREATED);
+        return response()->json(['activity' => $this->present($activity, $organization)], Response::HTTP_CREATED);
     }
 
     public function show(Request $request, TenantContext $context, string $activity): JsonResponse
     {
-        Gate::forUser($request->user())->authorize('catalog.view', $this->organization($context));
+        $organization = $this->organization($context);
+        Gate::forUser($request->user())->authorize('catalog.view', $organization);
         $record = Activity::query()->with('offerings.priceOptions')->findOrFail($activity);
 
-        return response()->json(['activity' => $this->present($record)]);
+        return response()->json(['activity' => $this->present($record, $organization)]);
     }
 
     public function update(
@@ -63,7 +66,7 @@ final class ActivityController extends Controller
         $this->validateImages($validated, $media, $record->id);
         $updated = $action->handle($request->user(), $record, $validated['version'], $validated);
 
-        return response()->json(['activity' => $this->present($updated)]);
+        return response()->json(['activity' => $this->present($updated, $organization)]);
     }
 
     /** @return array<string, mixed> */
@@ -139,7 +142,7 @@ final class ActivityController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function present(Activity $activity): array
+    private function present(Activity $activity, Organization $organization): array
     {
         /** @var Offering|null $offering */
         $offering = $activity->offerings->sortBy('created_at')->first();
@@ -173,6 +176,8 @@ final class ActivityController extends Controller
                 'terms' => $offering->terms,
                 'cancellation_policy' => $offering->cancellation_policy,
                 'contact_email' => $offering->contact_email,
+                // Shown when the activity has no address of its own; parents' questions and emails go there.
+                'organization_contact_email' => $organization->public_contact_email,
                 'enrollment_instructions' => $offering->enrollment_instructions,
                 'payment_terms_id' => $offering->payment_terms_id,
                 'price_options' => $offering->priceOptions->whereNull('group_id')->values()->map(fn ($price) => [

@@ -173,6 +173,25 @@ class ActivityPublicationTest extends TestCase
         $this->assertSame(1, DB::table('audit_events')->where('action', 'catalog.activity_published')->count());
     }
 
+    public function test_parents_always_have_an_email_for_questions(): void
+    {
+        [, $organization, $activity] = $this->setupCatalog();
+        $this->postJson($this->groupsUrl($activity), [
+            ...$this->groupPayload(),
+            'price_options' => [['enrollment_mode' => 'monthly', 'unit' => 'month', 'amount_cents' => 5000]],
+        ])->assertCreated();
+        // The editor offers the organization's address when the activity has none of its own.
+        $this->getJson('/api/v1/catalog/activities/'.$activity->id)->assertOk()
+            ->assertJsonPath('activity.offering.contact_email', null)
+            ->assertJsonPath('activity.offering.organization_contact_email', 'school@example.test');
+
+        $organization->forceFill(['public_contact_email' => null])->save();
+        $this->postJson($this->publishUrl($activity), ['version' => 1])->assertUnprocessable()
+            ->assertJsonPath('errors.contact_email.0', 'Добавете имейл за въпроси в стъпка 6 „Цени и записване“.');
+        $this->patchJson('/api/v1/catalog/activities/'.$activity->id, ['version' => 1, 'offering' => ['contact_email' => 'chess@example.test']])->assertOk();
+        $this->postJson($this->publishUrl($activity), ['version' => 2])->assertOk()->assertJsonPath('activity.status', 'published');
+    }
+
     public function test_publication_requires_publish_permission_active_tenant_and_current_version(): void
     {
         [$user, $organization, $activity] = $this->setupCatalog();
@@ -283,6 +302,7 @@ class ActivityPublicationTest extends TestCase
     {
         $organization = Organization::query()->withoutGlobalScopes()->create([
             'name' => 'School', 'slug' => 'school-'.Str::random(12), 'status' => 'active',
+            'public_contact_email' => 'school@example.test',
         ]);
         OrganizationMembership::query()->withoutGlobalScopes()->create([
             'organization_id' => $organization->id, 'user_id' => $user->id,
