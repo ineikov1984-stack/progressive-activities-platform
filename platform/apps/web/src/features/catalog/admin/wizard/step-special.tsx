@@ -65,7 +65,7 @@ export function StepSpecial({ organizationId, activityId, groups, hasVisits }: P
         <section className={styles.specialCard} aria-labelledby="special-dates">
           <h3 id="special-dates">Посещения само на определени дати</h3>
           <p>Когато не искате посещения във всяко занятие — например само в първата седмица на месеца или само в една група.</p>
-          <p className={styles.muted}>Изберете датите, местата и цената.</p>
+          <p className={styles.muted}>Изберете датите и местата — цената и условията са от стъпка 6.</p>
           <Link className={styles.secondary} href={`/dashboard/activities/${activityId}/visit-offers`}>Избери дати за посещения</Link>
         </section>
       </div>
