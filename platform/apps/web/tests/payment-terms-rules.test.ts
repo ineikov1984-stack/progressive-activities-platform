@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BillingKindInfo, Rules, SelfService } from '../src/features/payment-terms/api';
 import {
-  canonical, describeTerms, errorsFor, exampleFor, ladderRanges, matchPreset, money, paidShare, returnedShare, valueAt, withValue,
+  canonical, describeTerms, errorsFor, exampleFor, ladderRanges, matchPreset, money, ordinalSuffix, paidShare, returnedShare, valueAt, withValue,
 } from '../src/features/payment-terms/rules';
 
 // The server's ready-made "Стандартни" sets (app/Domain/PaymentTerms/Rules/Presets.php).
@@ -69,13 +69,20 @@ describe('payment terms rules', () => {
     expect(ladderRanges([24, 12, 0], 'h')).toEqual(['поне 24 часа', 'между 12 и 24 часа', 'по-малко от 12 часа']);
     expect(money(7.5)).toBe('7,50 €');
     expect(money(30)).toBe('30 €');
+    expect([1, 2, 3, 7, 8, 11, 12, 15, 21, 22, 27, 28].map((day) => `${day}-${ordinalSuffix(day)}`)).toEqual(
+      ['1-во', '2-ро', '3-то', '7-мо', '8-мо', '11-то', '12-то', '15-то', '21-во', '22-ро', '27-мо', '28-мо'],
+    );
   });
 
   it('describes the standard monthly terms the way the owner put them', () => {
     const lines = Object.fromEntries(describeTerms('monthly', monthly).map((line) => [line.title, line.text]));
     expect(lines['Начало']).toBeUndefined();
     expect(lines['Прекратяване']).toBe('Ако последният ден е до 15-то число, плащате половината от таксата за месеца; след това — цялата такса за месеца.');
-    expect(lines['Пауза']).toBe('Кажете ни поне 7 дни по-рано и заниманията в паузата не се плащат. По-късно — плащате половината от стойността им. Това важи за до 61 дни пауза в учебната година.');
+    expect(lines['Пауза']).toBe('Кажете ни поне 7 дни по-рано и заниманията в паузата не се плащат. По-късно — плащате половината от стойността им. Това важи за до 61 дни пауза в учебната година; над тях — като при късно заявена пауза.');
+    // Without days at the on-time terms every pause counts as a late one.
+    expect(describeTerms('monthly', withValue(monthly, 'pause.free_days_per_school_year', 0)).find((line) => line.title === 'Пауза')?.text)
+      .toBe('За заниманията в паузата плащате половината от стойността им.');
+    expect(describeTerms('monthly', withValue(monthly, 'end.cutoff_day', 1)).find((line) => line.title === 'Прекратяване')?.text).toContain('до 1-во число');
     expect(lines['Отсъствия']).toBe('До 3 отсъствия в месеца — цялата такса, при повече — половината от таксата. Пропуснато занимание наваксвате до 14 дни, ако ни кажете поне 3 часа по-рано.');
     expect(lines['Връщане']).toBe('Върнатата сума получавате обратно или като кредит — по ваш избор.');
   });
@@ -85,17 +92,17 @@ describe('payment terms rules', () => {
     const campLines = Object.fromEntries(describeTerms('residential_camp', camp).map((line) => [line.title, line.text]));
     expect(campLines['Капаро']).toBe('25 % от цената при записване — приспада се от нея.');
     expect(campLines['Отказ преди тръгване']).toBe('Поне 30 дни преди тръгване — връщаме всичко. 15–29 дни преди тръгване — връщаме 75 %. 8–14 дни преди тръгване — връщаме половината. По-малко от 8 дни преди тръгване — не връщаме нищо.');
-    expect(campLines['Болест']).toBe('При болест преди тръгване с документ от лекар връщаме всичко без реално направените разходи.');
+    expect(campLines['Болест']).toBe('При болест преди тръгване с документ от лекар връщаме всичко, като приспадаме реално направените разходи.');
     expect(describeTerms('day_camp', dayCamp)[0].text).toContain('По-малко от 7 дни преди седмицата — не връщаме нищо, но предлагаме кредит за друга седмица.');
   });
 
   it('works the spec examples out', () => {
     expect(exampleFor('monthly', monthly)?.lines).toEqual([
-      'Последен ден 10 ноември → за ноември 30 €.',
-      'Последен ден 20 ноември → 60 €.',
-      '4 отсъствия в ноември → 30 €.',
+      'Последен ден 10 ноември → за ноември плащате 30 €.',
+      'Последен ден 20 ноември → плащате 60 €.',
+      '4 отсъствия в ноември → плащате 30 €.',
     ]);
-    expect(exampleFor('visit', visit)?.lines).toEqual(['Отказ 30 часа преди → 0 €.', 'Отказ 18 часа преди → 7,50 €.', 'Отказ 6 часа преди → 15 €.']);
+    expect(exampleFor('visit', visit)?.lines).toEqual(['Отказ 30 часа преди → плащате 0 €.', 'Отказ 18 часа преди → плащате 7,50 €.', 'Отказ 6 часа преди → плащате 15 €.']);
     expect(exampleFor('residential_camp', camp)?.lines).toEqual([
       'Отказ 36 дни преди тръгване → връщат се 600 €.',
       'Отказ 22 дни преди тръгване → връщат се 450 €.',

@@ -108,6 +108,7 @@ export function selfServiceOptions(kind: BillingKind): Array<keyof SelfService> 
     case 'package': return ['absence', 'cancel_visit'];
     case 'day_camp':
     case 'residential_camp': return ['absence'];
+    case 'kindergarten': return ['absence', 'end'];
     default: return ['absence', 'pause_weeks', 'end'];
   }
 }
@@ -147,6 +148,16 @@ export function returnedShare(kept: number): string {
   return `връщаме ${back} %`;
 }
 
+/** "15-то", "1-во", "2-ро", "7-мо" число: the neuter ordinal ending of a day of the month. */
+export function ordinalSuffix(day: number): string {
+  if (day % 100 >= 11 && day % 100 <= 19) return 'то';
+  const last = day % 10;
+  if (last === 1) return 'во';
+  if (last === 2) return 'ро';
+  if (last === 7 || last === 8) return 'мо';
+  return 'то';
+}
+
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
@@ -179,11 +190,11 @@ function monthPart(rules: Rules, part: 'start' | 'end'): string {
   if (part === 'end') {
     const notice = numberAt(rules, 'end.notice_days') ?? 0;
     const warn = notice > 0 ? ` Кажете ни поне ${plural(notice, 'ден', 'дни')} по-рано.` : '';
-    if (mode === 'cutoff') return `Ако последният ден е до ${day}-то число, плащате ${fee(until)}; след това — ${fee(after)}.${warn}`;
+    if (mode === 'cutoff') return `Ако последният ден е до ${day}-${ordinalSuffix(day)} число, плащате ${fee(until)}; след това — ${fee(after)}.${warn}`;
     if (mode === 'full_month') return `Месецът, в който спирате, се плаща изцяло.${warn}`;
     return `Плащате само заниманията до последния ден.${warn}`;
   }
-  if (mode === 'cutoff') return `Ако започнете до ${day}-то число, плащате ${fee(until)} за първия месец; след това — ${fee(after)}.`;
+  if (mode === 'cutoff') return `Ако започнете до ${day}-${ordinalSuffix(day)} число, плащате ${fee(until)} за първия месец; след това — ${fee(after)}.`;
   if (mode === 'full_month') return 'Първият месец се плаща изцяло, независимо от деня на започване.';
   return 'За първия месец плащате само заниманията от първия ден.';
 }
@@ -195,13 +206,18 @@ function pauseText(rules: Rules): string {
   const freeDays = numberAt(rules, 'pause.free_days_per_school_year') ?? 0;
   const minDays = numberAt(rules, 'pause.min_days') ?? 0;
   const share = (kept: number) => (kept <= 0 ? 'заниманията в паузата не се плащат' : `за заниманията в паузата плащате ${paidShare(kept, 'им стойност', 'от стойността им')}`);
-  const parts = [
-    notice > 0
-      ? `Кажете ни поне ${plural(notice, 'ден', 'дни')} по-рано и ${share(onTime)}. По-късно — ${late <= 0 ? 'също не се плащат' : `плащате ${paidShare(late, 'им стойност', 'от стойността им')}`}.`
-      : sentence(share(onTime)),
-    freeDays > 0 ? `Това важи за до ${plural(freeDays, 'ден', 'дни')} пауза в учебната година.` : 'Пауза с намаление на таксата няма.',
+  const lateShare = late <= 0 ? 'също не се плащат' : `плащате ${paidShare(late, 'им стойност', 'от стойността им')}`;
+  const extra = [
     minDays > 0 ? `Най-кратката пауза е ${plural(minDays, 'ден', 'дни')}.` : '',
     booleanAt(rules, 'pause.document_required') ? 'Пауза — само с документ от лекар.' : '',
+  ];
+  // Without days at the on-time terms every pause counts as a late one.
+  const parts = freeDays <= 0 ? [sentence(share(late)), ...extra] : [
+    notice > 0
+      ? `Кажете ни поне ${plural(notice, 'ден', 'дни')} по-рано и ${share(onTime)}. По-късно — ${lateShare}.`
+      : sentence(share(onTime)),
+    `Това важи за до ${plural(freeDays, 'ден', 'дни')} пауза в учебната година; над тях — като при късно заявена пауза.`,
+    ...extra,
   ];
   return parts.filter(Boolean).join(' ');
 }
@@ -240,12 +256,12 @@ function refundText(rules: Rules): string {
   }
 }
 
-function cancellationText(steps: Tier[], unit: 'h' | 'd', whole: string, of: string, before: string, offerCredit: boolean, returning: boolean): string {
+function cancellationText(steps: Tier[], unit: 'h' | 'd', whole: string, of: string, before: string, creditFor: string | null, returning: boolean): string {
   const ranges = ladderRanges(steps.map((step) => step.min), unit);
   return steps.map((step, index) => {
     const range = capitalize(`${ranges[index]}${steps.length > 1 ? ` ${before}` : ''}`);
     const result = returning ? returnedShare(step.kept) : (step.kept <= 0 ? 'не плащате' : `плащате ${paidShare(step.kept, whole, of)}`);
-    const credit = offerCredit && step.credit ? ', но предлагаме кредит за друга седмица' : '';
+    const credit = creditFor && step.credit ? `, но предлагаме кредит за ${creditFor}` : '';
     return `${range} — ${result}${credit}.`;
   }).join(' ');
 }
@@ -274,7 +290,7 @@ export function describeTerms(kind: BillingKind, rules: Rules): TermsLine[] {
         `${then} ${rest}.`,
       ].filter(Boolean).join(' ');
       return [
-        { title: 'Отказ преди началото', text: cancellationText(tiers(rules, 'before_start.tiers', 'min_days'), 'd', 'сума', 'от сумата', 'преди началото', false, true) },
+        { title: 'Отказ преди началото', text: cancellationText(tiers(rules, 'before_start.tiers', 'min_days'), 'd', 'сума', 'от сумата', 'преди началото', null, true) },
         { title: 'Отказ след началото', text: after },
         { title: 'Пауза', text: pauseText(rules) },
         { title: 'Отсъствия', text: makeupText(rules) },
@@ -284,7 +300,7 @@ export function describeTerms(kind: BillingKind, rules: Rules): TermsLine[] {
     case 'visit': {
       const noShow = numberAt(rules, 'no_show_kept') ?? 100;
       return [
-        { title: 'Отказ', text: cancellationText(tiers(rules, 'cancellation.tiers', 'min_hours'), 'h', 'сума', 'от сумата', 'преди началото', false, false) },
+        { title: 'Отказ', text: cancellationText(tiers(rules, 'cancellation.tiers', 'min_hours'), 'h', 'сума', 'от сумата', 'преди началото', null, false) },
         { title: 'Неявяване', text: `Ако не дойдете, без да откажете, ${noShow <= 0 ? 'не плащате' : `плащате ${paidShare(noShow, 'сума', 'от сумата')}`}.` },
         { title: 'Връщане', text: refundText(rules) },
       ];
@@ -306,7 +322,7 @@ export function describeTerms(kind: BillingKind, rules: Rules): TermsLine[] {
         ? 'Дните отсъствие не се връщат.'
         : `${firstDays > 0 ? `Първите ${plural(firstDays, 'ден', 'дни')} отсъствие не се връщат; за всеки следващ` : 'За всеки ден отсъствие'} ${returnedShare(keptAfter)} от дневната цена.`;
       return [
-        { title: 'Отказ преди седмицата', text: cancellationText(tiers(rules, 'before_start.tiers', 'min_days'), 'd', 'сума', 'от сумата', 'преди седмицата', true, true) },
+        { title: 'Отказ преди седмицата', text: cancellationText(tiers(rules, 'before_start.tiers', 'min_days'), 'd', 'сума', 'от сумата', 'преди седмицата', 'друга седмица', true) },
         { title: 'Отсъствия', text: absence },
         ...(change > 0 ? [{ title: 'Смяна на седмицата', text: `Без такса до ${plural(change, 'ден', 'дни')} преди началото ѝ.` }] : []),
         { title: 'Връщане', text: refundText(rules) },
@@ -324,8 +340,8 @@ export function describeTerms(kind: BillingKind, rules: Rules): TermsLine[] {
       if (mode === 'amount') lines.push({ title: 'Капаро', text: `${money(cents / 100)} при записване — приспада се от цената.` });
       if (mode === 'percent') lines.push({ title: 'Капаро', text: `${percent} % от цената при записване — приспада се от нея.` });
       lines.push(
-        { title: 'Отказ преди тръгване', text: cancellationText(tiers(rules, 'before_start.tiers', 'min_days'), 'd', 'сума', 'от сумата', 'преди тръгване', true, true) },
-        { title: 'Болест', text: `При болест преди тръгване с документ от лекар ${returnedShare(illness)}${costs ? ' без реално направените разходи' : ''}.` },
+        { title: 'Отказ преди тръгване', text: cancellationText(tiers(rules, 'before_start.tiers', 'min_days'), 'd', 'сума', 'от сумата', 'преди тръгване', 'друга смяна', true) },
+        { title: 'Болест', text: `При болест преди тръгване с документ от лекар ${returnedShare(illness)}${costs ? ', като приспадаме реално направените разходи' : ''}.` },
       );
       if (transfer > 0) lines.push({ title: 'Друго дете', text: `Друго дете може да заеме мястото до ${plural(transfer, 'ден', 'дни')} преди тръгване — без такса.` });
       lines.push(
@@ -389,9 +405,9 @@ export function exampleFor(kind: BillingKind, rules: Rules): { intro: string; li
       return {
         intro: 'Такса 60 € на месец, 4 занимания в ноември.',
         lines: [
-          `Последен ден 10 ноември → за ноември ${money(end(10))}.`,
-          `Последен ден 20 ноември → ${money(end(20))}.`,
-          `4 отсъствия в ноември → ${money(absences(4))}.`,
+          `Последен ден 10 ноември → за ноември плащате ${money(end(10))}.`,
+          `Последен ден 20 ноември → плащате ${money(end(20))}.`,
+          `4 отсъствия в ноември → плащате ${money(absences(4))}.`,
         ],
       };
     }
@@ -399,7 +415,7 @@ export function exampleFor(kind: BillingKind, rules: Rules): { intro: string; li
       const steps = tiers(rules, 'cancellation.tiers', 'min_hours');
       return {
         intro: 'Пробно занимание за 15 €.',
-        lines: samples(steps).map((hours) => `Отказ ${plural(hours, 'час', 'часа')} преди → ${money(15 * (tierFor(steps, hours)?.kept ?? 100) / 100)}.`),
+        lines: samples(steps).map((hours) => `Отказ ${plural(hours, 'час', 'часа')} преди → плащате ${money(15 * (tierFor(steps, hours)?.kept ?? 100) / 100)}.`),
       };
     }
     case 'residential_camp': {

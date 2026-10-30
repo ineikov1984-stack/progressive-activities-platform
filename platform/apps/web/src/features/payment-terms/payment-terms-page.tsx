@@ -42,18 +42,22 @@ export function PaymentTermsPage() {
   const [kind, setKind] = useState<BillingKind>('monthly');
   const [drafts, setDrafts] = useState<Partial<Record<BillingKind, Draft>>>({});
   const [customPicked, setCustomPicked] = useState<Partial<Record<BillingKind, boolean>>>({});
+  // The organization's own numbers, kept when a ready-made set is tried, so "Собствени" brings them back.
+  const [customDrafts, setCustomDrafts] = useState<Partial<Record<BillingKind, Draft>>>({});
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string }>();
   const [saving, setSaving] = useState(false);
   const noticeRef = useRef<HTMLParagraphElement>(null);
-  const editorRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLElement>(null);
 
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
     loadPaymentTerms(organization.id)
       .then((loaded) => { if (active) setWorkspace(loaded); })
-      .catch((reason: unknown) => { if (active) setLoadError(reason instanceof Error ? reason.message : 'Условията не се заредиха.'); });
+      .catch((reason: unknown) => {
+        if (active) setLoadError(reason instanceof PaymentTermsApiError ? reason.message : 'Условията не се заредиха. Проверете връзката и опитайте отново.');
+      });
     return () => { active = false; };
   }, [organization.id, attempt]);
   const retry = () => {
@@ -61,8 +65,17 @@ export function PaymentTermsPage() {
     setAttempt((current) => current + 1);
   };
 
+  // After a refused save the first rule with a problem takes the focus; otherwise the message does.
   useEffect(() => {
     if (!notice) return;
+    const invalid = notice.tone === 'error'
+      ? editorRef.current?.querySelector<HTMLElement>('input[aria-invalid="true"], fieldset[data-invalid="true"] input:not([disabled]), fieldset[data-invalid="true"] select:not([disabled])')
+      : null;
+    if (invalid) {
+      invalid.scrollIntoView({ block: 'center' });
+      invalid.focus();
+      return;
+    }
     noticeRef.current?.scrollIntoView({ block: 'nearest' });
     noticeRef.current?.focus();
   }, [notice]);
@@ -74,6 +87,15 @@ export function PaymentTermsPage() {
   const dirtyKinds = useMemo(() => new Set((workspace?.billing_kinds ?? [])
     .filter((item) => drafts[item.value] && !sameDraft(drafts[item.value] as Draft, baseDraft(workspace as PaymentTermsWorkspace, item)))
     .map((item) => item.value)), [drafts, workspace]);
+
+  // Unsaved numbers are not lost silently when the page is closed or reloaded.
+  const anyDirty = dirtyKinds.size > 0;
+  useEffect(() => {
+    if (!anyDirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [anyDirty]);
 
   if (loadError) {
     return (
@@ -112,9 +134,11 @@ export function PaymentTermsPage() {
   const pickPreset = (next: Preset) => {
     if (next === 'custom') {
       setCustomPicked((current) => ({ ...current, [kind]: true }));
-      requestAnimationFrame(() => editorRef.current?.querySelector<HTMLInputElement>('input:not([disabled]), select:not([disabled])')?.focus());
+      const own = customDrafts[kind];
+      if (own) changeDraft(own);
       return;
     }
+    if (preset === 'custom') setCustomDrafts((current) => ({ ...current, [kind]: draft }));
     setCustomPicked((current) => ({ ...current, [kind]: false }));
     changeDraft({ rules: info.presets[next].rules, self_service: info.presets[next].self_service });
   };
@@ -139,10 +163,18 @@ export function PaymentTermsPage() {
       }));
       setDrafts((current) => ({ ...current, [kind]: undefined }));
       setCustomPicked((current) => ({ ...current, [kind]: false }));
-      setNotice({ tone: 'ok', text: 'Условията са запазени. Важат за новите записвания.' });
+      setCustomDrafts((current) => ({ ...current, [kind]: undefined }));
+      const others = workspace.billing_kinds.filter((item) => item.value !== kind && dirtyKinds.has(item.value)).map((item) => `„${item.label}“`);
+      setNotice({ tone: 'ok', text: `Условията за „${info.label}“ са запазени.${others.length ? ` Още не са запазени: ${others.join(', ')}.` : ''}` });
     } catch (reason) {
-      if (reason instanceof PaymentTermsApiError) setErrors(reason.fieldErrors);
-      setNotice({ tone: 'error', text: reason instanceof Error ? reason.message : 'Условията не бяха запазени. Опитайте отново.' });
+      if (reason instanceof PaymentTermsApiError) {
+        setErrors(reason.fieldErrors);
+        // Messages that belong to no rule on the screen are said in the message itself.
+        const loose = Object.entries(reason.fieldErrors).filter(([key]) => !key.startsWith('rules.') && !key.startsWith('self_service.')).flatMap(([, list]) => list);
+        setNotice({ tone: 'error', text: [reason.message, ...loose].join(' ') });
+      } else {
+        setNotice({ tone: 'error', text: 'Условията не бяха запазени. Проверете връзката и опитайте отново.' });
+      }
     } finally {
       setSaving(false);
     }
@@ -150,7 +182,8 @@ export function PaymentTermsPage() {
 
   const lines = describeTerms(kind, draft.rules);
   const example = exampleFor(kind, draft.rules);
-  const violations = saved && !dirty ? Object.values(saved.marketplace_violations) : [];
+  const violations = saved ? Object.values(saved.marketplace_violations) : [];
+  const unsaved = workspace.billing_kinds.filter((item) => dirtyKinds.has(item.value)).map((item) => `„${item.label}“`);
   const selfServiceErrors = errorsFor(errors, ['self_service']);
 
   return (
@@ -176,9 +209,10 @@ export function PaymentTermsPage() {
       <label className={styles.kindSelect}>
         <span>Начин на плащане</span>
         <select value={kind} onChange={(event) => pickKind(event.target.value as BillingKind)}>
-          {workspace.billing_kinds.map((item) => <option key={item.value} value={item.value}>{item.label}{dirtyKinds.has(item.value) ? ' • незапазени промени' : ''}</option>)}
+          {workspace.billing_kinds.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </select>
       </label>
+      {unsaved.length ? <p className={styles.unsaved}><span className={styles.dot} aria-hidden="true" />Незапазени промени: {unsaved.join(', ')}.</p> : null}
 
       <fieldset className={styles.presets} disabled={!canManage || saving}>
         <legend className={styles.presetsLegend}>Готови условия</legend>
@@ -201,7 +235,7 @@ export function PaymentTermsPage() {
             <p className={styles.muted}>
               {saved?.current_version
                 ? `Запазени на ${savedOn(saved.current_version.created_at)}.${dirty ? ' Имате незапазени промени.' : ''}`
-                : 'Още не сте запазили свои условия за този начин на плащане — важат „Стандартни“.'}
+                : 'Организацията още не е запазила свои условия за този начин на плащане — важат „Стандартни“.'}
               {canManage ? ' Сменете число и условията стават „Собствени“.' : ''}
             </p>
           </div>
@@ -253,7 +287,7 @@ export function PaymentTermsPage() {
       </div>
 
       {canManage ? (
-        <div className={styles.saveBar}>
+        <div className={dirty ? `${styles.saveBar} ${styles.saveBarSticky}` : styles.saveBar}>
           <button type="button" className={styles.primary} onClick={save} disabled={saving || (!!saved && !dirty)}>
             {saving ? 'Запазване…' : 'Запази условията'}
           </button>
@@ -263,13 +297,13 @@ export function PaymentTermsPage() {
               setCustomPicked((current) => ({ ...current, [kind]: false }));
               setErrors({});
               setNotice(undefined);
-            }}>Откажи промените</button>
+            }}>Върни запазените</button>
           ) : null}
           <span className={styles.muted}>Записаните досега деца остават с условията, които родителите им са приели.</span>
+          {notice ? (
+            <p ref={noticeRef} tabIndex={-1} className={notice.tone === 'ok' ? styles.ok : styles.error} role={notice.tone === 'ok' ? 'status' : 'alert'}>{notice.text}</p>
+          ) : null}
         </div>
-      ) : null}
-      {notice ? (
-        <p ref={noticeRef} tabIndex={-1} className={notice.tone === 'ok' ? styles.ok : styles.error} role={notice.tone === 'ok' ? 'status' : 'alert'}>{notice.text}</p>
       ) : null}
     </div>
   );
@@ -279,8 +313,8 @@ function Header() {
   return (
     <header className={styles.header}>
       <p className={styles.eyebrow}>Настройки на организацията</p>
-      <h1>Условия за отказ, пауза и отсъствия</h1>
-      <p className={styles.lead}>Изберете готови условия за всеки начин на плащане и ги променете, ако искате. Родителите ще ги виждат преди записване.</p>
+      <h1>Условия за плащане</h1>
+      <p className={styles.lead}>Какво се дължи при отказ, пауза и отсъствия. Изберете готови условия за всеки начин на плащане и ги променете, ако искате. Родителите ще ги виждат преди записване.</p>
     </header>
   );
 }
@@ -293,20 +327,7 @@ const SELF_SERVICE_TEXT: Record<keyof SelfService, string> = {
 };
 
 function SelfServiceOption({ option, value, disabled, onChange }: { option: keyof SelfService; value: SelfService; disabled: boolean; onChange: (next: SelfService) => void }) {
-  if (option === 'pause_weeks') {
-    return (
-      <div className={styles.line}>
-        <label className={styles.check}>
-          <input type="checkbox" checked={value.pause_weeks > 0} disabled={disabled} onChange={(event) => onChange({ ...value, pause_weeks: event.target.checked ? 2 : 0 })} />
-          <span>{SELF_SERVICE_TEXT.pause_weeks}</span>
-        </label>
-        <input className={styles.number} type="number" inputMode="numeric" min={1} max={12} step={1} aria-label="Седмици пауза без одобрение"
-          value={value.pause_weeks > 0 ? String(value.pause_weeks) : ''} disabled={disabled || value.pause_weeks === 0}
-          onChange={(event) => onChange({ ...value, pause_weeks: Math.max(0, Math.min(12, Math.round(Number(event.target.value) || 0))) })} />
-        <span>седмици без одобрение</span>
-      </div>
-    );
-  }
+  if (option === 'pause_weeks') return <PauseWeeks value={value} disabled={disabled} onChange={onChange} />;
   return (
     <label className={styles.check}>
       <input type="checkbox" checked={value[option]} disabled={disabled} onChange={(event) => {
@@ -316,5 +337,30 @@ function SelfServiceOption({ option, value, disabled, onChange }: { option: keyo
       }} />
       <span>{SELF_SERVICE_TEXT[option]}</span>
     </label>
+  );
+}
+
+/** Typed freely and read when the field is left; only the checkbox turns the option off. */
+function PauseWeeks({ value, disabled, onChange }: { value: SelfService; disabled: boolean; onChange: (next: SelfService) => void }) {
+  const [text, setText] = useState<string>();
+  const on = value.pause_weeks > 0;
+  const commit = () => {
+    if (text === undefined) return;
+    const weeks = Math.round(Number(text));
+    if (text.trim() !== '' && Number.isFinite(weeks)) onChange({ ...value, pause_weeks: Math.max(1, Math.min(12, weeks)) });
+    setText(undefined);
+  };
+  return (
+    <div className={styles.line}>
+      <label className={styles.check}>
+        <input type="checkbox" checked={on} disabled={disabled} onChange={(event) => { setText(undefined); onChange({ ...value, pause_weeks: event.target.checked ? 2 : 0 }); }} />
+        <span>{SELF_SERVICE_TEXT.pause_weeks}</span>
+      </label>
+      <input className={styles.number} type="number" inputMode="numeric" min={1} max={12} step={1} aria-label="Седмици пауза без одобрение"
+        value={text ?? (on ? String(value.pause_weeks) : '')} disabled={disabled || !on}
+        onChange={(event) => setText(event.target.value)} onBlur={commit}
+        onKeyDown={(event) => { if (event.key === 'Enter') commit(); }} />
+      <span>седмици без одобрение</span>
+    </div>
   );
 }

@@ -1,5 +1,5 @@
 /* "Условия за плащане": the layout follows the width left next to the menu (a container), mobile first. */
-.page { display: grid; gap: var(--space-6); max-width: var(--content-max); box-sizing: border-box; padding: var(--space-8) clamp(1rem, 3vw, 2.5rem) var(--space-12); container: terms / inline-size; }
+.page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); max-width: var(--content-max); box-sizing: border-box; padding: var(--space-8) clamp(1rem, 3vw, 2.5rem) var(--space-12); container: terms / inline-size; }
 .header { display: grid; gap: var(--space-2); }
 .header h1 { margin: 0; color: var(--ink); font-size: clamp(26px, 4vw, 36px); font-weight: 700; line-height: 1.17; letter-spacing: -0.02em; }
 .eyebrow { margin: 0; color: var(--action-hover); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
@@ -17,8 +17,11 @@
 .kind:hover { background: var(--surface-sunken); }
 .kindOn, .kindOn:hover { border-color: var(--ink); color: var(--ink-inverse); background: var(--ink); }
 .dot { width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--action); box-shadow: 0 0 0 2px var(--surface); }
-.kindSelect { display: grid; gap: var(--space-1); color: var(--ink); font-size: 14px; font-weight: 600; }
-.kindSelect select, .choice select { min-height: 44px; box-sizing: border-box; padding: 0 var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-sm); color: var(--ink); background: var(--surface); font: inherit; font-size: 15px; font-weight: 500; }
+.kindSelect { display: grid; gap: var(--space-1); min-width: 0; color: var(--ink); font-size: 14px; font-weight: 600; }
+/* 16 px in fields, so a phone does not zoom in on each of them. A select never gets wider than its column. */
+.kindSelect select, .choice select { width: auto; max-width: 100%; min-width: 0; min-height: 44px; box-sizing: border-box; padding: 0 var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-sm); color: var(--ink); background: var(--surface); font: inherit; font-size: 16px; font-weight: 500; }
+.kindSelect select { width: 100%; }
+.unsaved { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--ink); font-size: 14px; font-weight: 600; line-height: 20px; }
 
 /* The ready-made sets. */
 .presets { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); margin: 0; padding: 0; border: 0; min-width: 0; }
@@ -44,18 +47,19 @@
 
 /* One rule: a title with its icon, then sentences with numbers inside. */
 .rule { display: grid; gap: var(--space-3); min-width: 0; margin: 0; padding: var(--space-4); border: 0; border-top: 1px solid var(--border); }
+.ruleInvalid { box-shadow: inset 4px 0 0 var(--status-full); background: var(--status-full-soft); }
 .ruleTitle { display: flex; align-items: center; gap: 12px; padding: 0; color: var(--ink); font-size: 16px; font-weight: 650; line-height: 24px; }
 .icon { flex: none; color: var(--ink-muted); }
 .ruleBody { display: grid; gap: var(--space-3); min-width: 0; }
 .line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--ink-body); font-size: 15px; line-height: 22px; }
 .step { display: grid; gap: var(--space-2); }
-.number { width: 64px; height: 44px; box-sizing: border-box; padding: 0 var(--space-1); border: 1px solid var(--border-control); border-radius: var(--radius-sm); color: var(--ink); background: var(--surface); font: inherit; font-weight: 600; text-align: center; }
+.number { width: 64px; height: 44px; box-sizing: border-box; padding: 0 var(--space-1); border: 1px solid var(--border-control); border-radius: var(--radius-sm); color: var(--ink); background: var(--surface); font: inherit; font-size: 16px; font-weight: 600; text-align: center; }
 .numberWide { width: 76px; }
 .number[aria-invalid="true"] { border: 2px solid var(--status-full); }
 .number:disabled, .choice select:disabled { color: var(--ink-body); background: var(--surface-sunken); }
-.check { display: inline-flex; align-items: flex-start; gap: 10px; color: var(--ink-body); font-size: 15px; line-height: 22px; }
-.check input { flex: none; width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--action); }
-.choice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--ink-body); font-size: 15px; line-height: 22px; }
+.check { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; color: var(--ink-body); font-size: 15px; line-height: 22px; cursor: pointer; }
+.check input { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--action); }
+.choice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; color: var(--ink-body); font-size: 15px; line-height: 22px; }
 .fieldError { margin: 0; color: var(--status-full); font-size: 14px; font-weight: 600; line-height: 20px; }
 .fieldError::before { content: "! "; }
 .linkButton { justify-self: start; min-height: 44px; padding: 0 var(--space-1); border: 0; color: var(--ink); background: transparent; font: inherit; font-size: 15px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
@@ -73,6 +77,9 @@
 .cardAlways h2 { font-size: 16px; }
 
 .saveBar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); }
+/* With unsaved changes the button stays in sight, also at the end of a long phone screen. */
+.saveBarSticky { position: sticky; bottom: 0; z-index: 3; margin: 0 calc(-1 * var(--space-4)); padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); background: var(--surface-page); box-shadow: var(--shadow-raised); }
+.saveBar .ok, .saveBar .error { flex: 1 1 100%; }
 .primary, .secondary { min-height: var(--control-height); padding: 0 var(--space-6); border: 1px solid transparent; border-radius: var(--radius-md); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
 .primary { color: var(--ink-inverse); background: var(--action); }
 .primary:hover { background: var(--action-hover); }
@@ -111,7 +118,7 @@
   .presets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
-@container terms (min-width: 1080px) {
-  .layout { grid-template-columns: minmax(0, 1fr) 380px; }
+@container terms (min-width: 880px) {
+  .layout { grid-template-columns: minmax(0, 1fr) 320px; }
   .aside { position: sticky; top: var(--space-4); }
 }

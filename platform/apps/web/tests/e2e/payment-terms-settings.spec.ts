@@ -81,10 +81,10 @@ test('the owner starts from "Стандартни", changes a number and saves t
   const writes = await fixture(page);
   await page.goto('/dashboard/settings/payment-terms');
 
-  await expect(page.getByRole('heading', { name: 'Условия за отказ, пауза и отсъствия' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Условия за плащане', level: 1 })).toBeVisible();
   await expect(page.getByRole('radio', { name: /^Стандартни/ })).toBeChecked();
   await expect(page.getByText('Ако последният ден е до 15-то число, плащате половината от таксата за месеца; след това — цялата такса за месеца.')).toBeVisible();
-  await expect(page.getByText('Още не сте запазили свои условия за този начин на плащане — важат „Стандартни“.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Организацията още не е запазила свои условия за този начин на плащане — важат „Стандартни“.', { exact: false })).toBeVisible();
 
   await page.getByLabel('Ден от месеца').first().fill('10');
   await expect(page.getByRole('radio', { name: /^Собствени/ })).toBeChecked();
@@ -96,7 +96,7 @@ test('the owner starts from "Стандартни", changes a number and saves t
   await page.getByLabel('Дни предизвестие за пауза').fill('10');
 
   await page.getByRole('button', { name: 'Запази условията' }).click();
-  await expect(page.getByText('Условията са запазени. Важат за новите записвания.')).toBeVisible();
+  await expect(page.getByText('Условията за „Месечна такса“ са запазени.')).toBeVisible();
   expect(writes).toHaveLength(1);
   expect(writes[0].method).toBe('POST');
   expect(writes[0].body).toMatchObject({ billing_kind: 'monthly', name: 'Условията на организацията', is_default: true, self_service: self.standard });
@@ -127,7 +127,7 @@ for (const width of [390, 768, 1440]) {
     await fixture(page);
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/dashboard/settings/payment-terms');
-    await expect(page.getByRole('heading', { name: 'Условия за отказ, пауза и отсъствия' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Условия за плащане', level: 1 })).toBeVisible();
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);

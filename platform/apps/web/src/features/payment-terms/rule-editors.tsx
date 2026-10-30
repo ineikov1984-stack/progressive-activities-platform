@@ -1,8 +1,8 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useId, useRef, type ReactNode } from 'react';
 import type { BillingKind, Json, Rules } from './api';
-import { booleanAt, errorsFor, numberAt, valueAt } from './rules';
+import { booleanAt, errorsFor, numberAt, ordinalSuffix, valueAt } from './rules';
 import styles from './payment-terms.module.css';
 
 /**
@@ -42,12 +42,13 @@ export function RuleIcon({ name }: { name: string }) {
 /** One rule: an icon, a title and sentences; the server's messages for these paths appear under it. */
 export function RuleRow({ icon, title, paths, context, children }: { icon: string; title: string; paths: string[]; context: EditorContext; children: ReactNode }) {
   const messages = errorsFor(context.errors, paths.map((path) => `rules.${path}`));
+  const errorId = useId();
   return (
-    <fieldset className={styles.rule}>
+    <fieldset className={messages.length ? `${styles.rule} ${styles.ruleInvalid}` : styles.rule} aria-describedby={messages.length ? errorId : undefined} data-invalid={messages.length ? 'true' : undefined}>
       <legend className={styles.ruleTitle}><RuleIcon name={icon} />{title}</legend>
       <div className={styles.ruleBody}>
         {children}
-        {messages.map((message) => <p key={message} className={styles.fieldError}>{message}</p>)}
+        {messages.length ? <div id={errorId}>{messages.map((message) => <p key={message} className={styles.fieldError}>{message}</p>)}</div> : null}
       </div>
     </fieldset>
   );
@@ -109,14 +110,21 @@ export function Choice({ context, path, label, options, onPick }: { context: Edi
 }
 
 /** "Поне N часа/дни преди → …%", the last step is "по-късно"; 1 to `max` steps. */
-function Ladder({ context, path, unit, max, returned, credit, before }: {
-  context: EditorContext; path: string; unit: 'min_hours' | 'min_days'; max: number; returned: boolean; credit: boolean; before: string;
+function Ladder({ context, path, unit, max, returned, creditFor, before }: {
+  context: EditorContext; path: string; unit: 'min_hours' | 'min_days'; max: number; returned: boolean; creditFor: string | null; before: string;
 }) {
+  const addRef = useRef<HTMLButtonElement>(null);
+  const credit = creditFor !== null;
   const list = valueAt(context.rules, path);
   const steps = Array.isArray(list) ? list : [];
   const word = unit === 'min_hours' ? 'часа' : 'дни';
   const verb = returned ? 'връща се' : 'дължи се';
   const replace = (next: Json[]) => context.change(path, next);
+  const remove = (index: number) => {
+    replace(steps.filter((__, other) => other !== index));
+    // The removed row had the focus; "Добави срок" is next to it.
+    requestAnimationFrame(() => addRef.current?.focus());
+  };
   const add = () => {
     const last = steps[steps.length - 1];
     const previous = steps.length > 1 ? numberAt(steps[steps.length - 2], unit) ?? 0 : 0;
@@ -138,25 +146,26 @@ function Ladder({ context, path, unit, max, returned, credit, before }: {
               {last
                 ? <span>{steps.length === 1 ? `При отказ по всяко време ${before}` : 'По-късно'} → {verb}</span>
                 : <><span>Поне</span><NumberInput context={context} path={`${path}.${index}.${unit}`} label={`${unit === 'min_hours' ? 'Часове' : 'Дни'} преди, стъпало ${index + 1}`} min={1} /><span>{word} {before} → {verb}</span></>}
-              <NumberInput context={context} path={`${path}.${index}.kept`} label={`Процент, който ${verb}, стъпало ${index + 1}`} max={100} returned={returned} />
+              <NumberInput context={context} path={`${path}.${index}.kept`} label={`Процент, който ${returned ? 'се връща' : 'се дължи'}, стъпало ${index + 1}`} max={100} returned={returned} />
               <span>%</span>
               {!last && !context.disabled && steps.length > 1 ? (
-                <button type="button" className={styles.linkButton} onClick={() => replace(steps.filter((__, other) => other !== index))}>
+                <button type="button" className={styles.linkButton} onClick={() => remove(index)}>
                   Махни<span className="sr-only"> стъпало {index + 1}</span>
                 </button>
               ) : null}
             </Line>
-            {credit ? <Check context={context} path={`${path}.${index}.credit_offered`}>Предлагаме кредит за друга седмица — родителят решава</Check> : null}
+            {credit ? <Check context={context} path={`${path}.${index}.credit_offered`}>Предлагаме кредит за {creditFor} — родителят решава</Check> : null}
           </div>
         );
       })}
-      {!context.disabled && steps.length < max ? <button type="button" className={styles.linkButton} onClick={add}>Добави срок</button> : null}
+      {!context.disabled && steps.length < max ? <button type="button" ref={addRef} className={styles.linkButton} onClick={add}>Добави срок</button> : null}
     </>
   );
 }
 
 /** Up to 3 steps by the number of absences in a month; the last is "повече". */
 function AbsenceTiers({ context }: { context: EditorContext }) {
+  const addRef = useRef<HTMLButtonElement>(null);
   const path = 'absences.tiers';
   const list = valueAt(context.rules, path);
   const steps = Array.isArray(list) ? list : [];
@@ -173,7 +182,10 @@ function AbsenceTiers({ context }: { context: EditorContext }) {
             <NumberInput context={context} path={`${path}.${index}.kept`} label={`Процент от таксата, стъпало ${index + 1}`} max={100} />
             <span>% от таксата за месеца.</span>
             {!last && !context.disabled ? (
-              <button type="button" className={styles.linkButton} onClick={() => replace(steps.filter((__, other) => other !== index))}>
+              <button type="button" className={styles.linkButton} onClick={() => {
+                replace(steps.filter((__, other) => other !== index));
+                requestAnimationFrame(() => addRef.current?.focus());
+              }}>
                 Махни<span className="sr-only"> стъпало {index + 1}</span>
               </button>
             ) : null}
@@ -181,7 +193,7 @@ function AbsenceTiers({ context }: { context: EditorContext }) {
         );
       })}
       {!context.disabled && steps.length < 3 ? (
-        <button type="button" className={styles.linkButton} onClick={() => {
+        <button type="button" ref={addRef} className={styles.linkButton} onClick={() => {
           const previous = steps.length > 1 ? numberAt(steps[steps.length - 2], 'up_to') ?? 0 : 0;
           const lastKept = numberAt(steps[steps.length - 1] ?? {}, 'kept') ?? 100;
           const previousKept = steps.length > 1 ? numberAt(steps[steps.length - 2], 'kept') ?? 100 : 100;
@@ -213,7 +225,7 @@ function MonthPart({ context, part }: { context: EditorContext; part: 'start' | 
         <Line>
           <span>{part === 'end' ? 'Последен ден до' : 'Начало до'}</span>
           <NumberInput context={context} path={`${part}.cutoff_day`} label="Ден от месеца" min={1} max={28} />
-          <span>-то число → дължи се</span>
+          <span>-{ordinalSuffix(numberAt(context.rules, `${part}.cutoff_day`) ?? 15)} число → дължи се</span>
           <NumberInput context={context} path={`${part}.kept_until_cutoff`} label="Процент от таксата до този ден" max={100} />
           <span>% от таксата за месеца. След това →</span>
           <NumberInput context={context} path={`${part}.kept_after_cutoff`} label="Процент от таксата след този ден" max={100} />
@@ -237,9 +249,9 @@ function PauseRow({ context }: { context: EditorContext }) {
         <span>%.</span>
       </Line>
       <Line>
-        <span>Най-много</span>
-        <NumberInput context={context} path="pause.free_days_per_school_year" label="Дни пауза в учебната година" max={183} wide />
-        <span>дни пауза в учебната година (61 дни ≈ 2 месеца). Най-кратка пауза</span>
+        <span>Така — до</span>
+        <NumberInput context={context} path="pause.free_days_per_school_year" label="Дни пауза в учебната година при тези условия" max={183} wide />
+        <span>дни пауза в учебната година (61 дни ≈ 2 месеца); над тях — като късно заявена. Най-кратка пауза</span>
         <NumberInput context={context} path="pause.min_days" label="Най-кратка пауза в дни" max={183} />
         <span>дни.</span>
       </Line>
@@ -261,7 +273,7 @@ function MakeupLines({ context }: { context: EditorContext }) {
       <Line>
         <span>Най-много</span>
         <NumberInput context={context} path="makeup.per_month" label="Наваксвания в месеца (празно — без ограничение)" min={1} max={31} />
-        <span>в месеца (празно — без ограничение).</span>
+        <span>наваксвания в месеца (празно — без ограничение).</span>
       </Line>
       <Check context={context} path="makeup.only_if_space">Само ако в групата има свободно място</Check>
     </>
@@ -271,10 +283,10 @@ function MakeupLines({ context }: { context: EditorContext }) {
 function RefundRow({ context }: { context: EditorContext }) {
   return (
     <RuleRow icon="money" title="Връщане на пари" paths={['refund']} context={context}>
+      {/* Only as credit is not offered: a credit is always the parent's choice (spec, т. 3.3). */}
       <Choice context={context} path="refund" label="Върнатата сума:" options={[
         ['parent_choice', 'пари или кредит — по избор на родителя'],
         ['money', 'пари, по същия начин на плащане'],
-        ['credit', 'кредит за следващо плащане'],
       ]} />
     </RuleRow>
   );
@@ -308,7 +320,7 @@ export function RuleEditor({ kind, context }: { kind: BillingKind; context: Edit
       return (
         <>
           <RuleRow icon="end" title="Отказ преди началото" paths={['before_start']} context={context}>
-            <Ladder context={context} path="before_start.tiers" unit="min_days" max={6} returned credit={false} before="преди началото" />
+            <Ladder context={context} path="before_start.tiers" unit="min_days" max={6} returned creditFor={null} before="преди началото" />
           </RuleRow>
           <RuleRow icon="clock" title="Отказ след началото" paths={['after_start']} context={context}>
             <Line>
@@ -330,7 +342,7 @@ export function RuleEditor({ kind, context }: { kind: BillingKind; context: Edit
       return (
         <>
           <RuleRow icon="clock" title="Отказ от посещение" paths={['cancellation']} context={context}>
-            <Ladder context={context} path="cancellation.tiers" unit="min_hours" max={3} returned={false} credit={false} before="преди началото" />
+            <Ladder context={context} path="cancellation.tiers" unit="min_hours" max={3} returned={false} creditFor={null} before="преди началото" />
           </RuleRow>
           <RuleRow icon="person" title="Неявяване" paths={['no_show_kept']} context={context}>
             <Line>
@@ -364,7 +376,7 @@ export function RuleEditor({ kind, context }: { kind: BillingKind; context: Edit
       return (
         <>
           <RuleRow icon="end" title="Отказ преди началото на седмицата" paths={['before_start']} context={context}>
-            <Ladder context={context} path="before_start.tiers" unit="min_days" max={6} returned credit before="преди седмицата" />
+            <Ladder context={context} path="before_start.tiers" unit="min_days" max={6} returned creditFor="друга седмица" before="преди седмицата" />
           </RuleRow>
           <RuleRow icon="absences" title="Отсъствия в записана седмица" paths={['absences']} context={context}>
             <Line>
@@ -392,7 +404,7 @@ export function RuleEditor({ kind, context }: { kind: BillingKind; context: Edit
             <DepositLines context={context} />
           </RuleRow>
           <RuleRow icon="end" title="Отказ преди тръгване" paths={['before_start']} context={context}>
-            <Ladder context={context} path="before_start.tiers" unit="min_days" max={6} returned credit before="преди тръгване" />
+            <Ladder context={context} path="before_start.tiers" unit="min_days" max={6} returned creditFor="друга смяна" before="преди тръгване" />
             <p className={styles.hint}>Задържаната сума не бива да е по-голяма от реалните ви разходи.</p>
           </RuleRow>
           <RuleRow icon="document" title="Болест и друго дете" paths={['illness_with_document', 'transfer_to_another_child_until_days']} context={context}>
@@ -401,7 +413,7 @@ export function RuleEditor({ kind, context }: { kind: BillingKind; context: Edit
               <NumberInput context={context} path="illness_with_document.kept" label="Процент, който се връща при болест" max={100} returned />
               <span>%.</span>
             </Line>
-            <Check context={context} path="illness_with_document.plus_costs">Без реално направените разходи</Check>
+            <Check context={context} path="illness_with_document.plus_costs">Приспадаме реално направените разходи</Check>
             <Line>
               <span>Друго дете може да заеме мястото до</span>
               <NumberInput context={context} path="transfer_to_another_child_until_days" label="Дни за друго дете на мястото" max={60} />

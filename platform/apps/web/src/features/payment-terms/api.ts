@@ -71,7 +71,7 @@ export function errorMessage(status: number, message: unknown): string {
   if (status === 409) return 'Някой друг току-що промени тези условия. Презаредете страницата и опитайте отново.';
   if (status === 422) return 'Проверете отбелязаните полета.';
   if (typeof message === 'string' && /[А-Яа-я]/.test(message)) return message;
-  return 'Условията не бяха запазени. Опитайте отново.';
+  return 'Заявката не беше изпълнена. Опитайте отново.';
 }
 
 export function loadPaymentTerms(organizationId: string): Promise<PaymentTermsWorkspace> {
