@@ -618,7 +618,7 @@ final class ChangeEnrollment
                 'payment_terms_snapshot' => $copy,
             ]];
         }
-        $terms = $this->paymentTerms->forPrice($price->enrollment_mode, $target->offering?->payment_terms_id);
+        $terms = $this->paymentTerms->forPrice($price->enrollment_mode, $target->offering?->paymentTermsByKind() ?? []);
         if ($terms === null) {
             throw ValidationException::withMessages(['price_option_id' => 'Изберете цена на новата група.']);
         }

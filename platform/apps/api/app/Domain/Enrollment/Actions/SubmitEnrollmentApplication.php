@@ -131,7 +131,7 @@ final class SubmitEnrollmentApplication
                     throw ValidationException::withMessages(['visit_offer_id' => 'Изберете публикувано предложение за посещение.']);
                 }
                 $session = $this->resolveSession($payload['session_id'] ?? null, $group, $scope);
-                $terms = $offer === null ? $this->acceptedTerms($price->enrollment_mode, $group->offering->payment_terms_id, $payload) : null;
+                $terms = $offer === null ? $this->acceptedTerms($price->enrollment_mode, $group->offering->paymentTermsByKind(), $payload) : null;
                 $acceptedAt = now()->toImmutable();
                 $status = EnrollmentApplicationStatus::Submitted;
                 $metadata = [];
@@ -220,11 +220,12 @@ final class SubmitEnrollmentApplication
      * The terms for the chosen price, as the parent saw them (docs/product/payment-policies.md, т. 7.3): a
      * changed set asks the parent to look again instead of holding them to numbers they did not read.
      *
+     * @param  array<string, string>  $choices  the activity's sets by way of paying
      * @param  array<string, mixed>  $payload
      */
-    private function acceptedTerms(string $enrollmentMode, ?string $chosenTermsId, array $payload): AppliedTerms
+    private function acceptedTerms(string $enrollmentMode, array $choices, array $payload): AppliedTerms
     {
-        $terms = $this->paymentTerms->forPrice($enrollmentMode, $chosenTermsId);
+        $terms = $this->paymentTerms->forPrice($enrollmentMode, $choices);
         // The organization is in the public catalog (checked above), so its frame applies (т. 7.5).
         if ($terms === null || $terms->marketplaceViolations() !== []) {
             throw ValidationException::withMessages(['price_option_id' => 'Избраната цена не е достъпна.']);

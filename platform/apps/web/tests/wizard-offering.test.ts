@@ -3,7 +3,7 @@ import type { ActivityDraft } from '../src/features/catalog/admin/api';
 import { amountText, blankPrice, checkOffering, offeringFromActivity, type OfferingDraft } from '../src/features/catalog/admin/wizard/offering';
 
 const draft = (changes: Partial<OfferingDraft> = {}): OfferingDraft => ({
-  location_id: null, lead_instructor_profile_id: null, contact_email: 'info@example.test', enrollment_instructions: '', cancellation_policy: '', terms: '', payment_terms_id: null,
+  location_id: null, lead_instructor_profile_id: null, contact_email: 'info@example.test', enrollment_instructions: '', cancellation_policy: '', terms: '', payment_terms: {},
   prices: [{ ...blankPrice(), amount: '30,00' }], ...changes,
 });
 
@@ -35,9 +35,12 @@ describe('checkOffering', () => {
     expect(offeringFromActivity(own)?.contact_email).toBe('chess@example.test');
   });
 
-  it('sends the chosen payment terms, or null for the organization\'s', () => {
-    expect(checkOffering(draft()).payload.payment_terms_id).toBeNull();
-    expect(checkOffering(draft({ payment_terms_id: 'set-1' })).payload.payment_terms_id).toBe('set-1');
+  it('sends the terms chosen for each way of paying', () => {
+    expect(checkOffering(draft()).payload.payment_terms).toEqual({});
+    expect(checkOffering(draft({ payment_terms: { monthly: 'set-1', visit: 'set-2' } })).payload.payment_terms).toEqual({ monthly: 'set-1', visit: 'set-2' });
+    // An empty map from PHP arrives as an array.
+    const activity = { offering: { id: 'o', version: 1, payment_terms: [], price_options: [] } } as unknown as ActivityDraft;
+    expect(offeringFromActivity(activity)?.payment_terms).toEqual({});
   });
 
   it('formats cents for the input field', () => {

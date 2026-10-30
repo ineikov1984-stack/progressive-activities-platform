@@ -160,22 +160,11 @@
 .priceActions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .toggle { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 40px; color: var(--ink); font-size: 14px; cursor: pointer; }
 .toggle input { width: 20px; height: 20px; accent-color: var(--ink); }
-.termsBlock { display: grid; gap: var(--space-3); min-width: 0; margin: 0; padding: 0; border: 0; }
-.termsLegend { display: grid; gap: var(--space-1); margin-bottom: var(--space-2); padding: 0; }
-.termsTitle { margin: 0; color: var(--ink); font-size: 18px; line-height: 24px; }
-.termsCard { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4) var(--space-4); border: 1.5px solid var(--border-control); border-radius: var(--radius-lg); background: var(--surface); }
-.termsCardOn { border-color: var(--ink); background: var(--surface-warm); box-shadow: inset 0 0 0 1px var(--ink); }
-.termsHead { display: flex; align-items: center; gap: var(--space-3); min-height: 44px; color: var(--ink); font-size: 16px; font-weight: 650; line-height: 22px; cursor: pointer; }
-.termsHead input { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--ink); }
-.termsHead:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-sm); }
-.termsHead:has(input:disabled) { color: var(--ink-muted); cursor: not-allowed; }
-.termsBody { display: grid; gap: var(--space-2); min-width: 0; padding-left: calc(20px + var(--space-3)); }
-.termsKind { display: grid; gap: var(--space-1); }
-.termsKind strong { color: var(--ink); font-size: 14px; }
+.priceTerms { display: grid; gap: var(--space-2); min-width: 0; padding-top: var(--space-3); border-top: 1px solid var(--border); }
 .termsLines { display: grid; gap: var(--space-1); margin: 0; padding: 0; color: var(--ink-body); font-size: 14px; line-height: 20px; list-style: none; }
 .termsLines strong { color: var(--ink); }
 .termsLink { justify-self: start; color: var(--action); font-size: 14px; font-weight: 600; line-height: 44px; }
-.termsSelect { max-width: 26rem; }
+.termsSelect { max-width: 30rem; }
 .termsSkeleton { height: 7rem; border-radius: var(--radius-lg); background: linear-gradient(90deg, var(--surface-sunken) 0%, var(--surface) 50%, var(--surface-sunken) 100%); background-size: 200% 100%; animation: shimmer 1.4s ease-in-out infinite; }
 .groupList { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
 .groupCard { display: grid; gap: var(--space-1); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); }

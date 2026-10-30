@@ -1,5 +1,6 @@
 import type { ActivityDraft, ActivityInput, PriceOption } from '../api';
 import { parseEuroCents } from '../presentation';
+import type { Choices } from './terms-choice';
 
 export type PriceDraft = Omit<PriceOption, 'amount_cents'> & { amount: string };
 
@@ -11,8 +12,8 @@ export type OfferingDraft = {
   enrollment_instructions: string;
   cancellation_policy: string;
   terms: string;
-  /** A set of payment terms chosen for the activity; null — the organization's terms. */
-  payment_terms_id: string | null;
+  /** "Такси, отсъствия и отказ" chosen for each way of paying; a missing one uses the organization's terms. */
+  payment_terms: Choices;
   prices: PriceDraft[];
 };
 
@@ -62,7 +63,8 @@ export function offeringFromActivity(activity: ActivityDraft): OfferingDraft | n
     enrollment_instructions: offering.enrollment_instructions ?? '',
     cancellation_policy: offering.cancellation_policy ?? '',
     terms: offering.terms ?? '',
-    payment_terms_id: offering.payment_terms_id ?? null,
+    // An empty map arrives as a JSON array from PHP.
+    payment_terms: Array.isArray(offering.payment_terms) ? {} : { ...(offering.payment_terms ?? {}) } as Choices,
     prices: offering.price_options.map(({ amount_cents, ...price }) => ({ ...price, amount: amountText(amount_cents) })),
   };
 }
@@ -110,7 +112,7 @@ export function checkOffering(draft: OfferingDraft): OfferingCheck {
     enrollment_instructions: draft.enrollment_instructions.trim() || null,
     cancellation_policy: draft.cancellation_policy.trim() || null,
     terms: draft.terms.trim() || null,
-    payment_terms_id: draft.payment_terms_id,
+    payment_terms: Object.fromEntries(Object.entries(draft.payment_terms).filter(([, id]) => Boolean(id))) as Choices,
   };
   if (!problems.contact_email) payload.contact_email = email;
   // Prices are replaced as a whole on the server, so they are sent only when all are valid.
