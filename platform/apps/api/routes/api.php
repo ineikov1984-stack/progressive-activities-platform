@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\V1\OrganizationContextController;
 use App\Http\Controllers\Api\V1\OrganizationController;
 use App\Http\Controllers\Api\V1\ParentChildController;
 use App\Http\Controllers\Api\V1\ParentEnrollmentController;
+use App\Http\Controllers\Api\V1\PaymentTermsController;
 use App\Http\Controllers\Api\V1\PublicCatalogController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentChangeController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentController;
@@ -80,6 +81,12 @@ Route::prefix('v1')->group(function (): void {
                     Route::post('/enrollments/{enrollment}/skipped-sessions', [StaffEnrollmentChangeController::class, 'skipSession'])->whereUuid('enrollment');
                     Route::delete('/enrollments/{enrollment}/skipped-sessions/{session}', [StaffEnrollmentChangeController::class, 'restoreSession'])->whereUuid(['enrollment', 'session']);
                 });
+            });
+            // Sets of payment terms (docs/product/payment-policies.md, т. 7.1): the team reads, owner and administrator change.
+            Route::prefix('payment-terms')->middleware('tenant')->group(function (): void {
+                Route::get('/', [PaymentTermsController::class, 'index'])->middleware('organization.access:operational.read');
+                Route::post('/', [PaymentTermsController::class, 'store'])->middleware(['organization.access:operational.write', 'throttle:30,1']);
+                Route::patch('/{terms}', [PaymentTermsController::class, 'update'])->whereUuid('terms')->middleware(['organization.access:operational.write', 'throttle:30,1']);
             });
             Route::prefix('catalog')->middleware('tenant')->group(function (): void {
                 Route::middleware('organization.access:operational.read')->group(function (): void {

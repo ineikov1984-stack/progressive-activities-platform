@@ -37,6 +37,17 @@ class OrganizationPolicy
         return $this->allows($user, $organization, 'view');
     }
 
+    /** Every member of the team reads the sets of payment terms; parents see them on the activity. */
+    public function viewPaymentTerms(User $user, Organization $organization): bool
+    {
+        return $this->allows($user, $organization, 'view');
+    }
+
+    public function managePaymentTerms(User $user, Organization $organization): bool
+    {
+        return $this->allows($user, $organization, 'terms.manage');
+    }
+
     public function viewApplication(User $user, Organization $organization): bool
     {
         return in_array($this->role($user, $organization), [

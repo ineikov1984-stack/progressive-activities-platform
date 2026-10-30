@@ -20,7 +20,7 @@ final class TermsSchema
 
     public const REFUND = ['money', 'credit', 'parent_choice'];
 
-    private const PERCENT = ['required', 'integer', 'between:0,100'];
+    private const PERCENT = ['required', 'integer:strict', 'between:0,100'];
 
     private const MESSAGES = [
         'required' => 'Попълнете „:attribute“.',
@@ -124,10 +124,10 @@ final class TermsSchema
     public static function validateSelfService(array $selfService): array
     {
         return Validator::make($selfService, [
-            'absence' => ['required', 'boolean'],
-            'pause_weeks' => ['required', 'integer', 'between:0,12'],
-            'end' => ['required', 'boolean'],
-            'cancel_visit' => ['required', 'boolean'],
+            'absence' => ['required', 'boolean:strict'],
+            'pause_weeks' => ['required', 'integer:strict', 'between:0,12'],
+            'end' => ['required', 'boolean:strict'],
+            'cancel_visit' => ['required', 'boolean:strict'],
         ], self::MESSAGES, self::ATTRIBUTES)->validate();
     }
 
@@ -137,31 +137,31 @@ final class TermsSchema
         $refund = ['refund' => ['required', Rule::in(self::REFUND)]];
         $pause = [
             'pause' => ['required', 'array'],
-            'pause.notice_days' => ['required', 'integer', 'between:0,60'],
+            'pause.notice_days' => ['required', 'integer:strict', 'between:0,60'],
             'pause.kept_on_time' => self::PERCENT,
             'pause.kept_late' => self::PERCENT,
-            'pause.free_days_per_school_year' => ['required', 'integer', 'between:0,183'],
-            'pause.document_required' => ['required', 'boolean'],
-            'pause.min_days' => ['required', 'integer', 'between:0,183'],
+            'pause.free_days_per_school_year' => ['required', 'integer:strict', 'between:0,183'],
+            'pause.document_required' => ['required', 'boolean:strict'],
+            'pause.min_days' => ['required', 'integer:strict', 'between:0,183'],
         ];
         $makeup = [
             'makeup' => ['required', 'array'],
-            'makeup.enabled' => ['required', 'boolean'],
-            'makeup.within_days' => ['required', 'integer', 'between:1,60'],
-            'makeup.notice_hours' => ['required', 'integer', 'between:0,72'],
-            'makeup.per_month' => ['present', 'nullable', 'integer', 'between:1,31'],
-            'makeup.only_if_space' => ['required', 'boolean'],
+            'makeup.enabled' => ['required', 'boolean:strict'],
+            'makeup.within_days' => ['required', 'integer:strict', 'between:1,60'],
+            'makeup.notice_hours' => ['required', 'integer:strict', 'between:0,72'],
+            'makeup.per_month' => ['present', 'nullable', 'integer:strict', 'between:1,31'],
+            'makeup.only_if_space' => ['required', 'boolean:strict'],
         ];
 
         return match ($kind) {
             BillingKind::Monthly => [
                 ...self::monthPart('start'),
                 ...self::monthPart('end'),
-                'end.notice_days' => ['required', 'integer', 'between:0,30'],
+                'end.notice_days' => ['required', 'integer:strict', 'between:0,30'],
                 ...$pause,
                 'absences' => ['required', 'array'],
                 'absences.tiers' => ['required', 'array', 'list', 'min:1', 'max:3'],
-                'absences.tiers.*.up_to' => ['present', 'nullable', 'integer', 'between:0,31'],
+                'absences.tiers.*.up_to' => ['present', 'nullable', 'integer:strict', 'between:0,31'],
                 'absences.tiers.*.kept' => self::PERCENT,
                 ...$makeup,
                 ...$refund,
@@ -169,7 +169,7 @@ final class TermsSchema
             BillingKind::FullPeriod => [
                 ...self::beforeStart(false),
                 'after_start' => ['required', 'array'],
-                'after_start.full_refund_days' => ['required', 'integer', 'between:0,60'],
+                'after_start.full_refund_days' => ['required', 'integer:strict', 'between:0,60'],
                 'after_start.kept_of_remaining' => self::PERCENT,
                 ...$pause,
                 ...$makeup,
@@ -178,42 +178,42 @@ final class TermsSchema
             BillingKind::Visit => [
                 'cancellation' => ['required', 'array'],
                 'cancellation.tiers' => ['required', 'array', 'list', 'min:1', 'max:3'],
-                'cancellation.tiers.*.min_hours' => ['required', 'integer', 'between:0,168'],
+                'cancellation.tiers.*.min_hours' => ['required', 'integer:strict', 'between:0,168'],
                 'cancellation.tiers.*.kept' => self::PERCENT,
                 'no_show_kept' => self::PERCENT,
                 ...$refund,
             ],
             BillingKind::Package => [
-                'freeze_days_with_document' => ['required', 'integer', 'between:0,90'],
-                'extension_days_on_request' => ['required', 'integer', 'between:0,90'],
+                'freeze_days_with_document' => ['required', 'integer:strict', 'between:0,90'],
+                'extension_days_on_request' => ['required', 'integer:strict', 'between:0,90'],
                 ...$refund,
             ],
             BillingKind::DayCamp => [
                 ...self::beforeStart(true),
                 'absences' => ['required', 'array'],
-                'absences.kept_first_days' => ['required', 'integer', 'between:0,5'],
+                'absences.kept_first_days' => ['required', 'integer:strict', 'between:0,5'],
                 'absences.kept_after' => self::PERCENT,
-                'week_change_free_until_days' => ['required', 'integer', 'between:0,30'],
+                'week_change_free_until_days' => ['required', 'integer:strict', 'between:0,30'],
                 ...$refund,
             ],
             BillingKind::ResidentialCamp => [
                 'deposit' => ['required', 'array'],
                 'deposit.mode' => ['required', Rule::in(['none', 'amount', 'percent'])],
-                'deposit.amount_cents' => ['required_if:deposit.mode,amount', 'nullable', 'integer', 'between:0,10000000'],
-                'deposit.percent' => ['required_if:deposit.mode,percent', 'nullable', 'integer', 'between:0,30'],
+                'deposit.amount_cents' => ['required_if:deposit.mode,amount', 'nullable', 'integer:strict', 'between:0,10000000'],
+                'deposit.percent' => ['required_if:deposit.mode,percent', 'nullable', 'integer:strict', 'between:0,30'],
                 ...self::beforeStart(true),
                 'illness_with_document' => ['required', 'array'],
                 'illness_with_document.kept' => self::PERCENT,
-                'illness_with_document.plus_costs' => ['required', 'boolean'],
-                'transfer_to_another_child_until_days' => ['required', 'integer', 'between:0,60'],
+                'illness_with_document.plus_costs' => ['required', 'boolean:strict'],
+                'transfer_to_another_child_until_days' => ['required', 'integer:strict', 'between:0,60'],
                 'early_departure_kept' => self::PERCENT,
                 ...$refund,
             ],
             BillingKind::Kindergarten => [
-                'notice_days' => ['required', 'integer', 'between:0,30'],
-                'deposit_months' => ['required', 'integer', 'between:0,1'],
-                'meals_by_attendance' => ['required', 'boolean'],
-                'sick_over_working_days' => ['required', 'integer', 'between:0,60'],
+                'notice_days' => ['required', 'integer:strict', 'between:0,30'],
+                'deposit_months' => ['required', 'integer:strict', 'between:0,1'],
+                'meals_by_attendance' => ['required', 'boolean:strict'],
+                'sick_over_working_days' => ['required', 'integer:strict', 'between:0,60'],
                 'sick_next_month_kept' => self::PERCENT,
                 ...$refund,
             ],
@@ -230,9 +230,9 @@ final class TermsSchema
         return [
             $part => ['required', 'array'],
             "{$part}.mode" => ['required', Rule::in(['by_sessions', 'cutoff', 'full_month'])],
-            "{$part}.cutoff_day" => ["required_if:{$part}.mode,cutoff", 'nullable', 'integer', 'between:1,28'],
-            "{$part}.kept_until_cutoff" => ["required_if:{$part}.mode,cutoff", 'nullable', 'integer', 'between:0,100'],
-            "{$part}.kept_after_cutoff" => ["required_if:{$part}.mode,cutoff", 'nullable', 'integer', 'between:0,100'],
+            "{$part}.cutoff_day" => ["required_if:{$part}.mode,cutoff", 'nullable', 'integer:strict', 'between:1,28'],
+            "{$part}.kept_until_cutoff" => ["required_if:{$part}.mode,cutoff", 'nullable', 'integer:strict', 'between:0,100'],
+            "{$part}.kept_after_cutoff" => ["required_if:{$part}.mode,cutoff", 'nullable', 'integer:strict', 'between:0,100'],
         ];
     }
 
@@ -246,9 +246,9 @@ final class TermsSchema
         return [
             'before_start' => ['required', 'array'],
             'before_start.tiers' => ['required', 'array', 'list', 'min:1', 'max:6'],
-            'before_start.tiers.*.min_days' => ['required', 'integer', 'between:0,365'],
+            'before_start.tiers.*.min_days' => ['required', 'integer:strict', 'between:0,365'],
             'before_start.tiers.*.kept' => self::PERCENT,
-            ...($credit ? ['before_start.tiers.*.credit_offered' => ['required', 'boolean']] : []),
+            ...($credit ? ['before_start.tiers.*.credit_offered' => ['required', 'boolean:strict']] : []),
         ];
     }
 

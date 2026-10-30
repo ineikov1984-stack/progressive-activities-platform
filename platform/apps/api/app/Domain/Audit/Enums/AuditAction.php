@@ -38,4 +38,6 @@ enum AuditAction: string
     case EnrollmentSessionRestored = 'enrollment.session_restored';
     case EnrollmentGroupApprovalChanged = 'enrollment.group_approval_changed';
     case EnrollmentContactViewed = 'enrollment.contact_viewed';
+    case PaymentTermsCreated = 'payment_terms.created';
+    case PaymentTermsUpdated = 'payment_terms.updated';
 }

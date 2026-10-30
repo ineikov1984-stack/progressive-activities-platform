@@ -35,7 +35,7 @@ class DashboardDataTest extends TestCase
             ->assertJsonPath('organizations.0.permissions', [
                 'create', 'update', 'invite', 'finance', 'view',
                 'catalog.view', 'catalog.manage', 'catalog.publish',
-                'enrollment.view', 'enrollment.manage', 'enrollment.contacts',
+                'enrollment.view', 'enrollment.manage', 'enrollment.contacts', 'terms.manage',
             ]);
     }
 

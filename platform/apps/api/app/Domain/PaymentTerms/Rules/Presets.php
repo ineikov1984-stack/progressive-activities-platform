@@ -38,6 +38,40 @@ final class Presets
         };
     }
 
+    /**
+     * Which ready-made set these numbers are, or "Собствени" when they differ in anything. The server decides
+     * it, so the label "Стандартни" never hides changed numbers.
+     *
+     * @param  array<string, mixed>  $rules
+     * @param  array<string, mixed>  $selfService
+     */
+    public static function match(BillingKind $kind, array $rules, array $selfService): TermsPreset
+    {
+        foreach ([TermsPreset::Flexible, TermsPreset::Standard, TermsPreset::Strict] as $preset) {
+            if (self::canonical($rules) === self::canonical(self::rules($kind, $preset))
+                && self::canonical($selfService) === self::canonical(self::selfService($preset))) {
+                return $preset;
+            }
+        }
+
+        return TermsPreset::Custom;
+    }
+
+    /**
+     * The same numbers in one key order (the database may store the keys of a JSON object in another order).
+     *
+     * @param  array<array-key, mixed>  $value
+     * @return array<array-key, mixed>
+     */
+    public static function canonical(array $value): array
+    {
+        if (! array_is_list($value)) {
+            ksort($value);
+        }
+
+        return array_map(fn (mixed $item): mixed => is_array($item) ? self::canonical($item) : $item, $value);
+    }
+
     /** @return array<string, mixed> */
     private static function monthly(TermsPreset $preset): array
     {
