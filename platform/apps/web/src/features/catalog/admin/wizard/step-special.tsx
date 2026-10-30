@@ -18,9 +18,14 @@ type Props = {
 const statuses: Record<VisitOffer['status'], string> = { draft: 'Чернова', published: 'Публикувано', closed: 'Приключено', cancelled: 'Отменено' };
 const kinds: Record<VisitOffer['type'], string> = { trial: 'пробно', single: 'еднократно', open_day: 'отворени врати' };
 
+function priceFact(offer: VisitOffer): string | undefined {
+  // A trial or single visit is priced from step 6 (docs/product/visits.md, т. 8a); an open day has its own fee.
+  if (offer.type !== 'open_day') return offer.price ? (offer.price.amount_cents === 0 ? 'безплатно' : formatEur(offer.price.amount_cents)) : 'без цена от стъпка 6';
+  return offer.fee_type === 'free' ? 'безплатно' : `${offer.fee_type === 'from_price' ? 'от ' : ''}${formatEur(offer.amount_cents)}`;
+}
+
 export function offerFacts(offer: VisitOffer, groups: ActivityGroup[]): string {
-  const price = offer.fee_type === 'free' ? 'безплатно'
-    : `${offer.fee_type === 'from_price' ? 'от ' : ''}${formatEur(offer.amount_cents)}`;
+  const price = priceFact(offer);
   const group = groups.find((item) => item.id === offer.group_id)?.name;
   const places = `${offer.visit_limit} ${offer.visit_limit === 1 ? 'място' : 'места'}`;
   return [group, kinds[offer.type], price, places].filter(Boolean).join(' · ');

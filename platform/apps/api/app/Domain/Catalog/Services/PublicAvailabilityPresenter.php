@@ -4,10 +4,12 @@ namespace App\Domain\Catalog\Services;
 
 use App\Domain\Catalog\Enums\ActivityStatus;
 use App\Domain\Catalog\Enums\VisitOfferStatus;
+use App\Domain\Catalog\Enums\VisitOfferType;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Catalog\Models\VisitOffer;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
+use App\Domain\PaymentTerms\Services\PaymentTermsResolver;
 use Carbon\CarbonImmutable;
 use DateTimeZone;
 use Illuminate\Support\Collection;
@@ -22,6 +24,7 @@ final class PublicAvailabilityPresenter
     public function __construct(
         private readonly VisitOfferAvailabilityService $offers,
         private readonly EnrollmentCapacity $capacity,
+        private readonly PaymentTermsResolver $paymentTerms,
     ) {}
 
     /**
@@ -33,10 +36,16 @@ final class PublicAvailabilityPresenter
         $rows = [];
         foreach ($offers as $offer) {
             if ($offer->status !== VisitOfferStatus::Published
-                || trim((string) $offer->terms_version) === ''
                 || $offer->activity?->status !== ActivityStatus::Published
                 || $offer->group?->status !== 'published'
                 || $offer->group->offering?->activity_id !== $offer->activity_id) {
+                continue;
+            }
+            // A trial or single visit is priced from step 6 and every visit takes the activity's visit terms
+            // (docs/product/visits.md, т. 8a): without either it cannot be booked, so it is not shown.
+            $price = $offer->stepSixPrice();
+            $terms = $this->paymentTerms->forPrice('single', $offer->group->offering->paymentTermsByKind());
+            if (($offer->type !== VisitOfferType::OpenDay && $price === null) || $terms === null || $terms->marketplaceViolations() !== []) {
                 continue;
             }
             foreach ($offer->sessions as $session) {
@@ -59,15 +68,13 @@ final class PublicAvailabilityPresenter
                     'starts_at' => $session->starts_at->toIso8601String(),
                     'ends_at' => $session->ends_at->toIso8601String(),
                     'timezone' => $this->timezoneFor($offer->group),
-                    'fee_type' => $offer->fee_type->value,
-                    'amount_cents' => $offer->amount_cents,
-                    'currency' => $offer->currency,
-                    'fee_reason' => $offer->fee_reason,
-                    'cancellation_policy' => $offer->cancellation_policy,
-                    'cancellation_outcome' => $offer->cancellation_outcome,
-                    'cancellation_deadline_hours' => $offer->cancellation_deadline_hours,
+                    'fee_type' => $price === null ? $offer->fee_type->value : ($price->amount_cents === 0 ? 'free' : 'paid'),
+                    'amount_cents' => $price === null ? $offer->amount_cents : $price->amount_cents,
+                    'currency' => $price === null ? $offer->currency : $price->currency,
+                    'fee_reason' => $price === null ? $offer->fee_reason : null,
                     'booking_deadline_hours' => $offer->booking_deadline_hours,
-                    'terms_version' => $offer->terms_version,
+                    // What the parent reads and accepts (`payment_terms.version` is `accepted_terms_version`).
+                    'payment_terms' => $terms->presentForParent(),
                     'availability' => $availability->toArray(),
                     'action' => match ($availability->status) {
                         'closed' => 'closed',

@@ -24,15 +24,17 @@ class VisitOfferFinalReviewTest extends TestCase
 
     public static function priceRows(): array
     {
-        return [['lone', 1250], ['identical', 1250], ['mixed', 0]];
+        // A free visit is the card's price only when nothing costs money (docs/product/visits.md, т. 5.5).
+        return [['lone', 1250], ['identical', 1250], ['mixed', 1250]];
     }
 
     #[DataProvider('priceRows')]
     public function test_public_card_and_hero_preserve_from_price_semantics(string $rows, int $minimum): void
     {
         $this->travelTo('2026-10-28T10:00:00Z');
+        // Only an open day has its own fee (т. 8a.2).
         [$org, $activity, $group, $session, $offer] = $this->visitFixture([
-            'fee_type' => 'from_price', 'amount_cents' => 1250, 'fee_reason' => 'Materials',
+            'type' => 'open_day', 'fee_type' => 'from_price', 'amount_cents' => 1250, 'fee_reason' => 'Materials',
         ]);
         if ($rows === 'identical') {
             $next = $session->replicate();

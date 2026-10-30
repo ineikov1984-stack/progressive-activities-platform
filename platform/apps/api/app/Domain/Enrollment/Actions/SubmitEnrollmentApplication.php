@@ -118,18 +118,26 @@ final class SubmitEnrollmentApplication
                 }
 
                 $offer = $offerId === null ? null : VisitOffer::query()->whereKey($offerId)->lockForUpdate()->firstOrFail();
-                // The group's own prices and the activity's for the ways of enrolling the group takes.
+                if ($offer !== null && isset($payload['price_option_id'])) {
+                    throw ValidationException::withMessages(['price_option_id' => 'Цената на посещение по предложение идва от предложението.']);
+                }
+                // The group's own prices and the activity's for the ways of enrolling the group takes; a trial or single
+                // visit on chosen dates — the activity's price for it from step 6 (docs/product/visits.md, т. 8a.1).
                 $price = $offer === null ? $group->pricesForEnrollment()->where('is_available', true)
-                    ->firstWhere('id', $payload['price_option_id'] ?? null) : null;
+                    ->firstWhere('id', $payload['price_option_id'] ?? null) : $offer->stepSixPrice();
                 if ($offer === null && $price === null) {
                     throw ValidationException::withMessages(['price_option_id' => 'Избраната цена не е достъпна.']);
+                }
+                if ($offer !== null && $offer->type !== VisitOfferType::OpenDay && $price === null) {
+                    throw ValidationException::withMessages(['visit_offer_id' => 'Предложението не е достъпно.']);
                 }
 
                 $scope = $offer !== null
                     ? ($offer->type === VisitOfferType::Trial ? EnrollmentScope::Trial : EnrollmentScope::Single)
                     : $this->scopeFor(EnrollmentMode::from($price->enrollment_mode));
                 $session = $this->resolveSession($payload['session_id'] ?? null, $group, $scope);
-                $terms = $offer === null ? $this->acceptedTerms($price->enrollment_mode, $group->offering->paymentTermsByKind(), $payload) : null;
+                // Every visit, on chosen dates too, keeps a copy of the activity's visit terms (т. 8a.3).
+                $terms = $this->acceptedTerms($offer === null ? $price->enrollment_mode : 'single', $group->offering->paymentTermsByKind(), $payload, $offer !== null);
                 $acceptedAt = now()->toImmutable();
                 $status = EnrollmentApplicationStatus::Submitted;
                 $metadata = [];
@@ -139,19 +147,15 @@ final class SubmitEnrollmentApplication
                     if (now()->greaterThanOrEqualTo($session->starts_at->subHours($offer->booking_deadline_hours))) {
                         throw ValidationException::withMessages(['session_id' => 'Срокът за записване е изтекъл.']);
                     }
-                    if ($offer->terms_version !== null && $payload['accepted_terms_version'] !== $offer->terms_version) {
-                        throw ValidationException::withMessages(['accepted_terms_version' => 'Приемете актуалните условия.']);
-                    }
                     if ($this->capacity->remainingForOffer($offer, $session, forAllocation: true) < 1) {
                         if (! $offer->waitlist_enabled || ! $group->waitlist_enabled) {
                             throw ValidationException::withMessages(['capacity' => 'Няма свободни места.']);
                         }
                         $status = EnrollmentApplicationStatus::Waitlisted;
                     }
+                    // The start the parent booked for: cancellation deadlines count from it (т. 5.4, 8a.4).
                     $metadata = [
                         'visit_offer_type' => $offer->type->value,
-                        'cancellation_deadline_hours' => $offer->cancellation_deadline_hours,
-                        'cancellation_outcome' => $offer->cancellation_outcome,
                         'session_starts_at' => $session->starts_at->toIso8601String(),
                     ];
                     if ($overrideActor !== null && trim((string) $overrideReason) !== '') {
@@ -188,18 +192,19 @@ final class SubmitEnrollmentApplication
                     'idempotency_key' => $idempotencyKey,
                     'accepted_terms_version' => $payload['accepted_terms_version'],
                     'accepted_terms_at' => $acceptedAt,
-                    // The copy of the terms the parent accepted; visits from an offer keep the offer's terms until 2d-3b.
-                    // A dated visit has no right of withdrawal, so no early start (ЗЗП, чл. 57, т. 12).
-                    'payment_terms_version_id' => $terms?->versionId,
-                    'payment_terms_snapshot' => $terms?->snapshot('parent', $acceptedAt, null,
+                    // The copy of the terms the parent accepted. A dated visit has no right of withdrawal, so no early
+                    // start (ЗЗП, чл. 57, т. 12).
+                    'payment_terms_version_id' => $terms->versionId,
+                    'payment_terms_snapshot' => $terms->snapshot('parent', $acceptedAt, null,
                         $scope === EnrollmentScope::FullPeriod && ($payload['early_start'] ?? false) === true),
-                    'amount_cents_snapshot' => $offer !== null ? $offer->amount_cents : $price->amount_cents,
-                    'currency_snapshot' => $offer !== null ? $offer->currency : $price->currency,
-                    'unit_snapshot' => $offer !== null ? 'session' : $price->unit,
+                    // An open day keeps its own fee; everything else is priced from step 6.
+                    'amount_cents_snapshot' => $price !== null ? $price->amount_cents : $offer->amount_cents,
+                    'currency_snapshot' => $price !== null ? $price->currency : $offer->currency,
+                    'unit_snapshot' => $price !== null ? $price->unit : 'session',
                     'visit_offer_id' => $offer?->id,
                     'visit_offer_title_snapshot' => $offer?->title,
-                    'fee_reason_snapshot' => $offer?->fee_reason,
-                    'cancellation_policy_snapshot' => $offer?->cancellation_policy,
+                    'fee_reason_snapshot' => $price === null ? $offer->fee_reason : null,
+                    'cancellation_policy_snapshot' => null,
                 ]);
                 $transition = null;
                 if ($metadata !== []) {
@@ -238,12 +243,14 @@ final class SubmitEnrollmentApplication
      * @param  array<string, string>  $choices  the activity's sets by way of paying
      * @param  array<string, mixed>  $payload
      */
-    private function acceptedTerms(string $enrollmentMode, array $choices, array $payload): AppliedTerms
+    private function acceptedTerms(string $enrollmentMode, array $choices, array $payload, bool $offer): AppliedTerms
     {
         $terms = $this->paymentTerms->forPrice($enrollmentMode, $choices);
         // The organization is in the public catalog (checked above), so its frame applies (т. 7.5).
         if ($terms === null || $terms->marketplaceViolations() !== []) {
-            throw ValidationException::withMessages(['price_option_id' => 'Избраната цена не е достъпна.']);
+            throw ValidationException::withMessages($offer
+                ? ['visit_offer_id' => 'Предложението не е достъпно.']
+                : ['price_option_id' => 'Избраната цена не е достъпна.']);
         }
         if (($payload['accepted_terms_version'] ?? null) !== $terms->key()) {
             throw ValidationException::withMessages(['accepted_terms_version' => 'Условията са променени — прегледайте ги отново.']);

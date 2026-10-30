@@ -29,7 +29,12 @@ class VisitOfferAdminTest extends TestCase
             ->assertCreated()->assertJsonPath('visit_offer.status', 'draft')
             ->assertJsonPath('visit_offer.version', 1)
             ->assertJsonPath('visit_offer.booking_deadline_hours', 12)
-            ->assertJsonPath('visit_offer.cancellation_deadline_hours', 24)
+            // Priced from step 6 with the activity's visit terms (docs/product/visits.md, т. 8a.8).
+            ->assertJsonPath('visit_offer.price.enrollment_mode', 'trial')
+            ->assertJsonPath('visit_offer.price.amount_cents', 0)
+            ->assertJsonPath('visit_offer.payment_terms.billing_kind', 'visit')
+            ->assertJsonMissingPath('visit_offer.cancellation_deadline_hours')
+            ->assertJsonMissingPath('visit_offer.terms_version')
             ->assertJsonPath('visit_offer.sessions.0.id', $session->id);
         $id = $created->json('visit_offer.id');
         $this->getJson('/api/v1/catalog/visit-offers')->assertOk()->assertJsonCount(1, 'visit_offers');
@@ -56,7 +61,11 @@ class VisitOfferAdminTest extends TestCase
     {
         [$organization, $activity, $group, $session] = $this->fixture();
         $this->login($organization);
-        $base = $this->offerPayload($activity, $group, $session);
+        // A trial or single visit is priced from step 6: no fee of its own.
+        $this->postJson('/api/v1/catalog/visit-offers', [...$this->offerPayload($activity, $group, $session), 'fee_type' => 'paid', 'amount_cents' => 1250, 'fee_reason' => 'Materials'])
+            ->assertUnprocessable()->assertJsonValidationErrors('fee_type');
+        // An open day keeps its own fee.
+        $base = [...$this->offerPayload($activity, $group, $session), 'type' => 'open_day'];
         $this->postJson('/api/v1/catalog/visit-offers', [...$base, 'fee_type' => 'paid', 'amount_cents' => 1.5, 'fee_reason' => 'Materials'])
             ->assertUnprocessable()->assertJsonValidationErrors('amount_cents');
         $this->postJson('/api/v1/catalog/visit-offers', [...$base, 'fee_type' => 'paid', 'amount_cents' => 1250])
@@ -90,62 +99,60 @@ class VisitOfferAdminTest extends TestCase
         $this->postJson("/api/v1/catalog/visit-offers/{$id}/publish", ['version' => 1])->assertConflict();
     }
 
-    public function test_draft_may_omit_terms_version_but_publish_requires_an_explicit_nonblank_version(): void
+    public function test_retired_terms_fields_are_refused_and_publish_requires_a_step_six_price(): void
     {
         [$organization, $activity, $group, $session] = $this->fixture();
         $this->login($organization);
-        $id = $this->postJson('/api/v1/catalog/visit-offers', [
-            ...$this->offerPayload($activity, $group, $session), 'terms_version' => null,
-        ])->assertCreated()->assertJsonPath('visit_offer.terms_version', null)->json('visit_offer.id');
+        foreach (['terms_version' => 'v1', 'cancellation_deadline_hours' => 24, 'cancellation_outcome' => 'refund',
+            'cancellation_policy' => 'Text', 'trial_limit_per_academic_year' => 2, 'single_visit_limit' => 3,
+            'single_visit_window_days' => 30, 'unlimited_single_visits' => true, 'no_show_trial_limit' => 2] as $field => $value) {
+            $this->postJson('/api/v1/catalog/visit-offers', [...$this->offerPayload($activity, $group, $session), $field => $value])
+                ->assertUnprocessable()->assertJsonValidationErrors($field);
+        }
 
+        $id = $this->postJson('/api/v1/catalog/visit-offers', $this->offerPayload($activity, $group, $session))
+            ->assertCreated()->json('visit_offer.id');
         $url = "/api/v1/catalog/visit-offers/{$id}";
+        app(TenantContext::class)->select($organization);
+        $group->offering->priceOptions()->where('enrollment_mode', 'trial')->update(['is_available' => false]);
         $this->postJson($url.'/publish', ['version' => 1])
-            ->assertUnprocessable()->assertJsonValidationErrors('terms_version');
+            ->assertUnprocessable()->assertJsonValidationErrors('price_option_id');
         $this->assertDatabaseHas('visit_offers', ['id' => $id, 'status' => 'draft', 'version' => 1]);
-        $this->patchJson($url, ['version' => 1, 'terms_version' => '  '])
-            ->assertOk()->assertJsonPath('visit_offer.version', 2);
-        $this->postJson($url.'/publish', ['version' => 2])
-            ->assertUnprocessable()->assertJsonValidationErrors('terms_version');
-        $this->assertDatabaseHas('visit_offers', ['id' => $id, 'status' => 'draft', 'version' => 2]);
-        $this->assertDatabaseMissing('audit_events', [
-            'subject_id' => $id, 'action' => 'catalog.visit_offer_published',
-        ]);
-
-        $this->patchJson($url, ['version' => 2, 'terms_version' => 'visit-v2'])
-            ->assertOk()->assertJsonPath('visit_offer.version', 3);
-        $this->postJson($url.'/publish', ['version' => 3])
-            ->assertOk()->assertJsonPath('visit_offer.status', 'published')
-            ->assertJsonPath('visit_offer.terms_version', 'visit-v2');
+        app(TenantContext::class)->select($organization);
+        $group->offering->priceOptions()->where('enrollment_mode', 'trial')->update(['is_available' => true]);
+        $this->postJson($url.'/publish', ['version' => 1])
+            ->assertOk()->assertJsonPath('visit_offer.status', 'published');
     }
 
-    public function test_published_offer_cannot_remove_its_terms_version_on_update(): void
+    public function test_an_older_trial_turning_into_an_open_day_does_not_bring_back_its_old_fee(): void
     {
         [$organization, $activity, $group, $session] = $this->fixture();
         $this->login($organization);
         $id = $this->postJson('/api/v1/catalog/visit-offers', $this->offerPayload($activity, $group, $session))
             ->assertCreated()->json('visit_offer.id');
-        $url = "/api/v1/catalog/visit-offers/{$id}";
-        $this->postJson($url.'/publish', ['version' => 1])->assertOk();
+        // A trial saved before step 6 priced it (docs/product/visits.md, т. 8a.1) still carries a fee of its own.
+        DB::table('visit_offers')->where('id', $id)->update(['fee_type' => 'paid', 'amount_cents' => 1250, 'fee_reason' => 'Materials']);
 
-        $this->patchJson($url, ['version' => 2, 'terms_version' => null])
-            ->assertUnprocessable()->assertJsonValidationErrors('terms_version');
-        $this->patchJson($url, ['version' => 2, 'terms_version' => '  '])
-            ->assertUnprocessable()->assertJsonValidationErrors('terms_version');
-        $this->assertDatabaseHas('visit_offers', [
-            'id' => $id, 'status' => 'published', 'terms_version' => 'v1', 'version' => 2,
-        ]);
+        $this->patchJson("/api/v1/catalog/visit-offers/{$id}", ['version' => 1, 'type' => 'open_day'])
+            ->assertOk()->assertJsonPath('visit_offer.fee_type', 'free')->assertJsonPath('visit_offer.amount_cents', 0)
+            ->assertJsonPath('visit_offer.fee_reason', null);
+        $this->patchJson("/api/v1/catalog/visit-offers/{$id}", ['version' => 2, 'fee_type' => 'paid', 'amount_cents' => 800, 'fee_reason' => 'Entry'])
+            ->assertOk()->assertJsonPath('visit_offer.amount_cents', 800);
+        // An open day keeps its own fee on later edits.
+        $this->patchJson("/api/v1/catalog/visit-offers/{$id}", ['version' => 3, 'title' => 'Open chess day'])
+            ->assertOk()->assertJsonPath('visit_offer.fee_type', 'paid')->assertJsonPath('visit_offer.amount_cents', 800)
+            ->assertJsonPath('visit_offer.fee_reason', 'Entry');
     }
 
     public function test_update_is_versioned_and_audits_each_material_change(): void
     {
         [$organization, $activity, $group, $session] = $this->fixture();
         $this->login($organization);
-        $id = $this->postJson('/api/v1/catalog/visit-offers', $this->offerPayload($activity, $group, $session))
+        $id = $this->postJson('/api/v1/catalog/visit-offers', [...$this->offerPayload($activity, $group, $session), 'type' => 'open_day'])
             ->assertCreated()->json('visit_offer.id');
         $this->patchJson("/api/v1/catalog/visit-offers/{$id}", [
             'version' => 1, 'visit_limit' => 2, 'fee_type' => 'paid', 'amount_cents' => 1250,
-            'fee_reason' => 'Materials', 'booking_deadline_hours' => 6,
-            'cancellation_policy' => 'Refund before deadline',
+            'fee_reason' => 'Materials', 'booking_deadline_hours' => 6, 'waitlist_enabled' => false,
         ])->assertOk()->assertJsonPath('visit_offer.version', 2);
         $this->patchJson("/api/v1/catalog/visit-offers/{$id}", ['version' => 1, 'title' => 'Lost update'])->assertConflict();
         $actions = DB::table('audit_events')->where('subject_id', $id)->pluck('action')->all();
@@ -263,7 +270,7 @@ class VisitOfferAdminTest extends TestCase
             ->assertUnprocessable()->assertJsonValidationErrors('visit_limit');
         $this->assertDatabaseHas('visit_offers', ['id' => $id, 'visit_limit' => 3, 'version' => 1]);
         $this->patchJson("/api/v1/catalog/visit-offers/{$id}", [
-            'version' => 1, 'type' => 'trial', 'fee_type' => 'free', 'title' => 'New display title',
+            'version' => 1, 'type' => 'trial', 'title' => 'New display title',
         ])->assertOk()->assertJsonPath('visit_offer.version', 2)
             ->assertJsonPath('visit_offer.title', 'New display title');
         $this->assertDatabaseHas('enrollment_applications', [
@@ -376,6 +383,8 @@ class VisitOfferAdminTest extends TestCase
             'summary' => 'Chess lessons', 'age_label' => '7+',
         ]);
         $offering = $activity->offerings()->create([]);
+        // Step 6: a free trial for visits on chosen dates (docs/product/visits.md, т. 8a.1).
+        $offering->priceOptions()->create(['enrollment_mode' => 'trial', 'unit' => 'session', 'amount_cents' => 0, 'currency' => 'EUR', 'is_available' => true]);
         $group = $offering->groups()->create(['name' => 'Tuesday', 'capacity_max' => 12]);
         $session = $group->sessions()->create([
             'starts_at' => '2030-11-03 16:00:00+02', 'ends_at' => '2030-11-03 17:00:00+02',
@@ -406,7 +415,7 @@ class VisitOfferAdminTest extends TestCase
     {
         return [
             'activity_id' => $activity->id, 'group_id' => $group->id, 'session_ids' => [$session->id],
-            'type' => 'trial', 'title' => 'Trial chess', 'visit_limit' => 3, 'terms_version' => 'v1',
+            'type' => 'trial', 'title' => 'Trial chess', 'visit_limit' => 3,
         ];
     }
 }

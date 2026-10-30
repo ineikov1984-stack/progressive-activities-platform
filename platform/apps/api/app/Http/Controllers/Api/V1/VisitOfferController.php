@@ -9,6 +9,7 @@ use App\Domain\Catalog\Enums\VisitOfferType;
 use App\Domain\Catalog\Models\VisitOffer;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
+use App\Domain\PaymentTerms\Services\PaymentTermsResolver;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,6 +20,15 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class VisitOfferController extends Controller
 {
+    public function __construct(private readonly PaymentTermsResolver $paymentTerms) {}
+
+    /** Offer fields that no longer apply (docs/product/visits.md, т. 8a.8). */
+    private const RETIRED = [
+        'cancellation_deadline_hours', 'cancellation_outcome', 'cancellation_policy', 'terms_version',
+        'trial_limit_per_academic_year', 'single_visit_limit', 'single_visit_window_days',
+        'unlimited_single_visits', 'no_show_trial_limit',
+    ];
+
     public function index(Request $request, TenantContext $context): JsonResponse
     {
         Gate::forUser($request->user())->authorize('catalog.view', $this->organization($context));
@@ -93,26 +103,39 @@ final class VisitOfferController extends Controller
             'audience_age_label' => ['sometimes', 'nullable', 'string', 'max:100'],
             'audience_class_label' => ['sometimes', 'nullable', 'string', 'max:100'],
             'visit_limit' => [$required, 'integer', 'min:1'],
+            // Only an open day has its own fee; a trial or single visit is priced from step 6 (docs/product/visits.md, т. 8a).
             'fee_type' => ['sometimes', Rule::enum(VisitFeeType::class)],
             'amount_cents' => ['sometimes', 'integer', 'min:0'],
             'currency' => ['sometimes', Rule::in(['EUR'])],
             'fee_reason' => ['sometimes', 'nullable', 'string'],
             'booking_deadline_hours' => ['sometimes', 'integer', 'min:0'],
-            'cancellation_deadline_hours' => ['sometimes', 'integer', 'min:0'],
-            'cancellation_policy' => ['sometimes', 'nullable', 'string'],
-            'cancellation_outcome' => ['sometimes', Rule::in(['refund', 'credit', 'non_refundable'])],
-            'terms_version' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'trial_limit_per_academic_year' => ['sometimes', 'integer', 'min:1'],
-            'single_visit_limit' => ['sometimes', 'integer', 'min:1'],
-            'single_visit_window_days' => ['sometimes', 'integer', 'min:1'],
-            'unlimited_single_visits' => ['sometimes', 'boolean'],
-            'no_show_trial_limit' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'waitlist_enabled' => ['sometimes', 'boolean'],
-        ]);
+            // The visit terms of the activity and the trial rule replace these; kept as they are for older applications.
+            ...array_fill_keys(self::RETIRED, ['prohibited']),
+        ], array_fill_keys(array_map(fn (string $field): string => "{$field}.prohibited", self::RETIRED),
+            'Правилата за отказ и лимитите вече идват от „Такси, отсъствия и отказ“ и стъпка 6.'));
 
-        $fee = $data['fee_type'] ?? ($offer === null ? 'free' : $offer->fee_type->value);
-        $amount = $data['amount_cents'] ?? ($offer === null ? 0 : $offer->amount_cents);
-        $reason = array_key_exists('fee_reason', $data) ? $data['fee_reason'] : $offer?->fee_reason;
+        $type = $data['type'] ?? $offer?->type->value;
+        if ($type !== VisitOfferType::OpenDay->value) {
+            foreach (['fee_type', 'amount_cents', 'fee_reason'] as $field) {
+                if (array_key_exists($field, $data)) {
+                    throw ValidationException::withMessages([$field => 'Цената на пробното и еднократното посещение е от стъпка 6 „Цени и записване“.']);
+                }
+            }
+
+            // A new trial or single offer (or one turning into one) is stored as free so the row stays valid; nothing
+            // reads it for these kinds (т. 8a.1). An older one keeps what it had.
+            return $offer === null || $offer->type->value !== $type
+                ? [...$data, 'fee_type' => VisitFeeType::Free->value, 'amount_cents' => 0, 'fee_reason' => null]
+                : $data;
+        }
+
+        // A trial or single offer turning into an open day does not bring back a fee it had before step 6 priced
+        // it: the open day is free unless the request sets its fee.
+        $openDay = $offer !== null && $offer->type === VisitOfferType::OpenDay ? $offer : null;
+        $fee = $data['fee_type'] ?? ($openDay === null ? VisitFeeType::Free->value : $openDay->fee_type->value);
+        $amount = $data['amount_cents'] ?? ($openDay === null ? 0 : $openDay->amount_cents);
+        $reason = array_key_exists('fee_reason', $data) ? $data['fee_reason'] : $openDay?->fee_reason;
         if ($fee === 'free' && $amount !== 0) {
             throw ValidationException::withMessages(['amount_cents' => 'Безплатното посещение трябва да е 0 евроцента.']);
         }
@@ -123,7 +146,7 @@ final class VisitOfferController extends Controller
             throw ValidationException::withMessages(['fee_reason' => 'Добавете основание за таксата.']);
         }
 
-        return $data;
+        return [...$data, 'fee_type' => $fee, 'amount_cents' => $amount, 'fee_reason' => $reason];
     }
 
     private function organization(TenantContext $context): Organization
@@ -134,7 +157,8 @@ final class VisitOfferController extends Controller
     /** @return array<string, mixed> */
     private function present(VisitOffer $offer): array
     {
-        $offer->loadMissing('sessions');
+        $offer->loadMissing(['sessions', 'group.priceOptions', 'group.offering.priceOptions', 'group.offering.paymentTermsChoices']);
+        $price = $offer->stepSixPrice();
 
         return [
             'id' => $offer->id, 'activity_id' => $offer->activity_id, 'group_id' => $offer->group_id,
@@ -145,12 +169,15 @@ final class VisitOfferController extends Controller
             'visit_limit' => $offer->visit_limit, 'fee_type' => $offer->fee_type->value,
             'amount_cents' => $offer->amount_cents, 'currency' => $offer->currency,
             'fee_reason' => $offer->fee_reason, 'booking_deadline_hours' => $offer->booking_deadline_hours,
-            'cancellation_deadline_hours' => $offer->cancellation_deadline_hours,
-            'cancellation_policy' => $offer->cancellation_policy, 'cancellation_outcome' => $offer->cancellation_outcome,
-            'terms_version' => $offer->terms_version, 'trial_limit_per_academic_year' => $offer->trial_limit_per_academic_year,
-            'single_visit_limit' => $offer->single_visit_limit, 'single_visit_window_days' => $offer->single_visit_window_days,
-            'unlimited_single_visits' => $offer->unlimited_single_visits, 'no_show_trial_limit' => $offer->no_show_trial_limit,
             'waitlist_enabled' => $offer->waitlist_enabled,
+            // A trial or single visit is priced from step 6 (null — the activity has no such price yet).
+            'price' => $price === null ? null : [
+                'id' => $price->id, 'enrollment_mode' => $price->enrollment_mode, 'unit' => $price->unit,
+                'amount_cents' => $price->amount_cents, 'currency' => $price->currency,
+            ],
+            // The activity's "Такси, отсъствия и отказ" for visits, which every application copies (т. 8a.3).
+            'payment_terms' => $offer->group === null ? null : $this->paymentTerms
+                ->forPrice('single', $offer->group->offering->paymentTermsByKind())?->presentForParent(),
             'published_at' => $offer->published_at?->toIso8601String(),
             'closed_at' => $offer->closed_at?->toIso8601String(),
             'cancelled_at' => $offer->cancelled_at?->toIso8601String(),

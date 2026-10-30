@@ -79,7 +79,7 @@ final class PublicCatalogController extends Controller
                 $campaign = OpenDayCampaign::query()->where('slug', $campaignSlug)
                     ->where('status', VisitOfferStatus::Published)
                     ->with(['visitOffers' => fn ($query) => $query->where('status', VisitOfferStatus::Published)
-                        ->with(['activity', 'group.offering', 'sessions.group', 'campaign'])])->firstOrFail();
+                        ->with(['activity', 'group.priceOptions', 'group.offering.priceOptions', 'group.offering.paymentTermsChoices', 'sessions.group', 'campaign'])])->firstOrFail();
 
                 $days = [];
                 $at = CarbonImmutable::now();
@@ -167,7 +167,7 @@ final class PublicCatalogController extends Controller
     {
         return [
             'visitOffers' => fn ($query) => $query->where('status', VisitOfferStatus::Published)
-                ->with(['activity', 'group.offering', 'sessions.group', 'campaign']),
+                ->with(['activity', 'group.priceOptions', 'group.offering.priceOptions', 'group.offering.paymentTermsChoices', 'sessions.group', 'campaign']),
             'offerings' => fn ($query) => $query->with([
                 'location' => fn ($location) => $location->where('is_public', true),
                 'leadInstructor' => fn ($instructor) => $instructor->where('is_public', true),
@@ -209,7 +209,8 @@ final class PublicCatalogController extends Controller
         $rows = $this->availabilityPresenter->rows($activity->visitOffers, CarbonImmutable::now());
         $availability = $this->availabilityPresenter->cardAvailability($rows)
             ?? $this->availabilityPresenter->groupAvailability($groups, CarbonImmutable::now());
-        $offerPrice = collect($rows)->sortBy('amount_cents')->first();
+        // A free visit is the card's price only when nothing costs money (docs/product/visits.md, т. 5.5).
+        $offerPrice = collect($rows)->sortBy(fn (array $row): array => [$row['amount_cents'] === 0 ? 1 : 0, $row['amount_cents']])->first();
         $offerPriceVaries = collect($rows)->map(fn (array $row): string => implode(':', [
             $row['fee_type'], $row['amount_cents'], $row['currency'],
         ]))->unique()->count() > 1;
@@ -387,7 +388,7 @@ final class PublicCatalogController extends Controller
         $campaignUsesMedia = OpenDayCampaign::query()->where('status', VisitOfferStatus::Published)
             ->where('image_path', $path)
             ->with(['visitOffers' => fn ($query) => $query->where('status', VisitOfferStatus::Published)
-                ->with(['activity', 'group.offering', 'sessions.group', 'campaign'])])->get()
+                ->with(['activity', 'group.priceOptions', 'group.offering.priceOptions', 'group.offering.paymentTermsChoices', 'sessions.group', 'campaign'])])->get()
             ->contains(fn (OpenDayCampaign $campaign): bool => $this->availabilityPresenter
                 ->rows($campaign->visitOffers, CarbonImmutable::now()) !== []);
         if ($campaignUsesMedia) {

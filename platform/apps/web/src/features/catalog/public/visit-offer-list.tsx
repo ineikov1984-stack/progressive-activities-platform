@@ -1,8 +1,9 @@
 'use client';
 
 import { useId, useState } from 'react';
+import { describeTerms } from '../../payment-terms/rules';
 import type { PublicGroup, PublicLocation, PublicVisitOffer } from './api';
-import { availabilityLabel, cancellationSummary, enrollmentCta, meaningfulText, navigationAction, offerAction, visitPriceLabel, visitSchedule } from './presentation';
+import { availabilityLabel, enrollmentCta, meaningfulText, navigationAction, offerAction, visitPriceLabel, visitSchedule } from './presentation';
 import styles from './catalog.module.css';
 
 export function PublicLocationDetails({ location }: { location?: PublicLocation | null }) {
@@ -12,6 +13,17 @@ export function PublicLocationDetails({ location }: { location?: PublicLocation 
     {location?.type === 'physical' && meaningfulText(location.address) && <span>{location.address!.trim()}</span>}
     {meaningfulText(location?.public_directions) && <span>{location!.public_directions!.trim()}</span>}
     {navigation && <a href={navigation.href} target="_blank" rel="noreferrer">{navigation.label} ↗</a>}
+  </div>;
+}
+
+/** "Такси, отсъствия и отказ" of a visit: cancellation and no-show first, the rest on request (т. 8a.10). */
+function VisitTerms({ terms, same }: { terms: PublicVisitOffer['payment_terms']; same: boolean }) {
+  if (same) return <p className={styles.sameTerms}>Същите такси, отсъствия и отказ.</p>;
+  const lines = describeTerms(terms.billing_kind, terms.rules);
+  return <div className={styles.visitTerms}>
+    <strong>Такси, отсъствия и отказ</strong>
+    <dl>{lines.slice(0, 2).map((line) => <div key={line.title}><dt>{line.title}:</dt> <dd>{line.text}</dd></div>)}</dl>
+    {lines.length > 2 && <details><summary>Пълни условия</summary><dl>{lines.slice(2).map((line) => <div key={line.title}><dt>{line.title}:</dt> <dd>{line.text}</dd></div>)}</dl></details>}
   </div>;
 }
 
@@ -25,7 +37,7 @@ export function VisitOfferList({ offers, groups, headingLevel = 3 }: { offers: P
     {multiple && <p className={styles.chooserHint}>Изберете конкретно посещение, за да прегледате възможността за участие. Изборът не запазва място.</p>}
     <fieldset className={styles.offerFieldset}>
       <legend className={styles.srOnly}>{multiple ? 'Изберете посещение' : 'Подробности за посещението'}</legend>
-      <div className={styles.offerGrid}>{offers.map((offer) => {
+      <div className={styles.offerGrid}>{offers.map((offer, index) => {
         const key = `${offer.visit_offer_id}:${offer.session_id}`;
         // A location belongs to this offer only through a real public session relation.
         const group = groups?.find((item) => item.sessions?.some((session) => session.id === offer.session_id));
@@ -42,11 +54,10 @@ export function VisitOfferList({ offers, groups, headingLevel = 3 }: { offers: P
           </div>
           <div className={styles.offerDetails}>
           <dl className={styles.offerTerms}>
-            <div><dt>Срок за записване</dt><dd>До {offer.booking_deadline_hours} часа преди началото</dd></div>
-            <div><dt>Срок за отказ</dt><dd>До {offer.cancellation_deadline_hours} часа преди началото</dd></div>
-            <div><dt>При отказ в срок</dt><dd>{cancellationSummary(offer.cancellation_outcome)}</dd></div>
+            <div><dt>Записване</dt><dd>До {offer.booking_deadline_hours} часа преди началото</dd></div>
           </dl>
-          {meaningfulText(offer.cancellation_policy) && <p className={styles.cancellation}>{offer.cancellation_policy!.trim()}</p>}
+          <VisitTerms terms={offer.payment_terms} same={index > 0 && offers[index - 1].payment_terms.version === offer.payment_terms.version} />
+          {offer.type === 'trial' && <p className={styles.trialRule}>Пробното е веднъж на дете за тази дейност в учебната година.</p>}
           {groups && <PublicLocationDetails location={group?.location} />}
           <p className={styles.actionState}>{state.label}</p>
           {multiple && offer.action !== 'closed' && <label className={styles.offerChoice}>

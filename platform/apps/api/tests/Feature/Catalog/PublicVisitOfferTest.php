@@ -93,17 +93,18 @@ class PublicVisitOfferTest extends TestCase
             ->assertJsonPath('activity.visit_offers.0.action', 'closed');
     }
 
-    public function test_public_detail_terms_version_can_be_used_to_submit_the_selected_offer(): void
+    public function test_public_visit_terms_version_can_be_used_to_submit_the_selected_offer(): void
     {
         $this->travelTo('2026-10-28T10:00:00Z');
-        [$organization, $activity, , $session, $offer, $child] = $this->visitFixture([
-            'terms_version' => 'visit-v2',
-        ]);
+        [$organization, $activity, , $session, $offer, $child] = $this->visitFixture(['terms_version' => 'visit-v2']);
 
         $base = $this->base($organization->slug);
         $this->getJson($base.'/catalog')->assertOk()->assertJsonMissingPath('activities.0.terms_version');
         $row = $this->getJson($base.'/activities/'.$activity->slug)->assertOk()->json('activity.visit_offers.0');
-        $this->assertSame('visit-v2', $row['terms_version']);
+        // The activity's visit terms, not the offer's own version (docs/product/visits.md, т. 8a.10).
+        $this->assertArrayNotHasKey('terms_version', $row);
+        $this->assertSame($this->visitTerms(), $row['payment_terms']['version']);
+        $this->assertSame('visit', $row['payment_terms']['billing_kind']);
         $this->assertSame($offer->id, $row['visit_offer_id']);
         $this->assertSame($session->id, $row['session_id']);
 
@@ -112,14 +113,14 @@ class PublicVisitOfferTest extends TestCase
                 'child_id' => $child->id,
                 'visit_offer_id' => $row['visit_offer_id'],
                 'session_id' => $row['session_id'],
-                'accepted_terms_version' => $row['terms_version'],
-            ])->assertCreated()->assertJsonPath('application.accepted_terms_version', 'visit-v2');
+                'accepted_terms_version' => $row['payment_terms']['version'],
+            ])->assertCreated()->assertJsonPath('application.accepted_terms_version', $this->visitTerms());
     }
 
-    public function test_legacy_published_offer_without_terms_version_is_not_publicly_actionable(): void
+    public function test_an_offer_without_its_own_terms_version_is_shown_and_a_trial_without_a_price_is_not(): void
     {
         $this->travelTo('2026-10-28T10:00:00Z');
-        [$organization, $activity, , , $offer] = $this->visitFixture([
+        [$organization, $activity, $group, , $offer] = $this->visitFixture([
             'type' => 'open_day', 'terms_version' => null,
         ]);
         $campaign = OpenDayCampaign::query()->create([
@@ -128,19 +129,20 @@ class PublicVisitOfferTest extends TestCase
         $offer->update(['campaign_id' => $campaign->id]);
 
         $base = $this->base($organization->slug);
+        $this->getJson($base.'/activities/'.$activity->slug)->assertOk()
+            ->assertJsonPath('activity.visit_offers.0.payment_terms.version', $this->visitTerms())
+            ->assertJsonPath('activity.visit_offers.0.action', 'apply');
+        $this->getJson($base.'/open-days/legacy-without-terms')->assertOk();
+
+        // A trial on chosen dates needs the activity's trial price (т. 8a.1).
+        app(TenantContext::class)->select($organization);
+        $offer->update(['type' => 'trial']);
+        $group->offering->priceOptions()->where('enrollment_mode', 'trial')->update(['is_available' => false]);
         $this->getJson($base.'/catalog')->assertOk()
             ->assertJsonPath('activities.0.special_offer', null)
             ->assertJsonPath('activities.0.special_offer_url', null);
-        $this->getJson($base.'/activities/'.$activity->slug)->assertOk()
-            ->assertJsonPath('activity.visit_offers', []);
+        $this->getJson($base.'/activities/'.$activity->slug)->assertOk()->assertJsonPath('activity.visit_offers', []);
         $this->getJson($base.'/open-days/legacy-without-terms')->assertNotFound();
-
-        app(TenantContext::class)->select($organization);
-        $offer->update(['terms_version' => 'visit-v2']);
-        $this->getJson($base.'/activities/'.$activity->slug)->assertOk()
-            ->assertJsonPath('activity.visit_offers.0.terms_version', 'visit-v2')
-            ->assertJsonPath('activity.visit_offers.0.action', 'apply');
-        $this->getJson($base.'/open-days/legacy-without-terms')->assertOk();
     }
 
     public function test_detail_excludes_draft_stale_cancelled_offers_and_private_fields(): void
@@ -151,6 +153,7 @@ class PublicVisitOfferTest extends TestCase
             'cancellation_policy' => 'Credit before deadline', 'cancellation_outcome' => 'credit',
             'audience_age_label' => '7–9 г.',
         ]);
+        // A single visit is priced from step 6; the offer's own fee and terms are no longer shown (т. 8a.10).
         $draft = $this->offer($offer, ['status' => 'draft', 'title' => 'Private draft']);
         $draft->sessions()->attach($session->id);
         $cancelled = $this->offer($offer, ['status' => 'cancelled', 'title' => 'Private cancelled']);
@@ -162,9 +165,12 @@ class PublicVisitOfferTest extends TestCase
         $stale->sessions()->attach($past->id);
         $response = $this->getJson($this->base($organization->slug).'/activities/'.$activity->slug)->assertOk()
             ->assertJsonCount(1, 'activity.visit_offers')
-            ->assertJsonPath('activity.visit_offers.0.fee_reason', 'Materials')
-            ->assertJsonPath('activity.visit_offers.0.cancellation_policy', 'Credit before deadline')
-            ->assertJsonPath('activity.visit_offers.0.booking_deadline_hours', 12);
+            ->assertJsonPath('activity.visit_offers.0.amount_cents', 1500)
+            ->assertJsonPath('activity.visit_offers.0.fee_type', 'paid')
+            ->assertJsonPath('activity.visit_offers.0.fee_reason', null)
+            ->assertJsonPath('activity.visit_offers.0.booking_deadline_hours', 12)
+            ->assertJsonMissingPath('activity.visit_offers.0.cancellation_policy')
+            ->assertJsonMissingPath('activity.visit_offers.0.cancellation_deadline_hours');
         $row = $response->json('activity.visit_offers.0');
         $this->assertSame($offer->id, $row['visit_offer_id']);
         $this->assertSame($session->id, $row['session_id']);
@@ -217,8 +223,9 @@ class PublicVisitOfferTest extends TestCase
         $danceOffer->sessions()->attach($danceSession->id);
 
         $card = $this->getJson($this->base($organization->slug).'/catalog')->assertOk()->json('activities.0');
+        // The paid visit is the card's price; a free one only when nothing costs money (т. 5.5).
         $this->assertTrue($card['price']['from']);
-        $this->assertSame('От 0,00 € / посещение', $card['price']['label']);
+        $this->assertSame('От 15,00 € / посещение', $card['price']['label']);
 
         $url = $this->base($organization->slug).'/open-days/'.$campaign->slug;
         $response = $this->getJson($url)->assertOk()
@@ -228,7 +235,7 @@ class PublicVisitOfferTest extends TestCase
             ->assertJsonPath('campaign.days.0.date', '2026-11-03')
             ->assertJsonPath('campaign.days.1.date', '2026-11-04')
             ->assertJsonPath('campaign.days.1.activities.0.visit_offers.0.visit_offer_id', $paid->id)
-            ->assertJsonPath('campaign.days.1.activities.0.visit_offers.0.amount_cents', 1250)
+            ->assertJsonPath('campaign.days.1.activities.0.visit_offers.0.amount_cents', 1500)
             ->assertJsonPath('campaign.days.1.activities.0.visit_offers.0.availability.status', 'limited')
             ->assertJsonMissing(['title' => 'Hidden draft']);
         $firstDayActivities = $response->json('campaign.days.0.activities');

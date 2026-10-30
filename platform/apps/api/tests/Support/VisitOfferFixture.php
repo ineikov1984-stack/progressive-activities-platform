@@ -13,10 +13,18 @@ use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
+use App\Domain\PaymentTerms\Enums\BillingKind;
+use App\Domain\PaymentTerms\Services\AppliedTerms;
 use Illuminate\Support\Str;
 
 trait VisitOfferFixture
 {
+    /** The terms a parent accepts for a visit while the organization has no terms of its own (т. 8a.3). */
+    private function visitTerms(): string
+    {
+        return AppliedTerms::standard(BillingKind::Visit)->key();
+    }
+
     /** @return array{Organization, Activity, Group, Session, VisitOffer, Child} */
     private function visitFixture(array $offerAttributes = [], array $groupAttributes = [], array $sessionAttributes = []): array
     {
@@ -30,6 +38,12 @@ trait VisitOfferFixture
             'summary' => 'Chess classes', 'age_label' => '7+', 'status' => 'published',
         ]);
         $offering = $activity->offerings()->create([]);
+        // Step 6: a trial or single visit on chosen dates takes the activity's price (docs/product/visits.md, т. 8a.1).
+        foreach (['trial' => 0, 'single' => 1500] as $mode => $amount) {
+            $offering->priceOptions()->create([
+                'enrollment_mode' => $mode, 'unit' => 'session', 'amount_cents' => $amount, 'currency' => 'EUR', 'is_available' => true,
+            ]);
+        }
         $group = $offering->groups()->create(array_merge([
             'name' => 'Tuesday', 'capacity_max' => 12, 'status' => 'published',
             'waitlist_enabled' => true, 'schedule_pattern' => ['timezone' => 'Europe/Sofia'],
@@ -59,9 +73,10 @@ trait VisitOfferFixture
         string $status = 'active',
         ?string $startsOn = null,
     ): Enrollment {
+        // Not available, so it never takes the place of the activity's price for the group.
         $price = $group->offering->priceOptions()->create([
             'group_id' => $group->id, 'enrollment_mode' => $scope === 'full_period' ? 'monthly' : $scope,
-            'unit' => 'session', 'amount_cents' => 0, 'currency' => 'EUR', 'is_available' => true,
+            'unit' => 'session', 'amount_cents' => 0, 'currency' => 'EUR', 'is_available' => false,
         ]);
         $application = EnrollmentApplication::query()->create([
             'parent_user_id' => $child->owner_user_id, 'child_id' => $child->id,

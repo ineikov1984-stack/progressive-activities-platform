@@ -48,8 +48,10 @@ final class RecordVisitOutcome
             if ($current->status !== EnrollmentStatus::Active) {
                 throw ValidationException::withMessages(['outcome' => 'Посещението не е активно.']);
             }
-            // A visit from an offer keeps the offer's deadline; one from a price — its copy of the terms.
-            $offer = $application->visitOffer;
+            // The copy of the visit terms decides; an offer visit from before the copies keeps its offer's deadline;
+            // anything else follows the platform's standard terms (docs/product/visits.md, т. 8a.7).
+            $copy = ($application->payment_terms_snapshot['billing_kind'] ?? null) === 'visit';
+            $offer = $copy ? null : $application->visitOffer;
             $accepted = $application->transitions()->whereNotNull($offer !== null
                 ? 'metadata->cancellation_deadline_hours' : 'metadata->session_starts_at')->first()?->metadata;
             $start = isset($accepted['session_starts_at']) ? CarbonImmutable::parse($accepted['session_starts_at']) : $session->starts_at;

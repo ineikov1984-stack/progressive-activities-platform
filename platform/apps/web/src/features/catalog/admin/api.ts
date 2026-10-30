@@ -55,18 +55,21 @@ export const privateMediaUrl = (path?: string | null) => path ? `/backend/api/v1
 
 export type VisitOfferType = 'trial' | 'single' | 'open_day';
 export type VisitOfferStatus = 'draft' | 'published' | 'closed' | 'cancelled';
+/** The fee fields are an open day's own; a trial or single visit is priced from step 6 (docs/product/visits.md, т. 8a). */
 export type VisitOfferFields = {
   activity_id: string; group_id: string; type: VisitOfferType; title: string; description: string | null;
   audience_age_label: string | null; audience_class_label: string | null; visit_limit: number;
   fee_type: 'free' | 'paid' | 'from_price'; amount_cents: number; currency: 'EUR'; fee_reason: string | null;
-  booking_deadline_hours: number; cancellation_deadline_hours: number; cancellation_policy: string | null;
-  cancellation_outcome: 'refund' | 'credit' | 'non_refundable'; terms_version: string | null;
-  trial_limit_per_academic_year: number; single_visit_limit: number; single_visit_window_days: number;
-  unlimited_single_visits: boolean; no_show_trial_limit: number | null; waitlist_enabled: boolean;
+  booking_deadline_hours: number; waitlist_enabled: boolean;
 };
+export type VisitOfferPrice = { id: string; enrollment_mode: string; unit: string; amount_cents: number; currency: 'EUR' };
+export type VisitOfferTerms = { version: string; billing_kind: string; name: string; preset: string; preset_label: string };
 export type VisitOffer = VisitOfferFields & {
   id: string; campaign_id: string | null; status: VisitOfferStatus; version: number;
   sessions: ActivityGroup['sessions']; published_at: string | null; closed_at: string | null; cancelled_at: string | null;
+  /** The step-6 price of a trial or single visit; null for an open day or without such a price. */
+  price?: VisitOfferPrice | null;
+  payment_terms?: VisitOfferTerms | null;
 };
 export type VisitOfferInput = Pick<VisitOfferFields, 'activity_id' | 'group_id' | 'type' | 'title' | 'visit_limit'> & Partial<VisitOfferFields> & { version?: number; session_ids?: string[] };
 export type OpenDayCampaign = {

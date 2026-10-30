@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { VisitOffer } from '../../src/features/catalog/admin/api';
 
-test('six-step editing preserves inputs, saves exact cents, restores after reload and blocks publication errors', async ({ page }) => {
+test('five-step editing preserves inputs, saves an open day fee in exact cents, restores after reload and blocks publication errors', async ({ page }) => {
   let saved: VisitOffer | undefined;
   let publishCalls = 0;
   let conflict = false;
@@ -36,14 +36,16 @@ test('six-step editing preserves inputs, saves exact cents, restores after reloa
   await page.goto('/dashboard/activities/activity-1/visit-offers');
   await expect(page.getByRole('heading', { level: 1, name: 'Шахмат' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Генерирай с AI' })).toBeDisabled();
+  // Only an open day has a fee of its own; a trial or single visit is priced from step 6 (docs/product/visits.md, т. 8a).
+  await page.getByLabel('Вид посещение').selectOption('open_day');
   await page.getByLabel('Публично заглавие').fill('Първи ходове');
   await page.getByLabel('Описание (по желание)').fill('Запазено описание');
   await expect(page.getByText('Например: Децата ще изпробват', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Напред', exact: true }).click();
   await page.getByRole('combobox', { name: 'Група', exact: true }).selectOption('group-1');
   await page.getByRole('checkbox').check();
-  await page.getByRole('button', { name: '4. Цена и основание', exact: true }).click();
-  await page.getByLabel('Ценови модел').selectOption('paid');
+  await page.getByRole('button', { name: '4. Цена и условия', exact: true }).click();
+  await page.getByLabel('Цена за деня').selectOption('paid');
   await page.getByLabel('Цена в евро').fill('19,99');
   await page.getByRole('button', { name: 'Запази черновата' }).click();
   await expect(page.locator('#error-fee_reason')).toBeVisible();
@@ -51,21 +53,21 @@ test('six-step editing preserves inputs, saves exact cents, restores after reloa
   await page.getByLabel('Публично основание за таксата').fill('Материали');
   await page.getByRole('button', { name: '1. Вид и съдържание', exact: true }).click();
   await expect(page.getByLabel('Описание (по желание)')).toHaveValue('Запазено описание');
-  await page.getByRole('button', { name: '5. Срокове и отказ', exact: true }).click();
+  await page.getByRole('button', { name: '3. Места и срок', exact: true }).click();
   await expect(page.getByLabel('Записване до колко часа преди началото')).toHaveValue('12');
-  await expect(page.getByLabel('Отказ до колко часа преди началото')).toHaveValue('24');
-  await page.getByLabel('Издание на условията').fill('2035-1');
+  await expect(page.getByLabel('Отказ до колко часа преди началото')).toHaveCount(0);
   await page.getByRole('button', { name: 'Запази черновата' }).click();
   await expect(page.getByRole('status')).toHaveText('Предложението е запазено.');
-  expect(writes[0]).toMatchObject({ amount_cents: 1999, description: 'Запазено описание', session_ids: ['session-1'], fee_reason: 'Материали', trial_limit_per_academic_year: 1 });
+  expect(writes[0]).toMatchObject({ type: 'open_day', amount_cents: 1999, description: 'Запазено описание', session_ids: ['session-1'], fee_reason: 'Материали', booking_deadline_hours: 12 });
+  for (const retired of ['terms_version', 'cancellation_deadline_hours', 'cancellation_outcome', 'trial_limit_per_academic_year']) expect(writes[0]).not.toHaveProperty(retired);
   await page.reload();
   await expect(page.getByLabel('Публично заглавие')).toHaveValue('Първи ходове');
   await expect(page.getByLabel('Описание (по желание)')).toHaveValue('Запазено описание');
   await page.getByRole('button', { name: '2. Група и занятия', exact: true }).click();
   await expect(page.getByRole('checkbox')).toBeChecked();
-  await page.getByRole('button', { name: '4. Цена и основание', exact: true }).click();
+  await page.getByRole('button', { name: '4. Цена и условия', exact: true }).click();
   await expect(page.getByLabel('Цена в евро')).toHaveValue('19.99');
-  await page.getByRole('button', { name: '6. Преглед и публикуване', exact: true }).click();
+  await page.getByRole('button', { name: '5. Преглед и публикуване', exact: true }).click();
   await page.getByRole('button', { name: 'Публикувай предложението' }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Поправете следното' })).toContainText('Има конфликт в графика.');
   await expect(page.getByRole('button', { name: 'Публикувай предложението' })).toBeDisabled();
@@ -82,7 +84,7 @@ test('six-step editing preserves inputs, saves exact cents, restores after reloa
   await page.getByRole('button', { name: 'Замени формата с актуалното предложение' }).click();
   await expect(page.getByLabel('Публично заглавие')).toHaveValue('Промяна от колега');
   conflict = false; rejectPublication = false;
-  await page.getByRole('button', { name: '6. Преглед и публикуване', exact: true }).click();
+  await page.getByRole('button', { name: '5. Преглед и публикуване', exact: true }).click();
   await page.getByRole('button', { name: 'Публикувай предложението' }).click();
   await expect(page.getByRole('status')).toHaveText('Предложението е публикувано.');
   await expect(page.getByRole('button', { name: 'Публикувай предложението' })).toBeDisabled();

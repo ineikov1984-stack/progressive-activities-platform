@@ -48,10 +48,6 @@ describe('public visit offer presentation', () => {
     expect(presentation.visitSchedule({ starts_at: '2035-11-03T23:30:00Z', ends_at: '2035-11-04T00:30:00Z', timezone: 'Asia/Tokyo' })).toContain('4 ноември');
   });
 
-  it.each([['refund', 'Възстановяване на сумата'], ['credit', 'Кредит за бъдещо посещение'], ['non_refundable', 'Сумата не се възстановява']] as const)('keeps the public %s cancellation outcome visible even without prose', (outcome, label) => {
-    expect(presentation.cancellationSummary(outcome)).toBe(label);
-  });
-
   it('shows every published weekly slot in practical group information', () => {
     expect(presentation.groupScheduleLines({ frequency: 'weekly', timezone: 'Europe/Sofia', slots: [{ weekday: 1, starts_at: '16:00', duration_minutes: 60 }, { weekday: 4, starts_at: '17:30', duration_minutes: 90 }] })).toEqual(['Всеки понеделник · 16:00–17:00 · Europe/Sofia', 'Всеки четвъртък · 17:30–19:00 · Europe/Sofia']);
     expect(presentation.groupScheduleLines(null)).toEqual(['Все още не е обявено']);

@@ -1,3 +1,5 @@
+import type { BillingKind, Rules } from '../../payment-terms/api';
+
 export type CatalogOrganization = { slug: string; public_name: string; intro?: string | null; accent_color?: string | null; logo_url?: string | null };
 export type AvailabilityStatus = 'available' | 'limited' | 'last_place' | 'full' | 'closed';
 export type Availability = { status: AvailabilityStatus; remaining_places: number | null };
@@ -13,12 +15,15 @@ export type PublicGroup = { id?: string; name: string; age_label?: string | null
 export type PublicVisitOffer = {
   visit_offer_id: string; session_id: string; campaign_slug: string | null; type: SpecialOffer; title: string;
   description: string | null; audience: string | null; starts_at: string; ends_at: string; timezone: string;
+  /** A trial or single visit carries its step-6 price; an open day its own fee (docs/product/visits.md, т. 8a). */
   fee_type: 'free' | 'paid' | 'from_price'; amount_cents: number; currency: 'EUR'; fee_reason: string | null;
-  cancellation_policy: string | null; cancellation_outcome: 'non_refundable' | 'refund' | 'credit';
-  cancellation_deadline_hours: number; booking_deadline_hours: number; terms_version: string | null;
+  booking_deadline_hours: number;
+  /** The visit terms the parent accepts ("Такси, отсъствия и отказ"); `version` is what an application sends. */
+  payment_terms: PublicPaymentTerms;
   availability: { status: AvailabilityStatus; remaining_total_places: number | null; remaining_offer_places: number; waitlist_available: boolean };
   action: 'apply' | 'waitlist' | 'closed';
 };
+export type PublicPaymentTerms = { version: string; billing_kind: BillingKind; billing_kind_label: string; name: string; preset: string; preset_label: string; schema_version: number; rules: Rules };
 export type PublicActivity = PublicActivityCard & { sections: ActivitySections; groups: PublicGroup[]; terms: { title?: string | null; terms?: string | null; cancellation_policy?: string | null }[]; instructors: PublicInstructor[]; visit_offers?: PublicVisitOffer[] };
 export type PublicCatalog = { organization: CatalogOrganization; activities: PublicActivityCard[] };
 export type PublicActivityResponse = { organization: CatalogOrganization; activity: PublicActivity };

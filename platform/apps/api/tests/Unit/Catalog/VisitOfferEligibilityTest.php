@@ -30,7 +30,9 @@ class VisitOfferEligibilityTest extends TestCase
             $this->assertArrayHasKey('trial_limit', $exception->errors());
         }
 
+        // The offer's own limit no longer applies: one trial for the activity (docs/product/visits.md, т. 8a.5).
         $offer->update(['trial_limit_per_academic_year' => 2]);
+        $this->expectException(ValidationException::class);
         app(VisitOfferEligibility::class)->assertEligible($child, $offer->refresh(), $session);
     }
 
@@ -43,80 +45,16 @@ class VisitOfferEligibilityTest extends TestCase
         app(VisitOfferEligibility::class)->assertEligible($child, $offer, $session);
     }
 
-    public function test_single_visits_use_a_rolling_30_day_window_and_configurable_limit(): void
+    public function test_single_visits_and_open_days_have_no_limit(): void
     {
-        [, , $group, $session, $offer, $child] = $this->visitFixture(['type' => 'single']);
-        $this->visitEnrollment($child, $group, $session, 'single', $offer, startsOn: '2026-10-03');
-        $this->visitEnrollment($child, $group, $session, 'single', $offer, startsOn: '2026-10-05');
-        $this->visitEnrollment($child, $group, $session, 'single', $offer, startsOn: '2026-10-20');
-
-        try {
-            app(VisitOfferEligibility::class)->assertEligible($child, $offer, $session);
-            $this->fail('Third single visit within 30 days was accepted.');
-        } catch (ValidationException $exception) {
-            $this->assertArrayHasKey('single_visit_limit', $exception->errors());
+        [, , $group, $session, $offer, $child] = $this->visitFixture(['type' => 'single', 'single_visit_limit' => 1]);
+        foreach (['2026-10-03', '2026-10-05', '2026-10-20'] as $day) {
+            $this->visitEnrollment($child, $group, $session, 'single', $offer, startsOn: $day);
         }
-
-        $offer->update(['single_visit_limit' => 3]);
+        app(VisitOfferEligibility::class)->assertEligible($child, $offer, $session);
+        $offer->update(['type' => 'open_day']);
         app(VisitOfferEligibility::class)->assertEligible($child, $offer->refresh(), $session);
-        $offer->update(['single_visit_limit' => 2, 'unlimited_single_visits' => true]);
-        app(VisitOfferEligibility::class)->assertEligible($child, $offer->refresh(), $session);
-    }
-
-    public function test_reverse_order_single_bookings_cannot_exceed_any_rolling_window(): void
-    {
-        [, , $group, $session, $offer, $child] = $this->visitFixture(['type' => 'single']);
-        $session->update(['starts_at' => '2026-11-10T14:00:00Z', 'ends_at' => '2026-11-10T15:00:00Z']);
-        foreach (['2026-11-20', '2026-11-15'] as $day) {
-            $later = $group->sessions()->create([
-                'starts_at' => $day.'T14:00:00Z', 'ends_at' => $day.'T15:00:00Z',
-                'status' => 'scheduled',
-            ]);
-            $this->visitEnrollment($child, $group, $later, 'single');
-        }
-
-        try {
-            app(VisitOfferEligibility::class)->assertEligible($child, $offer, $session->refresh());
-            $this->fail('Reverse-order bookings exceeded the single-visit limit.');
-        } catch (ValidationException $exception) {
-            $this->assertArrayHasKey('single_visit_limit', $exception->errors());
-        }
-    }
-
-    public function test_single_limit_counts_bookings_before_and_after_requested_visit(): void
-    {
-        [, , $group, $session, $offer, $child] = $this->visitFixture(['type' => 'single']);
-        $session->update(['starts_at' => '2026-11-15T14:00:00Z', 'ends_at' => '2026-11-15T15:00:00Z']);
-        foreach (['2026-10-25', '2026-11-20'] as $day) {
-            $otherSession = $group->sessions()->create([
-                'starts_at' => $day.'T14:00:00Z', 'ends_at' => $day.'T15:00:00Z',
-                'status' => 'scheduled',
-            ]);
-            $this->visitEnrollment($child, $group, $otherSession, 'single');
-        }
-
-        try {
-            app(VisitOfferEligibility::class)->assertEligible($child, $offer, $session->refresh());
-            $this->fail('Visits on both sides of the requested date exceeded the limit.');
-        } catch (ValidationException $exception) {
-            $this->assertArrayHasKey('single_visit_limit', $exception->errors());
-        }
-    }
-
-    public function test_bookings_on_both_sides_without_a_shared_window_remain_eligible(): void
-    {
-        [, , $group, $session, $offer, $child] = $this->visitFixture(['type' => 'single']);
-        $session->update(['starts_at' => '2026-11-15T14:00:00Z', 'ends_at' => '2026-11-15T15:00:00Z']);
-        foreach (['2026-10-20', '2026-12-10'] as $day) {
-            $otherSession = $group->sessions()->create([
-                'starts_at' => $day.'T14:00:00Z', 'ends_at' => $day.'T15:00:00Z',
-                'status' => 'scheduled',
-            ]);
-            $this->visitEnrollment($child, $group, $otherSession, 'single');
-        }
-
-        $this->expectNotToPerformAssertions();
-        app(VisitOfferEligibility::class)->assertEligible($child, $offer, $session->refresh());
+        $this->addToAssertionCount(2);
     }
 
     public function test_staff_override_requires_active_membership_and_a_nonblank_reason(): void
