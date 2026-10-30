@@ -10,7 +10,7 @@ import { type ActivityDraft, type ActivityGroup, type ActivitySections, type Ins
 import { activityCategories, activityCompleteness, formatEur } from '../presentation';
 import { PrivateImage, usePrivateMedia } from '../private-image';
 import { Autosave, type AutosaveState } from './autosave';
-import { checkOffering, enrollmentModes, priceUnits, type OfferingDraft } from './offering';
+import { checkOffering, enrollmentModes, isFreeTrial, priceUnits, type OfferingDraft } from './offering';
 import { StepGroups } from './step-groups';
 import { StepPeople } from './step-people';
 import { StepPrice } from './step-price';
@@ -429,7 +429,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
                 modes={(content.offering?.prices ?? []).flatMap((price) => {
                   const mode = enrollmentModes.find((item) => item.value === price.enrollment_mode);
                   const unit = priceUnits.find((item) => item.value === price.unit)?.label ?? '';
-                  return mode ? [{ value: mode.value, label: mode.label, price: `${price.amount} € ${unit}`.trim() }] : [];
+                  return mode ? [{ value: mode.value, label: mode.label, price: isFreeTrial(price) ? 'Безплатно' : `${price.amount} € ${unit}`.trim() }] : [];
                 })}
                 ageLabel={content.age_label.trim() || activity.age_label}
                 groups={groups}
