@@ -188,6 +188,38 @@ class PublicCatalogTest extends TestCase
             ->assertNotFound();
     }
 
+    public function test_a_teacher_who_has_left_the_group_or_not_started_is_not_shown_publicly(): void
+    {
+        Storage::fake('local');
+        [$organization, $activity] = $this->publishedCatalog('left-teacher-school');
+        $group = Group::query()->firstOrFail();
+        $teachers = [
+            'Текущ треньор' => [[], 200],
+            'Напуснал треньор' => [['ends_on' => now('Europe/Sofia')->subDay()->toDateString()], 404],
+            'Бъдещ треньор' => [['starts_on' => now('Europe/Sofia')->addDay()->toDateString()], 404],
+        ];
+        $files = [];
+        foreach ($teachers as $name => [$period, $status]) {
+            $filename = Str::uuid().'.png';
+            $teacher = InstructorProfile::query()->create(['public_name' => $name, 'photo_path' => 'catalog/'.$filename, 'is_public' => true]);
+            $group->assignments()->attach($teacher->id, $period);
+            Storage::disk('local')->put('catalog/'.$organization->id.'/'.$filename, 'image');
+            Storage::disk('local')->put('catalog/'.$organization->id.'/'.pathinfo($filename, PATHINFO_FILENAME).'.json', json_encode([
+                'organization_id' => $organization->id, 'activity_id' => $activity->id, 'path' => 'catalog/'.$filename, 'mime' => 'image/png',
+            ], JSON_THROW_ON_ERROR));
+            $files[$filename] = $status;
+        }
+        app(TenantContext::class)->clear();
+
+        $this->getJson('/api/v1/public/organizations/left-teacher-school/activities/'.$activity->slug)->assertOk()
+            ->assertJsonCount(2, 'activity.instructors')
+            ->assertJsonFragment(['public_name' => 'Текущ треньор'])
+            ->assertJsonMissing(['public_name' => 'Напуснал треньор'])->assertJsonMissing(['public_name' => 'Бъдещ треньор']);
+        foreach ($files as $filename => $status) {
+            $this->get('/api/v1/public/organizations/left-teacher-school/media/'.$filename)->assertStatus($status);
+        }
+    }
+
     public function test_unpublished_inactive_foreign_and_non_published_activity_slugs_return_not_found(): void
     {
         [, $activity] = $this->publishedCatalog('visible-school');

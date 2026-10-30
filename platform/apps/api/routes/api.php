@@ -108,6 +108,9 @@ Route::prefix('v1')->group(function (): void {
                     Route::post('/activities/{activity}/publish', [ActivityPublicationController::class, 'store']);
                     Route::post('/activities/{activity}/groups', [ActivityGroupController::class, 'store']);
                     Route::patch('/groups/{group}', [ActivityGroupController::class, 'update']);
+                    // Who leads or assists a group, also a published one (docs/product/team.md, т. 5).
+                    Route::post('/groups/{group}/assignments', [ActivityGroupController::class, 'assign'])->whereUuid('group');
+                    Route::post('/groups/{group}/assignments/{instructor}/end', [ActivityGroupController::class, 'endAssignment'])->whereUuid(['group', 'instructor']);
                     Route::post('/media', [CatalogMediaController::class, 'store']);
                     Route::patch('/profile', [OrganizationCatalogProfileController::class, 'update']);
                     Route::post('/locations', [LocationController::class, 'store']);

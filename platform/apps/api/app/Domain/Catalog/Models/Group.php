@@ -6,6 +6,7 @@ use App\Domain\Catalog\Concerns\BelongsToCatalogTenant;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -120,8 +121,25 @@ class Group extends Model
     /** @return BelongsToMany<InstructorProfile, $this> */
     public function instructors(): BelongsToMany
     {
+        // Only who leads or assists the group now (docs/product/team.md, т. 5.3); a teacher who has left disappears
+        // from the editor and the public page. The day is Sofia's, like the groups' schedules.
+        $today = CarbonImmutable::now('Europe/Sofia')->toDateString();
+
+        return $this->assignments()
+            ->where(fn ($query) => $query->whereNull('activity_group_instructors.starts_on')->orWhere('activity_group_instructors.starts_on', '<=', $today))
+            ->where(fn ($query) => $query->whereNull('activity_group_instructors.ends_on')->orWhere('activity_group_instructors.ends_on', '>=', $today));
+    }
+
+    /**
+     * Every assignment of the group, ended ones included: one row per person, lead or assistant, with its period.
+     *
+     * @return BelongsToMany<InstructorProfile, $this>
+     */
+    public function assignments(): BelongsToMany
+    {
         return $this->belongsToMany(InstructorProfile::class, 'activity_group_instructors', 'group_id', 'instructor_profile_id')
             ->withPivotValue('organization_id', $this->organization_id ?? app(TenantContext::class)->organizationId())
+            ->withPivot(['role', 'starts_on', 'ends_on', 'version', 'created_by'])
             ->withTimestamps();
     }
 

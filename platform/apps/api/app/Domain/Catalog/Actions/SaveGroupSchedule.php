@@ -2,19 +2,26 @@
 
 namespace App\Domain\Catalog\Actions;
 
+use App\Domain\Audit\AuditRecorder;
+use App\Domain\Audit\Enums\AuditAction;
+use App\Domain\Audit\ValueObjects\AuditableReference;
 use App\Domain\Catalog\Enums\ActivityStatus;
 use App\Domain\Catalog\Enums\EnrollmentMode;
 use App\Domain\Catalog\Enums\PriceUnit;
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
+use App\Domain\Catalog\Models\InstructorProfile;
 use App\Domain\Catalog\Models\Offering;
 use App\Domain\Catalog\Models\Session;
+use App\Domain\Catalog\Services\GroupTeachers;
 use App\Domain\Catalog\Services\SessionScheduleGenerator;
 use App\Domain\Catalog\ValueObjects\SchedulePattern;
 use App\Domain\Organizations\Models\Organization;
+use App\Domain\Organizations\Models\StaffMember;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
@@ -28,6 +35,8 @@ final readonly class SaveGroupSchedule
         private TenantContext $context,
         private SessionScheduleGenerator $generator,
         private SyncPriceOptions $prices,
+        private GroupTeachers $teachers,
+        private AuditRecorder $audit,
     ) {}
 
     /** @param array<string, mixed> $payload */
@@ -101,18 +110,18 @@ final readonly class SaveGroupSchedule
             }
             $group->save();
             if (array_key_exists('instructor_ids', $data)) {
-                $group->instructors()->sync($data['instructor_ids']);
+                $this->setCurrentTeachers($group, $data['instructor_ids']);
             }
             if ($generated !== null) {
                 // An explicit pattern replaces a draft series. Metadata-only edits preserve overrides.
                 $group->sessions()->delete();
-                $instructors = $group->instructors()->pluck('instructor_profiles.id')->all();
+                $assignments = $group->assignments()->get();
                 foreach ($generated as $occurrence) {
                     $session = $group->sessions()->create([
                         'starts_at' => $occurrence['starts_at']->utc(), 'ends_at' => $occurrence['ends_at']->utc(),
                         'location_id' => $group->location_id, 'capacity' => $group->capacity_max,
                     ]);
-                    $session->instructors()->sync($instructors);
+                    $session->instructors()->sync($this->teachers->forSession($group, $session->starts_at, $assignments));
                 }
             } elseif ($previousDefaults !== null) {
                 $this->updateInheritedAssignments($group, $previousDefaults, $data);
@@ -141,26 +150,65 @@ final readonly class SaveGroupSchedule
         if (array_intersect(['location_id', 'capacity_max', 'instructor_ids'], array_keys($data)) === []) {
             return;
         }
-        $oldInstructors = $previous['instructor_ids'];
-        sort($oldInstructors);
-        foreach ($group->sessions()->where('status', 'scheduled')->with('instructors')->lockForUpdate()->get() as $session) {
+        foreach ($group->sessions()->where('status', 'scheduled')->lockForUpdate()->get() as $session) {
             if (array_key_exists('location_id', $data) && $session->location_id === $previous['location_id']) {
                 $session->location_id = $group->location_id;
             }
             if (array_key_exists('capacity_max', $data) && $session->capacity === $previous['capacity']) {
                 $session->capacity = $group->capacity_max;
             }
-            $currentInstructors = $session->instructors->modelKeys();
-            sort($currentInstructors);
-            $changedInstructors = false;
-            if (array_key_exists('instructor_ids', $data) && $currentInstructors === $oldInstructors) {
-                $changes = $session->instructors()->sync($data['instructor_ids']);
-                $changedInstructors = $changes['attached'] !== [] || $changes['detached'] !== [];
-            }
-            if ($session->isDirty() || $changedInstructors) {
+            if ($session->isDirty()) {
                 $session->version++;
                 $session->save();
             }
+        }
+        if (array_key_exists('instructor_ids', $data)) {
+            // Sessions changed by hand keep their teachers (docs/product/team.md, т. 5.2).
+            $this->teachers->apply($group);
+        }
+    }
+
+    /**
+     * Step 7 of the editor (docs/product/team.md, т. 5.3): the ticked teachers teach the group now. A new one leads with
+     * no period, an ended or a later one is opened from now on, and an unticked current one leaves the draft group.
+     * Ended and later assignments of teachers who are not ticked stay as they are.
+     *
+     * @param  array<int, string>  $ids
+     */
+    private function setCurrentTeachers(Group $group, array $ids): void
+    {
+        $archived = InstructorProfile::query()->whereKey($ids)->whereNotNull('staff_member_id')
+            ->whereIn('staff_member_id', StaffMember::query()->whereNotNull('archived_at')->select('id'))->exists();
+        if ($archived) {
+            throw ValidationException::withMessages(['instructor_ids' => 'Преподавателят е архивиран.']);
+        }
+
+        $today = CarbonImmutable::now('Europe/Sofia')->toDateString();
+        $rows = $group->assignments()->get()->keyBy(fn (InstructorProfile $profile): string => (string) $profile->getKey());
+        foreach ($ids as $id) {
+            $row = $rows->get($id);
+            $current = $row === null ? null : GroupTeachers::assignment($row);
+            if ($current !== null && GroupTeachers::holds($current, $today)) {
+                continue;
+            }
+            if ($current === null) {
+                $group->assignments()->attach($id, ['role' => 'lead', 'version' => 1, 'created_by' => Auth::guard('web')->id()]);
+            } else {
+                $group->assignments()->updateExistingPivot($id, ['starts_on' => null, 'ends_on' => null, 'version' => $current['version'] + 1]);
+            }
+            $this->audit->record(AuditAction::CatalogAssignmentAdded, new AuditableReference('group', $group->id), [
+                'instructor_profile_id' => $id, 'role' => $current['role'] ?? 'lead', 'starts_on' => null, 'ends_on' => null,
+            ]);
+        }
+        foreach ($rows as $id => $row) {
+            if (in_array($id, $ids, true) || ! GroupTeachers::holds(GroupTeachers::assignment($row), $today)) {
+                continue;
+            }
+            // A draft group has not run yet, so the row goes; a running group ends assignments instead (т. 5.4).
+            $group->assignments()->detach($id);
+            $this->audit->record(AuditAction::CatalogAssignmentRemoved, new AuditableReference('group', $group->id), [
+                'instructor_profile_id' => $id,
+            ]);
         }
     }
 
@@ -261,10 +309,14 @@ final readonly class SaveGroupSchedule
         if ($session->ends_at <= $session->starts_at) {
             throw ValidationException::withMessages(["session_overrides.{$index}.ends_at" => 'Крайният час трябва да е след началния.']);
         }
+        if (array_key_exists('instructor_ids', $override)) {
+            // Changed by hand, also to no teacher: the group's assignments no longer change this session's teachers.
+            $session->setAttribute('instructors_source', 'manual');
+        }
         $session->version++;
         $session->save();
         if (array_key_exists('instructor_ids', $override)) {
-            $session->instructors()->sync(array_unique($override['instructor_ids']));
+            $session->instructors()->sync(array_fill_keys(array_unique($override['instructor_ids']), ['role' => 'lead']));
         }
     }
 }

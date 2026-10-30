@@ -2,16 +2,21 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domain\Catalog\Actions\AssignGroupInstructor;
+use App\Domain\Catalog\Actions\EndGroupAssignment;
 use App\Domain\Catalog\Actions\SaveGroupSchedule;
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
+use App\Domain\Catalog\Models\InstructorProfile;
 use App\Domain\Catalog\Models\Session;
+use App\Domain\Catalog\Services\GroupTeachers;
 use App\Domain\Catalog\Services\ScheduleConflictDetector;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Gate;
 
 final class ActivityGroupController extends Controller
@@ -23,7 +28,7 @@ final class ActivityGroupController extends Controller
         Gate::forUser($request->user())->authorize('catalog.view', Organization::query()->findOrFail($context->organizationId()));
         $record = Activity::query()->findOrFail($activity);
         $groups = Group::query()->whereHas('offering', fn ($query) => $query->where('activity_id', $record->id))
-            ->with(['instructors', 'sessions.instructors'])->orderBy('created_at')->orderBy('id')->get();
+            ->with(['instructors', 'assignments', 'sessions.instructors'])->orderBy('created_at')->orderBy('id')->get();
 
         return response()->json(['groups' => $groups->map($this->present(...))->all()]);
     }
@@ -46,6 +51,21 @@ final class ActivityGroupController extends Controller
         return response()->json(['group' => $this->present($updated)]);
     }
 
+    /** Lead or assistant in a group, also a published one (docs/product/team.md, т. 5.3). */
+    public function assign(Request $request, string $group, AssignGroupInstructor $action): JsonResponse
+    {
+        $record = Group::query()->findOrFail($group);
+
+        return response()->json(['group' => $this->present($action->handle($request->user(), $record, $request->all()))], 201);
+    }
+
+    public function endAssignment(Request $request, string $group, string $instructor, EndGroupAssignment $action): JsonResponse
+    {
+        $record = Group::query()->findOrFail($group);
+
+        return response()->json(['group' => $this->present($action->handle($request->user(), $record, $instructor, $request->all()))]);
+    }
+
     /** @return array<string, mixed> */
     private function present(Group $group): array
     {
@@ -60,6 +80,11 @@ final class ActivityGroupController extends Controller
             'enrollment_modes' => $group->enrollment_modes,
             'visit_places' => $group->visit_places,
             'location_id' => $group->location_id, 'instructor_ids' => $group->instructors->modelKeys(),
+            // Lead or assistant with a period, ended ones included (docs/product/team.md, т. 5).
+            'assignments' => $group->assignments->map(fn (InstructorProfile $profile) => [
+                'instructor_profile_id' => $profile->id,
+                ...Arr::only(GroupTeachers::assignment($profile), ['role', 'starts_on', 'ends_on', 'version']),
+            ])->values()->all(),
             'schedule_pattern' => $group->schedule_pattern,
             'price_options' => $group->priceOptions->map(fn ($price) => [
                 'id' => $price->id, 'enrollment_mode' => $price->enrollment_mode, 'unit' => $price->unit,

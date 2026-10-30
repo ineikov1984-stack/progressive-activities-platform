@@ -28,6 +28,10 @@ enum AuditAction: string
     case CatalogOpenDayCampaignPublished = 'catalog.open_day_campaign_published';
     case CatalogOpenDayCampaignClosed = 'catalog.open_day_campaign_closed';
     case CatalogOpenDayCampaignCancelled = 'catalog.open_day_campaign_cancelled';
+    // Who leads or assists a group (docs/product/team.md, т. 5).
+    case CatalogAssignmentAdded = 'catalog.assignment_added';
+    case CatalogAssignmentEnded = 'catalog.assignment_ended';
+    case CatalogAssignmentRemoved = 'catalog.assignment_removed';
     case EnrollmentApplicationReviewed = 'enrollment.application_reviewed';
     case EnrollmentTransferred = 'enrollment.transferred';
     case EnrollmentPaused = 'enrollment.paused';

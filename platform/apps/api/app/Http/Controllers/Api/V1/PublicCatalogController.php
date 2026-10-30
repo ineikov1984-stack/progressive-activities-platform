@@ -413,6 +413,11 @@ final class PublicCatalogController extends Controller
                                 ->join('activity_groups', 'activity_groups.id', '=', 'activity_group_instructors.group_id')
                                 ->join('offerings', 'offerings.id', '=', 'activity_groups.offering_id')
                                 ->whereColumn('activity_group_instructors.instructor_profile_id', 'instructor_profiles.id')
+                                // Only who teaches now, like the page itself (docs/product/team.md, т. 5.3).
+                                ->where(fn ($period) => $period->whereNull('activity_group_instructors.starts_on')
+                                    ->orWhere('activity_group_instructors.starts_on', '<=', CarbonImmutable::now('Europe/Sofia')->toDateString()))
+                                ->where(fn ($period) => $period->whereNull('activity_group_instructors.ends_on')
+                                    ->orWhere('activity_group_instructors.ends_on', '>=', CarbonImmutable::now('Europe/Sofia')->toDateString()))
                                 ->where('activity_groups.status', 'published')
                                 ->where('offerings.activity_id', $activity->id));
                     })->exists();
