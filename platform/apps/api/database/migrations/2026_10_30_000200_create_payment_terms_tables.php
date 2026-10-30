@@ -128,7 +128,9 @@ return new class extends Migration
         $username = config('database.connections.pgsql.username');
         if (is_string($username) && $username !== '') {
             $role = '"'.str_replace('"', '""', $username).'"';
-            // Sets are archived, never deleted; versions are only added.
+            // Sets are archived, never deleted; versions are only added. The default privileges give the
+            // application role every row operation on new tables, so take back what it must not do.
+            DB::unprepared("REVOKE ALL ON payment_terms, payment_terms_versions FROM {$role}");
             DB::unprepared("GRANT SELECT, INSERT, UPDATE ON payment_terms TO {$role}");
             DB::unprepared("GRANT SELECT, INSERT ON payment_terms_versions TO {$role}");
         }
