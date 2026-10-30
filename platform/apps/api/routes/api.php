@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\V1\PublicCatalogController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentChangeController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentDetailsController;
+use App\Http\Controllers\Api\V1\TeamController;
 use App\Http\Controllers\Api\V1\VisitOfferController;
 use Illuminate\Support\Facades\Route;
 
@@ -60,6 +61,19 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/invitations', [InvitationController::class, 'index'])->middleware('tenant');
             Route::post('/invitations/accept', [InvitationController::class, 'accept']);
             Route::get('/audit-events', [AuditEventController::class, 'index'])->middleware('tenant');
+            // The team: people with or without a login (docs/product/team.md, т. 9).
+            Route::prefix('team')->middleware('tenant')->group(function (): void {
+                Route::middleware('organization.access:operational.read')->group(function (): void {
+                    Route::get('/', [TeamController::class, 'index']);
+                    Route::get('/members/{member}', [TeamController::class, 'show'])->whereUuid('member');
+                });
+                Route::middleware('organization.access:operational.write')->group(function (): void {
+                    Route::post('/members', [TeamController::class, 'store']);
+                    Route::patch('/members/{member}', [TeamController::class, 'update'])->whereUuid('member');
+                    Route::post('/members/{member}/archive', [TeamController::class, 'archive'])->whereUuid('member');
+                    Route::post('/members/{member}/instructor-profile', [TeamController::class, 'linkProfile'])->whereUuid('member');
+                });
+            });
             Route::prefix('enrollment')->middleware('tenant')->group(function (): void {
                 Route::middleware('organization.access:operational.read')->group(function (): void {
                     Route::get('/applications', [StaffEnrollmentController::class, 'applications']);

@@ -32,6 +32,10 @@ enum AuditAction: string
     case CatalogAssignmentAdded = 'catalog.assignment_added';
     case CatalogAssignmentEnded = 'catalog.assignment_ended';
     case CatalogAssignmentRemoved = 'catalog.assignment_removed';
+    case TeamMemberAdded = 'team.member_added';
+    case TeamMemberUpdated = 'team.member_updated';
+    case TeamMemberArchived = 'team.member_archived';
+    case TeamProfileLinked = 'team.profile_linked';
     case EnrollmentApplicationReviewed = 'enrollment.application_reviewed';
     case EnrollmentTransferred = 'enrollment.transferred';
     case EnrollmentPaused = 'enrollment.paused';

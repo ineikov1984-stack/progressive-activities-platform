@@ -48,6 +48,18 @@ class OrganizationPolicy
         return $this->allows($user, $organization, 'terms.manage');
     }
 
+    /** Who is in the team, their roles and groups (docs/product/team.md, т. 4). */
+    public function viewTeam(User $user, Organization $organization): bool
+    {
+        return $this->allows($user, $organization, 'team.view');
+    }
+
+    /** Adding and changing people, their phones and e-mails, archiving. */
+    public function manageTeam(User $user, Organization $organization): bool
+    {
+        return $this->allows($user, $organization, 'team.manage');
+    }
+
     public function viewApplication(User $user, Organization $organization): bool
     {
         return in_array($this->role($user, $organization), [
