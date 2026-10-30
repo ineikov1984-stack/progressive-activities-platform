@@ -20,6 +20,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'cancellation_policy',
     'contact_email',
     'enrollment_instructions',
+    // The set of payment terms chosen for the activity; none means the organization's default (PaymentTermsResolver).
+    'payment_terms_id',
     'version',
 ])]
 class Offering extends Model

@@ -18,11 +18,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Support\AcceptsPaymentTerms;
 use Tests\Support\VisitOfferFixture;
 use Tests\TestCase;
 
 class ParentVisitOfferApplicationTest extends TestCase
 {
+    use AcceptsPaymentTerms;
     use RefreshDatabase, VisitOfferFixture;
 
     protected function setUp(): void
@@ -63,7 +65,7 @@ class ParentVisitOfferApplicationTest extends TestCase
             [$org, , $group, $session, $offer, $child] = $this->visitFixture([], ['enrollment_approval_mode' => 'automatic']);
             $secondChild = $child->owner->children()->create(['first_name' => 'Ben', 'last_name' => 'Smith']);
             $price = $group->offering->priceOptions()->create(['group_id' => $group->id, 'enrollment_mode' => 'monthly', 'unit' => 'month', 'amount_cents' => 4500, 'currency' => 'EUR', 'is_available' => true]);
-            $payload = ['child_id' => $child->id, 'accepted_terms_version' => 'v1'];
+            $payload = ['child_id' => $child->id, 'accepted_terms_version' => $mode === 'visit' ? 'v1' : $this->standardTermsVersion($price->id)];
             $payload += $mode === 'visit'
                 ? ['visit_offer_id' => $offer->id, 'session_id' => $session->id]
                 : ['group_id' => $group->id, 'price_option_id' => $price->id];

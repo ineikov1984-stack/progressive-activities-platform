@@ -103,6 +103,8 @@ final class ActivityController extends Controller
             'offering.cancellation_policy' => ['sometimes', 'nullable', 'string'],
             'offering.contact_email' => ['sometimes', 'nullable', 'email', 'max:254'],
             'offering.enrollment_instructions' => ['sometimes', 'nullable', 'string'],
+            // One of the organization's own active sets; checked against the prices in the draft actions.
+            'offering.payment_terms_id' => ['sometimes', 'nullable', 'uuid', Rule::exists('payment_terms', 'id')->where('organization_id', $tenant)->where('status', 'active')],
             'offering.price_options' => ['sometimes', 'array', 'max:20'],
             'offering.price_options.*' => ['array:enrollment_mode,unit,amount_cents,currency,terms,is_available,cancellation_policy,payment_due'],
             'offering.price_options.*.enrollment_mode' => ['required', Rule::enum(EnrollmentMode::class), 'distinct'],
@@ -113,7 +115,7 @@ final class ActivityController extends Controller
             'offering.price_options.*.is_available' => ['sometimes', 'boolean'],
             'offering.price_options.*.cancellation_policy' => ['sometimes', 'nullable', 'string'],
             'offering.price_options.*.payment_due' => ['sometimes', 'nullable', 'string', 'max:255'],
-        ]);
+        ], ['offering.payment_terms_id.exists' => 'Изберете условия от „Настройки → Условия за плащане“.']);
     }
 
     /** @param array<string, mixed> $payload */
@@ -172,6 +174,7 @@ final class ActivityController extends Controller
                 'cancellation_policy' => $offering->cancellation_policy,
                 'contact_email' => $offering->contact_email,
                 'enrollment_instructions' => $offering->enrollment_instructions,
+                'payment_terms_id' => $offering->payment_terms_id,
                 'price_options' => $offering->priceOptions->whereNull('group_id')->values()->map(fn ($price) => [
                     'id' => $price->id,
                     'enrollment_mode' => $price->enrollment_mode,

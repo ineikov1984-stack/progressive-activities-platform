@@ -13,11 +13,13 @@ use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Support\AcceptsPaymentTerms;
 use Tests\Support\VisitOfferFixture;
 use Tests\TestCase;
 
 class VisitOfferFinalReviewTest extends TestCase
 {
+    use AcceptsPaymentTerms;
     use RefreshDatabase, VisitOfferFixture;
 
     public static function priceRows(): array
@@ -83,7 +85,7 @@ class VisitOfferFinalReviewTest extends TestCase
             'unit' => 'month', 'amount_cents' => 5000, 'currency' => 'EUR', 'is_available' => true]);
         $other = $child->owner->children()->create(['first_name' => 'New', 'last_name' => 'Child']);
         $application = app(SubmitEnrollmentApplication::class)->handle($child->owner, ['child_id' => $other->id,
-            'group_id' => $group->id, 'price_option_id' => $price->id, 'accepted_terms_version' => 'v1'], 'period');
+            'group_id' => $group->id, 'price_option_id' => $price->id, 'accepted_terms_version' => $this->standardTermsVersion($price->id)], 'period');
         app(TenantContext::class)->select($org);
         $this->assertSame('approved', app(ReviewEnrollmentApplication::class)
             ->handle($child->owner, $application, 'approve', 1, null, null)->status->value);
