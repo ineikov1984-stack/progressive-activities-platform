@@ -45,7 +45,7 @@ test('five-step editing preserves inputs, saves an open day fee in exact cents, 
   await page.getByRole('combobox', { name: 'Група', exact: true }).selectOption('group-1');
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: '4. Цена и условия', exact: true }).click();
-  await page.getByLabel('Цена', { exact: true }).selectOption('paid');
+  await page.getByLabel('Цена за деня').selectOption('paid');
   await page.getByLabel('Цена в евро').fill('19,99');
   await page.getByRole('button', { name: 'Запази черновата' }).click();
   await expect(page.locator('#error-fee_reason')).toBeVisible();

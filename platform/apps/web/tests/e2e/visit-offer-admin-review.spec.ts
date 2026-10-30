@@ -62,7 +62,7 @@ test('group setup detour restores unfinished fields while normal dirty navigatio
   await page.getByLabel('Подходящ клас').fill('I–II клас');
   await page.getByLabel('Вид посещение').selectOption('open_day');
   await page.getByRole('button', { name: '4. Цена и условия', exact: true }).click();
-  await page.getByLabel('Цена', { exact: true }).selectOption('paid');
+  await page.getByLabel('Цена за деня').selectOption('paid');
   await page.getByLabel('Цена в евро').fill('19,99');
   await page.getByLabel('Публично основание').fill('Материали');
   page.once('dialog', (dialog) => dialog.dismiss());
@@ -142,7 +142,7 @@ test('a trial on chosen dates shows its step-6 price and visit terms, and cannot
   await page.goto('/dashboard/activities/activity-1/visit-offers?offer=offer-1');
   await page.getByRole('button', { name: '4. Цена и условия', exact: true }).click();
   await expect(page.locator('#visit-step-3').getByText('Добавете цена „Пробно занимание“ в стъпка 6 „Цени и записване“.')).toBeVisible();
-  await expect(page.getByLabel('Цена', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Цена за деня')).toHaveCount(0);
   const priceStep = page.locator('#visit-step-3');
   await expect(priceStep.getByText('Условията на организацията — Стандартни')).toBeVisible();
   await expect(priceStep.getByText('Неявяване:')).toBeVisible();
