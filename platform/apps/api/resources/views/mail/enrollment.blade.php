@@ -19,7 +19,8 @@
 <table role="presentation" cellpadding="0" cellspacing="0"><tr>
 <td style="padding-right:12px;vertical-align:middle;">
 @if ($b->logoUrl)
-<img src="{{ $b->logoUrl }}" width="40" height="40" alt="{{ $b->name }}" style="display:block;width:40px;height:40px;border-radius:999px;object-fit:cover;">
+{{-- When the client blocks images, the initials show on the colour instead of a broken picture. --}}
+<img src="{{ $b->logoUrl }}" width="40" height="40" alt="{{ $b->initials }}" style="display:block;width:40px;height:40px;line-height:40px;border-radius:999px;object-fit:cover;background:{{ $b->accent }};color:{{ $b->onAccent }};font-size:15px;font-weight:700;text-align:center;">
 @else
 <div style="width:40px;height:40px;line-height:40px;border-radius:999px;background:{{ $b->accent }};color:{{ $b->onAccent }};font-size:15px;font-weight:700;text-align:center;">{{ $b->initials }}</div>
 @endif

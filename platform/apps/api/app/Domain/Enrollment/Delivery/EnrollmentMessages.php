@@ -58,18 +58,29 @@ final class EnrollmentMessages
         $fact = fn (string $label, string $value, ?string $hint = null): ?array => $value === '' ? null : ['label' => $label, 'value' => $value, 'hint' => $hint];
         $placeFact = $place === null ? null : $fact('Място', $place['text'], $place['hint']);
         $mapButton = $place['url'] ?? null ? ['label' => 'Как да стигнете', 'url' => $place['url']] : null;
+        $groupFact = $fact('Група', $this->groupTitle($group), $weekly === '' ? null : $weekly);
+        $sessionFact = fn (string $label, ?Session $session): ?array => $session === null ? null : $fact($label, $this->sessionText($session, $group));
+        $question = $reply("Имате въпрос? Отговорете на този имейл — ще го получи екипът на {$org}.");
+        $submitted = $application->created_at === null ? null : 'Подадена на '.BulgarianDates::day($application->created_at->toDateString());
 
         switch ($event->type) {
             case 'enrollment.application_submitted':
                 if ($text('status') === 'waitlisted') {
-                    return $this->waitlisted($mail, $child, $where, $quote, $reply);
+                    return $this->waitlisted($mail, $child, $where, $quote, $reply, [$groupFact, $fact('Подадена', BulgarianDates::day((string) $application->created_at?->toDateString()))]);
                 }
+
+                $visit = $application->scope->value !== 'full_period';
 
                 return $mail(
                     "Получихме заявката за {$child} — {$where}",
                     "Получихме заявката за {$child}",
                     ["Екипът на {$org} ще я разгледа и ще ви пише, когато реши. Дотогава мястото не е запазено."],
-                    [$fact('Дейност', $this->groupTitle($group)), $fact('Ден и час', $weekly), $fact('Подадена', BulgarianDates::day((string) $application->created_at?->toDateString()))],
+                    [
+                        $fact('Дейност', $this->groupTitle($group)),
+                        $visit ? $sessionFact($application->scope->value === 'trial' ? 'Пробно занимание' : 'Посещение', $application->session) : $fact('Ден и час', $weekly),
+                        $placeFact,
+                        $fact('Подадена', BulgarianDates::day((string) $application->created_at?->toDateString())),
+                    ],
                     after: [$reply('Искате да добавите нещо? Отговорете на този имейл.')],
                 );
             case 'enrollment.application_approved':
@@ -90,12 +101,13 @@ final class EnrollmentMessages
                     after: [$reply("Имате въпрос или {$child} няма да може да дойде? Отговорете на този имейл — ще го получи екипът на {$org}.")],
                 );
             case 'enrollment.application_waitlisted':
-                return $this->waitlisted($mail, $child, $where, $quote, $reply);
+                return $this->waitlisted($mail, $child, $where, $quote, $reply, [$groupFact, $fact('Подадена', BulgarianDates::day((string) $application->created_at?->toDateString()))]);
             case 'enrollment.application_rejected':
                 return $mail(
                     "Заявката за {$child} за {$where} не е одобрена",
                     "Заявката за {$where} не е одобрена",
                     ["Благодарим за интереса. Екипът на {$org} този път не може да запише {$child} в тази група."],
+                    [$fact('Заявка', $this->groupTitle($group), $submitted)],
                     quoteBlock: $quote,
                     after: [$reply('Имате въпрос? Отговорете на този имейл — ще го получи екипът.')],
                 );
@@ -107,7 +119,7 @@ final class EnrollmentMessages
                 return $mail(
                     "{$child} се премества в {$where}".($day !== '' ? ' от '.BulgarianDates::day($day) : ''),
                     "{$child} се премества в {$where}",
-                    [],
+                    ['Мястото в новата група е запазено.'],
                     [
                         $from?->ends_on === null ? null : $fact('Последен ден в „'.($from->group->name ?? 'старата група').'“', BulgarianDates::weekdayDay($from->ends_on->toDateString())),
                         $first === null ? null : $fact('Първо в новата група', $this->sessionText($first, $group)),
@@ -116,6 +128,7 @@ final class EnrollmentMessages
                     ],
                     quoteBlock: $quote,
                     button: $mapButton,
+                    after: [$question],
                 );
             case 'enrollment.paused':
                 $back = $enrollment === null || $text('ends_on') === '' ? null
@@ -125,7 +138,12 @@ final class EnrollmentMessages
                     "Пауза за {$child}: ".BulgarianDates::day($text('starts_on')).' – '.BulgarianDates::day($text('ends_on')),
                     "Пауза за {$child}: ".BulgarianDates::day($text('starts_on')).' – '.BulgarianDates::day($text('ends_on')),
                     ["Мястото на {$child} в {$where} се пази. Заниманията в паузата не се броят."],
-                    [$back === null ? null : $fact('Връща се', $this->sessionText($back, $group))],
+                    [
+                        $fact('Пауза', 'от '.BulgarianDates::weekdayDay($text('starts_on')).' до '.BulgarianDates::weekdayDay($text('ends_on'))),
+                        $sessionFact('Връща се', $back),
+                        $groupFact,
+                    ],
+                    after: [$reply("Датите не са верни? Отговорете на този имейл — ще го получи екипът на {$org}.")],
                 );
             case 'enrollment.pause_ended':
                 $cancelled = ($payload['cancelled'] ?? false) === true;
@@ -135,15 +153,20 @@ final class EnrollmentMessages
                     $cancelled ? "Паузата за {$child} е отменена" : "{$child} се връща от паузата на ".BulgarianDates::day($text('resume_on')),
                     $cancelled ? "Паузата за {$child} е отменена" : "{$child} се връща от паузата",
                     [$cancelled ? "{$child} продължава в {$where} без пауза." : "{$child} продължава в {$where}."],
-                    [$next === null ? null : $fact('Следващо занимание', $this->sessionText($next, $group))],
+                    [$sessionFact('Следващо занимание', $next), $fact('Дни и час', $weekly), $placeFact],
+                    button: $mapButton,
+                    after: [$question],
                 );
             case 'enrollment.ended':
                 $last = $text('last_day');
+                $lastSession = $enrollment === null ? null : $this->sessions->sessionsFor($enrollment)
+                    ->filter(fn (Session $session): bool => $session->starts_at->isFuture())->last();
 
                 return $mail(
                     "Последен ден на {$child} в {$where}: ".BulgarianDates::day($last),
                     'Записването приключва на '.BulgarianDates::day($last),
                     ["Последният ден на {$child} в {$where} е ".BulgarianDates::weekdayDay($last).'. След това мястото се освобождава.'],
+                    [$sessionFact('Последно занимание', $lastSession)],
                     quoteBlock: $quote,
                     after: [$reply('Грешка ли е? Отговорете на този имейл до '.BulgarianDates::day($last).'.')],
                 );
@@ -152,6 +175,7 @@ final class EnrollmentMessages
                     "Записването на {$child} в {$where} е отменено",
                     'Записването е отменено',
                     ["Записването на {$child} в {$where} е отменено преди първото занимание. Мястото се освобождава."],
+                    [$groupFact],
                     quoteBlock: $quote,
                     after: [$reply('Грешка ли е? Отговорете на този имейл.')],
                 );
@@ -162,19 +186,35 @@ final class EnrollmentMessages
                     "{$child} продължава в {$where}",
                     "{$child} продължава в {$where}",
                     ["Прекратяването е отменено — {$child} продължава в групата."],
-                    [$next === null ? null : $fact('Следващо занимание', $this->sessionText($next, $group))],
+                    [$sessionFact('Следващо занимание', $next), $fact('Дни и час', $weekly), $placeFact],
+                    button: $mapButton,
+                    after: [$question],
                 );
             case 'enrollment.session_excluded':
             case 'enrollment.session_restored':
-                $session = is_string($payload['session_id'] ?? null) ? Session::query()->find($payload['session_id']) : null;
+                $session = $this->sessionOf($payload);
                 $day = $session === null ? '' : BulgarianDates::day($session->starts_at->setTimezone($this->timezone($group))->toDateString());
-                $excluded = $event->type === 'enrollment.session_excluded';
+                if ($event->type === 'enrollment.session_excluded') {
+                    // The next session that still counts, for a child who comes every week.
+                    $next = $enrollment === null || $enrollment->scope->value !== 'full_period' ? null : $this->firstSession($enrollment, null);
+
+                    return $mail(
+                        "{$child} пропуска заниманието на {$day}",
+                        "{$child} пропуска заниманието на {$day}",
+                        ["Заниманието на {$day} в {$where} не се брои за {$child}."],
+                        [$sessionFact('Пропуска', $session), $sessionFact('Следващо занимание', $next)],
+                        quoteBlock: $quote,
+                        after: [$reply("Грешка ли е? Отговорете на този имейл — ще го получи екипът на {$org}.")],
+                    );
+                }
 
                 return $mail(
-                    $excluded ? "{$child} пропуска заниманието на {$day}" : "Заниманието на {$day} отново се брои за {$child}",
-                    $excluded ? "{$child} пропуска заниманието на {$day}" : "Заниманието на {$day} отново се брои",
-                    [$excluded ? "Заниманието на {$day} в {$where} не се брои за {$child}." : "{$child} е очаквано на заниманието на {$day} в {$where}."],
-                    quoteBlock: $excluded ? $quote : null,
+                    "Заниманието на {$day} отново се брои за {$child}",
+                    "Заниманието на {$day} отново се брои",
+                    ["Очакваме {$child} на заниманието."],
+                    [$sessionFact('Занимание', $session), $fact('Група', $this->groupTitle($group)), $placeFact],
+                    button: $mapButton,
+                    after: [$reply("Имате въпрос или {$child} все пак няма да може да дойде? Отговорете на този имейл — ще го получи екипът на {$org}.")],
                 );
         }
 
@@ -200,7 +240,6 @@ final class EnrollmentMessages
             default => "Получавате това писмо като собственик или администратор на {$org}. Изпратено чрез {$context['platform']}.",
         };
         $private = 'Кое дете е и какво е написал родителят виждате след вход — в „Записвания“.';
-        $waiting = $context['waitingInGroup'] > 0 ? ' · в групата чакат '.$context['waitingInGroup'] : '';
         $mail = fn (string $subject, array $paragraphs, array $facts, string $buttonLabel, string $url): MailContent => new MailContent(
             team: true,
             fromName: $context['platform'],
@@ -217,38 +256,70 @@ final class EnrollmentMessages
             after: [$private],
             footer: $footer,
         );
-        $sessionDay = function () use ($payload, $group): string {
-            $session = is_string($payload['session_id'] ?? null) ? Session::query()->find($payload['session_id']) : null;
-
-            return $session === null ? '' : BulgarianDates::day($session->starts_at->setTimezone($this->timezone($group))->toDateString());
+        $weekly = BulgarianDates::weekly($group?->weeklySlots());
+        $groupFact = $fact('Група', $this->groupTitle($group), $weekly === '' ? null : $weekly);
+        $session = $this->sessionOf($payload);
+        $sessionDay = $session === null ? '' : BulgarianDates::day($session->starts_at->setTimezone($this->timezone($group))->toDateString());
+        $sessionFact = $session === null ? null : $fact('Занимание', $this->sessionText($session, $group));
+        $waitingFact = $fact('Чакат място', match ($context['waitingInGroup']) {
+            0 => '', 1 => '1 заявка в списъка на чакащите', default => $context['waitingInGroup'].' заявки в списъка на чакащите',
+        });
+        $decisionsFact = $fact('Чакат решение', $context['submittedHere'] === 1 ? '1 заявка в организацията' : $context['submittedHere'].' заявки в организацията');
+        // A trial or a single visit is for one session: the team sees which.
+        $visitFact = match ($application->scope->value) {
+            'trial' => $fact('Заявка за', 'Пробно занимание', $application->session === null ? null : $this->sessionText($application->session, $group)),
+            'single' => $fact('Заявка за', 'Еднократно посещение', $application->session === null ? null : $this->sessionText($application->session, $group)),
+            default => null,
         };
 
         return match ($event->type) {
             'enrollment.application_submitted' => $mail(
                 "Нова заявка за {$where}",
                 [$text('status') === 'waitlisted' ? 'Групата е пълна — заявката е в чакащите.' : 'Родител подаде заявка. Тя чака вашето решение.'],
-                [
-                    $fact('Група', $this->groupTitle($group), BulgarianDates::weekly($group?->weeklySlots()) ?: null),
-                    $fact('Места днес', $context['placesText']),
-                    $fact('Чакат решение', $context['submittedHere'] === 1 ? '1 заявка в организацията' : $context['submittedHere'].' заявки в организацията'),
-                ],
+                [$groupFact, $visitFact, $fact('Места днес', $context['placesText']), $decisionsFact],
                 'Отвори заявката',
                 $link,
             ),
-            'enrollment.application_withdrawn' => $mail("Родител оттегли заявка за {$where}", ['Заявката вече не чака решение.'], [], 'Отвори „Записвания“', $link),
+            'enrollment.application_withdrawn' => $mail(
+                "Родител оттегли заявка за {$where}",
+                ['Заявката вече не чака решение.'],
+                [$groupFact, $visitFact, $decisionsFact],
+                'Отвори „Записвания“',
+                $link,
+            ),
             'enrollment.ended' => $mail(
                 "Родител прекрати записване в {$where}",
                 [],
                 [
+                    $groupFact,
                     $fact('Последен ден', $text('last_day') === '' ? '' : BulgarianDates::weekdayDay($text('last_day'))),
-                    $fact('Мястото', $text('last_day') === '' ? '' : 'се освобождава от '.BulgarianDates::day(CarbonImmutable::parse($text('last_day'))->addDay()->toDateString()).$waiting),
+                    $fact('Мястото', $text('last_day') === '' ? '' : 'се освобождава от '.BulgarianDates::day(CarbonImmutable::parse($text('last_day'))->addDay()->toDateString())),
+                    $waitingFact,
                 ],
                 'Отвори групата',
                 $groupLink,
             ),
-            'enrollment.cancelled' => $mail("Родител отмени записване в {$where} преди началото", ['Мястото се освобождава.'.($waiting !== '' ? ' В групата чакат '.$context['waitingInGroup'].'.' : '')], [], 'Отвори групата', $groupLink),
-            'enrollment.session_excluded' => $mail("Родител отбеляза пропуск на {$sessionDay()} в {$where}", ['Мястото в това занимание се освобождава.'], [], 'Отвори групата', $groupLink),
-            'enrollment.session_restored' => $mail("Родител отмени пропуска на {$sessionDay()} в {$where}", ['Детето ще бъде на заниманието.'], [], 'Отвори групата', $groupLink),
+            'enrollment.cancelled' => $mail(
+                "Родител отмени записване в {$where} преди началото",
+                ['Мястото се освобождава.'],
+                [$groupFact, $fact('Места днес', $context['placesText']), $waitingFact],
+                'Отвори групата',
+                $groupLink,
+            ),
+            'enrollment.session_excluded' => $mail(
+                "Родител отбеляза пропуск на {$sessionDay} в {$where}",
+                ['Детето няма да е на това занимание. Мястото в него се освобождава.'],
+                [$groupFact, $sessionFact],
+                'Отвори групата',
+                $groupLink,
+            ),
+            'enrollment.session_restored' => $mail(
+                "Родител отмени пропуска на {$sessionDay} в {$where}",
+                ['Детето отново ще бъде на това занимание.'],
+                [$groupFact, $sessionFact],
+                'Отвори групата',
+                $groupLink,
+            ),
             default => throw new \LogicException('No team email for '.$event->type),
         };
     }
@@ -265,14 +336,15 @@ final class EnrollmentMessages
      * @param  callable(string, string, array<int, string>, array<int, array<string, mixed>|null>=, array{title: string, text: string}|null=, array{label: string, text: string}|null=, array{label: string, url: string}|null=, array<int, string>=): MailContent  $mail
      * @param  array{label: string, text: string}|null  $quote
      * @param  callable(string): string  $reply
+     * @param  array<int, array<string, mixed>|null>  $facts
      */
-    private function waitlisted(callable $mail, string $child, string $where, ?array $quote, callable $reply): MailContent
+    private function waitlisted(callable $mail, string $child, string $where, ?array $quote, callable $reply, array $facts): MailContent
     {
         return $mail(
             "{$child} е в списъка на чакащите за {$where}",
             "{$child} е в списъка на чакащите",
             ["Групата {$where} в момента е пълна. Ще ви пишем, когато има място за {$child}."],
-            [],
+            $facts,
             ['title' => 'Чака място', 'text' => "Мястото не е запазено, докато не получите имейл „Записахме {$child}“."],
             $quote,
             null,
@@ -291,6 +363,12 @@ final class EnrollmentMessages
         $activity = $group?->offering?->activity?->title;
 
         return trim(($activity === null ? '' : $activity.' · ').($group->name ?? 'групата'));
+    }
+
+    /** @param  array<string, mixed>  $payload */
+    private function sessionOf(array $payload): ?Session
+    {
+        return is_string($payload['session_id'] ?? null) ? Session::query()->find($payload['session_id']) : null;
     }
 
     /** The first session that counts for the child, from a day on (default: from now). */

@@ -6,8 +6,8 @@ use App\Domain\Catalog\Models\OrganizationCatalogProfile;
 
 /**
  * The organization's look in its emails: its colour (the owner chooses it in the catalog settings), its logo
- * when the profile is public, else its initials. The text on the colour is white or dark, whichever reads
- * better, so a light colour never makes a button unreadable (decision of 30.10.2026).
+ * when the profile is public and the file is stored, else its initials. The text on the colour is white or dark,
+ * whichever reads better, so a light colour never makes a button unreadable (decision of 30.10.2026).
  */
 final readonly class Branding
 {
@@ -24,15 +24,20 @@ final readonly class Branding
         public string $initials,
     ) {}
 
-    public static function forOrganization(string $name, ?OrganizationCatalogProfile $profile, string $apiUrl): self
+    /**
+     * @param  string  $webUrl  the web app (WEB_URL): the logo is fetched through its public `/backend` proxy, the
+     *                          same address the public catalog uses — the API host itself need not be reachable
+     * @param  bool  $logoStored  the logo's file is on disk; a missing one would show as a broken image
+     */
+    public static function forOrganization(string $name, ?OrganizationCatalogProfile $profile, string $webUrl, bool $logoStored): self
     {
         $accent = is_string($profile?->accent_color) && preg_match('/^#[0-9a-fA-F]{6}$/', $profile->accent_color) === 1
             ? strtoupper($profile->accent_color) : self::PLATFORM;
         // The logo is public only with a published profile (the same rule as the public catalog).
         $logo = null;
-        if ($profile !== null && $profile->is_published && is_string($profile->logo_path)
+        if ($logoStored && $profile !== null && $profile->is_published && is_string($profile->logo_path)
             && preg_match('/^catalog\/([0-9a-f-]{36}\.(?:jpg|png|webp))$/D', $profile->logo_path, $match) === 1) {
-            $logo = rtrim($apiUrl, '/').'/api/v1/public/organizations/'.rawurlencode((string) $profile->slug).'/media/'.$match[1];
+            $logo = rtrim($webUrl, '/').'/backend/api/v1/public/organizations/'.rawurlencode((string) $profile->slug).'/media/'.$match[1];
         }
 
         return new self($name, $accent, self::readableOn($accent), $logo, self::initials($name));
