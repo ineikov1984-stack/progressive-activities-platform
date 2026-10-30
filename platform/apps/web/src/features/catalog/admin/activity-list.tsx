@@ -25,7 +25,8 @@ const unitLabels: Record<string, string> = { month: '/ месец', session: '/ 
 function priceLabel(activity: ActivityDraft): string | undefined {
   const options = activity.offering?.price_options ?? [];
   if (options.length === 0) return undefined;
-  const cheapest = [...options].sort((a, b) => a.amount_cents - b.amount_cents)[0];
+  // A free trial shows only when there is no other price (docs/product/visits.md, т. 5.5).
+  const cheapest = [...options].sort((a, b) => Number(a.amount_cents === 0) - Number(b.amount_cents === 0) || a.amount_cents - b.amount_cents)[0];
   if (cheapest.amount_cents === 0) return 'Безплатно';
   const amount = formatEur(cheapest.amount_cents);
   return `${options.length > 1 ? 'от ' : ''}${amount} ${unitLabels[cheapest.unit] ?? ''}`.trim();

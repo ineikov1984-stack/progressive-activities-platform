@@ -11,7 +11,7 @@ const base: ActivityDraft = {
 describe('activity completeness', () => {
   it('treats the quick-create placeholders as missing and points to the first gap', () => {
     const result = activityCompleteness(base);
-    expect(result).toMatchObject({ done: 0, total: 7 });
+    expect(result).toMatchObject({ done: 0, total: 6 });
     expect(result.next?.label).toBe('Основна информация');
   });
 
@@ -28,7 +28,9 @@ describe('activity completeness', () => {
         price_options: [{ enrollment_mode: 'subscription', unit: 'month', amount_cents: 4500 }],
       },
     });
-    expect(result).toMatchObject({ done: 7, total: 7 });
+    expect(result).toMatchObject({ done: 6, total: 6 });
+    // The terms are the organization's "Такси, отсъствия и отказ"; there is no separate step for them.
+    expect(result.steps.map((step) => step.id)).not.toContain('terms');
     expect(result.next).toBeUndefined();
   });
 

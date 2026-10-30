@@ -178,8 +178,9 @@ export function activityCompleteness(activity: ActivityDraft): ActivityCompleten
     { id: 'story', label: 'Представяне и ползи', done: filled(activity.sections?.about) },
     { id: 'media', label: 'Снимки', done: filled(activity.hero_image_path) },
     { id: 'people', label: 'Място и преподавател', done: Boolean(offering?.location_id && offering?.lead_instructor_profile_id) },
+    // Every price has "Такси, отсъствия и отказ" — the organization's unless another set is chosen — so there is
+    // no separate terms step (the free-text terms left the editor on 30.10.2026).
     { id: 'price', label: 'Цени и записване', done: Boolean(offering?.price_options?.length) },
-    { id: 'terms', label: 'Условия', done: filled(offering?.terms) || filled(offering?.cancellation_policy) },
   ];
   const done = steps.filter((step) => step.done).length;
   return { done, total: steps.length, steps, next: steps.find((step) => !step.done) };

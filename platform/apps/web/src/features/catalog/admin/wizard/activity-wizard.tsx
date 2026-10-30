@@ -21,7 +21,8 @@ import styles from './wizard.module.css';
 
 function PreviewCard({ content, cover, organizationName, activity }: { content: WizardContent; cover?: string; organizationName: string; activity: ActivityDraft }) {
   const prices = activity.offering?.price_options ?? [];
-  const cheapest = [...prices].sort((a, b) => a.amount_cents - b.amount_cents)[0];
+  // A free trial is the "from" price only when there is nothing else (docs/product/visits.md, т. 5.5).
+  const cheapest = [...prices].sort((a, b) => Number(a.amount_cents === 0) - Number(b.amount_cents === 0) || a.amount_cents - b.amount_cents)[0];
   return (
     <div className={styles.previewCard}>
       <div className={styles.previewMedia}>
@@ -33,7 +34,7 @@ function PreviewCard({ content, cover, organizationName, activity }: { content: 
         <span className={styles.previewProvider}><span aria-hidden="true">{organizationName.slice(0, 2).toUpperCase()}</span>{organizationName}</span>
         <p className={styles.previewSummary}>{content.summary.trim() || 'Краткото описание ще се появи тук.'}</p>
         <span className={content.age_label.trim() ? styles.previewFact : styles.previewPending}>{content.age_label.trim() || 'Възраст — в стъпка 2'}</span>
-        <span className={cheapest ? styles.previewFact : styles.previewPending}>{cheapest ? `от ${formatEur(cheapest.amount_cents)}` : 'Цена — в стъпка 6'}</span>
+        <span className={cheapest ? styles.previewFact : styles.previewPending}>{cheapest ? (cheapest.amount_cents === 0 ? 'Безплатно' : `от ${formatEur(cheapest.amount_cents)}`) : 'Цена — в стъпка 6'}</span>
       </div>
     </div>
   );
@@ -480,7 +481,6 @@ const requiredForPublish = new Set(['basics', 'audience', 'price']);
 function ReviewStep({ activity, groups, onPublish, publishing, message, onGo }: { activity: ActivityDraft; groups: ActivityGroup[]; onPublish: () => void; publishing: boolean; message: string; onGo: (step: WizardStep) => void }) {
   const completeness = activityCompleteness(activity);
   const stepFor: Record<string, WizardStep> = Object.fromEntries(wizardSteps.map((item) => [item.id, item]));
-  stepFor.terms = stepFor.price;
   const blocking = groups.flatMap((group) => group.conflicts).filter((conflict) => conflict.severity === 'blocking');
   const required = completeness.steps.filter((item) => requiredForPublish.has(item.id));
   const recommended = completeness.steps.filter((item) => !requiredForPublish.has(item.id));
