@@ -10,14 +10,14 @@ use PHPUnit\Framework\Attributes\Group as TestGroup;
 use Tests\TestCase;
 
 /**
- * Step 2d (docs/product/payment-policies.md, т. 7.3, т. 11): the database keeps an activity's chosen set and an
- * application's copy inside their organization, and the copy unchanged.
+ * Step 2d (docs/product/payment-policies.md, т. 7.3, т. 11): the database keeps an activity's chosen sets (one per
+ * way of paying) and an application's copy inside their organization, and the copy unchanged.
  */
 class PaymentTermsCopySchemaTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const KEYS = 'offerings_payment_terms_tenant_fk, enrollment_applications_terms_version_tenant_fk';
+    private const KEYS = 'offering_payment_terms_terms_tenant_fk, enrollment_applications_terms_version_tenant_fk';
 
     #[TestGroup('tenant-isolation')]
     public function test_the_choice_and_the_copy_stay_in_their_organization_and_the_copy_never_changes(): void
@@ -34,13 +34,27 @@ class PaymentTermsCopySchemaTest extends TestCase
             $first = $this->organization($pdo);
             $second = $this->organization($pdo);
 
-            // An activity points at a set of its own organization, never at another's (composite key).
-            $pdo->exec("UPDATE offerings SET payment_terms_id = '{$first['terms']}' WHERE id = '{$first['offering']}'");
+            // An activity chooses, for one way of paying, a set of its own organization for that way of paying —
+            // never another organization's, never a set for another way of paying (composite key).
+            $this->choose($pdo, $first, 'monthly', $first['terms']);
             $this->checkKeys($pdo);
             $this->refused($pdo, function () use ($pdo, $first, $second): void {
-                $pdo->exec("UPDATE offerings SET payment_terms_id = '{$second['terms']}' WHERE id = '{$first['offering']}'");
+                $this->choose($pdo, $first, 'package', $second['terms']);
                 $this->checkKeys($pdo);
             }, '23503');
+            $this->refused($pdo, function () use ($pdo, $first): void {
+                $this->choose($pdo, $first, 'visit', $first['terms']);
+                $this->checkKeys($pdo);
+            }, '23503');
+            // One choice per way of paying.
+            $this->refused($pdo, fn () => $this->choose($pdo, $first, 'monthly', $first['terms']), '23505');
+            // The choices are read only inside their organization.
+            $this->choose($pdo, $second, 'monthly', $second['terms']);
+            $pdo->exec('SET LOCAL ROLE progressive_app');
+            $this->tenant($pdo, $second['organization']);
+            $this->assertSame([$second['offering']], $pdo->query('SELECT offering_id FROM offering_payment_terms')->fetchAll(\PDO::FETCH_COLUMN));
+            $this->assertSame(0, $pdo->exec("DELETE FROM offering_payment_terms WHERE offering_id = '{$first['offering']}'"));
+            $pdo->exec('RESET ROLE');
 
             // An application keeps a copy of a version of its own organization…
             $application = $this->insertApplication($pdo, $first, $first['version'], '{"key": "v"}');
@@ -71,7 +85,7 @@ class PaymentTermsCopySchemaTest extends TestCase
             // Removing a whole organization still removes its sets, activities and applications together.
             $pdo->prepare('DELETE FROM organizations WHERE id = :id')->execute(['id' => $first['organization']]);
             $this->checkKeys($pdo);
-            foreach (['payment_terms', 'payment_terms_versions', 'offerings', 'enrollment_applications'] as $table) {
+            foreach (['payment_terms', 'payment_terms_versions', 'offerings', 'offering_payment_terms', 'enrollment_applications'] as $table) {
                 $left = $pdo->prepare("SELECT count(*) FROM {$table} WHERE organization_id = :id");
                 $left->execute(['id' => $first['organization']]);
                 $this->assertSame(0, (int) $left->fetchColumn(), $table);
@@ -135,6 +149,14 @@ class PaymentTermsCopySchemaTest extends TestCase
             ['id' => $ids['child'], 'parent' => $ids['parent']]);
 
         return $ids;
+    }
+
+    /** @param array{organization: string, offering: string} $organization */
+    private function choose(\PDO $pdo, array $organization, string $kind, string $terms): void
+    {
+        $pdo->prepare('INSERT INTO offering_payment_terms (offering_id, organization_id, billing_kind, payment_terms_id, created_at, updated_at) '
+            .'VALUES (:offering, :organization, :kind, :terms, NOW(), NOW())')
+            ->execute(['offering' => $organization['offering'], 'organization' => $organization['organization'], 'kind' => $kind, 'terms' => $terms]);
     }
 
     /** @param array{organization: string, group: string, parent: string, child: string} $organization */

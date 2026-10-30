@@ -20,8 +20,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'cancellation_policy',
     'contact_email',
     'enrollment_instructions',
-    // The set of payment terms chosen for the activity; none means the organization's default (PaymentTermsResolver).
-    'payment_terms_id',
     'version',
 ])]
 class Offering extends Model
@@ -51,6 +49,22 @@ class Offering extends Model
     public function leadInstructor(): BelongsTo
     {
         return $this->belongsTo(InstructorProfile::class, 'lead_instructor_profile_id');
+    }
+
+    /** @return HasMany<OfferingPaymentTerms, $this> */
+    public function paymentTermsChoices(): HasMany
+    {
+        return $this->hasMany(OfferingPaymentTerms::class);
+    }
+
+    /**
+     * The set chosen for each way of paying (billing kind => set id); a missing kind uses the organization's terms.
+     *
+     * @return array<string, string>
+     */
+    public function paymentTermsByKind(): array
+    {
+        return $this->paymentTermsChoices->mapWithKeys(fn (OfferingPaymentTerms $choice): array => [$choice->billing_kind => $choice->payment_terms_id])->all();
     }
 
     /** @return HasMany<Group, $this> */

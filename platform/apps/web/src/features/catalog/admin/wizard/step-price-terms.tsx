@@ -1,20 +1,34 @@
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
-import { createPaymentTerms, errorMessage, loadPaymentTerms, PaymentTermsApiError, type PaymentTermsWorkspace } from '../../../payment-terms/api';
-import { freeName, kindsOf, optionSummary, organizationTerms, otherOptions, stillFits, type TermsSummary } from './terms-choice';
+import { useEffect, useState } from 'react';
+import { createPaymentTerms, errorMessage, loadPaymentTerms, PaymentTermsApiError, type BillingKind, type PaymentTermsSet, type PaymentTermsWorkspace } from '../../../payment-terms/api';
+import { freeName, optionSummary, organizationTerms, otherOptions, type TermsSummary } from './terms-choice';
 import { Icon, icons } from './ui';
 import styles from './wizard.module.css';
 
-type Props = {
-  organizationId: string;
-  /** The enrollment modes of all the activity's prices (step 6 and the groups). */
-  modes: string[];
-  chosenId: string | null;
-  locked: boolean;
-  onChoose: (id: string | null) => void;
-};
+export type TermsWorkspace = { workspace?: PaymentTermsWorkspace; failed: boolean; retry: () => void; added: (set: PaymentTermsSet) => void };
+
+/** The organization's "Такси, отсъствия и отказ", loaded once for step 6. */
+export function useTermsWorkspace(organizationId: string): TermsWorkspace {
+  const [workspace, setWorkspace] = useState<PaymentTermsWorkspace>();
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let current = true;
+    loadPaymentTerms(organizationId)
+      .then((loaded) => { if (current) setWorkspace(loaded); })
+      .catch(() => { if (current) setFailed(true); });
+    return () => { current = false; };
+  }, [organizationId, attempt]);
+
+  return {
+    workspace,
+    failed,
+    retry: () => { setFailed(false); setAttempt((value) => value + 1); },
+    added: (set) => setWorkspace((loaded) => loaded ? { ...loaded, payment_terms: [...loaded.payment_terms, set] } : loaded),
+  };
+}
 
 function Lines({ summary }: { summary: TermsSummary }) {
   return (
@@ -29,49 +43,43 @@ function Lines({ summary }: { summary: TermsSummary }) {
   );
 }
 
-/** "Какви условия важат за тази дейност?" — board "Дейност · Условия" (approved 30.10.2026). */
-export function StepPriceTerms({ organizationId, modes, chosenId, locked, onChoose }: Props) {
-  const [workspace, setWorkspace] = useState<PaymentTermsWorkspace>();
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [attempt, setAttempt] = useState(0);
+type Props = {
+  id: string;
+  organizationId: string;
+  terms: TermsWorkspace;
+  kind: BillingKind;
+  chosenId: string | undefined;
+  /** The other price that shares this way of paying (a trial and a single visit), named for the team. */
+  sharedWith?: string;
+  locked: boolean;
+  onChoose: (id: string | null) => void;
+};
+
+/** "Такси, отсъствия и отказ" for one price: the organization's terms or a set chosen for this way of paying. */
+export function PriceTerms({ id, organizationId, terms, kind, chosenId, sharedWith, locked, onChoose }: Props) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const kinds = useMemo(() => kindsOf(modes), [modes]);
+  const { workspace } = terms;
 
-  useEffect(() => {
-    let current = true;
-    loadPaymentTerms(organizationId)
-      .then((loaded) => { if (current) setWorkspace(loaded); })
-      .catch(() => { if (current) setLoadFailed(true); });
-    return () => { current = false; };
-  }, [organizationId, attempt]);
-
-  // A choice that no longer fits (archived, or for a price the activity no longer has) would make every save
-  // fail: the activity falls back to the organization's terms, which the radio buttons then show.
-  useEffect(() => {
-    if (workspace && chosenId && !locked && !stillFits(workspace, chosenId, kinds)) onChoose(null);
-  }, [workspace, chosenId, kinds, locked, onChoose]);
-
-  if (kinds.length === 0) return null;
-  if (loadFailed) {
+  if (terms.failed) {
     return (
-      <div className={styles.termsBlock}>
+      <div className={styles.priceTerms}>
         <p className={styles.fieldError}>Правилата за такси, отсъствия и отказ не се заредиха.</p>
-        <button type="button" className={styles.quiet} onClick={() => { setLoadFailed(false); setAttempt((value) => value + 1); }}>Опитай отново</button>
+        <button type="button" className={styles.quiet} onClick={terms.retry}>Опитай отново</button>
       </div>
     );
   }
-  if (!workspace) return <div className={styles.termsBlock} aria-busy="true"><div className={styles.termsSkeleton} /><p className={styles.muted}>Зареждане на правилата за такси, отсъствия и отказ…</p></div>;
+  if (!workspace) return <div className={styles.priceTerms} aria-busy="true"><div className={styles.termsSkeleton} /></div>;
 
-  const options = otherOptions(workspace, kinds);
+  const options = otherOptions(workspace, kind);
   const chosen = chosenId ? options.find((option) => 'set' in option && option.set.id === chosenId) : undefined;
-  const own = chosenId !== null && chosen !== undefined;
-  const kindLabels = kinds.map((kind) => organizationTerms(workspace, kind).kindLabel);
+  const own = organizationTerms(workspace, kind);
 
   const choose = async (value: string) => {
+    setMessage('');
+    if (value === '') { onChoose(null); return; }
     const option = options.find((item) => item.value === value);
     if (!option) return;
-    setMessage('');
     if ('set' in option) { onChoose(option.set.id); return; }
     // A ready-made set is saved once, as one of the organization's sets, then chosen.
     setBusy(true);
@@ -80,7 +88,7 @@ export function StepPriceTerms({ organizationId, modes, chosenId, locked, onChoo
         billing_kind: option.kind, name: freeName(workspace, option.kind, option.label), is_default: false,
         rules: option.rules, self_service: option.selfService,
       });
-      setWorkspace({ ...workspace, payment_terms: [...workspace.payment_terms, saved] });
+      terms.added(saved);
       onChoose(saved.id);
     } catch (error) {
       setMessage(error instanceof PaymentTermsApiError ? Object.values(error.fieldErrors).flat()[0] ?? error.message : errorMessage(0, undefined));
@@ -88,69 +96,23 @@ export function StepPriceTerms({ organizationId, modes, chosenId, locked, onChoo
       setBusy(false);
     }
   };
-  const firstUsable = options.find((option) => 'set' in option || workspace.can_manage);
 
   return (
-    <fieldset className={styles.termsBlock} disabled={locked || busy} aria-busy={busy || undefined}>
-      <legend className={styles.termsLegend}>
-        <h3 className={styles.termsTitle}>Какви условия важат за тази дейност?</h3>
-        <span className={styles.hint}>Какво се плаща при прекратяване, пауза и отсъствия и какво се връща при отказ. Родителят ги вижда до цената и ги приема при записване.</span>
-      </legend>
-
-      <div className={`${styles.termsCard} ${own ? '' : styles.termsCardOn}`}>
-        <label className={styles.termsHead}>
-          <input type="radio" name="activity-terms" checked={!own} onChange={() => { setMessage(''); onChoose(null); }} />
-          <span>Условията на организацията{kinds.length === 1 ? ` — ${organizationTerms(workspace, kinds[0]).presetLabel}` : ''}</span>
-        </label>
-        <div className={styles.termsBody}>
-          {kinds.map((kind) => {
-            const terms = organizationTerms(workspace, kind);
-            return (
-              <div key={kind} className={styles.termsKind}>
-                {kinds.length > 1 ? <strong>{terms.kindLabel} — {terms.presetLabel}</strong> : null}
-                <Lines summary={terms} />
-              </div>
-            );
-          })}
-          <Link className={styles.termsLink} href="/dashboard/settings/payment-terms">Промени в „Такси, отсъствия и отказ“</Link>
-        </div>
-      </div>
-
-      <div className={`${styles.termsCard} ${own ? styles.termsCardOn : ''}`}>
-        <label className={styles.termsHead}>
-          <input type="radio" name="activity-terms" checked={own} disabled={!firstUsable} onChange={() => { if (firstUsable) void choose(firstUsable.value); }} />
-          <span>Други условия само за тази дейност</span>
-        </label>
-        <div className={styles.termsBody}>
-          {options.length > 0 ? (
-            <select
-              className={`${styles.input} ${styles.termsSelect}`}
-              aria-label="Условия за тази дейност"
-              value={chosen?.value ?? ''}
-              onChange={(event) => { if (event.target.value) void choose(event.target.value); }}
-            >
-              <option value="" disabled>Изберете условия</option>
-              {kinds.map((kind) => {
-                const items = options.filter((option) => option.kind === kind);
-                if (items.length === 0) return null;
-                const list = items.map((option) => (
-                  <option key={option.value} value={option.value} disabled={!('set' in option) && !workspace.can_manage}>{option.label}</option>
-                ));
-                return kinds.length > 1 ? <optgroup key={kind} label={organizationTerms(workspace, kind).kindLabel}>{list}</optgroup> : list;
-              })}
-            </select>
-          ) : <p className={styles.muted}>Няма други условия за {kindLabels.join(' и ').toLocaleLowerCase('bg')}.</p>}
-          {!workspace.can_manage && options.some((option) => !('set' in option)) ? (
-            <span className={styles.hint}>Готовите условия, които организацията още не ползва, се добавят от собственика или администратора.</span>
-          ) : null}
-          {chosen ? <Lines summary={optionSummary(workspace, chosen)} /> : null}
-          {chosen && kinds.length > 1 ? (
-            <span className={styles.hint}>Важат за цените „{organizationTerms(workspace, chosen.kind).kindLabel}“. За другите цени — условията на организацията.</span>
-          ) : null}
-        </div>
-      </div>
+    <div className={styles.priceTerms} aria-busy={busy || undefined}>
+      <label className={styles.label} htmlFor={id}>Такси, отсъствия и отказ</label>
+      <select id={id} className={`${styles.input} ${styles.termsSelect}`} value={chosen?.value ?? ''} disabled={locked || busy} aria-describedby={`${id}-hint`} onChange={(event) => { void choose(event.target.value); }}>
+        <option value="">Условията на организацията — {own.presetLabel}</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value} disabled={!('set' in option) && !workspace.can_manage}>{option.label}</option>
+        ))}
+      </select>
+      <span className={styles.hint} id={`${id}-hint`}>
+        {sharedWith ? `Важат и за „${sharedWith}“ — пробното и еднократното посещение са с едни и същи правила.` : `Важат за тази цена (${own.kindLabel.toLocaleLowerCase('bg')}).`}
+        {!workspace.can_manage && options.some((option) => !('set' in option)) ? ' Готовите условия, които организацията още не ползва, се добавят от собственика или администратора.' : ''}
+      </span>
+      <Lines summary={chosen ? optionSummary(workspace, chosen) : own} />
       {busy ? <p className={styles.muted} role="status">Запазване на условията…</p> : null}
       {message ? <p className={styles.fieldError} role="alert">{message}</p> : null}
-    </fieldset>
+    </div>
   );
 }

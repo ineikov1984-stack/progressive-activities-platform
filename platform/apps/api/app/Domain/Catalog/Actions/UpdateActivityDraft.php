@@ -7,7 +7,6 @@ use App\Domain\Catalog\Models\Activity;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
-use App\Domain\PaymentTerms\Services\PaymentTermsResolver;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -17,7 +16,7 @@ final readonly class UpdateActivityDraft
     public function __construct(
         private TenantContext $context,
         private SyncPriceOptions $prices,
-        private PaymentTermsResolver $paymentTerms,
+        private SyncPaymentTermsChoices $paymentTerms,
     ) {}
 
     /** @param array<string, mixed> $payload */
@@ -45,20 +44,19 @@ final readonly class UpdateActivityDraft
                 $offering = $locked->offerings()->orderBy('created_at')->lockForUpdate()->firstOrFail();
                 $offering->fill(Arr::only($payload['offering'], [
                     'location_id', 'lead_instructor_profile_id', 'title', 'description', 'terms',
-                    'cancellation_policy', 'contact_email', 'enrollment_instructions', 'payment_terms_id',
+                    'cancellation_policy', 'contact_email', 'enrollment_instructions',
                 ]));
                 $offering->version++;
                 $offering->save();
                 if (array_key_exists('price_options', $payload['offering'])) {
                     $this->prices->handle($offering, null, $payload['offering']['price_options']);
                 }
-                if (($payload['offering']['payment_terms_id'] ?? null) !== null) {
-                    $this->paymentTerms->assertChoosable($payload['offering']['payment_terms_id'], $offering->priceOptions()
-                        ->pluck('enrollment_mode')->all(), 'offering.payment_terms_id');
+                if (array_key_exists('payment_terms', $payload['offering'])) {
+                    $this->paymentTerms->handle($offering, (array) $payload['offering']['payment_terms']);
                 }
             }
 
-            return $locked->refresh()->load('offerings.priceOptions');
+            return $locked->refresh()->load('offerings.priceOptions', 'offerings.paymentTermsChoices');
         });
     }
 }

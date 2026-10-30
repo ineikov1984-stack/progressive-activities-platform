@@ -201,14 +201,14 @@ test('an owner creates, fills in and publishes an activity with the wizard', asy
   await slow(page.getByRole('status').first()).toContainText('Запазено');
   await page.reload();
   await slow(page.getByLabel('Цена', { exact: true }).first()).toHaveValue('25,00');
-  // The activity uses the organization's payment terms unless other terms are chosen for it.
-  const terms = () => page.getByRole('group', { name: /Какви условия важат за тази дейност/ });
-  await slow(terms().getByRole('radio', { name: /^Условията на организацията/ })).toBeChecked();
-  await terms().getByLabel('Условия за тази дейност').selectOption({ label: 'Гъвкави' });
-  await slow(terms().getByRole('radio', { name: 'Други условия само за тази дейност' })).toBeChecked();
+  // Each price uses the organization's "Такси, отсъствия и отказ" unless other terms are chosen for its way of paying.
+  const terms = () => page.getByLabel('Такси, отсъствия и отказ').first();
+  await slow(terms().locator('option:checked')).toHaveText(/^Условията на организацията/);
+  await terms().selectOption({ label: 'Гъвкави' });
+  await slow(terms().locator('option:checked')).toHaveText('Гъвкави');
   await slow(page.getByRole('status').first()).toContainText('Запазено');
   await page.reload();
-  await slow(terms().getByRole('radio', { name: 'Други условия само за тази дейност' })).toBeChecked();
+  await slow(terms().locator('option:checked')).toHaveText('Гъвкави');
 
   // Step 7: a weekly group creates its sessions.
   await page.getByRole('navigation', { name: 'Стъпки' }).getByRole('button', { name: /Групи и график/ }).click();

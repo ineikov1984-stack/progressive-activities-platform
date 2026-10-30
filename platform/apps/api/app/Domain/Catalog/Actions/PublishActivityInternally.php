@@ -101,7 +101,7 @@ final readonly class PublishActivityInternally
         foreach ($groups as $group) {
             $prices = $group->priceOptions->concat($group->offering->priceOptions->whereNull('group_id'))->where('is_available', true);
             foreach ($prices as $price) {
-                if ($this->paymentTerms->forPrice($price->enrollment_mode, $group->offering->payment_terms_id)?->marketplaceViolations()) {
+                if ($this->paymentTerms->forPrice($price->enrollment_mode, $group->offering->paymentTermsByKind())?->marketplaceViolations()) {
                     throw ValidationException::withMessages(['payment_terms' => 'Правилата за такси, отсъствия и отказ на тази дейност не са в рамките на каталога на платформата. Променете ги в „Такси, отсъствия и отказ“.']);
                 }
             }

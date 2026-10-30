@@ -65,12 +65,17 @@ class PaymentTermsCopyTest extends TestCase
 
         // A set chosen for the activity wins over the default; a set for another way of paying does not apply.
         $strict = $this->saveTerms($f, TermsPreset::Strict, name: 'Летен интензив');
-        $this->inOrganization($f['organization'], fn () => $f['offering']->update(['payment_terms_id' => $strict['id']]));
+        $this->choose($f, ['monthly' => $strict['id']]);
         $this->publicPrice($f)->assertJsonPath('payment_terms.version', $strict['version'])
             ->assertJsonPath('payment_terms.name', 'Летен интензив');
-        $visit = $this->saveTerms($f, TermsPreset::Strict, BillingKind::Visit);
-        $this->inOrganization($f['organization'], fn () => $f['offering']->update(['payment_terms_id' => $visit['id']]));
+        // Each way of paying has its own choice: a single visit in the same group follows the visit terms.
+        $visit = $this->saveTerms($f, TermsPreset::Flexible, BillingKind::Visit);
+        $single = $this->inOrganization($f['organization'], fn () => $this->price($f['group'], 'single'));
+        $this->choose($f, ['visit' => $visit['id']]);
         $this->publicPrice($f)->assertJsonPath('payment_terms.version', $default['version']);
+        $this->publicPrice($f, $single)->assertJsonPath('payment_terms.version', $visit['version'])
+            ->assertJsonPath('payment_terms.billing_kind', 'visit')
+            ->assertJsonPath('payment_terms.rules.no_show_kept', 100);
     }
 
     public function test_the_parent_accepts_the_terms_they_read_and_the_copy_never_changes(): void
@@ -201,7 +206,10 @@ class PaymentTermsCopyTest extends TestCase
         $foreign = $this->saveTerms($g, TermsPreset::Strict, isDefault: true);
 
         // Even pointed at directly, another organization's set is not read: its own terms apply.
-        DB::table('offerings')->where('id', $f['offering']->id)->update(['payment_terms_id' => $foreign['id']]);
+        DB::table('offering_payment_terms')->insert([
+            'offering_id' => $f['offering']->id, 'organization_id' => $f['organization']->id, 'billing_kind' => 'monthly',
+            'payment_terms_id' => $foreign['id'], 'created_at' => now(), 'updated_at' => now(),
+        ]);
         $this->publicPrice($f)->assertJsonPath('payment_terms.version', AppliedTerms::standard(BillingKind::Monthly)->key());
         $this->apply($f, $foreign['version'], 'foreign')->assertUnprocessable()->assertJsonValidationErrors('accepted_terms_version');
         $this->publicPrice($g)->assertJsonPath('payment_terms.version', $foreign['version']);
@@ -221,23 +229,34 @@ class PaymentTermsCopyTest extends TestCase
             'self_service' => Presets::selfService(TermsPreset::Strict), 'status' => 'active', 'version' => 1,
         ])->id);
 
-        $draft = fn (?string $terms) => $this->as($f['owner'], $f['organization'])->postJson('/api/v1/catalog/activities', [
+        $draft = fn (array $terms, array $modes = ['monthly']) => $this->as($f['owner'], $f['organization'])->postJson('/api/v1/catalog/activities', [
             'title' => 'Рисуване', 'category' => 'Изкуство', 'summary' => 'Синтетично описание.', 'age_label' => '6–8 г.',
             'offering' => [
-                'payment_terms_id' => $terms,
-                'price_options' => [['enrollment_mode' => 'monthly', 'unit' => 'month', 'amount_cents' => 6000]],
+                'payment_terms' => $terms,
+                'price_options' => array_map(fn (string $mode): array => [
+                    'enrollment_mode' => $mode, 'unit' => $mode === 'monthly' ? 'month' : 'session', 'amount_cents' => 6000,
+                ], $modes),
             ],
         ]);
-        $activityId = $draft($own['id'])->assertCreated()->assertJsonPath('activity.offering.payment_terms_id', $own['id'])->json('activity.id');
+        // A monthly fee and a single visit in one activity, each with its own terms.
+        $activityId = $draft(['monthly' => $own['id'], 'visit' => $visit['id']], ['monthly', 'single'])->assertCreated()
+            ->assertJsonPath('activity.offering.payment_terms.monthly', $own['id'])
+            ->assertJsonPath('activity.offering.payment_terms.visit', $visit['id'])
+            ->json('activity.id');
+        $error = fn (string $kind, string $message) => fn (array $errors): bool => ($errors["offering.payment_terms.{$kind}"] ?? null) === [$message];
         foreach ([$foreign, $archived['id']] as $refused) {
-            $draft($refused)->assertUnprocessable()->assertJsonPath('errors', fn (array $errors): bool => $errors['offering.payment_terms_id'] === ['Изберете условия от „Такси, отсъствия и отказ“.']);
+            $draft(['monthly' => $refused])->assertUnprocessable()->assertJsonPath('errors', $error('monthly', 'Изберете условия от „Такси, отсъствия и отказ“.'));
         }
-        $draft($visit['id'])->assertUnprocessable()->assertJsonPath('errors', fn (array $errors): bool => $errors['offering.payment_terms_id']
-            === ['Тези условия са за „Пробно или единично посещение“, а дейността няма такава цена.']);
+        $draft(['monthly' => $visit['id']])->assertUnprocessable()
+            ->assertJsonPath('errors', $error('monthly', 'Тези условия са за „Пробно или единично посещение“, а изборът е за „Месечна такса“.'));
+        $draft(['visit' => $visit['id']])->assertUnprocessable()
+            ->assertJsonPath('errors', $error('visit', 'Дейността няма цена „Пробно или единично посещение“.'));
+        $draft(['day_camp' => $own['id']])->assertUnprocessable()->assertJsonValidationErrors('offering.payment_terms');
 
-        // Back to the organization's terms.
-        $this->as($f['owner'], $f['organization'])->patchJson("/api/v1/catalog/activities/{$activityId}", ['version' => 1, 'offering' => ['payment_terms_id' => null]])
-            ->assertOk()->assertJsonPath('activity.offering.payment_terms_id', null);
+        // Back to the organization's terms for every way of paying.
+        $this->as($f['owner'], $f['organization'])->patchJson("/api/v1/catalog/activities/{$activityId}", ['version' => 1, 'offering' => ['payment_terms' => []]])
+            ->assertOk()->assertJsonPath('activity.offering.payment_terms', []);
+        $this->assertSame(0, DB::table('offering_payment_terms')->count());
     }
 
     /** @return array{organization: Organization, owner: User, parent: User, child: Child, activity: Activity, offering: Offering, group: Group, price: PriceOption} */
@@ -277,6 +296,7 @@ class PaymentTermsCopyTest extends TestCase
         return $group->offering->priceOptions()->create([
             'group_id' => $group->id, 'enrollment_mode' => $mode,
             'unit' => match ($mode) {
+                'single', 'trial' => 'session',
                 'package' => 'package', 'full_period' => 'period', default => 'month'
             },
             'amount_cents' => 6000, 'currency' => 'EUR', 'is_available' => true,
@@ -297,11 +317,11 @@ class PaymentTermsCopyTest extends TestCase
         return ['id' => $response->json('payment_terms.id'), 'version' => $response->json('payment_terms.current_version.id')];
     }
 
-    /** The first price of the group on the activity's public page. */
-    private function publicPrice(array $f): TestResponse
+    /** A price of the group on the activity's public page (the monthly one unless another is given). */
+    private function publicPrice(array $f, ?PriceOption $price = null): TestResponse
     {
         $response = $this->getJson("/api/v1/public/organizations/{$f['organization']->slug}/activities/{$f['activity']->slug}")->assertOk();
-        $price = collect($response->json('activity.groups.0.prices'))->firstWhere('id', $f['price']->id);
+        $price = collect($response->json('activity.groups.0.prices'))->firstWhere('id', ($price ?? $f['price'])->id);
         $this->assertNotNull($price);
 
         return TestResponse::fromBaseResponse(response()->json($price));
@@ -314,6 +334,17 @@ class PaymentTermsCopyTest extends TestCase
             'child_id' => ($child ?? $f['child'])->id, 'group_id' => $f['group']->id, 'price_option_id' => $f['price']->id,
             'accepted_terms_version' => $version, ...$extra,
         ]);
+    }
+
+    /** @param array<string, string> $choices billing kind => set id */
+    private function choose(array $f, array $choices): void
+    {
+        $this->inOrganization($f['organization'], function () use ($f, $choices): void {
+            $f['offering']->paymentTermsChoices()->delete();
+            foreach ($choices as $kind => $id) {
+                $f['offering']->paymentTermsChoices()->create(['billing_kind' => $kind, 'payment_terms_id' => $id]);
+            }
+        });
     }
 
     private function secondChild(array $f): Child

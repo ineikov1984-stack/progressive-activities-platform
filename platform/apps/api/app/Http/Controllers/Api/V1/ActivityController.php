@@ -27,7 +27,7 @@ final class ActivityController extends Controller
         Gate::forUser($request->user())->authorize('catalog.view', $organization);
 
         return response()->json([
-            'activities' => Activity::query()->with('offerings.priceOptions')->latest()->get()
+            'activities' => Activity::query()->with('offerings.priceOptions', 'offerings.paymentTermsChoices')->latest()->get()
                 ->map(fn (Activity $activity): array => $this->present($activity, $organization))->all(),
         ]);
     }
@@ -47,7 +47,7 @@ final class ActivityController extends Controller
     {
         $organization = $this->organization($context);
         Gate::forUser($request->user())->authorize('catalog.view', $organization);
-        $record = Activity::query()->with('offerings.priceOptions')->findOrFail($activity);
+        $record = Activity::query()->with('offerings.priceOptions', 'offerings.paymentTermsChoices')->findOrFail($activity);
 
         return response()->json(['activity' => $this->present($record, $organization)]);
     }
@@ -106,8 +106,10 @@ final class ActivityController extends Controller
             'offering.cancellation_policy' => ['sometimes', 'nullable', 'string'],
             'offering.contact_email' => ['sometimes', 'nullable', 'email', 'max:254'],
             'offering.enrollment_instructions' => ['sometimes', 'nullable', 'string'],
-            // One of the organization's own active sets; checked against the prices in the draft actions.
-            'offering.payment_terms_id' => ['sometimes', 'nullable', 'uuid', Rule::exists('payment_terms', 'id')->where('organization_id', $tenant)->where('status', 'active')],
+            // A set for each way of paying the activity has (the organization's own, active); checked against
+            // the prices in SyncPaymentTermsChoices. Left out or null — the organization's terms.
+            'offering.payment_terms' => ['sometimes', 'array:monthly,full_period,package,visit'],
+            'offering.payment_terms.*' => ['nullable', 'uuid', Rule::exists('payment_terms', 'id')->where('organization_id', $tenant)->where('status', 'active')],
             'offering.price_options' => ['sometimes', 'array', 'max:20'],
             'offering.price_options.*' => ['array:enrollment_mode,unit,amount_cents,currency,terms,is_available,cancellation_policy,payment_due'],
             'offering.price_options.*.enrollment_mode' => ['required', Rule::enum(EnrollmentMode::class), 'distinct'],
@@ -118,7 +120,7 @@ final class ActivityController extends Controller
             'offering.price_options.*.is_available' => ['sometimes', 'boolean'],
             'offering.price_options.*.cancellation_policy' => ['sometimes', 'nullable', 'string'],
             'offering.price_options.*.payment_due' => ['sometimes', 'nullable', 'string', 'max:255'],
-        ], ['offering.payment_terms_id.exists' => 'Изберете условия от „Такси, отсъствия и отказ“.']);
+        ], ['offering.payment_terms.*.exists' => 'Изберете условия от „Такси, отсъствия и отказ“.']);
     }
 
     /** @param array<string, mixed> $payload */
@@ -179,7 +181,8 @@ final class ActivityController extends Controller
                 // Shown when the activity has no address of its own; parents' questions and emails go there.
                 'organization_contact_email' => $organization->public_contact_email,
                 'enrollment_instructions' => $offering->enrollment_instructions,
-                'payment_terms_id' => $offering->payment_terms_id,
+                // The set chosen for each way of paying; a missing one uses the organization's terms.
+                'payment_terms' => (object) $offering->paymentTermsByKind(),
                 'price_options' => $offering->priceOptions->whereNull('group_id')->values()->map(fn ($price) => [
                     'id' => $price->id,
                     'enrollment_mode' => $price->enrollment_mode,

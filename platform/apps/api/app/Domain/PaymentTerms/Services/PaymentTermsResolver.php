@@ -14,34 +14,43 @@ use Illuminate\Validation\ValidationException;
  */
 final class PaymentTermsResolver
 {
-    /** The terms for a price with this enrollment mode, in an activity that chose `$chosenTermsId` (or none). */
-    public function forPrice(string $enrollmentMode, ?string $chosenTermsId): ?AppliedTerms
+    /**
+     * The terms for a price with this enrollment mode, in an activity that chose `$choices` (billing kind => set
+     * id; a kind without a choice uses the organization's terms).
+     *
+     * @param  array<string, string>  $choices
+     */
+    public function forPrice(string $enrollmentMode, array $choices): ?AppliedTerms
     {
         $kind = BillingKind::fromEnrollmentMode($enrollmentMode);
         if ($kind === null) {
             return null;
         }
 
-        return $this->resolve($kind, $chosenTermsId);
+        return $this->resolve($kind, $choices[$kind->value] ?? null);
     }
 
     /**
-     * A set chosen for an activity must be one of the organization's own, not archived, and for a way of paying
-     * the activity has — otherwise it would never apply and the team would think it does.
+     * A set chosen for one way of paying in an activity must be one of the organization's own, not archived, for
+     * that way of paying, and the activity must have a price paid that way — otherwise it would never apply and
+     * the team would think it does.
      *
      * @param  array<array-key, mixed>  $enrollmentModes  the modes of the activity's prices
      */
-    public function assertChoosable(string $termsId, array $enrollmentModes, string $field): void
+    public function assertChoosable(string $termsId, BillingKind $kind, array $enrollmentModes, string $field): void
     {
         $terms = PaymentTerms::query()->whereKey($termsId)->where('status', 'active')->first();
         if ($terms === null) {
             throw ValidationException::withMessages([$field => 'Изберете условия от „Такси, отсъствия и отказ“.']);
         }
-        $kinds = array_map(fn (mixed $mode): ?BillingKind => BillingKind::fromEnrollmentMode((string) $mode), array_values($enrollmentModes));
-        if (! in_array($terms->billing_kind, $kinds, true)) {
+        if ($terms->billing_kind !== $kind) {
             throw ValidationException::withMessages([
-                $field => 'Тези условия са за „'.$terms->billing_kind->label().'“, а дейността няма такава цена.',
+                $field => 'Тези условия са за „'.$terms->billing_kind->label().'“, а изборът е за „'.$kind->label().'“.',
             ]);
+        }
+        $kinds = array_map(fn (mixed $mode): ?BillingKind => BillingKind::fromEnrollmentMode((string) $mode), array_values($enrollmentModes));
+        if (! in_array($kind, $kinds, true)) {
+            throw ValidationException::withMessages([$field => 'Дейността няма цена „'.$kind->label().'“.']);
         }
     }
 
