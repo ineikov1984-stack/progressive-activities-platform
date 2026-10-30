@@ -17,7 +17,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Записването започва с първото занимание; сценарии; ред на имейлите | Claude | claude/enrollment-starts-at-first-session | `app/Domain/Enrollment` (одобрение, промени, изпращач), `change-panel.tsx`, e2e | ревю, после PR |
+| Записването започва с първото занимание; сценарии; ред на имейлите | Claude | claude/enrollment-starts-at-first-session | `app/Domain/Enrollment` (одобрение, промени, изпращач), `change-panel.tsx`, e2e | PR #46 — ревю минато, чака merge |
 
 ## Опашка (по приоритет)
 
