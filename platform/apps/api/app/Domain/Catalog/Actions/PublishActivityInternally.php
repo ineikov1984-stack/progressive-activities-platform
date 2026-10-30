@@ -118,7 +118,8 @@ final readonly class PublishActivityInternally
         $prices = $group->pricesForEnrollment();
         $validPrice = $prices->contains(fn ($price) => $price->is_available
             && $price->currency === 'EUR'
-            && $price->amount_cents > 0
+            // A free trial is a valid price too (docs/product/visits.md, т. 5.5).
+            && ($price->amount_cents > 0 || $price->enrollment_mode === 'trial')
             && EnrollmentMode::tryFrom($price->enrollment_mode) !== null
             && PriceUnit::tryFrom($price->unit) !== null);
         if (! $validPrice) {

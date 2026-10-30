@@ -200,11 +200,12 @@ final class PublicCatalogController extends Controller
     private function presentCard(Activity $activity, string $organizationSlug): array
     {
         $groups = $activity->offerings->flatMap->groups;
-        // "From" the cheapest price a parent can actually enroll with in some group.
+        // "From" the cheapest price a parent can actually enroll with in some group; a free trial only when
+        // there is nothing else (docs/product/visits.md, т. 5.5).
         /** @var PriceOption|null $price */
         $price = $activity->offerings->flatMap(fn (Offering $offering) => $offering->groups
             ->flatMap(fn (Group $group) => $group->pricesForEnrollment($offering->priceOptions)))
-            ->sortBy('amount_cents')->first();
+            ->sortBy(fn (PriceOption $option): array => [$option->amount_cents === 0 ? 1 : 0, $option->amount_cents])->first();
         $rows = $this->availabilityPresenter->rows($activity->visitOffers, CarbonImmutable::now());
         $availability = $this->availabilityPresenter->cardAvailability($rows)
             ?? $this->availabilityPresenter->groupAvailability($groups, CarbonImmutable::now());
@@ -276,6 +277,8 @@ final class PublicCatalogController extends Controller
     {
         /** @var Location|null $location */
         $location = $group->location ?? $publicOffering->location;
+        $prices = $group->pricesForEnrollment($publicOffering->priceOptions);
+        $takesVisits = $prices->contains(fn (PriceOption $price): bool => in_array($price->enrollment_mode, ['trial', 'single'], true));
 
         return [
             'id' => $group->id,
@@ -287,7 +290,7 @@ final class PublicCatalogController extends Controller
             'availability' => $this->availabilityPresenter->groupAvailability(collect([$group]), CarbonImmutable::now()),
             'location' => $location ? $this->presentLocation($location) : null,
             // The ways of enrolling this group takes (its own prices win over the activity's).
-            'prices' => $group->pricesForEnrollment($publicOffering->priceOptions)->map(fn (PriceOption $price) => [
+            'prices' => $prices->map(fn (PriceOption $price) => [
                 ...$this->presentPrice($price),
                 // What the parent reads and accepts before applying (docs/product/payment-policies.md, т. 8).
                 'payment_terms' => $this->paymentTerms->forPrice($price->enrollment_mode, $publicOffering->paymentTermsByKind())?->presentForParent(),
@@ -298,6 +301,8 @@ final class PublicCatalogController extends Controller
                 'ends_at' => $session->ends_at->toIso8601String(),
                 'status' => $session->status,
             ])->all(),
+            // The next dates a parent can book a trial or a single visit for (docs/product/visits.md, т. 5.6).
+            'visit_dates' => $takesVisits ? $this->availabilityPresenter->visitDates($group, CarbonImmutable::now()) : [],
         ];
     }
 
@@ -333,7 +338,7 @@ final class PublicCatalogController extends Controller
             'unit' => $price->unit,
             'amount_cents' => $price->amount_cents,
             'currency' => 'EUR',
-            'label' => $amount."\u{00A0}€ / {$unit}",
+            'label' => $price->amount_cents === 0 ? 'Безплатно' : $amount."\u{00A0}€ / {$unit}",
             'terms' => $price->terms,
             'cancellation_policy' => $price->cancellation_policy,
             'payment_due' => $price->payment_due,

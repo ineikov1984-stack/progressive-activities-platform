@@ -114,7 +114,13 @@ final class ActivityController extends Controller
             'offering.price_options.*' => ['array:enrollment_mode,unit,amount_cents,currency,terms,is_available,cancellation_policy,payment_due'],
             'offering.price_options.*.enrollment_mode' => ['required', Rule::enum(EnrollmentMode::class), 'distinct'],
             'offering.price_options.*.unit' => ['required', Rule::enum(PriceUnit::class)],
-            'offering.price_options.*.amount_cents' => ['required', 'integer', 'min:1'],
+            // Only a trial may be free (docs/product/visits.md, т. 5.5).
+            'offering.price_options.*.amount_cents' => ['required', 'integer', 'min:0', function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                $mode = $request->input(str_replace('.amount_cents', '.enrollment_mode', $attribute));
+                if (is_numeric($value) && (int) $value === 0 && $mode !== 'trial') {
+                    $fail('Безплатно може да е само пробното занимание.');
+                }
+            }],
             'offering.price_options.*.currency' => ['sometimes', 'required', Rule::in(['EUR'])],
             'offering.price_options.*.terms' => ['sometimes', 'nullable', 'string'],
             'offering.price_options.*.is_available' => ['sometimes', 'boolean'],

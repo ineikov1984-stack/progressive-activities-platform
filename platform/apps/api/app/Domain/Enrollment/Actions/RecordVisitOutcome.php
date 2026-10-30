@@ -12,6 +12,8 @@ use App\Domain\Enrollment\Models\EnrollmentEvent;
 use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\OrganizationMembership;
+use App\Domain\PaymentTerms\Enums\BillingKind;
+use App\Domain\PaymentTerms\Services\AppliedTerms;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -31,7 +33,7 @@ final class RecordVisitOutcome
                 ->whereIn('role', ['organization_owner', 'organization_admin', 'coordinator'])->exists();
             $cancellation = in_array($outcome, ['cancelled_in_time', 'late_cancelled'], true);
             abort_unless($staff || ($cancellation && $actor->is_active && $application->parent_user_id === $actor->id), 403);
-            if ($current->scope === EnrollmentScope::FullPeriod || $application->visit_offer_id === null
+            if ($current->scope === EnrollmentScope::FullPeriod
                 || ! in_array($outcome, ['attended', 'cancelled_in_time', 'late_cancelled', 'no_show'], true)) {
                 throw ValidationException::withMessages(['outcome' => 'Невалиден резултат за посещението.']);
             }
@@ -46,21 +48,31 @@ final class RecordVisitOutcome
             if ($current->status !== EnrollmentStatus::Active) {
                 throw ValidationException::withMessages(['outcome' => 'Посещението не е активно.']);
             }
-            $accepted = $application->transitions()->whereNotNull('metadata->cancellation_deadline_hours')->first()?->metadata;
+            // A visit from an offer keeps the offer's deadline; one from a price — its copy of the terms.
             $offer = $application->visitOffer;
+            $accepted = $application->transitions()->whereNotNull($offer !== null
+                ? 'metadata->cancellation_deadline_hours' : 'metadata->session_starts_at')->first()?->metadata;
             $start = isset($accepted['session_starts_at']) ? CarbonImmutable::parse($accepted['session_starts_at']) : $session->starts_at;
-            $deadlineHours = $accepted['cancellation_deadline_hours'] ?? $offer->cancellation_deadline_hours;
-            $timely = now()->lessThanOrEqualTo($start->subHours($deadlineHours));
+            $deadlineHours = $offer !== null
+                ? ($accepted['cancellation_deadline_hours'] ?? $offer->cancellation_deadline_hours)
+                : $this->freeCancellationHours($application->payment_terms_snapshot);
+            $timely = $deadlineHours !== null && now()->lessThanOrEqualTo($start->subHours($deadlineHours));
             if ((! $staff && (now()->greaterThanOrEqualTo($start) || now()->greaterThanOrEqualTo($session->starts_at)))
                 || ($outcome === 'cancelled_in_time' && ! $timely)
                 || ($outcome === 'late_cancelled' && $timely)
                 || (! $cancellation && now()->lessThan($start))) {
                 throw ValidationException::withMessages(['outcome' => 'Резултатът не съответства на срока за посещението.']);
             }
-            $metadata = [
+            $metadata = $offer !== null ? [
                 'outcome' => $outcome,
                 'session_id' => $session->id,
                 'cancellation_outcome' => $accepted['cancellation_outcome'] ?? $offer->cancellation_outcome,
+                'refund_performed' => false,
+            ] : [
+                'outcome' => $outcome,
+                'session_id' => $session->id,
+                // The amount is worked out from the copy later (docs/product/payment-policies.md, 3a).
+                'terms_key' => $application->payment_terms_snapshot['key'] ?? null,
                 'refund_performed' => false,
             ];
             $status = $outcome === 'cancelled_in_time' ? EnrollmentStatus::Cancelled : EnrollmentStatus::Ended;
@@ -78,5 +90,26 @@ final class RecordVisitOutcome
 
             return $transition;
         });
+    }
+
+    /**
+     * Until when a visit from a price is cancelled without a fee: the latest step of the terms that keeps nothing
+     * (docs/product/visits.md, т. 5.4). Null — every cancellation keeps something. A visit booked before the
+     * copy of the terms existed follows the platform's standard terms.
+     *
+     * @param  array<string, mixed>|null  $snapshot
+     */
+    private function freeCancellationHours(?array $snapshot): ?int
+    {
+        $rules = ($snapshot['billing_kind'] ?? null) === 'visit' && is_array($snapshot['rules'] ?? null)
+            ? $snapshot['rules'] : AppliedTerms::standard(BillingKind::Visit)->rules;
+        $free = null;
+        foreach ($rules['cancellation']['tiers'] ?? [] as $tier) {
+            if (is_array($tier) && ($tier['kept'] ?? null) === 0 && is_int($tier['min_hours'] ?? null)) {
+                $free = $free === null ? $tier['min_hours'] : min($free, $tier['min_hours']);
+            }
+        }
+
+        return $free;
     }
 }

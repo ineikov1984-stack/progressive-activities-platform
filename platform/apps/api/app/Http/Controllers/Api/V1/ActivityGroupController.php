@@ -58,6 +58,7 @@ final class ActivityGroupController extends Controller
             'enrollment_approval_mode' => $group->enrollment_approval_mode,
             // The activity's ways of enrolling this group takes; null — all of them.
             'enrollment_modes' => $group->enrollment_modes,
+            'visit_places' => $group->visit_places,
             'location_id' => $group->location_id, 'instructor_ids' => $group->instructors->modelKeys(),
             'schedule_pattern' => $group->schedule_pattern,
             'price_options' => $group->priceOptions->map(fn ($price) => [

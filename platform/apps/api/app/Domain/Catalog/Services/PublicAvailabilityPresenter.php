@@ -134,6 +134,22 @@ final class PublicAvailabilityPresenter
     }
 
     /**
+     * The group's next sessions open for a trial or a single visit from a price, with their places (null — no
+     * limit, 0 — full). The group comes with its scheduled future sessions, earliest first.
+     *
+     * @return list<array{session_id: string, starts_at: string, ends_at: string, remaining: int|null}>
+     */
+    public function visitDates(Group $group, CarbonImmutable $at): array
+    {
+        return array_map(fn (array $day): array => [
+            'session_id' => $day['session']->id,
+            'starts_at' => $day['session']->starts_at->toIso8601String(),
+            'ends_at' => $day['session']->ends_at->toIso8601String(),
+            'remaining' => $day['remaining'],
+        ], $this->capacity->visitDays($group, $group->sessions, $at));
+    }
+
+    /**
      * @param  Collection<int, Group>  $groups
      * @return array{status: string, remaining_places: ?int}
      */

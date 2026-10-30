@@ -18,6 +18,7 @@ use App\Domain\Enrollment\Models\EnrollmentEvent;
 use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
 use App\Domain\Enrollment\Services\SessionAllocation;
+use App\Domain\Enrollment\Services\VisitBooking;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Enums\OrganizationStatus;
 use App\Domain\Organizations\Models\Organization;
@@ -36,6 +37,7 @@ final class SubmitEnrollmentApplication
         private readonly EnrollmentCapacity $capacity,
         private readonly SessionAllocation $allocation,
         private readonly PaymentTermsResolver $paymentTerms,
+        private readonly VisitBooking $visits,
     ) {}
 
     /** @param array<string, mixed> $payload */
@@ -126,9 +128,6 @@ final class SubmitEnrollmentApplication
                 $scope = $offer !== null
                     ? ($offer->type === VisitOfferType::Trial ? EnrollmentScope::Trial : EnrollmentScope::Single)
                     : $this->scopeFor(EnrollmentMode::from($price->enrollment_mode));
-                if ($offer === null && $scope !== EnrollmentScope::FullPeriod) {
-                    throw ValidationException::withMessages(['visit_offer_id' => 'Изберете публикувано предложение за посещение.']);
-                }
                 $session = $this->resolveSession($payload['session_id'] ?? null, $group, $scope);
                 $terms = $offer === null ? $this->acceptedTerms($price->enrollment_mode, $group->offering->paymentTermsByKind(), $payload) : null;
                 $acceptedAt = now()->toImmutable();
@@ -159,6 +158,21 @@ final class SubmitEnrollmentApplication
                         $this->eligibility->assertOverride($overrideActor, $overrideReason);
                         $metadata['eligibility_override_reason'] = trim($overrideReason);
                     }
+                } elseif ($session !== null) {
+                    // A trial or a single visit from a price and a date (docs/product/visits.md, т. 5.1).
+                    if (! VisitBooking::isOpen($session, now()->toImmutable())) {
+                        throw ValidationException::withMessages(['session_id' => 'Записването за тази дата е затворено.']);
+                    }
+                    $this->allocation->assertAvailable($child, $session);
+                    if ($scope === EnrollmentScope::Trial) {
+                        $this->visits->assertTrialOnce($child, $group, $session);
+                    }
+                    $remaining = $this->capacity->remainingForVisit($session, forAllocation: true);
+                    if ($remaining !== null && $remaining < 1) {
+                        throw ValidationException::withMessages(['capacity' => 'Няма свободни места на тази дата. Изберете друга дата.']);
+                    }
+                    // The start the parent booked for: cancellation deadlines count from it (т. 5.4).
+                    $metadata = ['session_starts_at' => $session->starts_at->toIso8601String()];
                 }
 
                 $application = EnrollmentApplication::query()->create([
@@ -174,9 +188,11 @@ final class SubmitEnrollmentApplication
                     'idempotency_key' => $idempotencyKey,
                     'accepted_terms_version' => $payload['accepted_terms_version'],
                     'accepted_terms_at' => $acceptedAt,
-                    // The copy of the terms the parent accepted; visits keep their offer's terms until step 2d-3.
+                    // The copy of the terms the parent accepted; visits from an offer keep the offer's terms until 2d-3b.
+                    // A dated visit has no right of withdrawal, so no early start (ЗЗП, чл. 57, т. 12).
                     'payment_terms_version_id' => $terms?->versionId,
-                    'payment_terms_snapshot' => $terms?->snapshot('parent', $acceptedAt, null, ($payload['early_start'] ?? false) === true),
+                    'payment_terms_snapshot' => $terms?->snapshot('parent', $acceptedAt, null,
+                        $scope === EnrollmentScope::FullPeriod && ($payload['early_start'] ?? false) === true),
                     'amount_cents_snapshot' => $offer !== null ? $offer->amount_cents : $price->amount_cents,
                     'currency_snapshot' => $offer !== null ? $offer->currency : $price->currency,
                     'unit_snapshot' => $offer !== null ? 'session' : $price->unit,
@@ -186,7 +202,7 @@ final class SubmitEnrollmentApplication
                     'cancellation_policy_snapshot' => $offer?->cancellation_policy,
                 ]);
                 $transition = null;
-                if ($offer !== null) {
+                if ($metadata !== []) {
                     $transition = EnrollmentTransition::query()->create([
                         'application_id' => $application->id,
                         'actor_user_id' => isset($metadata['eligibility_override_reason']) ? $overrideActor->id : $actor->id,
