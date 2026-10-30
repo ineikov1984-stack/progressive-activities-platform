@@ -73,6 +73,8 @@ class GroupAssignmentTest extends TestCase
         $group = $this->postJson($this->groupsUrl($activity), $this->payload())->assertCreated()->json('group');
         $url = '/api/v1/catalog/groups/'.$group['id'].'/assignments';
 
+        // Each request ends with the organization cleared; the test selects it again before using the models.
+        app(TenantContext::class)->select($organization);
         $person = StaffMember::query()->create(['full_name' => 'Стар треньор', 'archived_at' => now()]);
         $archived = InstructorProfile::query()->create(['public_name' => 'Стар треньор']);
         $archived->forceFill(['staff_member_id' => $person->id])->save();
@@ -86,13 +88,14 @@ class GroupAssignmentTest extends TestCase
         $foreignGroup = $foreignActivity->offerings()->create([])->groups()->create(['name' => 'Чужда']);
         app(TenantContext::class)->select($organization);
         $this->postJson($url, ['instructor_profile_id' => $foreignTeacher->id])->assertUnprocessable()->assertJsonValidationErrors('instructor_profile_id');
+        app(TenantContext::class)->select($organization);
         $mine = InstructorProfile::query()->create(['public_name' => 'Мой']);
         $this->postJson('/api/v1/catalog/groups/'.$foreignGroup->id.'/assignments', ['instructor_profile_id' => $mine->id])->assertNotFound();
 
         // A coordinator assigns (owner's decision, docs/product/team.md, т. 13.1); a viewer does not.
-        OrganizationMembership::query()->where('user_id', $user->id)->update(['role' => 'coordinator']);
+        $this->assertSame(1, OrganizationMembership::query()->withoutGlobalScopes()->where('user_id', $user->id)->update(['role' => 'coordinator']));
         $this->postJson($url, ['instructor_profile_id' => $mine->id])->assertCreated();
-        OrganizationMembership::query()->where('user_id', $user->id)->update(['role' => 'viewer']);
+        $this->assertSame(1, OrganizationMembership::query()->withoutGlobalScopes()->where('user_id', $user->id)->update(['role' => 'viewer']));
         $this->postJson($url.'/'.$mine->id.'/end', ['ends_on' => '2026-11-10', 'version' => 1])->assertForbidden();
         $this->assertDatabaseCount('activity_group_instructors', 1);
     }
