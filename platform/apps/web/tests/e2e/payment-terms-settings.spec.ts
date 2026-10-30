@@ -45,6 +45,7 @@ function workspace(canManage: boolean, saved: PaymentTermsSet[] = []): PaymentTe
       } },
     ],
     in_marketplace: false,
+    usage: { monthly: ['Футбол (6–8 г.)'] },
     can_manage: canManage,
     schema_version: 1,
   };
@@ -83,15 +84,16 @@ test('the owner starts from "Стандартни", changes a number and saves t
 
   await expect(page.getByRole('heading', { name: 'Условия за плащане', level: 1 })).toBeVisible();
   await expect(page.getByRole('radio', { name: /^Стандартни/ })).toBeChecked();
-  await expect(page.getByText('Ако последният ден е до 15-то число, плащате половината от таксата за месеца; след това — цялата такса за месеца.')).toBeVisible();
+  await expect(page.getByText('Спрете ли до 15-то число, плащате половината от таксата за месеца; след това — цялата.')).toBeVisible();
+  await expect(page.getByText('Ползва се при: Футбол (6–8 г.)')).toBeVisible();
   await expect(page.getByText('Организацията още не е запазила свои условия за този начин на плащане — важат „Стандартни“.', { exact: false })).toBeVisible();
 
   await page.getByLabel('Ден от месеца').first().fill('10');
   await expect(page.getByRole('radio', { name: /^Собствени/ })).toBeChecked();
-  await expect(page.getByText('Ако последният ден е до 10-то число', { exact: false })).toBeVisible();
+  await expect(page.getByText('Спрете ли до 10-то число', { exact: false })).toBeVisible();
 
   await page.getByRole('radio', { name: /^Строги/ }).check();
-  await expect(page.getByText('Месецът, в който спирате, се плаща изцяло.')).toBeVisible();
+  await expect(page.getByText('Месецът, в който спирате, се плаща цял.')).toBeVisible();
   await page.getByRole('radio', { name: /^Стандартни/ }).check();
   await page.getByLabel('Дни предизвестие за пауза').fill('10');
 
@@ -110,7 +112,7 @@ test('a refused number is shown under its rule', async ({ page }) => {
   await page.getByRole('button', { name: 'Запази условията' }).click();
 
   await expect(page.getByText('Проверете отбелязаните полета.')).toBeVisible();
-  await expect(page.getByRole('group', { name: 'Прекратяване' })).toContainText('„ден от месеца“ трябва да е от 1 до 28.');
+  await expect(page.getByRole('group', { name: 'Ако детето спре по средата на месеца' })).toContainText('„ден от месеца“ трябва да е от 1 до 28.');
 });
 
 test('a member who does not manage terms reads them without changing them', async ({ page }) => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BillingKindInfo, Rules, SelfService } from '../src/features/payment-terms/api';
 import {
-  canonical, describeTerms, errorsFor, exampleFor, ladderRanges, matchPreset, money, ordinalSuffix, paidShare, returnedShare, valueAt, withValue,
+  absenceExample, canonical, describeTerms, errorsFor, exampleFor, ladderRanges, matchPreset, monthChoiceExample, money, ordinalSuffix, paidShare, pauseExample, returnedShare, valueAt, withValue,
 } from '../src/features/payment-terms/rules';
 
 // The server's ready-made "Стандартни" sets (app/Domain/PaymentTerms/Rules/Presets.php).
@@ -76,15 +76,15 @@ describe('payment terms rules', () => {
 
   it('describes the standard monthly terms the way the owner put them', () => {
     const lines = Object.fromEntries(describeTerms('monthly', monthly).map((line) => [line.title, line.text]));
-    expect(lines['Начало']).toBeUndefined();
-    expect(lines['Прекратяване']).toBe('Ако последният ден е до 15-то число, плащате половината от таксата за месеца; след това — цялата такса за месеца.');
-    expect(lines['Пауза']).toBe('Кажете ни поне 7 дни по-рано и заниманията в паузата не се плащат. По-късно — плащате половината от стойността им. Това важи за до 61 дни пауза в учебната година; над тях — като при късно заявена пауза.');
+    expect(lines['Ако започнете по средата на месеца']).toBeUndefined();
+    expect(lines['Ако спрете']).toBe('Спрете ли до 15-то число, плащате половината от таксата за месеца; след това — цялата.');
+    expect(lines['Пауза']).toBe('Кажете ни поне 7 дни по-рано и заниманията в паузата не се плащат. По-късно — половината. До 61 дни в учебната година; над тях — като казано късно.');
     // Without days at the on-time terms every pause counts as a late one.
     expect(describeTerms('monthly', withValue(monthly, 'pause.free_days_per_school_year', 0)).find((line) => line.title === 'Пауза')?.text)
       .toBe('За заниманията в паузата плащате половината от стойността им.');
-    expect(describeTerms('monthly', withValue(monthly, 'end.cutoff_day', 1)).find((line) => line.title === 'Прекратяване')?.text).toContain('до 1-во число');
-    expect(lines['Отсъствия']).toBe('До 3 отсъствия в месеца — цялата такса, при повече — половината от таксата. Пропуснато занимание наваксвате до 14 дни, ако ни кажете поне 3 часа по-рано.');
-    expect(lines['Връщане']).toBe('Върнатата сума получавате обратно или като кредит — по ваш избор.');
+    expect(describeTerms('monthly', withValue(monthly, 'end.cutoff_day', 1)).find((line) => line.title === 'Ако спрете')?.text).toContain('до 1-во число');
+    expect(lines['Отсъствия']).toBe('До 3 отсъствия в месеца — цялата такса, при повече — половината. Пропуснато занимание наваксвате до 14 дни, ако ни кажете поне 3 часа по-рано.');
+    expect(lines['Връщане']).toBe('Пари или кредит — по ваш избор.');
   });
 
   it('describes cancellation ladders for a visit and a camp', () => {
@@ -111,5 +111,17 @@ describe('payment terms rules', () => {
     ]);
     expect(exampleFor('day_camp', dayCamp)?.lines).toEqual(['3 дни отсъствие без документ → връщат се 15 €.']);
     expect(exampleFor('package', {})).toBeNull();
+  });
+
+  it('puts a worked example under each monthly rule', () => {
+    expect(monthChoiceExample(monthly, 'end', 'by_sessions')).toBe('Спира на 10 ноември → плаща 2 занимания = 30 €.');
+    expect(monthChoiceExample(monthly, 'end', 'cutoff')).toBe('Спира на 10 ноември → 30 €. Спира на 20 ноември → 60 €.');
+    expect(monthChoiceExample(monthly, 'end', 'full_month')).toBe('Спира на 10 ноември → 60 €.');
+    expect(monthChoiceExample(monthly, 'start', 'by_sessions')).toBe('Започва на 17 ноември → плаща 2 занимания = 30 €.');
+    const strictStart = withValue(monthly, 'start', { mode: 'cutoff', cutoff_day: 15, kept_until_cutoff: 100, kept_after_cutoff: 50 });
+    expect(monthChoiceExample(strictStart, 'start', 'cutoff')).toBe('Започва на 10 ноември → 60 €. Започва на 20 ноември → 30 €.');
+    expect(pauseExample(monthly)).toBe('Пример: пауза 2–15 ноември (2 занимания). Казано навреме → за ноември 30 €. Казано късно → 45 €.');
+    expect(absenceExample(monthly)).toBe('Пример: 4 отсъствия в ноември → 30 € вместо 60 €.');
+    expect(absenceExample(withValue(monthly, 'absences.tiers', [{ up_to: null, kept: 100 }]))).toBe('Пример: 4 отсъствия в ноември → 60 €.');
   });
 });

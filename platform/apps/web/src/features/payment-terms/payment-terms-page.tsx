@@ -7,7 +7,7 @@ import {
   type BillingKind, type BillingKindInfo, type Json, type PaymentTermsSet, type PaymentTermsWorkspace, type Preset, type Rules, type SelfService,
 } from './api';
 import { RuleEditor, RuleIcon, type EditorContext } from './rule-editors';
-import { canonical, describeTerms, errorsFor, exampleFor, matchPreset, presetBlurb, READY_PRESETS, selfServiceOptions, withValue } from './rules';
+import { canonical, describeTerms, errorsFor, exampleFor, KIND_HINTS, matchPreset, presetBlurb, READY_PRESETS, selfServiceOptions, withValue } from './rules';
 import styles from './payment-terms.module.css';
 
 type Draft = { rules: Rules; self_service: SelfService };
@@ -23,6 +23,15 @@ function baseDraft(workspace: PaymentTermsWorkspace, info: BillingKindInfo): Dra
   const saved = savedSet(workspace, info.value);
   if (saved?.current_version) return { rules: saved.current_version.rules, self_service: saved.self_service };
   return { rules: info.presets.standard.rules, self_service: info.presets.standard.self_service };
+}
+
+/** Ways of paying shown first when no activity uses any yet; camps and kindergartens wait for such an activity. */
+const COMMON_KINDS: BillingKind[] = ['monthly', 'visit', 'full_period', 'package'];
+
+function usageText(names: string[] | undefined): string {
+  if (!names?.length) return 'Още нямате дейност с такава цена.';
+  const shown = names.slice(0, 3).join(', ');
+  return names.length > 3 ? `${shown} и още ${names.length - 3}` : shown;
 }
 
 const sameDraft = (a: Draft, b: Draft) => canonical(a.rules) === canonical(b.rules) && canonical(a.self_service) === canonical(b.self_service);
@@ -47,6 +56,8 @@ export function PaymentTermsPage() {
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string }>();
   const [saving, setSaving] = useState(false);
+  const [allKinds, setAllKinds] = useState(false);
+  const [allLines, setAllLines] = useState(false);
   const noticeRef = useRef<HTMLParagraphElement>(null);
   const editorRef = useRef<HTMLElement>(null);
 
@@ -146,6 +157,7 @@ export function PaymentTermsPage() {
     rules: draft.rules,
     disabled: !canManage || saving,
     errors,
+    inMarketplace: workspace.in_marketplace,
     change: (path: string, value: Json) => changeDraft({ ...draft, rules: withValue(draft.rules, path, value) }),
   };
 
@@ -181,7 +193,14 @@ export function PaymentTermsPage() {
   };
 
   const lines = describeTerms(kind, draft.rules);
-  const example = exampleFor(kind, draft.rules);
+  // Monthly fees carry their examples under each rule; the others keep one example beside the words.
+  const example = kind === 'monthly' ? null : exampleFor(kind, draft.rules);
+  const usage = workspace.usage ?? {};
+  const used = workspace.billing_kinds.filter((item) => (usage[item.value] ?? []).length > 0).map((item) => item.value);
+  const primary = new Set<BillingKind>([...(used.length ? used : COMMON_KINDS), kind, ...dirtyKinds,
+    ...workspace.payment_terms.filter((set) => set.status === 'active').map((set) => set.billing_kind)]);
+  const shownKinds = workspace.billing_kinds.filter((item) => allKinds || primary.has(item.value));
+  const hiddenKinds = workspace.billing_kinds.filter((item) => !primary.has(item.value));
   const violations = saved ? Object.values(saved.marketplace_violations) : [];
   const unsaved = workspace.billing_kinds.filter((item) => dirtyKinds.has(item.value)).map((item) => `„${item.label}“`);
   const selfServiceErrors = errorsFor(errors, ['self_service']);
@@ -191,57 +210,61 @@ export function PaymentTermsPage() {
       <Header />
 
       {!canManage ? <p className={styles.info}>Само собственикът и администраторът могат да променят условията. Вие ги виждате така, както са запазени.</p> : null}
-      {workspace.in_marketplace ? (
-        <p className={styles.info}>Организацията е в каталога на платформата, затова условията трябва да са в рамките му: предизвестие до 30 дни, капаро до 30 % и при ранен отказ винаги се връща нещо.</p>
-      ) : null}
 
-      <fieldset className={styles.kinds}>
-        <legend className="sr-only">Начин на плащане</legend>
-        {workspace.billing_kinds.map((item) => (
-          <label key={item.value} className={item.value === kind ? `${styles.kind} ${styles.kindOn}` : styles.kind}>
-            <input type="radio" name="billing-kind" value={item.value} checked={item.value === kind} onChange={() => pickKind(item.value)} />
-            <span>{item.label}</span>
-            {dirtyKinds.has(item.value) ? <span className={styles.dot} aria-hidden="true" /> : null}
-            {dirtyKinds.has(item.value) ? <span className="sr-only"> (незапазени промени)</span> : null}
-          </label>
-        ))}
+      <fieldset className={styles.part}>
+        <legend className={styles.partTitle}>1. За кой начин на плащане настройвате?</legend>
+        <div className={styles.kindGrid}>
+          {shownKinds.map((item) => (
+            <label key={item.value} className={item.value === kind ? `${styles.option} ${styles.optionOn}` : styles.option}>
+              <span className={styles.optionHead}>
+                <input type="radio" name="billing-kind" value={item.value} checked={item.value === kind} onChange={() => pickKind(item.value)} />
+                <span className={styles.optionName}>{item.label}</span>
+              </span>
+              <span className={styles.hint}>{KIND_HINTS[item.value]}</span>
+              <span className={(usage[item.value] ?? []).length ? styles.usage : styles.hint}>
+                {(usage[item.value] ?? []).length ? <strong>Ползва се при: </strong> : null}{usageText(usage[item.value])}
+              </span>
+              {dirtyKinds.has(item.value) ? <span className={styles.unsaved}><span className={styles.dot} aria-hidden="true" />Незапазени промени</span> : null}
+            </label>
+          ))}
+        </div>
+        {hiddenKinds.length && !allKinds ? (
+          <button type="button" className={styles.linkButton} onClick={() => setAllKinds(true)}>
+            Още {hiddenKinds.length} {hiddenKinds.length === 1 ? 'начин' : 'начина'}: {hiddenKinds.map((item) => item.label.toLowerCase()).join(', ')} — ще ги видите, щом добавите такава дейност
+          </button>
+        ) : null}
       </fieldset>
-      <label className={styles.kindSelect}>
-        <span>Начин на плащане</span>
-        <select value={kind} onChange={(event) => pickKind(event.target.value as BillingKind)}>
-          {workspace.billing_kinds.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-        </select>
-      </label>
-      {unsaved.length ? <p className={styles.unsaved}><span className={styles.dot} aria-hidden="true" />Незапазени промени: {unsaved.join(', ')}.</p> : null}
 
-      <fieldset className={styles.presets} disabled={!canManage || saving}>
-        <legend className={styles.presetsLegend}>Готови условия</legend>
-        {[...READY_PRESETS, 'custom' as const].map((item) => (
-          <label key={item} className={[styles.preset, item === preset ? styles.presetOn : '', item === 'custom' ? styles.presetCustom : ''].join(' ')}>
-            <span className={styles.presetHead}>
-              <input type="radio" name={`preset-${kind}`} value={item} checked={item === preset} onChange={() => pickPreset(item)} />
-              <span className={styles.presetName}>{item === 'custom' ? 'Собствени' : info.presets[item].label}</span>
-              {item === 'standard' ? <span className={styles.recommended}>Препоръчани</span> : null}
-            </span>
-            <span className={styles.presetText}>{presetBlurb(kind, item)}</span>
-          </label>
-        ))}
+      <fieldset className={styles.part} disabled={!canManage || saving}>
+        <legend className={styles.partTitle}>2. Изберете готови условия</legend>
+        <div className={styles.presets}>
+          {[...READY_PRESETS, 'custom' as const].map((item) => (
+            <label key={item} className={[styles.option, item === preset ? styles.optionOn : '', item === 'custom' ? styles.optionCustom : ''].join(' ')}>
+              <span className={styles.optionHead}>
+                <input type="radio" name={`preset-${kind}`} value={item} checked={item === preset} onChange={() => pickPreset(item)} />
+                <span className={styles.optionName}>{item === 'custom' ? 'Собствени' : info.presets[item].label}</span>
+                {item === 'standard' ? <span className={styles.recommended}>Препоръчани</span> : null}
+              </span>
+              <span className={styles.hint}>{presetBlurb(kind, item)}</span>
+            </label>
+          ))}
+        </div>
       </fieldset>
 
       <div className={styles.layout}>
         <section className={styles.editor} aria-labelledby="terms-title" ref={editorRef}>
           <div className={styles.editorHead}>
-            <h2 id="terms-title">{preset === 'custom' ? 'Собствени' : info.presets[preset].label} · {info.label.toLowerCase()}</h2>
+            <h2 id="terms-title">3. Проверете условията за {info.label.toLowerCase()}</h2>
             <p className={styles.muted}>
               {saved?.current_version
-                ? `Запазени на ${savedOn(saved.current_version.created_at)}.${dirty ? ' Имате незапазени промени.' : ''}`
+                ? `Запазени на ${savedOn(saved.current_version.created_at)} като „${preset === 'custom' ? 'Собствени' : info.presets[preset].label}“.${dirty ? ' Имате незапазени промени.' : ''}`
                 : 'Организацията още не е запазила свои условия за този начин на плащане — важат „Стандартни“.'}
-              {canManage ? ' Сменете число и условията стават „Собствени“.' : ''}
             </p>
+            {kind === 'monthly' ? <p className={styles.muted}>Пример навсякъде: такса 60 € на месец, 4 занимания в ноември — по 15 € всяко.</p> : null}
           </div>
           {violations.length ? (
             <div className={styles.warning} role="note">
-              <strong>Тези условия не влизат в рамките на каталога.</strong>
+              <strong>Тези условия не отговарят на правилата за записване през платформата.</strong>
               {violations.map((text) => <p key={text}>{text}</p>)}
               <p>Поправете ги и ги запазете.</p>
             </div>
@@ -250,9 +273,9 @@ export function PaymentTermsPage() {
           <RuleEditor kind={kind} context={context} />
 
           <fieldset className={styles.rule}>
-            <legend className={styles.ruleTitle}><RuleIcon name="person" />Какво може родителят сам</legend>
+            <legend className={styles.ruleTitle}><RuleIcon name="person" />Какво може родителят сам, без да ви пита</legend>
             <div className={styles.ruleBody}>
-              <p className={styles.hint}>Действа, когато родителите получат свой профил в платформата. Дотогава те пишат или се обаждат на екипа.</p>
+              <p className={styles.hint}>Ще работи, когато родителите имат профил в платформата. Дотогава ви пишат или се обаждат.</p>
               {selfServiceOptions(kind).map((option) => (
                 <SelfServiceOption key={option} option={option} value={draft.self_service} disabled={!canManage || saving}
                   onChange={(self_service) => changeDraft({ ...draft, self_service })} />
@@ -262,10 +285,11 @@ export function PaymentTermsPage() {
           </fieldset>
         </section>
 
-        <aside className={styles.aside} aria-label="Как го виждат родителите">
-          <section className={styles.card}>
-            <h2>Така го виждат родителите</h2>
+        <aside className={styles.aside} aria-label="Как го четат родителите">
+          <section className={allLines ? styles.card : `${styles.card} ${styles.cardFolded}`}>
+            <h2>Така го четат родителите</h2>
             {lines.map((line) => <p key={line.title}><strong>{line.title}.</strong> {line.text}</p>)}
+            {lines.length > 1 && !allLines ? <button type="button" className={styles.unfold} onClick={() => setAllLines(true)}>Виж всички условия</button> : null}
           </section>
           {example ? (
             <section className={`${styles.card} ${styles.cardExample}`}>
@@ -276,12 +300,11 @@ export function PaymentTermsPage() {
             </section>
           ) : null}
           <section className={`${styles.card} ${styles.cardAlways}`}>
-            <h2><RuleIcon name="document" />Винаги важи</h2>
-            <p>Занимание, отменено от организацията, не се плаща.</p>
-            <p>Връщане до 14 дни по същия начин, по който е платено; кредит — само ако родителят избере.</p>
-            <p>Записаните пазят условията, които са приели. Промяната важи за новите.</p>
+            <h2><RuleIcon name="document" />Винаги важи, каквото и да изберете</h2>
+            <p>Занимание, отменено от вас, не се плаща.</p>
+            <p>Записаните досега деца остават с условията, които са приели.</p>
             <p>Отказ по имейл, по телефона или от профила винаги се приема.</p>
-            <p>Документ от лекар не се качва в системата — екипът само отбелязва, че го е видял.</p>
+            <p>Бележка от лекар не се качва — екипът само отбелязва, че я е видял.</p>
           </section>
         </aside>
       </div>
@@ -289,7 +312,7 @@ export function PaymentTermsPage() {
       {canManage ? (
         <div className={dirty ? `${styles.saveBar} ${styles.saveBarSticky}` : styles.saveBar}>
           <button type="button" className={styles.primary} onClick={save} disabled={saving || (!!saved && !dirty)}>
-            {saving ? 'Запазване…' : 'Запази условията'}
+            {saving ? 'Запазване…' : `Запази условията за ${info.label.toLowerCase()}`}
           </button>
           {dirty ? (
             <button type="button" className={styles.secondary} disabled={saving} onClick={() => {
@@ -299,7 +322,7 @@ export function PaymentTermsPage() {
               setNotice(undefined);
             }}>Върни запазените</button>
           ) : null}
-          <span className={styles.muted}>Записаните досега деца остават с условията, които родителите им са приели.</span>
+          <span className={styles.muted}>Записаните досега деца остават с условията, които са приели.</span>
           {notice ? (
             <p ref={noticeRef} tabIndex={-1} className={notice.tone === 'ok' ? styles.ok : styles.error} role={notice.tone === 'ok' ? 'status' : 'alert'}>{notice.text}</p>
           ) : null}
@@ -314,15 +337,15 @@ function Header() {
     <header className={styles.header}>
       <p className={styles.eyebrow}>Настройки на организацията</p>
       <h1>Условия за плащане</h1>
-      <p className={styles.lead}>Какво се дължи при отказ, пауза и отсъствия. Изберете готови условия за всеки начин на плащане и ги променете, ако искате. Родителите ще ги виждат преди записване.</p>
+      <p className={styles.lead}>Решете какво плаща родителят, когато детето спре, започне по средата на месеца, вземе пауза или отсъства. Задавате го веднъж — важи за всички дейности с този начин на плащане. Родителите виждат условията, преди да се запишат.</p>
     </header>
   );
 }
 
 const SELF_SERVICE_TEXT: Record<keyof SelfService, string> = {
-  absence: 'Да отбележи отсъствие',
+  absence: 'Да отбележи, че детето няма да дойде',
   pause_weeks: 'Да пусне пауза до',
-  end: 'Да прекрати записването — иначе изпраща молба до екипа',
+  end: 'Да спре записването (иначе ви изпраща молба)',
   cancel_visit: 'Да откаже посещение',
 };
 

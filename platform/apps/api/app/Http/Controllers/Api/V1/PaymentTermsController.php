@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Domain\Catalog\Models\OrganizationCatalogProfile;
+use App\Domain\Catalog\Models\PriceOption;
+use App\Domain\Catalog\Models\VisitOffer;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Domain\PaymentTerms\Actions\SavePaymentTerms;
@@ -13,6 +15,7 @@ use App\Domain\PaymentTerms\Rules\MarketplaceLimits;
 use App\Domain\PaymentTerms\Rules\Presets;
 use App\Domain\PaymentTerms\Rules\TermsSchema;
 use App\Http\Controllers\Controller;
+use Illuminate\Database\Query\JoinClause;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -52,6 +55,7 @@ final class PaymentTermsController extends Controller
                 'presets' => self::readyMade($kind),
             ], BillingKind::cases()),
             'in_marketplace' => $inMarketplace,
+            'usage' => (object) self::usage(),
             'can_manage' => Gate::forUser($request->user())->allows('managePaymentTerms', $organization),
             'schema_version' => TermsSchema::VERSION,
         ]);
@@ -93,6 +97,46 @@ final class PaymentTermsController extends Controller
         $updated = $save->update($request->user(), $record, $version, $data);
 
         return response()->json(['payment_terms' => $this->present($updated, $this->inMarketplace())]);
+    }
+
+    /**
+     * Which of the organization's activities use each way of paying, so the screen can say "Ползва се при: …"
+     * (the owner's review of 30.10.2026). Archived activities and cancelled offers do not count.
+     *
+     * @return array<string, list<string>>
+     */
+    private static function usage(): array
+    {
+        $titles = [];
+        $prices = PriceOption::query()
+            ->join('offerings', fn (JoinClause $join) => $join->on('offerings.id', '=', 'price_options.offering_id')
+                ->on('offerings.organization_id', '=', 'price_options.organization_id'))
+            ->join('activities', fn (JoinClause $join) => $join->on('activities.id', '=', 'offerings.activity_id')
+                ->on('activities.organization_id', '=', 'offerings.organization_id'))
+            ->where('activities.status', '!=', 'archived')
+            ->orderBy('activities.title')
+            ->get(['price_options.enrollment_mode as mode', 'activities.title as title']);
+        foreach ($prices as $price) {
+            $kind = BillingKind::fromEnrollmentMode((string) $price->getAttribute('mode'));
+            if ($kind !== null) {
+                $titles[$kind->value][] = self::title($price->getAttribute('title'));
+            }
+        }
+        $offers = VisitOffer::query()
+            ->whereIn('type', ['trial', 'single'])
+            ->where('status', '!=', 'cancelled')
+            ->orderBy('title')
+            ->get(['title']);
+        foreach ($offers as $offer) {
+            $titles[BillingKind::Visit->value][] = self::title($offer->getAttribute('title'));
+        }
+
+        return array_map(fn (array $list): array => array_values(array_unique($list)), $titles);
+    }
+
+    private static function title(mixed $title): string
+    {
+        return is_string($title) && trim($title) !== '' ? trim($title) : 'Дейност без име';
     }
 
     private function organization(TenantContext $context): Organization

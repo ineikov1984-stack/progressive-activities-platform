@@ -30,6 +30,8 @@ export type PaymentTermsWorkspace = {
   payment_terms: PaymentTermsSet[];
   billing_kinds: BillingKindInfo[];
   in_marketplace: boolean;
+  /** Names of the organization's activities that use each way of paying. */
+  usage?: Partial<Record<BillingKind, string[]>>;
   can_manage: boolean;
   schema_version: number;
 };
