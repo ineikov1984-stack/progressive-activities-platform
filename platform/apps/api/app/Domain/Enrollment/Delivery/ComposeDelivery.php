@@ -90,6 +90,7 @@ final class ComposeDelivery
         return ['to' => $to, 'mail' => $this->messages->parent($event, $application, $enrollment, [
             'organization' => $name,
             'platform' => $platform,
+            'webUrl' => (string) config('platform.web_url'),
             'brand' => Branding::forOrganization($name, $profile, (string) config('platform.web_url'), $this->logoStored($profile)),
             'replyTo' => $this->replyTo($application, $organization),
             'reason' => $transition?->public_reason,
