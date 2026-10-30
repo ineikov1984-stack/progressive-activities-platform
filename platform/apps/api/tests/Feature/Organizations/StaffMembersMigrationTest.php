@@ -3,6 +3,7 @@
 namespace Tests\Feature\Organizations;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -18,8 +19,8 @@ class StaffMembersMigrationTest extends TestCase
 
     public function test_existing_members_and_teacher_profiles_get_a_person_and_the_step_reverses(): void
     {
-        $migration = require base_path('database/migrations/2026_10_30_000800_create_staff_members_and_group_assignments.php');
-        $migration->down();
+        // The migrator keeps the migration it has loaded; requiring the file again would declare its class twice.
+        Artisan::call('migrate:rollback', ['--step' => 1, '--force' => true]);
         $this->assertFalse(Schema::hasTable('staff_members'));
 
         $now = now();
@@ -44,7 +45,8 @@ class StaffMembersMigrationTest extends TestCase
         $inherited = $this->session($organization, $group, '2026-11-03 15:00:00', [$linked]);
         $byHand = $this->session($organization, $group, '2026-11-10 15:00:00', [$unlinked]);
 
-        $migration->up();
+        Artisan::call('migrate', ['--force' => true]);
+        $this->assertTrue(Schema::hasTable('staff_members'));
 
         $people = DB::table('staff_members')->where('organization_id', $organization)->get()->keyBy('full_name');
         $this->assertCount(3, $people, 'The owner, the teacher with a login and the teacher without one; not the platform operator.');
