@@ -148,13 +148,15 @@ final class EnrollmentMessages
                 );
             case 'enrollment.pause_ended':
                 $cancelled = ($payload['cancelled'] ?? false) === true;
-                $next = $enrollment === null ? null : $this->firstSession($enrollment, $text('resume_on') ?: null);
+                // A cancelled pause never happened: the next session is simply the next one. A pause ended early:
+                // the child is back from the day the team chose.
+                $next = $enrollment === null ? null : $this->firstSession($enrollment, $cancelled ? null : ($text('resume_on') ?: null));
 
                 return $mail(
                     $cancelled ? "Паузата за {$child} е отменена" : "{$child} се връща от паузата на ".BulgarianDates::day($text('resume_on')),
                     $cancelled ? "Паузата за {$child} е отменена" : "{$child} се връща от паузата",
                     [$cancelled ? "{$child} продължава в {$where} без пауза." : "{$child} продължава в {$where}."],
-                    [$sessionFact('Следващо занимание', $next), $fact('Дни и час', $weekly), $placeFact],
+                    [$sessionFact($cancelled ? 'Следващо занимание' : 'Връща се', $next), $fact('Дни и час', $weekly), $placeFact],
                     button: $mapButton,
                     after: [$question],
                 );

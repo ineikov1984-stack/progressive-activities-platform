@@ -11,6 +11,7 @@ use App\Domain\Enrollment\Models\EnrollmentEvent;
 use App\Domain\Enrollment\Models\EnrollmentEventDelivery;
 use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
+use App\Domain\Enrollment\Services\SessionApplicability;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use Carbon\CarbonImmutable;
@@ -26,6 +27,7 @@ final class ComposeDelivery
         private readonly EnrollmentMessages $messages,
         private readonly EnrollmentCapacity $capacity,
         private readonly CatalogMediaStore $media,
+        private readonly SessionApplicability $sessions,
     ) {}
 
     /** @return array{to: string, mail: MailContent}|array{skip: string} */
@@ -58,6 +60,15 @@ final class ComposeDelivery
         if ($enrollment === null && $event->type === 'enrollment.application_approved') {
             $enrollment = Enrollment::query()->with(['group.offering.activity', 'group.offering.location', 'group.location', 'session'])
                 ->where('application_id', $application->id)->first();
+        }
+        // A skipped or restored session whose state has changed again before sending (restored, then paused):
+        // only the latest is told, so the parent never reads "we expect her" next to "she is on a pause".
+        if ($enrollment !== null && in_array($event->type, ['enrollment.session_excluded', 'enrollment.session_restored'], true)) {
+            $sessionId = $event->payload['session_id'] ?? null;
+            $counts = is_string($sessionId) && $this->sessions->sessionsFor($enrollment)->contains('id', $sessionId);
+            if ($counts !== ($event->type === 'enrollment.session_restored')) {
+                return ['skip' => 'superseded'];
+            }
         }
         $platform = (string) config('platform.name');
 
