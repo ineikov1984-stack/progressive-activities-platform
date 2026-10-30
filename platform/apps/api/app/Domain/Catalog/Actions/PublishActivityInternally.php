@@ -102,7 +102,7 @@ final readonly class PublishActivityInternally
             $prices = $group->priceOptions->concat($group->offering->priceOptions->whereNull('group_id'))->where('is_available', true);
             foreach ($prices as $price) {
                 if ($this->paymentTerms->forPrice($price->enrollment_mode, $group->offering->payment_terms_id)?->marketplaceViolations()) {
-                    throw ValidationException::withMessages(['payment_terms' => 'Условията за плащане на тази дейност не са в рамките на каталога на платформата. Променете ги в „Настройки → Условия за плащане“.']);
+                    throw ValidationException::withMessages(['payment_terms' => 'Правилата за такси, отсъствия и отказ на тази дейност не са в рамките на каталога на платформата. Променете ги в „Такси, отсъствия и отказ“.']);
                 }
             }
         }

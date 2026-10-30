@@ -70,8 +70,8 @@ const auditActionLabels: Record<string, string> = {
   'enrollment.pause_ended': 'Пауза, приключена по-рано',
   'enrollment.ended': 'Прекратено записване',
   'enrollment.reopened': 'Отменено прекратяване на записване',
-  'payment_terms.created': 'Създадени условия за плащане',
-  'payment_terms.updated': 'Променени условия за плащане',
+  'payment_terms.created': 'Създадени правила за такси, отсъствия и отказ',
+  'payment_terms.updated': 'Променени правила за такси, отсъствия и отказ',
 };
 
 const visibleInvitations = 5;

@@ -190,7 +190,7 @@ class PaymentTermsCopyTest extends TestCase
             'target_group_id' => $group->id, 'price_option_id' => $price->id, 'effective_date' => '2026-11-14',
             'reason' => 'Семейството избра целия курс.', 'version' => 1,
         ])->assertUnprocessable()->assertJsonPath('errors.price_option_id.0',
-            'Условията за тази цена не са в рамките на каталога на платформата. Променете ги в „Настройки → Условия за плащане“.');
+            'Правилата за такси, отсъствия и отказ за тази цена не са в рамките на каталога на платформата. Променете ги в „Такси, отсъствия и отказ“.');
     }
 
     #[TestGroup('tenant-isolation')]
@@ -230,7 +230,7 @@ class PaymentTermsCopyTest extends TestCase
         ]);
         $activityId = $draft($own['id'])->assertCreated()->assertJsonPath('activity.offering.payment_terms_id', $own['id'])->json('activity.id');
         foreach ([$foreign, $archived['id']] as $refused) {
-            $draft($refused)->assertUnprocessable()->assertJsonPath('errors', fn (array $errors): bool => $errors['offering.payment_terms_id'] === ['Изберете условия от „Настройки → Условия за плащане“.']);
+            $draft($refused)->assertUnprocessable()->assertJsonPath('errors', fn (array $errors): bool => $errors['offering.payment_terms_id'] === ['Изберете условия от „Такси, отсъствия и отказ“.']);
         }
         $draft($visit['id'])->assertUnprocessable()->assertJsonPath('errors', fn (array $errors): bool => $errors['offering.payment_terms_id']
             === ['Тези условия са за „Пробно или единично посещение“, а дейността няма такава цена.']);

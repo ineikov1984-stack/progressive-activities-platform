@@ -319,7 +319,7 @@ test('the owner saves payment terms and they load again from the database', asyn
   expect(set.current_version.rules.freeze_days_with_document).toBe(0);
 
   await page.goto('/dashboard/settings/payment-terms');
-  await slow(page.getByRole('heading', { name: 'Условия за плащане', level: 1 })).toBeVisible();
+  await slow(page.getByRole('heading', { name: 'Такси, отсъствия и отказ', level: 1 })).toBeVisible();
   await expect(page.getByText('Заявката не беше изпълнена', { exact: false })).toHaveCount(0);
 });
 

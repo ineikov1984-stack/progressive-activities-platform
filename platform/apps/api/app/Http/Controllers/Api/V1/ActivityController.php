@@ -118,7 +118,7 @@ final class ActivityController extends Controller
             'offering.price_options.*.is_available' => ['sometimes', 'boolean'],
             'offering.price_options.*.cancellation_policy' => ['sometimes', 'nullable', 'string'],
             'offering.price_options.*.payment_due' => ['sometimes', 'nullable', 'string', 'max:255'],
-        ], ['offering.payment_terms_id.exists' => 'Изберете условия от „Настройки → Условия за плащане“.']);
+        ], ['offering.payment_terms_id.exists' => 'Изберете условия от „Такси, отсъствия и отказ“.']);
     }
 
     /** @param array<string, mixed> $payload */
