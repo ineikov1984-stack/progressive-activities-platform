@@ -14,6 +14,7 @@ use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Enrollment\Models\EnrollmentEvent;
 use App\Domain\Enrollment\Models\EnrollmentEventDelivery;
+use App\Domain\Enrollment\Models\EnrollmentPause;
 use App\Domain\Enrollment\Models\EnrollmentSessionException;
 use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Identity\Models\User;
@@ -352,22 +353,89 @@ class EnrollmentEmailTest extends TestCase
         $this->assertSame(1, $this->withTenant($f['organization'], fn () => EnrollmentEventDelivery::query()->where('skipped_reason', 'superseded')->count()));
     }
 
-    public function test_a_cancelled_pause_names_the_next_session_and_an_early_end_the_return(): void
+    public function test_a_cancelled_pause_names_the_pause_and_the_next_session_and_an_early_end_the_return(): void
     {
         $f = $this->fixture();
         $enrollment = $this->activeEnrollment($f);
-        $this->event($f, 'enrollment.pause_ended', ['resume_on' => '2026-11-18', 'cancelled' => true], $enrollment);
+        [$cancelledPause, $shortenedPause] = $this->withTenant($f['organization'], fn (): array => [
+            EnrollmentPause::query()->create(['enrollment_id' => $enrollment->id, 'starts_on' => '2026-11-09', 'ends_on' => '2026-11-15', 'reason_category' => 'holiday', 'cancelled_at' => now()]),
+            EnrollmentPause::query()->create(['enrollment_id' => $enrollment->id, 'starts_on' => '2026-11-16', 'ends_on' => '2026-11-17', 'reason_category' => 'holiday']),
+        ]);
+        $this->event($f, 'enrollment.pause_ended', ['pause_id' => $cancelledPause->id, 'resume_on' => '2026-11-09', 'cancelled' => true], $enrollment);
         app(DeliverEvents::class)->run();
         $cancelled = $this->html($this->mailer->sent[0]['mail']);
-        $this->assertStringContainsString('Следващо занимание', $cancelled);
-        $this->assertStringContainsString('сряда, 4 ноември · 17:30–18:30', $cancelled);
+        // Which pause, and simply the next session.
+        foreach (['Отменена пауза', 'от понеделник, 9 ноември до неделя, 15 ноември', 'Следващо занимание', 'сряда, 4 ноември · 17:30–18:30'] as $expected) {
+            $this->assertStringContainsString($expected, $cancelled);
+        }
 
         $this->mailer->sent = [];
-        $this->event($f, 'enrollment.pause_ended', ['resume_on' => '2026-11-18', 'cancelled' => false], $enrollment);
+        $this->event($f, 'enrollment.pause_ended', ['pause_id' => $shortenedPause->id, 'resume_on' => '2026-11-18', 'cancelled' => false], $enrollment);
         app(DeliverEvents::class)->run();
         $ended = $this->html($this->mailer->sent[0]['mail']);
-        $this->assertStringContainsString('Връща се', $ended);
-        $this->assertStringContainsString('сряда, 18 ноември · 17:30–18:30', $ended);
+        foreach (['от понеделник, 16 ноември до вторник, 17 ноември', 'Връща се', 'сряда, 18 ноември · 17:30–18:30'] as $expected) {
+            $this->assertStringContainsString($expected, $ended);
+        }
+    }
+
+    public function test_a_move_names_the_last_session_in_the_old_group_and_the_first_in_the_new_one(): void
+    {
+        $f = $this->fixture();
+        $old = $this->withTenant($f['organization'], function () use ($f): Enrollment {
+            $f['application']->forceFill(['status' => 'approved'])->save();
+
+            return Enrollment::query()->create([
+                'application_id' => $f['application']->id, 'child_id' => $f['child']->id, 'group_id' => $f['group']->id,
+                'price_option_id' => $f['application']->price_option_id, 'scope' => 'full_period', 'status' => 'ended',
+                'starts_on' => '2026-10-01', 'ends_on' => '2026-11-22',
+            ]);
+        });
+        [$moved, $application] = $this->withTenant($f['organization'], function () use ($f, $old): array {
+            $target = $f['group']->offering->groups()->create([
+                'name' => 'Група 3', 'capacity_max' => 10, 'status' => 'published', 'enrollment_approval_mode' => 'manual',
+                'location_id' => $f['group']->location_id,
+                'schedule_pattern' => ['timezone' => 'Europe/Sofia', 'frequency' => 'weekly', 'slots' => [['weekday' => 1, 'starts_at' => '16:00', 'duration_minutes' => 60]]],
+            ]);
+            foreach (['2026-11-23', '2026-11-30'] as $day) {
+                $target->sessions()->create(['starts_at' => "{$day}T14:00:00Z", 'ends_at' => "{$day}T15:00:00Z", 'status' => 'scheduled']);
+            }
+            $application = $f['application']->replicate()->fill(['group_id' => $target->id, 'idempotency_key' => fake()->uuid(), 'source' => 'staff']);
+            $application->save();
+
+            return [Enrollment::query()->create([
+                'application_id' => $application->id, 'child_id' => $f['child']->id, 'group_id' => $target->id,
+                'price_option_id' => $application->price_option_id, 'scope' => 'full_period', 'status' => 'active',
+                'starts_on' => '2026-11-23', 'transferred_from_id' => $old->id,
+            ]), $application];
+        });
+        $this->event([...$f, 'application' => $application], 'enrollment.transferred', ['transferred_from_id' => $old->id, 'effective_date' => '2026-11-23'], $moved);
+
+        app(DeliverEvents::class)->run();
+
+        $html = $this->html($this->mailer->sent[0]['mail']);
+        // The mock-up: the last session in the old group, not the calendar day before the move.
+        foreach (['Последно в „Група 2“', 'сряда, 18 ноември · 17:30–18:30', 'Първо в новата група', 'понеделник, 23 ноември · 16:00–17:00', 'Всеки понеделник · 16:00–17:00'] as $expected) {
+            $this->assertStringContainsString($expected, $html);
+        }
+        $this->assertStringNotContainsString('22 ноември', $html);
+    }
+
+    public function test_skipping_the_last_session_of_the_period_says_so(): void
+    {
+        $f = $this->fixture();
+        $enrollment = $this->activeEnrollment($f);
+        $last = $this->withTenant($f['organization'], fn () => $f['group']->sessions()->orderByDesc('starts_at')->firstOrFail());
+        $this->withTenant($f['organization'], fn () => EnrollmentSessionException::query()->create([
+            'enrollment_id' => $enrollment->id, 'session_id' => $last->id, 'kind' => 'excluded', 'reason' => 'Пътуваме.',
+        ]));
+        $this->event($f, 'enrollment.session_excluded', ['session_id' => $last->id], $enrollment);
+
+        app(DeliverEvents::class)->run();
+
+        $html = $this->html($this->mailer->sent[0]['mail']);
+        $this->assertStringContainsString('сряда, 25 ноември · 17:30–18:30', $html);
+        $this->assertStringContainsString('След него няма други занимания за Ния в този период.', $html);
+        $this->assertStringNotContainsString('Връща се', $html);
     }
 
     public function test_the_logo_comes_through_the_web_address_and_only_when_its_file_is_stored(): void
