@@ -40,7 +40,8 @@ export function StepGroups({ organizationId, activityId, modes, ageLabel, groups
   const [editing, setEditing] = useState<ActivityGroup | 'new' | undefined>(groups.length === 0 ? 'new' : undefined);
   const [slots, setSlots] = useState<Slot[]>([defaultSlot()]);
   const [extraDates, setExtraDates] = useState<ExtraDate[]>([]);
-  const [excluded, setExcluded] = useState('');
+  // Days without a session, each picked from a calendar (stored as YYYY-MM-DD).
+  const [excluded, setExcluded] = useState<string[]>([]);
   const [frequency, setFrequency] = useState<'weekly' | 'biweekly'>('weekly');
   const [approval, setApproval] = useState<'manual' | 'automatic'>('manual');
   // null — every way of enrolling the activity has, including ones added later.
@@ -53,7 +54,7 @@ export function StepGroups({ organizationId, activityId, modes, ageLabel, groups
     setEditing(group ?? 'new');
     setSlots(group?.schedule_pattern.slots?.length ? group.schedule_pattern.slots : [defaultSlot()]);
     setExtraDates(group?.schedule_pattern.added_dates ?? []);
-    setExcluded(group?.schedule_pattern.excluded_dates?.join('\n') ?? '');
+    setExcluded(group?.schedule_pattern.excluded_dates ?? []);
     setFrequency(group?.schedule_pattern.frequency ?? 'weekly');
     setApproval(group?.enrollment_approval_mode ?? 'manual');
     setTakes(group?.enrollment_modes ?? null);
@@ -80,7 +81,7 @@ export function StepGroups({ organizationId, activityId, modes, ageLabel, groups
         enrollment_approval_mode: approval,
         // All ways chosen means "all", so a way added later in step 6 applies to the group too.
         enrollment_modes: chosen === null || chosen.length === modes.length ? null : chosen,
-        schedule_pattern: buildSchedulePattern({ startDate: value('start_date'), endDate: value('end_date'), frequency, slots, excludedDates: excluded, addedDates: extraDates.filter((item) => item.date) }),
+        schedule_pattern: buildSchedulePattern({ startDate: value('start_date'), endDate: value('end_date'), frequency, slots, excludedDates: excluded.filter(Boolean).join('\n'), addedDates: extraDates.filter((item) => item.date) }),
       }, existing?.id);
       onGroup(group);
       setEditing(undefined);
@@ -208,9 +209,17 @@ export function StepGroups({ organizationId, activityId, modes, ageLabel, groups
           ) : null}
           <details className={styles.details}>
             <summary>Почивни дни и допълнителни занятия</summary>
-            <Field id="g-excluded" label="Дати без занятие" hint="По една дата на ред, например 2026-12-24.">
-              <textarea id="g-excluded" className={`${styles.input} ${styles.textareaSmall}`} value={excluded} onChange={(event) => setExcluded(event.target.value)} />
-            </Field>
+            <fieldset className={styles.fieldset}>
+              <legend className={styles.label}>Дати без занятие</legend>
+              <p className={styles.hint}>Например празници и ваканции — в тези дни занятие няма.</p>
+              {excluded.map((date, index) => (
+                <div key={index} className={styles.slotRow}>
+                  <input className={styles.input} type="date" aria-label={`Дата без занятие ${index + 1}`} value={date} onChange={(event) => setExcluded(excluded.map((item, at) => at === index ? event.target.value : item))} />
+                  <button type="button" className={styles.iconButton} aria-label={`Премахни дата без занятие ${index + 1}`} onClick={() => setExcluded(excluded.filter((_, at) => at !== index))}><Icon path={icons.trash} /></button>
+                </div>
+              ))}
+              <button type="button" className={styles.quiet} onClick={() => setExcluded([...excluded, ''])}><Icon path={icons.plus} />Добави дата без занятие</button>
+            </fieldset>
             <fieldset className={styles.fieldset}>
               <legend className={styles.label}>Допълнителни занятия</legend>
               {extraDates.map((item, index) => (
