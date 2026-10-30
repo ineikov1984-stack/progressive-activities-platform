@@ -66,8 +66,9 @@ class EnrollmentEmailTest extends TestCase
         $this->assertSame('Записахме Ния в „Шахмат · Група 2“', $envelope->subject);
         $this->assertSame('Школа Звезда чрез Progressive Activities', $envelope->from?->name);
         $this->assertSame('info@zvezda.example', $envelope->replyTo[0]->address ?? null);
-        $html = $mail->render();
-        foreach (['Здравейте, Мария,', 'Първо занимание', 'сряда, 4 ноември · 17:30–18:30', 'Всяка сряда · 17:30–18:30', 'Зала 1, ул. Пример 1, София', 'Вход от двора.', 'Как да стигнете', '#216653'] as $expected) {
+        $html = $this->html($mail);
+        foreach (['Здравейте, Мария,', 'Първо занимание', 'сряда, 4 ноември · 17:30–18:30', 'Всяка сряда · 17:30–18:30', 'Зала 1, ул. Пример 1, София', 'Вход от двора.', 'Как да стигнете', '#216653',
+            '/email-icons/calendar.png', '/email-icons/repeat.png', '/email-icons/pin.png'] as $expected) {
             $this->assertStringContainsString($expected, $html);
         }
         // Never the surname, class, birth date, the parent's note, a phone or an internal note.
@@ -95,7 +96,7 @@ class EnrollmentEmailTest extends TestCase
         $this->assertSame('Получихме заявката за Ния — „Шахмат · Група 2“', $parent->envelope()->subject);
         $team = $byAddress['info@zvezda.example']['mail'];
         $this->assertSame('Нова заявка за „Шахмат · Група 2“', $team->envelope()->subject);
-        $html = $team->render();
+        $html = $this->html($team);
         foreach (['Отвори заявката', '/dashboard/enrollments?organization='.$f['organization']->id, '10 свободни места от 10', '1 заявка в организацията'] as $expected) {
             $this->assertStringContainsString($expected, $html);
         }
@@ -248,23 +249,23 @@ class EnrollmentEmailTest extends TestCase
         $byTo = collect($this->mailer->sent);
         $ended = $byTo->first(fn (array $sent): bool => str_starts_with($sent['mail']->envelope()->subject, 'Последен ден'))['mail'];
         // The parent knows what they wrote; it may be about health — it stays out of the email.
-        $this->assertStringContainsString('30 ноември', $ended->render());
-        $this->assertStringContainsString('Последно занимание', $ended->render());
-        $this->assertStringContainsString('сряда, 25 ноември · 17:30–18:30', $ended->render());
-        $this->assertStringNotContainsString('Местим се', $ended->render());
+        $this->assertStringContainsString('30 ноември', $this->html($ended));
+        $this->assertStringContainsString('Последно занимание', $this->html($ended));
+        $this->assertStringContainsString('сряда, 25 ноември · 17:30–18:30', $this->html($ended));
+        $this->assertStringNotContainsString('Местим се', $this->html($ended));
         $pause = $byTo->first(fn (array $sent): bool => str_starts_with($sent['mail']->envelope()->subject, 'Пауза'))['mail'];
         foreach (['от понеделник, 9 ноември до неделя, 15 ноември', 'Връща се', 'сряда, 18 ноември · 17:30–18:30', 'Датите не са верни?'] as $expected) {
-            $this->assertStringContainsString($expected, $pause->render());
+            $this->assertStringContainsString($expected, $this->html($pause));
         }
-        $this->assertStringNotContainsString('health', $pause->render());
-        $this->assertStringNotContainsString('Здравословни', $pause->render());
+        $this->assertStringNotContainsString('health', $this->html($pause));
+        $this->assertStringNotContainsString('Здравословни', $this->html($pause));
         $team = $byTo->firstWhere('to', 'info@zvezda.example')['mail'];
         foreach (['Местим се', 'Ния', 'Мария'] as $private) {
-            $this->assertStringNotContainsString($private, $team->render());
+            $this->assertStringNotContainsString($private, $this->html($team));
         }
-        $this->assertStringContainsString('view=groups&amp;group='.$f['group']->id, $team->render());
+        $this->assertStringContainsString('view=groups&amp;group='.$f['group']->id, $this->html($team));
         foreach (['Всяка сряда · 17:30–18:30', 'понеделник, 30 ноември', 'се освобождава от 1 декември'] as $expected) {
-            $this->assertStringContainsString($expected, $team->render());
+            $this->assertStringContainsString($expected, $this->html($team));
         }
     }
 
@@ -289,16 +290,44 @@ class EnrollmentEmailTest extends TestCase
         $parent = $byAddress[$f['parent']->email]['mail'];
         $this->assertSame('Заниманието на 4 ноември отново се брои за Ния', $parent->envelope()->subject);
         foreach (['Очакваме Ния на заниманието.', 'сряда, 4 ноември · 17:30–18:30', 'Шахмат · Група 2', 'Зала 1, ул. Пример 1, София', 'Как да стигнете', 'Отговорете на този имейл'] as $expected) {
-            $this->assertStringContainsString($expected, $parent->render());
+            $this->assertStringContainsString($expected, $this->html($parent));
         }
         $team = $byAddress['info@zvezda.example']['mail'];
         $this->assertSame('Родител отмени пропуска на 4 ноември в „Шахмат · Група 2“', $team->envelope()->subject);
         foreach (['сряда, 4 ноември · 17:30–18:30', 'Всяка сряда · 17:30–18:30', 'Отвори групата'] as $expected) {
-            $this->assertStringContainsString($expected, $team->render());
+            $this->assertStringContainsString($expected, $this->html($team));
         }
         foreach (['Ния', 'Мария'] as $private) {
-            $this->assertStringNotContainsString($private, $team->render());
+            $this->assertStringNotContainsString($private, $this->html($team));
         }
+    }
+
+    public function test_a_skip_by_the_team_names_the_session_and_when_the_child_comes_back(): void
+    {
+        $f = $this->fixture();
+        $enrollment = $this->withTenant($f['organization'], function () use ($f): Enrollment {
+            $f['application']->forceFill(['status' => 'approved'])->save();
+
+            return Enrollment::query()->create([
+                'application_id' => $f['application']->id, 'child_id' => $f['child']->id, 'group_id' => $f['group']->id,
+                'price_option_id' => $f['application']->price_option_id, 'scope' => 'full_period', 'status' => 'active', 'starts_on' => '2026-10-01',
+            ]);
+        });
+        $third = $this->withTenant($f['organization'], fn () => $f['group']->sessions()->orderBy('starts_at')->skip(2)->firstOrFail());
+        $coordinator = $this->member($f['organization'], 'coordinator');
+        $this->event($f, 'enrollment.session_excluded', ['session_id' => $third->id], $enrollment, $this->transition($f, $enrollment, $coordinator, 'Състезание в училище.'));
+
+        app(DeliverEvents::class)->run();
+
+        $this->assertCount(1, $this->mailer->sent);
+        $mail = $this->mailer->sent[0]['mail'];
+        $this->assertSame('Ния пропуска заниманието на 18 ноември', $mail->envelope()->subject);
+        $html = $this->html($mail);
+        foreach (['Пропуска', 'сряда, 18 ноември · 17:30–18:30', 'Връща се', 'сряда, 25 ноември · 17:30–18:30', '„Състезание в училище.“', 'Грешка ли е?'] as $expected) {
+            $this->assertStringContainsString($expected, $html);
+        }
+        // The session after the skipped one — not the first session of the period.
+        $this->assertStringNotContainsString('4 ноември', $html);
     }
 
     public function test_the_logo_comes_through_the_web_address_and_only_when_its_file_is_stored(): void
@@ -317,7 +346,7 @@ class EnrollmentEmailTest extends TestCase
             $sent = collect($this->mailer->sent)->firstWhere('to', 'maria@example.com');
             $this->mailer->sent = [];
 
-            return $sent['mail']->render();
+            return $this->html($sent['mail']);
         };
 
         // The file is not on disk: the initials, never a broken picture.
@@ -352,7 +381,7 @@ class EnrollmentEmailTest extends TestCase
 
         app(DeliverEvents::class)->run();
 
-        $html = $this->mailer->sent[0]['mail']->render();
+        $html = $this->html($this->mailer->sent[0]['mail']);
         $this->assertStringContainsString('Обяснение от екипа', $html);
         $this->assertStringContainsString('„Групата е за по-малки деца.“', $html);
         $this->assertStringNotContainsString('Друг текст', $html);
@@ -506,6 +535,12 @@ class EnrollmentEmailTest extends TestCase
         return $this->withTenant($f['organization'], fn () => EnrollmentTransition::query()->create([
             'enrollment_id' => $enrollment->id, 'actor_user_id' => $actor->id, 'from_status' => 'active', 'to_status' => 'ended', 'public_reason' => $reason,
         ]));
+    }
+
+    /** The HTML without the word joiners that keep "17:30–18:30" on one line. */
+    private function html(EnrollmentMail $mail): string
+    {
+        return str_replace("\u{2060}", '', $mail->render());
     }
 
     private function text(EnrollmentMail $mail): string

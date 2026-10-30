@@ -22,7 +22,7 @@ final class EnrollmentMessages
     public function __construct(private readonly SessionApplicability $sessions) {}
 
     /**
-     * @param  array{organization: string, platform: string, brand: Branding, replyTo: string|null, reason: string|null, byParent: bool}  $context
+     * @param  array{organization: string, platform: string, webUrl: string, brand: Branding, replyTo: string|null, reason: string|null, byParent: bool}  $context
      */
     public function parent(EnrollmentEvent $event, EnrollmentApplication $application, ?Enrollment $enrollment, array $context): MailContent
     {
@@ -55,7 +55,8 @@ final class EnrollmentMessages
             after: array_values($after),
             footer: "Получавате това писмо, защото подадохте заявка за {$child} в {$org}. Изпратено чрез {$context['platform']}.",
         );
-        $fact = fn (string $label, string $value, ?string $hint = null): ?array => $value === '' ? null : ['label' => $label, 'value' => $value, 'hint' => $hint];
+        $fact = fn (string $label, string $value, ?string $hint = null): ?array => $value === '' ? null
+            : ['label' => $label, 'value' => $value, 'hint' => $hint, 'icon' => $this->icon($label, $context['webUrl'])];
         $placeFact = $place === null ? null : $fact('Място', $place['text'], $place['hint']);
         $mapButton = $place['url'] ?? null ? ['label' => 'Как да стигнете', 'url' => $place['url']] : null;
         $groupFact = $fact('Група', $this->groupTitle($group), $weekly === '' ? null : $weekly);
@@ -195,14 +196,15 @@ final class EnrollmentMessages
                 $session = $this->sessionOf($payload);
                 $day = $session === null ? '' : BulgarianDates::day($session->starts_at->setTimezone($this->timezone($group))->toDateString());
                 if ($event->type === 'enrollment.session_excluded') {
-                    // The next session that still counts, for a child who comes every week.
-                    $next = $enrollment === null || $enrollment->scope->value !== 'full_period' ? null : $this->firstSession($enrollment, null);
+                    // The session after the skipped one, for a child who comes every week.
+                    $next = $enrollment === null || $session === null || $enrollment->scope->value !== 'full_period' ? null
+                        : $this->firstSession($enrollment, $session->starts_at->setTimezone($this->timezone($group))->addDay()->toDateString());
 
                     return $mail(
                         "{$child} пропуска заниманието на {$day}",
                         "{$child} пропуска заниманието на {$day}",
                         ["Заниманието на {$day} в {$where} не се брои за {$child}."],
-                        [$sessionFact('Пропуска', $session), $sessionFact('Следващо занимание', $next)],
+                        [$sessionFact('Пропуска', $session), $sessionFact('Връща се', $next)],
                         quoteBlock: $quote,
                         after: [$reply("Грешка ли е? Отговорете на този имейл — ще го получи екипът на {$org}.")],
                     );
@@ -231,7 +233,8 @@ final class EnrollmentMessages
         $org = $context['organization'];
         $payload = $event->payload;
         $text = fn (string $key): string => is_string($payload[$key] ?? null) ? $payload[$key] : '';
-        $fact = fn (string $label, string $value, ?string $hint = null): ?array => $value === '' ? null : ['label' => $label, 'value' => $value, 'hint' => $hint];
+        $fact = fn (string $label, string $value, ?string $hint = null): ?array => $value === '' ? null
+            : ['label' => $label, 'value' => $value, 'hint' => $hint, 'icon' => $this->icon($label, $context['webUrl'])];
         $link = $context['webUrl'].'/dashboard/enrollments?organization='.rawurlencode($context['organizationId']);
         $groupLink = $context['webUrl'].'/dashboard/enrollments?view=groups&group='.rawurlencode((string) $group?->id).'&organization='.rawurlencode($context['organizationId']);
         $footer = match ($context['recipientKind']) {
@@ -363,6 +366,24 @@ final class EnrollmentMessages
         $activity = $group?->offering?->activity?->title;
 
         return trim(($activity === null ? '' : $activity.' · ').($group->name ?? 'групата'));
+    }
+
+    /**
+     * The small grey line icon beside a fact (the approved mock-up): a PNG from the web app's public folder,
+     * decorative only. Dates, the weekly rhythm, the place, the group, places and waiting.
+     */
+    private function icon(string $label, string $webUrl): ?string
+    {
+        $name = match (true) {
+            in_array($label, ['После', 'Дни и час', 'Ден и час'], true) => 'repeat',
+            $label === 'Място' => 'pin',
+            in_array($label, ['Група', 'Дейност', 'Заявка', 'Заявка за'], true) => 'group',
+            in_array($label, ['Места днес', 'Мястото'], true) => 'seat',
+            in_array($label, ['Чакат място', 'Чакат решение'], true) => 'waiting',
+            default => 'calendar',
+        };
+
+        return rtrim($webUrl, '/').'/email-icons/'.$name.'.png';
     }
 
     /** @param  array<string, mixed>  $payload */

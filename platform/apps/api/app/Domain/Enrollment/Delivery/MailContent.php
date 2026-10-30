@@ -10,7 +10,7 @@ final readonly class MailContent
 {
     /**
      * @param  list<string>  $paragraphs
-     * @param  list<array{label: string, value: string, hint?: string|null}>  $facts
+     * @param  list<array{label: string, value: string, hint?: string|null, icon?: string|null}>  $facts
      * @param  array{title: string, text: string}|null  $callout
      * @param  array{label: string, text: string}|null  $quote
      * @param  array{label: string, url: string}|null  $button

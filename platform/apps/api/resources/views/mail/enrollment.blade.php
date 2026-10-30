@@ -1,5 +1,10 @@
 {{-- One layout for every enrollment email; the words come from MailContent. Email-safe: tables and inline styles. --}}
-@php($b = $mail->brand)
+{{-- "17:30–18:30" never breaks at the dash on a phone: a word joiner (U+2060) after a dash between digits.
+     One @php block: Blade cannot mix @php(...) with @php … @endphp in one template. --}}
+@php
+    $b = $mail->brand;
+    $keepTime = fn (string $text): string => (string) preg_replace('/(?<=\d)–(?=\d)/u', "–\u{2060}", $text);
+@endphp
 <!doctype html>
 <html lang="bg">
 <head>
@@ -46,12 +51,20 @@
 @if ($mail->facts !== [])
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border:1px solid #E2E6EA;border-radius:12px;">
 @foreach ($mail->facts as $fact)
-<tr><td style="padding:{{ $loop->first ? '14px' : '6px' }} 18px {{ $loop->last ? '14px' : '6px' }};">
-<div style="font-size:14px;line-height:20px;font-weight:600;color:#5B6878;">{{ $fact['label'] }}</div>
-<div style="font-size:16px;line-height:24px;font-weight:600;color:#173F5F;">{{ $fact['value'] }}</div>
-@if (! empty($fact['hint']))
-<div style="font-size:14px;line-height:20px;color:#5B6878;">{{ $fact['hint'] }}</div>
+<tr><td style="padding:{{ $loop->first ? '14px' : '7px' }} 18px {{ $loop->last ? '14px' : '7px' }};">
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
+@if (! empty($fact['icon']))
+{{-- Decorative: the label says what it is. --}}
+<td width="22" valign="top" style="width:22px;padding:0 12px 0 0;vertical-align:top;"><img src="{{ $fact['icon'] }}" width="22" height="22" alt="" style="display:block;width:22px;height:22px;border:0;"></td>
 @endif
+<td valign="top" style="vertical-align:top;">
+<div style="font-size:14px;line-height:20px;font-weight:600;color:#5B6878;">{{ $fact['label'] }}</div>
+<div style="font-size:16px;line-height:24px;font-weight:600;color:#173F5F;">{{ $keepTime($fact['value']) }}</div>
+@if (! empty($fact['hint']))
+<div style="font-size:14px;line-height:20px;color:#5B6878;">{{ $keepTime($fact['hint']) }}</div>
+@endif
+</td>
+</tr></table>
 </td></tr>
 @endforeach
 </table>
