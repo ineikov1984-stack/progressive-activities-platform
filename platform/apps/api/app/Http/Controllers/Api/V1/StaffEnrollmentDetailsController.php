@@ -16,6 +16,7 @@ use App\Domain\Enrollment\Models\EnrollmentPause;
 use App\Domain\Enrollment\Models\EnrollmentSessionException;
 use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Enrollment\Services\ContactWindow;
+use App\Domain\Enrollment\Services\EnrollmentChain;
 use App\Domain\Enrollment\Services\SessionApplicability;
 use App\Domain\Identity\Models\User;
 use App\Domain\Identity\Support\PhoneNumber;
@@ -48,6 +49,7 @@ final class StaffEnrollmentDetailsController extends Controller
         private readonly ContactWindow $window,
         private readonly SessionApplicability $sessions,
         private readonly AuditRecorder $audit,
+        private readonly EnrollmentChain $chain,
     ) {}
 
     public function application(Request $request, string $application): JsonResponse
@@ -137,6 +139,12 @@ final class StaffEnrollmentDetailsController extends Controller
         ];
     }
 
+    /** A → B cancelled → C: the child moves to C. */
+    private function movedTo(Enrollment $enrollment): ?Enrollment
+    {
+        return $enrollment->transferredTo ?? ($enrollment->status === EnrollmentStatus::Ended ? $this->chain->next($enrollment) : null);
+    }
+
     /** @return array<string, mixed> */
     private function presentEnrollment(Enrollment $enrollment, bool $manage): array
     {
@@ -144,7 +152,7 @@ final class StaffEnrollmentDetailsController extends Controller
         $application = $enrollment->application;
         $activity = $enrollment->group?->offering?->activity;
         $pauses = $enrollment->pauses->filter(fn (EnrollmentPause $pause): bool => $pause->ends_on->toDateString() >= $today)->values();
-        $next = $enrollment->transferredTo;
+        $next = $this->movedTo($enrollment);
         $previous = $enrollment->transferredFrom;
 
         return [
@@ -171,6 +179,8 @@ final class StaffEnrollmentDetailsController extends Controller
                 'starts_on' => $pause->starts_on->format('Y-m-d'),
                 'ends_on' => $pause->ends_on->format('Y-m-d'),
                 'reason_category' => $manage ? $pause->reason_category : null,
+                // The team's own note (no diagnoses); the parent never sees it.
+                'note' => $manage ? $pause->note : null,
             ])->all(),
             'skipped_sessions' => $enrollment->sessionExceptions
                 ->filter(fn (EnrollmentSessionException $exception): bool => $exception->session !== null && $exception->session->starts_at->isFuture())
@@ -223,7 +233,7 @@ final class StaffEnrollmentDetailsController extends Controller
                 $pauses = $enrollment->pauses->filter(fn (EnrollmentPause $pause): bool => $pause->ends_on->toDateString() >= $today);
                 $current = $pauses->first(fn (EnrollmentPause $pause): bool => $pause->starts_on->toDateString() <= $today);
                 $coming = $pauses->first(fn (EnrollmentPause $pause): bool => $pause->starts_on->toDateString() > $today);
-                $next = $enrollment->transferredTo;
+                $next = $this->movedTo($enrollment);
 
                 return [
                     'kind' => 'enrollment',

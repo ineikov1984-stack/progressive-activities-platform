@@ -329,6 +329,68 @@ class StaffEnrollmentChangesTest extends TestCase
         $this->assertSame([], $this->sessionDates($f['organization'], $moved));
     }
 
+    public function test_an_enrollment_that_begins_today_can_be_cancelled_until_its_first_session_starts(): void
+    {
+        $f = $this->fixture();
+        $owner = $this->member($f['organization'], 'organization_owner');
+        // Thursday 05.11, morning; the session is at 14:00 UTC.
+        $this->travelTo('2026-11-05 09:00:00');
+        $today = $this->approve($f, $owner, $this->apply($f, $f['thursday'], $f['thursdayPrice']));
+        $this->assertSame('2026-11-05', $today->starts_on->format('Y-m-d'));
+        $this->actAs($owner, $f['organization'])
+            ->postJson("/api/v1/enrollment/enrollments/{$today->id}/end", ['last_day' => '2026-11-04', 'reason' => self::REASON, 'version' => 1])
+            ->assertOk()->assertJsonPath('enrollment.status', 'cancelled');
+
+        $late = $this->approve($f, $owner, $this->apply($f, $f['thursday'], $f['thursdayPrice'], 'Вики'));
+        $this->travelTo('2026-11-05 14:30:00');
+        $this->actAs($owner, $f['organization'])
+            ->postJson("/api/v1/enrollment/enrollments/{$late->id}/end", ['last_day' => '2026-11-04', 'reason' => self::REASON, 'version' => 1])
+            ->assertUnprocessable()->assertJsonValidationErrors('last_day');
+        // Any other day before today stays refused.
+        $this->actAs($owner, $f['organization'])
+            ->postJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/end", ['last_day' => '2026-11-04', 'reason' => self::REASON, 'version' => 1])
+            ->assertUnprocessable()->assertJsonValidationErrors('last_day');
+    }
+
+    public function test_a_cancelled_move_beside_a_live_one_never_lets_the_old_enrollment_reopen(): void
+    {
+        $f = $this->fixture();
+        $owner = $this->member($f['organization'], 'organization_owner');
+        $a = $f['enrollment']->id;
+        $version = fn (string $id): int => $this->withTenant($f['organization'], fn () => (int) Enrollment::query()->whereKey($id)->value('version'));
+        // A → B from 12.11, B cancelled before it starts, A reopened, then A → C from 19.11.
+        $b = $this->actAs($owner, $f['organization'])->postJson("/api/v1/enrollment/enrollments/{$a}/transfer", $this->transferPayload($f, '2026-11-12'))->assertOk()->json('enrollment.id');
+        $this->actAs($owner, $f['organization'])->postJson("/api/v1/enrollment/enrollments/{$b}/end", ['last_day' => '2026-11-05', 'reason' => self::REASON, 'version' => 1])
+            ->assertOk()->assertJsonPath('enrollment.status', 'cancelled');
+        $this->actAs($owner, $f['organization'])->postJson("/api/v1/enrollment/enrollments/{$a}/reopen", ['version' => $version($a)])->assertOk();
+        $this->actAs($owner, $f['organization'])->postJson("/api/v1/enrollment/enrollments/{$a}/transfer", [...$this->transferPayload($f, '2026-11-19'), 'version' => $version($a)])->assertOk();
+
+        // A has two moves out of it: B (cancelled) and C. Reopening A would give the child two places.
+        $this->actAs($owner, $f['organization'])->postJson("/api/v1/enrollment/enrollments/{$a}/reopen", ['version' => $version($a)])
+            ->assertUnprocessable()->assertJsonValidationErrors('enrollment');
+        $this->assertSame('ended', $this->withTenant($f['organization'], fn () => Enrollment::query()->findOrFail($a)->status->value));
+    }
+
+    public function test_a_move_on_after_a_cancelled_move_shows_where_the_child_goes(): void
+    {
+        $f = $this->fixture();
+        $owner = $this->member($f['organization'], 'organization_owner');
+        // A (Tuesday) → B (Thursday from 12.11); B moved back on its first day, so B is cancelled → C (Tuesday from 17.11).
+        $b = $this->actAs($owner, $f['organization'])->postJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/transfer", $this->transferPayload($f, '2026-11-12'))->assertOk()->json('enrollment.id');
+        $c = $this->actAs($owner, $f['organization'])->postJson("/api/v1/enrollment/enrollments/{$b}/transfer", [
+            'target_group_id' => $f['tuesday']->id, 'price_option_id' => $f['tuesdayPrice']->id, 'effective_date' => '2026-11-12', 'reason' => self::REASON, 'version' => 1,
+        ])->assertOk()->assertJsonPath('enrollment.starts_on', '2026-11-17')->json('enrollment.id');
+        $this->assertSame('cancelled', $this->withTenant($f['organization'], fn () => Enrollment::query()->findOrFail($b)->status->value));
+
+        $roster = $this->actAs($owner, $f['organization'])->getJson("/api/v1/enrollment/groups/{$f['tuesday']->id}/roster")->assertOk();
+        $row = collect($roster->json('enrollments'))->firstWhere('id', $f['enrollment']->id);
+        $this->assertSame(['group_id' => $f['tuesday']->id, 'group_name' => 'Вторник', 'starts_on' => '2026-11-17'], $row['moves_to']);
+        $this->actAs($owner, $f['organization'])->getJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}")
+            ->assertOk()->assertJsonPath('enrollment.moves_to.starts_on', '2026-11-17');
+        $this->assertSame(['2026-10-27', '2026-11-03', '2026-11-10'], $this->sessionDates($f['organization'], $f['enrollment']));
+        $this->assertSame(['2026-11-17', '2026-11-24'], $this->sessionDates($f['organization'], $c));
+    }
+
     /**
      * One child through a chain of changes: skip, pause, early return, end, undo, move and move back. After each
      * step the sessions that count are right, and the parent hears of each step in order, about the right days.
@@ -727,6 +789,21 @@ class StaffEnrollmentChangesTest extends TestCase
             ->assertJsonPath('enrollments.0.pauses.0.starts_on', '2026-11-09')
             ->assertJsonPath('enrollments.0.pauses.0.reason_category', null)
             ->assertJsonPath('upcoming_sessions', []);
+    }
+
+    public function test_the_pause_note_is_shown_to_those_who_manage_enrollments_only(): void
+    {
+        $f = $this->fixture();
+        $owner = $this->member($f['organization'], 'organization_owner');
+        $finance = $this->member($f['organization'], 'finance');
+        $this->actAs($owner, $f['organization'])
+            ->postJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/pauses", ['starts_on' => '2026-11-09', 'ends_on' => '2026-11-11', 'reason_category' => 'holiday', 'note' => 'Пътуват до баба.', 'version' => 1])
+            ->assertCreated();
+
+        $this->actAs($owner, $f['organization'])->getJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}")
+            ->assertOk()->assertJsonPath('enrollment.pauses.0.note', 'Пътуват до баба.');
+        $this->actAs($finance, $f['organization'])->getJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}")
+            ->assertOk()->assertJsonPath('enrollment.pauses.0.note', null);
     }
 
     /** @return iterable<string, array{string, int}> */

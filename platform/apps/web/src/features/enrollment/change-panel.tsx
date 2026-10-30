@@ -290,7 +290,7 @@ function PauseForm({ organizationId, roster, enrollment, name, onDone, onFailed,
       <div className={styles.field}>
         <label htmlFor={`pause-note-${enrollment.id}`}>Бележка за екипа (по желание)</label>
         <textarea id={`pause-note-${enrollment.id}`} value={note} maxLength={300} aria-describedby={`pause-note-hint-${enrollment.id}`} onChange={(event) => setNote(event.target.value)} />
-        <p id={`pause-note-hint-${enrollment.id}`} className={styles.hint}>Родителят не я вижда — в писмото до него са само датите. Без диагнози.</p>
+        <p id={`pause-note-hint-${enrollment.id}`} className={styles.hint}>Вижда се в „Подробности“, само от екипа. Родителят получава само датите. Без диагнози.</p>
       </div>
       {until && !order && !tooLong && from >= today ? <p className={styles.summary}>Заниманията от {shortDay(from)} до {shortDay(until)} няма да се броят. Мястото в групата се пази.</p> : null}
       <FormButtons busy={busy} label="Запиши паузата" error={error} onBack={onBack} />
@@ -338,6 +338,8 @@ function SkipForm({ organizationId, roster, enrollment, name, onDone, onFailed, 
 
 function EndForm({ organizationId, enrollment, name, onDone, onFailed, onBack }: FormProps) {
   const today = sofiaDay();
+  // An enrollment that begins today can still be cancelled before its first session: the day before is allowed.
+  const earliest = enrollment.starts_on === today ? addDays(today, -1) : today;
   const [lastDay, setLastDay] = useState(lastDayOfMonth(today));
   const [reason, setReason] = useState('');
   const { busy, error, run, fail, clear } = useSubmit(onDone, onFailed);
@@ -345,7 +347,7 @@ function EndForm({ organizationId, enrollment, name, onDone, onFailed, onBack }:
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const missing = lastDay < today ? 'Изберете дата от днес нататък.' : !reason.trim() ? 'Напишете обяснение за родителя.' : '';
+    const missing = lastDay < earliest ? 'Изберете дата от днес нататък.' : !reason.trim() ? 'Напишете обяснение за родителя.' : '';
     if (missing) { fail(missing); return; }
     void run(
       () => endEnrollment(organizationId, enrollment, { lastDay, reason }),
@@ -358,10 +360,10 @@ function EndForm({ organizationId, enrollment, name, onDone, onFailed, onBack }:
     <form className={styles.form} onSubmit={submit} onChange={clear} noValidate>
       <div className={styles.field}>
         <label htmlFor={`end-day-${enrollment.id}`}>Последен ден, в който детето посещава</label>
-        <input id={`end-day-${enrollment.id}`} type="date" min={today} max={enrollment.ends_on ?? addDays(today, 365)} value={lastDay} onChange={(event) => setLastDay(event.target.value)} />
+        <input id={`end-day-${enrollment.id}`} type="date" min={earliest} max={enrollment.ends_on ?? addDays(today, 365)} value={lastDay} onChange={(event) => setLastDay(event.target.value)} />
       </div>
       <ReasonField id={`end-reason-${enrollment.id}`} value={reason} onChange={setReason} />
-      {lastDay >= today ? (
+      {lastDay >= earliest ? (
         <p className={styles.summary}>
           {notStarted
             ? 'Записването още не е започнало и ще бъде отменено. Това не може да се върне.'

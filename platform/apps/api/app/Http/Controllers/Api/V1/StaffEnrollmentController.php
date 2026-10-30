@@ -17,6 +17,7 @@ use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Enrollment\Models\EnrollmentPause;
 use App\Domain\Enrollment\Models\EnrollmentSessionException;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
+use App\Domain\Enrollment\Services\EnrollmentChain;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
@@ -39,7 +40,7 @@ final class StaffEnrollmentController extends Controller
 {
     private const PAGE_SIZE = 200;
 
-    public function __construct(private readonly TenantContext $context) {}
+    public function __construct(private readonly TenantContext $context, private readonly EnrollmentChain $chain) {}
 
     public function applications(Request $request): JsonResponse
     {
@@ -275,7 +276,8 @@ final class StaffEnrollmentController extends Controller
      */
     private function presentRosterEnrollment(Enrollment $enrollment, string $today, bool $canManage): array
     {
-        $next = $enrollment->transferredTo;
+        // A → B cancelled → C: the child moves to C.
+        $next = $enrollment->transferredTo ?? ($enrollment->status === EnrollmentStatus::Ended ? $this->chain->next($enrollment) : null);
 
         return [
             'id' => $enrollment->id,

@@ -20,7 +20,7 @@ export type StaffApplication = {
   parent_name?: string | null;
 };
 export type PauseReason = 'health' | 'holiday' | 'family' | 'other';
-export type RosterPause = { id: string; starts_on: string; ends_on: string; reason_category: PauseReason | string };
+export type RosterPause = { id: string; starts_on: string; ends_on: string; reason_category: PauseReason | string; note?: string | null };
 export type RosterEnrollment = {
   id: string;
   child: StaffChild;
