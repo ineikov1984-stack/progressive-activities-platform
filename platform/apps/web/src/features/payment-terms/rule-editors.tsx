@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useRef, type ReactNode } from 'react';
+import { useId, useRef, useState, type ReactNode } from 'react';
 import type { BillingKind, Json, Rules } from './api';
 import { absenceExample, booleanAt, errorsFor, monthChoiceExample, numberAt, ordinalSuffix, pauseExample, valueAt } from './rules';
 import styles from './payment-terms.module.css';
@@ -17,6 +17,8 @@ export type EditorContext = {
   errors: Record<string, string[]>;
   /** The organization takes applications through the platform's catalog, so its frame applies. */
   inMarketplace: boolean;
+  /** On a phone "Връщане на пари" folds under one button until opened (the approved phone board). */
+  extrasOpen: boolean;
   change: (path: string, value: Json) => void;
 };
 
@@ -44,11 +46,12 @@ export function RuleIcon({ name }: { name: string }) {
 }
 
 /** One rule, asked as a question; the server's messages for these paths appear under it. */
-export function RuleRow({ icon, title, paths, context, children }: { icon: string; title: string; paths: string[]; context: EditorContext; children: ReactNode }) {
+export function RuleRow({ icon, title, paths, context, extra = false, children }: { icon: string; title: string; paths: string[]; context: EditorContext; extra?: boolean; children: ReactNode }) {
   const messages = errorsFor(context.errors, paths.map((path) => `rules.${path}`));
   const errorId = useId();
+  const classes = [styles.rule, messages.length ? styles.ruleInvalid : '', extra && !context.extrasOpen ? styles.foldOnPhone : ''].filter(Boolean).join(' ');
   return (
-    <fieldset className={messages.length ? `${styles.rule} ${styles.ruleInvalid}` : styles.rule} aria-describedby={messages.length ? errorId : undefined} data-invalid={messages.length ? 'true' : undefined}>
+    <fieldset className={classes} aria-describedby={messages.length ? errorId : undefined} data-invalid={messages.length ? 'true' : undefined} data-extra={extra ? 'true' : undefined}>
       <legend className={styles.ruleTitle}><RuleIcon name={icon} />{title}</legend>
       <div className={styles.ruleBody}>
         {children}
@@ -70,10 +73,10 @@ function Example({ children }: { children: ReactNode }) {
   return <p className={styles.example}>{children}</p>;
 }
 
-/** Rarely needed settings, folded under a link. */
-function More({ label, children }: { label: string; children: ReactNode }) {
+/** Rarely needed settings, folded under a link; open when something inside is in use or refused. */
+function More({ label, open, children }: { label: string; open: boolean; children: ReactNode }) {
   return (
-    <details className={styles.more}>
+    <details className={styles.more} open={open}>
       <summary>{label}</summary>
       <div className={styles.moreBody}>{children}</div>
     </details>
@@ -122,16 +125,22 @@ export function Check({ context, path, children }: { context: EditorContext; pat
 type Choice = { value: string; title: string; hint?: string; details?: ReactNode };
 
 /** Choices as cards; the chosen one shows its numbers. Inputs sit outside the label (a label holds one control). */
-function Choices({ context, name, value, choices, onPick }: { context: EditorContext; name: string; value: string; choices: Choice[]; onPick: (value: string) => void }) {
+function Choices({ context, name, value, choices, onPick, foldOnPhone = false }: { context: EditorContext; name: string; value: string; choices: Choice[]; onPick: (value: string) => void; foldOnPhone?: boolean }) {
   const group = useId();
+  const [unfolded, setUnfolded] = useState(false);
+  const firstHidden = useRef<HTMLInputElement | null>(null);
+  const others = choices.filter((choice) => choice.value !== value).length;
+  const folded = foldOnPhone && !unfolded;
   return (
     <div className={styles.choices}>
-      {choices.map((choice) => {
+      {choices.map((choice, index) => {
         const on = choice.value === value;
+        const card = on ? `${styles.choiceCard} ${styles.choiceCardOn}` : `${styles.choiceCard}${folded ? ` ${styles.foldOnPhone}` : ''}`;
         return (
-          <div key={choice.value} className={on ? `${styles.choiceCard} ${styles.choiceCardOn}` : styles.choiceCard}>
+          <div key={choice.value} className={card}>
             <label className={styles.choiceLabel}>
-              <input type="radio" name={`${group}-${name}`} value={choice.value} checked={on} disabled={context.disabled} onChange={() => onPick(choice.value)} />
+              <input type="radio" name={`${group}-${name}`} value={choice.value} checked={on} disabled={context.disabled} onChange={() => onPick(choice.value)}
+                ref={!on && index === choices.findIndex((other) => other.value !== value) ? firstHidden : undefined} />
               <span className={styles.choiceText}>
                 <span className={styles.choiceTitle}>{choice.title}</span>
                 {choice.hint ? <span className={styles.hint}>{choice.hint}</span> : null}
@@ -141,6 +150,12 @@ function Choices({ context, name, value, choices, onPick }: { context: EditorCon
           </div>
         );
       })}
+      {folded && others ? (
+        <button type="button" className={`${styles.linkButton} ${styles.phoneOnly}`} onClick={() => {
+          setUnfolded(true);
+          requestAnimationFrame(() => firstHidden.current?.focus());
+        }}>Други възможности ({others})</button>
+      ) : null}
     </div>
   );
 }
@@ -254,7 +269,7 @@ function MonthChoice({ context, part }: { context: EditorContext; part: 'start' 
   };
   const day = numberAt(context.rules, `${part}.cutoff_day`) ?? 15;
   return (
-    <Choices context={context} name={part} value={typeof mode === 'string' ? mode : 'by_sessions'} onPick={pick} choices={[
+    <Choices context={context} name={part} value={typeof mode === 'string' ? mode : 'by_sessions'} onPick={pick} foldOnPhone={part === 'start'} choices={[
       {
         value: 'by_sessions',
         title: part === 'end' ? 'Плаща само заниманията до последния ден' : 'Плаща само заниманията от първия ден',
@@ -263,7 +278,9 @@ function MonthChoice({ context, part }: { context: EditorContext; part: 'start' 
       {
         value: 'cutoff',
         title: 'Плаща част от месеца според датата',
-        hint: mode === 'cutoff' ? monthChoiceExample(context.rules, part, 'cutoff') : 'Напр. до 15-то число — половината, след това — цялата такса.',
+        hint: mode === 'cutoff'
+          ? monthChoiceExample(context.rules, part, 'cutoff')
+          : part === 'end' ? 'Напр. спре ли до 15-то число — половината, след това — цялата такса.' : 'Напр. започне ли до 15-то — цялата такса, след това — половината.',
         details: (
           <Line>
             <span>{part === 'end' ? 'Спре ли до' : 'Започне ли до'}</span>
@@ -282,6 +299,10 @@ function MonthChoice({ context, part }: { context: EditorContext; part: 'start' 
 }
 
 function PauseRow({ context, example }: { context: EditorContext; example: boolean }) {
+  const notice = numberAt(context.rules, 'pause.notice_days') ?? 0;
+  const shown = example ? pauseExample(context.rules) : null;
+  const moreInUse = (numberAt(context.rules, 'pause.min_days') ?? 0) > 0 || booleanAt(context.rules, 'pause.document_required')
+    || errorsFor(context.errors, ['rules.pause.min_days', 'rules.pause.document_required']).length > 0;
   return (
     <RuleRow icon="pause" title="Пауза — ваканция, болест, пътуване" paths={['pause']} context={context}>
       <Hint>Детето пази мястото си, а за заниманията в паузата плаща по-малко или нищо.</Hint>
@@ -292,18 +313,20 @@ function PauseRow({ context, example }: { context: EditorContext; example: boole
         <NumberInput context={context} path="pause.kept_on_time" label="Процент при навременна пауза" max={100} />
         <span>%.</span>
       </Line>
-      <Line>
-        <span>Ако каже по-късно → плаща</span>
-        <NumberInput context={context} path="pause.kept_late" label="Процент при късна пауза" max={100} />
-        <span>%.</span>
-      </Line>
+      {notice > 0 ? (
+        <Line>
+          <span>Ако каже по-късно → плаща</span>
+          <NumberInput context={context} path="pause.kept_late" label="Процент при късна пауза" max={100} />
+          <span>%.</span>
+        </Line>
+      ) : null}
       <Line>
         <span>Така — до</span>
         <NumberInput context={context} path="pause.free_days_per_school_year" label="Дни пауза в учебната година при тези условия" max={183} wide />
-        <span>дни в учебната година (61 дни ≈ 2 месеца). Над тях — като казано късно.</span>
+        <span>дни в учебната година (61 дни ≈ 2 месеца). За дните над тях плаща като при късно казана пауза.</span>
       </Line>
-      {example ? <Example>{pauseExample(context.rules)}</Example> : null}
-      <More label="Още за паузата: най-кратка пауза, само с бележка от лекар">
+      {shown ? <Example>{shown}</Example> : null}
+      <More label="Още за паузата: най-кратка пауза, само с бележка от лекар" open={moreInUse}>
         <Line>
           <span>Най-кратка пауза</span>
           <NumberInput context={context} path="pause.min_days" label="Най-кратка пауза в дни" max={183} />
@@ -330,8 +353,10 @@ function MakeupLines({ context }: { context: EditorContext }) {
 }
 
 function MakeupMore({ context }: { context: EditorContext }) {
+  const inUse = numberAt(context.rules, 'makeup.per_month') !== null || booleanAt(context.rules, 'makeup.only_if_space')
+    || errorsFor(context.errors, ['rules.makeup.per_month', 'rules.makeup.only_if_space']).length > 0;
   return (
-    <More label="Още за наваксването: колко в месеца, само ако има място">
+    <More label="Още за наваксването: колко в месеца, само ако има място" open={inUse}>
       <Line>
         <span>Най-много</span>
         <NumberInput context={context} path="makeup.per_month" label="Наваксвания в месеца (празно — без ограничение)" min={1} max={31} />
@@ -346,7 +371,7 @@ function RefundRow({ context }: { context: EditorContext }) {
   const value = valueAt(context.rules, 'refund');
   // Only as credit is not offered: a credit is always the parent's choice (spec, т. 3.3).
   return (
-    <RuleRow icon="money" title="Как се връщат пари" paths={['refund']} context={context}>
+    <RuleRow icon="money" title="Как се връщат пари" paths={['refund']} context={context} extra>
       <Choices context={context} name="refund" value={typeof value === 'string' ? value : 'parent_choice'} onPick={(next) => context.change('refund', next)} choices={[
         { value: 'parent_choice', title: 'Родителят избира — пари или кредит', hint: 'Кредитът се приспада от следващото плащане.' },
         { value: 'money', title: 'Винаги пари', hint: 'По същия начин, по който е платено, до 14 дни.' },

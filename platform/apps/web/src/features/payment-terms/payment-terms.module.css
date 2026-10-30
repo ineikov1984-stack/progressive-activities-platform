@@ -12,6 +12,7 @@
 /* The three steps: a way of paying, a ready-made set, the numbers. */
 .part { display: grid; gap: var(--space-3); min-width: 0; margin: 0; padding: 0; border: 0; }
 .partTitle { padding: 0 0 var(--space-1); color: var(--ink); font-size: 20px; font-weight: 700; line-height: 28px; }
+.partTitle h2 { margin: 0; color: inherit; font: inherit; letter-spacing: inherit; }
 .kindGrid, .presets { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
 .option { display: grid; align-content: start; gap: var(--space-1); min-height: 44px; box-sizing: border-box; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); cursor: pointer; }
 .option:hover { background: var(--surface-warm); }
@@ -35,9 +36,10 @@
 .warning p { margin: 0; }
 
 /* One rule: a question with its icon, then choices or sentences with numbers inside and an example. */
-.rule { display: grid; gap: var(--space-3); min-width: 0; margin: 0; padding: var(--space-4); border: 0; border-top: 1px solid var(--border); }
-.ruleInvalid { box-shadow: inset 4px 0 0 var(--status-full); background: var(--status-full-soft); }
-.ruleTitle { display: flex; align-items: center; gap: 12px; padding: 0; color: var(--ink); font-size: 17px; font-weight: 650; line-height: 24px; }
+.rule { display: grid; gap: var(--space-3); min-width: 0; margin: 0; padding: var(--space-4); border: 0; box-shadow: inset 0 1px 0 var(--border); }
+.ruleInvalid { box-shadow: inset 4px 0 0 var(--status-full), inset 0 1px 0 var(--border); background: var(--status-full-soft); }
+/* A floated legend is laid out like any heading, not on the fieldset's border (two lines on a phone). */
+.ruleTitle { float: left; width: 100%; display: flex; align-items: center; gap: 12px; padding: 0; color: var(--ink); font-size: 17px; font-weight: 650; line-height: 24px; }
 .icon { flex: none; color: var(--ink-muted); }
 .ruleBody { display: grid; gap: var(--space-3); min-width: 0; }
 .line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--ink-body); font-size: 15px; line-height: 22px; }
@@ -85,7 +87,11 @@
 .saveBar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); }
 /* With unsaved changes the button stays in sight, also at the end of a long phone screen. */
 .saveBarSticky { position: sticky; bottom: 0; z-index: 3; margin: 0 calc(-1 * var(--space-4)); padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); background: var(--surface-page); box-shadow: var(--shadow-raised); }
-.saveBar .ok, .saveBar .error { flex: 1 1 100%; }
+.saveBar .ok, .saveBar .error, .saveBar .unsaved { flex: 1 1 100%; }
+
+/* On a phone some parts fold under a button, as in the approved phone board. */
+.phoneOnly { display: none; }
+.extrasToggle { width: 100%; min-height: 52px; padding: 0 var(--space-4); border: 0; box-shadow: inset 0 1px 0 var(--border); color: var(--ink); background: transparent; font: inherit; font-size: 16px; font-weight: 650; text-align: left; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .primary, .secondary { min-height: var(--control-height); padding: 0 var(--space-6); border: 1px solid transparent; border-radius: var(--radius-md); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
 .primary { color: var(--ink-inverse); background: var(--action); }
 .primary:hover { background: var(--action-hover); }
@@ -101,6 +107,13 @@
 .skeleton { display: grid; gap: var(--space-4); }
 .skeleton span { display: block; height: 72px; border-radius: var(--radius-lg); background: var(--surface-sunken); }
 .skeleton span:last-child { height: 360px; }
+
+@container terms (max-width: 559px) {
+  .foldOnPhone { display: none; }
+  .phoneOnly { display: flex; align-items: center; }
+  .saveKind { display: none; }
+  .saveBarSticky .saveNote { display: none; }
+}
 
 @container terms (min-width: 560px) {
   .kindGrid, .presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }

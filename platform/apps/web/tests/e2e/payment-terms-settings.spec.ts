@@ -134,8 +134,11 @@ for (const width of [390, 768, 1440]) {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
     await expect(page.getByRole('button', { name: 'Запази условията' })).toBeVisible();
-    // Every number field is big enough to tap.
-    const small = await page.locator('input[type="number"]').evaluateAll((inputs) => inputs.filter((input) => input.getBoundingClientRect().height < 44).length);
+    // Every number field on screen is big enough to tap (folded ones have no size).
+    const small = await page.locator('input[type="number"]').evaluateAll((inputs) => inputs.filter((input) => {
+      const height = input.getBoundingClientRect().height;
+      return height > 0 && height < 44;
+    }).length);
     expect(small).toBe(0);
   });
 }

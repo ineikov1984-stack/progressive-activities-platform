@@ -78,7 +78,7 @@ describe('payment terms rules', () => {
     const lines = Object.fromEntries(describeTerms('monthly', monthly).map((line) => [line.title, line.text]));
     expect(lines['Ако започнете по средата на месеца']).toBeUndefined();
     expect(lines['Ако спрете']).toBe('Спрете ли до 15-то число, плащате половината от таксата за месеца; след това — цялата.');
-    expect(lines['Пауза']).toBe('Кажете ни поне 7 дни по-рано и заниманията в паузата не се плащат. По-късно — половината. До 61 дни в учебната година; над тях — като казано късно.');
+    expect(lines['Пауза']).toBe('Кажете ни поне 7 дни по-рано и заниманията в паузата не се плащат. По-късно — половината. До 61 дни в учебната година; над тях плащате половината от стойността им.');
     // Without days at the on-time terms every pause counts as a late one.
     expect(describeTerms('monthly', withValue(monthly, 'pause.free_days_per_school_year', 0)).find((line) => line.title === 'Пауза')?.text)
       .toBe('За заниманията в паузата плащате половината от стойността им.');
@@ -92,7 +92,7 @@ describe('payment terms rules', () => {
     const campLines = Object.fromEntries(describeTerms('residential_camp', camp).map((line) => [line.title, line.text]));
     expect(campLines['Капаро']).toBe('25 % от цената при записване — приспада се от нея.');
     expect(campLines['Отказ преди тръгване']).toBe('Поне 30 дни преди тръгване — връщаме всичко. 15–29 дни преди тръгване — връщаме 75 %. 8–14 дни преди тръгване — връщаме половината. По-малко от 8 дни преди тръгване — не връщаме нищо.');
-    expect(campLines['Болест']).toBe('При болест преди тръгване с документ от лекар връщаме всичко, като приспадаме реално направените разходи.');
+    expect(campLines['Болест']).toBe('При болест преди тръгване с бележка от лекар връщаме всичко, като приспадаме реално направените разходи.');
     expect(describeTerms('day_camp', dayCamp)[0].text).toContain('По-малко от 7 дни преди седмицата — не връщаме нищо, но предлагаме кредит за друга седмица.');
   });
 
@@ -104,12 +104,12 @@ describe('payment terms rules', () => {
     ]);
     expect(exampleFor('visit', visit)?.lines).toEqual(['Отказ 30 часа преди → плащате 0 €.', 'Отказ 18 часа преди → плащате 7,50 €.', 'Отказ 6 часа преди → плащате 15 €.']);
     expect(exampleFor('residential_camp', camp)?.lines).toEqual([
-      'Отказ 36 дни преди тръгване → връщат се 600 €.',
-      'Отказ 22 дни преди тръгване → връщат се 450 €.',
-      'Отказ 11 дни преди тръгване → връщат се 300 €.',
-      'Отказ 4 дни преди тръгване → връщат се 0 €.',
+      'Отказ 36 дни преди тръгване → връщаме 600 €.',
+      'Отказ 22 дни преди тръгване → връщаме 450 €.',
+      'Отказ 11 дни преди тръгване → връщаме 300 €.',
+      'Отказ 4 дни преди тръгване → връщаме 0 €.',
     ]);
-    expect(exampleFor('day_camp', dayCamp)?.lines).toEqual(['3 дни отсъствие без документ → връщат се 15 €.']);
+    expect(exampleFor('day_camp', dayCamp)?.lines).toEqual(['3 дни отсъствие → връщаме 15 €.']);
     expect(exampleFor('package', {})).toBeNull();
   });
 
@@ -121,6 +121,11 @@ describe('payment terms rules', () => {
     const strictStart = withValue(monthly, 'start', { mode: 'cutoff', cutoff_day: 15, kept_until_cutoff: 100, kept_after_cutoff: 50 });
     expect(monthChoiceExample(strictStart, 'start', 'cutoff')).toBe('Започва на 10 ноември → 60 €. Започва на 20 ноември → 30 €.');
     expect(pauseExample(monthly)).toBe('Пример: пауза 2–15 ноември (2 занимания). Казано навреме → за ноември 30 €. Казано късно → 45 €.');
+    // "Строги": no notice, the same share either way and at least 21 days — the example is a whole month.
+    const strictPause = withValue(monthly, 'pause', { notice_days: 0, kept_on_time: 50, kept_late: 50, free_days_per_school_year: 183, document_required: true, min_days: 21 });
+    expect(pauseExample(strictPause)).toBe('Пример: пауза 2–30 ноември (4 занимания) → за ноември 30 €.');
+    expect(describeTerms('monthly', strictPause).find((line) => line.title === 'Пауза')?.text)
+      .toBe('За заниманията в паузата плащате половината от стойността им. До 183 дни в учебната година. Най-кратката пауза е 21 дни. Пауза — само с бележка от лекар.');
     expect(absenceExample(monthly)).toBe('Пример: 4 отсъствия в ноември → 30 € вместо 60 €.');
     expect(absenceExample(withValue(monthly, 'absences.tiers', [{ up_to: null, kept: 100 }]))).toBe('Пример: 4 отсъствия в ноември → 60 €.');
   });

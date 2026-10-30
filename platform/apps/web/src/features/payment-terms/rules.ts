@@ -108,7 +108,7 @@ export const KIND_HINTS: Record<BillingKind, string> = {
 };
 
 export function presetBlurb(kind: BillingKind, preset: Preset): string {
-  if (preset === 'custom') return 'Започнете от готовите и сменете числата.';
+  if (preset === 'custom') return 'Сменете което и да е число по-долу — условията стават ваши.';
   return PRESET_BLURBS[kind]?.[preset] ?? GENERIC_BLURBS[preset];
 }
 
@@ -213,7 +213,7 @@ function monthPart(rules: Rules, part: 'start' | 'end'): string {
     if (mode === 'full_month') return `Месецът, в който спирате, се плаща цял.${warn}`;
     return `Плащате само заниманията до последния ден.${warn}`;
   }
-  if (mode === 'cutoff') return `Започнете ли до ${day}-${ordinalSuffix(day)} число, плащате ${fee(until)} за първия месец; след това — ${shortShare(after)}.`;
+  if (mode === 'cutoff') return `Започнете ли до ${day}-${ordinalSuffix(day)} число, плащате ${paidShare(until, 'такса', 'от таксата')} за първия месец; след това — ${shortShare(after)}.`;
   if (mode === 'full_month') return 'Първият месец се плаща цял, независимо от деня на започване.';
   return 'За първия месец плащате само заниманията от първия ден.';
 }
@@ -227,14 +227,17 @@ function pauseText(rules: Rules): string {
   const share = (kept: number) => (kept <= 0 ? 'заниманията в паузата не се плащат' : `за заниманията в паузата плащате ${paidShare(kept, 'им стойност', 'от стойността им')}`);
   const extra = [
     minDays > 0 ? `Най-кратката пауза е ${plural(minDays, 'ден', 'дни')}.` : '',
-    booleanAt(rules, 'pause.document_required') ? 'Пауза — само с документ от лекар.' : '',
+    booleanAt(rules, 'pause.document_required') ? 'Пауза — само с бележка от лекар.' : '',
   ];
   // Without days at the on-time terms every pause counts as a late one.
   const parts = freeDays <= 0 ? [sentence(share(late)), ...extra] : [
     notice > 0
       ? `Кажете ни поне ${plural(notice, 'ден', 'дни')} по-рано и ${share(onTime)}. По-късно — ${late <= 0 ? 'също не се плащат' : shortShare(late)}.`
       : sentence(share(onTime)),
-    `До ${plural(freeDays, 'ден', 'дни')} в учебната година; над тях — като казано късно.`,
+    // Beyond the yearly days a pause counts as a late one; said only when that changes what is paid.
+    onTime === late
+      ? `До ${plural(freeDays, 'ден', 'дни')} в учебната година.`
+      : `До ${plural(freeDays, 'ден', 'дни')} в учебната година; над тях ${late <= 0 ? 'също не плащате' : `плащате ${paidShare(late, 'им стойност', 'от стойността им')}`}.`,
     ...extra,
   ];
   return parts.filter(Boolean).join(' ');
@@ -327,7 +330,7 @@ export function describeTerms(kind: BillingKind, rules: Rules): TermsLine[] {
       const freeze = numberAt(rules, 'freeze_days_with_document') ?? 0;
       const extend = numberAt(rules, 'extension_days_on_request') ?? 0;
       return [
-        { title: 'Замразяване', text: freeze > 0 ? `С документ от лекар картата се замразява до ${plural(freeze, 'ден', 'дни')}.` : 'Картата не се замразява.' },
+        { title: 'Замразяване', text: freeze > 0 ? `С бележка от лекар картата се замразява до ${plural(freeze, 'ден', 'дни')}.` : 'Картата не се замразява.' },
         { title: 'Удължаване', text: extend > 0 ? `По молба срокът на картата се удължава с до ${plural(extend, 'ден', 'дни')}.` : 'Срокът на картата не се удължава.' },
         { title: 'Връщане', text: refundText(rules) },
       ];
@@ -359,7 +362,7 @@ export function describeTerms(kind: BillingKind, rules: Rules): TermsLine[] {
       if (mode === 'percent') lines.push({ title: 'Капаро', text: `${percent} % от цената при записване — приспада се от нея.` });
       lines.push(
         { title: 'Отказ преди тръгване', text: cancellationText(tiers(rules, 'before_start.tiers', 'min_days'), 'd', 'сума', 'от сумата', 'преди тръгване', 'друга смяна', true) },
-        { title: 'Болест', text: `При болест преди тръгване с документ от лекар ${returnedShare(illness)}${costs ? ', като приспадаме реално направените разходи' : ''}.` },
+        { title: 'Болест', text: `При болест преди тръгване с бележка от лекар ${returnedShare(illness)}${costs ? ', като приспадаме реално направените разходи' : ''}.` },
       );
       if (transfer > 0) lines.push({ title: 'Друго дете', text: `Друго дете може да заеме мястото до ${plural(transfer, 'ден', 'дни')} преди тръгване — без такса.` });
       lines.push(
@@ -440,7 +443,7 @@ export function exampleFor(kind: BillingKind, rules: Rules): { intro: string; li
       const steps = tiers(rules, 'before_start.tiers', 'min_days');
       return {
         intro: 'Лагер за 600 €.',
-        lines: samples(steps).map((days) => `Отказ ${plural(days, 'ден', 'дни')} преди тръгване → връщат се ${money(600 * (100 - (tierFor(steps, days)?.kept ?? 100)) / 100)}.`),
+        lines: samples(steps).map((days) => `Отказ ${plural(days, 'ден', 'дни')} преди тръгване → връщаме ${money(600 * (100 - (tierFor(steps, days)?.kept ?? 100)) / 100)}.`),
       };
     }
     case 'day_camp': {
@@ -449,7 +452,7 @@ export function exampleFor(kind: BillingKind, rules: Rules): { intro: string; li
       const back = Math.max(0, 3 - firstDays) * 30 * (100 - keptAfter) / 100;
       return {
         intro: 'Седмица за 150 € (30 € на ден).',
-        lines: [`3 дни отсъствие без документ → връщат се ${money(back)}.`],
+        lines: [`3 дни отсъствие → връщаме ${money(back)}.`],
       };
     }
     default:
@@ -482,10 +485,18 @@ export function monthChoiceExample(rules: Rules, part: 'start' | 'end', mode: st
   return `${verb} на 10 ноември → ${money(monthShare(rules, part, mode, 10))}. ${verb} на 20 ноември → ${money(monthShare(rules, part, mode, 20))}.`;
 }
 
-export function pauseExample(rules: Rules): string {
+/** A pause as long as the shortest one allowed: 2–15 November (2 sessions) or the whole month (4). */
+export function pauseExample(rules: Rules): string | null {
+  const notice = numberAt(rules, 'pause.notice_days') ?? 0;
   const onTime = numberAt(rules, 'pause.kept_on_time') ?? 0;
   const late = numberAt(rules, 'pause.kept_late') ?? 0;
-  return `Пример: пауза 2–15 ноември (2 занимания). Казано навреме → за ноември ${money(30 + 30 * onTime / 100)}. Казано късно → ${money(30 + 30 * late / 100)}.`;
+  const minDays = numberAt(rules, 'pause.min_days') ?? 0;
+  if (minDays > 29) return null;
+  const [range, sessions] = minDays <= 14 ? ['2–15 ноември', 2] : ['2–30 ноември', 4];
+  const paid = (kept: number) => money(60 - 15 * sessions + 15 * sessions * kept / 100);
+  const pause = `Пример: пауза ${range} (${sessions} занимания)`;
+  if (notice <= 0 || onTime === late) return `${pause} → за ноември ${paid(onTime)}.`;
+  return `${pause}. Казано навреме → за ноември ${paid(onTime)}. Казано късно → ${paid(late)}.`;
 }
 
 export function absenceExample(rules: Rules): string {
