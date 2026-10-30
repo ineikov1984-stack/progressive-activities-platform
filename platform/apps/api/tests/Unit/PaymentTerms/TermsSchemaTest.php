@@ -129,6 +129,38 @@ class TermsSchemaTest extends TestCase
         $this->assertArrayHasKey('deposit.percent', $this->errors(BillingKind::ResidentialCamp, $camp));
     }
 
+    public function test_the_label_is_derived_from_the_numbers(): void
+    {
+        foreach (BillingKind::cases() as $kind) {
+            foreach ([TermsPreset::Flexible, TermsPreset::Standard, TermsPreset::Strict] as $preset) {
+                // Key order does not matter (the database may store JSON keys in another order).
+                $rules = array_reverse(Presets::rules($kind, $preset), true);
+                $this->assertSame($preset, Presets::match($kind, $rules, Presets::selfService($preset)));
+            }
+        }
+
+        $rules = Presets::rules(BillingKind::Monthly, TermsPreset::Standard);
+        $this->assertSame(TermsPreset::Custom, Presets::match(BillingKind::Monthly, $rules, Presets::selfService(TermsPreset::Flexible)));
+        $rules['pause']['notice_days'] = 10;
+        $this->assertSame(TermsPreset::Custom, Presets::match(BillingKind::Monthly, $rules, Presets::selfService(TermsPreset::Standard)));
+        // The order of ladder steps does matter.
+        $visit = Presets::rules(BillingKind::Visit, TermsPreset::Standard);
+        $visit['cancellation']['tiers'] = array_reverse($visit['cancellation']['tiers']);
+        $this->assertNotSame(Presets::canonical(Presets::rules(BillingKind::Visit, TermsPreset::Standard)), Presets::canonical($visit));
+    }
+
+    public function test_numbers_and_choices_must_be_real_numbers_and_yes_or_no(): void
+    {
+        $rules = Presets::rules(BillingKind::Monthly, TermsPreset::Standard);
+        $rules['pause']['notice_days'] = '7';
+        $rules['makeup']['enabled'] = 1;
+
+        $errors = $this->errors(BillingKind::Monthly, $rules);
+
+        $this->assertSame('„предизвестие за пауза“ трябва да е цяло число.', $errors['pause.notice_days'][0]);
+        $this->assertSame('„наваксване“ трябва да е да или не.', $errors['makeup.enabled'][0]);
+    }
+
     public function test_the_kind_comes_from_the_price(): void
     {
         $this->assertSame(BillingKind::Monthly, BillingKind::fromEnrollmentMode('monthly'));

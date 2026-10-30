@@ -235,7 +235,7 @@
   - `id, organization_id, billing_kind, name, preset, is_default, self_service (JSON), status, version (оптимистична), created_by, timestamps`;
   - частичен уникален индекс за `is_default` по `(organization_id, billing_kind)`;
   - `UNIQUE (id, organization_id)`.
-- **`payment_terms_versions`** (tenant, RLS): `id, organization_id, terms_id, number, schema_version, rules (JSON по схема за начина на плащане), created_by, created_at`. Неизменими (тригер, както при историята на записванията). Съставен FK `(terms_id, organization_id)`, `RESTRICT` при изтриване.
+- **`payment_terms_versions`** (tenant, RLS): `id, organization_id, terms_id, number, schema_version, rules (JSON по схема за начина на плащане), created_by, created_at`. Неизменими (тригер, както при историята на записванията). Съставен FK `(terms_id, organization_id)`. Набор и версия не се изтриват — само заедно с организацията (тригер вместо `RESTRICT`, за да не зависи от реда на каскадите; стъпка 2b).
 - **Избор:** `offerings.payment_terms_id` и `price_options.payment_terms_id` (по избор, за различен начин на плащане в едно предложение), по-късно и на смяната. Съставни FK. Без стойност се взима наборът по подразбиране.
 - **Копие:**
   - `enrollment_applications.payment_terms_version_id`, `payment_terms_snapshot` (JSON: начин на плащане, числа, „ранно начало“, „приети чрез екипа“ + кой и кога);
