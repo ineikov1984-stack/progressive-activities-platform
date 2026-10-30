@@ -174,7 +174,7 @@ class TeamInvitationsTest extends TestCase
         $token = $this->tokenOf($this->invite($owner, $person)->assertOk());
 
         $this->assertSame(1, DB::table('invitations')->count());
-        $this->assertDatabaseHas('invitations', ['staff_member_id' => $person->id, 'token_hash' => hash('sha256', $token)]);
+        $this->assertDatabaseHas('invitations', ['staff_member_id' => $person->id, 'copy_token_hash' => hash('sha256', $token)]);
         $this->lookup($old)->assertNotFound();
         // The same address for another person while this invitation is active.
         $this->invite($owner, $this->person($organization, null, 'Друг човек'), ['role' => 'viewer', 'email' => 'petar@example.test'])
