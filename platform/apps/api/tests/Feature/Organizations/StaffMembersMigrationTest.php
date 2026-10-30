@@ -44,6 +44,7 @@ class StaffMembersMigrationTest extends TestCase
         DB::table('activity_group_instructors')->insert(['group_id' => $group, 'instructor_profile_id' => $linked, 'organization_id' => $organization, 'created_at' => $now, 'updated_at' => $now]);
         $inherited = $this->addSession($organization, $group, '2026-11-03 15:00:00', [$linked]);
         $byHand = $this->addSession($organization, $group, '2026-11-10 15:00:00', [$unlinked]);
+        $withoutTeachers = $this->addSession($organization, $group, '2026-11-17 15:00:00', []);
 
         Artisan::call('migrate', ['--force' => true]);
         $this->assertTrue(Schema::hasTable('staff_members'));
@@ -56,8 +57,20 @@ class StaffMembersMigrationTest extends TestCase
         $this->assertSame($people['Иван Петров']->id, DB::table('instructor_profiles')->where('id', $linked)->value('staff_member_id'));
         $this->assertSame($people['Петър Стоянов']->id, DB::table('instructor_profiles')->where('id', $unlinked)->value('staff_member_id'));
         $this->assertDatabaseHas('activity_group_instructors', ['group_id' => $group, 'role' => 'lead', 'starts_on' => null, 'ends_on' => null, 'version' => 1]);
-        $this->assertSame('assignment', DB::table('activity_session_instructors')->where('session_id', $inherited)->value('source'));
-        $this->assertSame('manual', DB::table('activity_session_instructors')->where('session_id', $byHand)->value('source'));
+        $this->assertSame('assignment', DB::table('activity_sessions')->where('id', $inherited)->value('instructors_source'));
+        $this->assertSame('manual', DB::table('activity_sessions')->where('id', $byHand)->value('instructors_source'));
+        $this->assertSame('manual', DB::table('activity_sessions')->where('id', $withoutTeachers)->value('instructors_source'));
+
+        // Back: an ended and a not yet started assignment would become current without their period, so they go.
+        $later = $this->addProfile($organization, 'Нов треньор', null);
+        DB::table('activity_group_instructors')->insert([
+            ['group_id' => $group, 'instructor_profile_id' => $unlinked, 'organization_id' => $organization, 'ends_on' => '2020-01-31', 'created_at' => $now, 'updated_at' => $now],
+            ['group_id' => $group, 'instructor_profile_id' => $later, 'organization_id' => $organization, 'starts_on' => '2999-01-01', 'created_at' => $now, 'updated_at' => $now],
+        ]);
+        Artisan::call('migrate:rollback', ['--step' => 1, '--force' => true]);
+        $this->assertSame([$linked], DB::table('activity_group_instructors')->where('group_id', $group)->pluck('instructor_profile_id')->all());
+        $this->assertFalse(Schema::hasColumn('activity_sessions', 'instructors_source'));
+        Artisan::call('migrate', ['--force' => true]);
     }
 
     private function addUser(string $name, ?string $phone): string

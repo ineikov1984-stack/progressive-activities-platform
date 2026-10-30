@@ -56,8 +56,16 @@ return new class extends Migration
         });
         Schema::table('activity_session_instructors', function (Blueprint $table): void {
             $table->string('role', 16)->default('lead');
-            // "assignment": follows the group's assignments; "manual": changed by hand for this session (т. 5.2).
-            $table->string('source', 16)->default('assignment');
+            // A teacher's sessions and lead offerings (the teacher's scope, т. 8).
+            $table->index('instructor_profile_id');
+        });
+        Schema::table('offerings', function (Blueprint $table): void {
+            $table->index('lead_instructor_profile_id');
+        });
+        Schema::table('activity_sessions', function (Blueprint $table): void {
+            // "assignment": the teachers follow the group's assignments; "manual": changed by hand for this session, also
+            // to no teacher at all (т. 5.2). On the session, so that a session left without teachers keeps that.
+            $table->string('instructors_source', 16)->default('assignment');
         });
 
         $this->backfillPeople();
@@ -86,7 +94,7 @@ return new class extends Migration
             ALTER TABLE activity_group_instructors ADD CONSTRAINT activity_group_instructors_created_by_fk
                 FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL;
             ALTER TABLE activity_session_instructors ADD CONSTRAINT activity_session_instructors_role_valid CHECK (role IN ('lead', 'assistant'));
-            ALTER TABLE activity_session_instructors ADD CONSTRAINT activity_session_instructors_source_valid CHECK (source IN ('assignment', 'manual'));
+            ALTER TABLE activity_sessions ADD CONSTRAINT activity_sessions_instructors_source_valid CHECK (instructors_source IN ('assignment', 'manual'));
             SQL);
 
         $username = config('database.connections.pgsql.username');
@@ -102,7 +110,7 @@ return new class extends Migration
     {
         if (DB::getDriverName() === 'pgsql') {
             DB::unprepared(<<<'SQL'
-                ALTER TABLE activity_session_instructors DROP CONSTRAINT IF EXISTS activity_session_instructors_source_valid;
+                ALTER TABLE activity_sessions DROP CONSTRAINT IF EXISTS activity_sessions_instructors_source_valid;
                 ALTER TABLE activity_session_instructors DROP CONSTRAINT IF EXISTS activity_session_instructors_role_valid;
                 ALTER TABLE activity_group_instructors DROP CONSTRAINT IF EXISTS activity_group_instructors_created_by_fk;
                 ALTER TABLE activity_group_instructors DROP CONSTRAINT IF EXISTS activity_group_instructors_period_valid;
@@ -112,11 +120,21 @@ return new class extends Migration
                 SQL);
         }
 
-        // An ended assignment would become current again without its period (docs/product/team.md, т. 12).
-        DB::table('activity_group_instructors')->whereNotNull('ends_on')->where('ends_on', '<', now()->toDateString())->delete();
+        // Without its period an ended or a not yet started assignment would become current (docs/product/team.md, т. 12).
+        $today = now('Europe/Sofia')->toDateString();
+        DB::table('activity_group_instructors')
+            ->where(fn ($query) => $query->where('ends_on', '<', $today)->orWhere('starts_on', '>', $today))
+            ->delete();
 
+        Schema::table('activity_sessions', function (Blueprint $table): void {
+            $table->dropColumn('instructors_source');
+        });
+        Schema::table('offerings', function (Blueprint $table): void {
+            $table->dropIndex(['lead_instructor_profile_id']);
+        });
         Schema::table('activity_session_instructors', function (Blueprint $table): void {
-            $table->dropColumn(['role', 'source']);
+            $table->dropIndex(['instructor_profile_id']);
+            $table->dropColumn('role');
         });
         Schema::table('activity_group_instructors', function (Blueprint $table): void {
             $table->dropIndex(['instructor_profile_id']);
@@ -168,20 +186,21 @@ return new class extends Migration
         }
     }
 
-    /** A session whose teachers differ from its group's was changed by hand. */
+    /** A session whose teachers differ from its group's, also one left without teachers, was changed by hand. */
     private function backfillSessionSources(): void
     {
         $groupTeachers = DB::table('activity_group_instructors')->get(['group_id', 'instructor_profile_id'])
             ->groupBy('group_id')->map(fn ($rows) => $rows->pluck('instructor_profile_id')->sort()->values()->all());
-        $sessions = DB::table('activity_session_instructors')
-            ->join('activity_sessions', 'activity_sessions.id', '=', 'activity_session_instructors.session_id')
-            ->get(['activity_session_instructors.session_id', 'activity_sessions.group_id', 'activity_session_instructors.instructor_profile_id'])
-            ->groupBy('session_id');
-        foreach ($sessions as $sessionId => $rows) {
-            $own = $rows->pluck('instructor_profile_id')->sort()->values()->all();
-            if ($own !== ($groupTeachers[$rows->first()->group_id] ?? [])) {
-                DB::table('activity_session_instructors')->where('session_id', $sessionId)->update(['source' => 'manual']);
+        $sessionTeachers = DB::table('activity_session_instructors')->get(['session_id', 'instructor_profile_id'])
+            ->groupBy('session_id')->map(fn ($rows) => $rows->pluck('instructor_profile_id')->sort()->values()->all());
+        $manual = [];
+        foreach (DB::table('activity_sessions')->orderBy('id')->get(['id', 'group_id']) as $session) {
+            if (($sessionTeachers[$session->id] ?? []) !== ($groupTeachers[$session->group_id] ?? [])) {
+                $manual[] = $session->id;
             }
+        }
+        foreach (array_chunk($manual, 500) as $ids) {
+            DB::table('activity_sessions')->whereIn('id', $ids)->update(['instructors_source' => 'manual']);
         }
     }
 };

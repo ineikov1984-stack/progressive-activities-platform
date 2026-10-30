@@ -16,7 +16,7 @@ final class GroupTeachers
 {
     /**
      * @param  Collection<int, InstructorProfile>|null  $assignments  the group's assignments, when already loaded
-     * @return array<string, array{role: string, source: string}>
+     * @return array<string, array{role: string}>
      */
     public function forSession(Group $group, CarbonImmutable $startsAt, ?Collection $assignments = null): array
     {
@@ -26,8 +26,8 @@ final class GroupTeachers
         $teachers = [];
         foreach ($assignments ?? $group->assignments()->get() as $profile) {
             $assignment = self::assignment($profile);
-            if (($assignment['starts_on'] === null || $assignment['starts_on'] <= $day) && ($assignment['ends_on'] === null || $assignment['ends_on'] >= $day)) {
-                $teachers[(string) $profile->getKey()] = ['role' => $assignment['role'], 'source' => 'assignment'];
+            if (self::holds($assignment, $day)) {
+                $teachers[(string) $profile->getKey()] = ['role' => $assignment['role']];
             }
         }
 
@@ -41,11 +41,10 @@ final class GroupTeachers
         // A draft group has not run yet: all its sessions follow the assignments.
         $sessions = $group->sessions()->where('status', 'scheduled')
             ->when($group->status !== 'draft', fn ($query) => $query->where('starts_at', '>', now()))
-            ->orderBy('starts_at')->lockForUpdate()->with('instructors')->get();
+            // Changed by hand, also to no teacher at all: the session keeps its teachers.
+            ->where('instructors_source', 'assignment')
+            ->orderBy('starts_at')->lockForUpdate()->get();
         foreach ($sessions as $session) {
-            if ($session->instructors->contains(fn (InstructorProfile $teacher): bool => self::assignment($teacher)['source'] === 'manual')) {
-                continue;
-            }
             $changes = $session->instructors()->sync($this->forSession($group, $session->starts_at, $assignments));
             if ($changes['attached'] !== [] || $changes['detached'] !== [] || $changes['updated'] !== []) {
                 $session->version++;
@@ -54,10 +53,17 @@ final class GroupTeachers
         }
     }
 
+    /** @param array{starts_on: string|null, ends_on: string|null} $assignment */
+    public static function holds(array $assignment, string $day): bool
+    {
+        return ($assignment['starts_on'] === null || $assignment['starts_on'] <= $day)
+            && ($assignment['ends_on'] === null || $assignment['ends_on'] >= $day);
+    }
+
     /**
      * The assignment on a teacher loaded through a group's `assignments()` or a session's `instructors()`.
      *
-     * @return array{role: string, starts_on: string|null, ends_on: string|null, version: int, source: string}
+     * @return array{role: string, starts_on: string|null, ends_on: string|null, version: int}
      */
     public static function assignment(InstructorProfile $profile): array
     {
@@ -70,7 +76,6 @@ final class GroupTeachers
             'starts_on' => $day($value('starts_on')),
             'ends_on' => $day($value('ends_on')),
             'version' => (int) ($value('version') ?? 1),
-            'source' => (string) ($value('source') ?? 'assignment'),
         ];
     }
 }

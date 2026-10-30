@@ -31,6 +31,7 @@ enum AuditAction: string
     // Who leads or assists a group (docs/product/team.md, т. 5).
     case CatalogAssignmentAdded = 'catalog.assignment_added';
     case CatalogAssignmentEnded = 'catalog.assignment_ended';
+    case CatalogAssignmentRemoved = 'catalog.assignment_removed';
     case EnrollmentApplicationReviewed = 'enrollment.application_reviewed';
     case EnrollmentTransferred = 'enrollment.transferred';
     case EnrollmentPaused = 'enrollment.paused';

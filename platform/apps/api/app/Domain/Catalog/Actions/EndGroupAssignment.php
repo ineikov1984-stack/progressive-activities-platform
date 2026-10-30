@@ -55,6 +55,9 @@ final readonly class EndGroupAssignment
                 'ends_on' => $data['ends_on'], 'version' => $current['version'] + 1,
             ]);
             $this->teachers->apply($group);
+            // An editor opened before this change saves with the old version and gets a conflict.
+            $group->version++;
+            $group->save();
 
             $this->audit->record(AuditAction::CatalogAssignmentEnded, new AuditableReference('group', $group->id), [
                 'instructor_profile_id' => $profileId, 'ends_on' => $data['ends_on'],

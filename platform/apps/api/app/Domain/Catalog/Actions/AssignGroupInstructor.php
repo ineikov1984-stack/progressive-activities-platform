@@ -72,6 +72,9 @@ final readonly class AssignGroupInstructor
                 $group->assignments()->attach($profile->id, [...$values, 'version' => 1]);
             }
             $this->teachers->apply($group);
+            // An editor opened before this change saves with the old version and gets a conflict.
+            $group->version++;
+            $group->save();
 
             $this->audit->record(AuditAction::CatalogAssignmentAdded, new AuditableReference('group', $group->id), [
                 'instructor_profile_id' => $profile->id, 'role' => $values['role'],
