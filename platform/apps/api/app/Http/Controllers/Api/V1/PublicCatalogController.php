@@ -200,9 +200,10 @@ final class PublicCatalogController extends Controller
     private function presentCard(Activity $activity, string $organizationSlug): array
     {
         $groups = $activity->offerings->flatMap->groups;
+        // "From" the cheapest price a parent can actually enroll with in some group.
         /** @var PriceOption|null $price */
-        $price = $groups->flatMap->priceOptions
-            ->concat($activity->offerings->flatMap->priceOptions)
+        $price = $activity->offerings->flatMap(fn (Offering $offering) => $offering->groups
+            ->flatMap(fn (Group $group) => $group->pricesForEnrollment($offering->priceOptions)))
             ->sortBy('amount_cents')->first();
         $rows = $this->availabilityPresenter->rows($activity->visitOffers, CarbonImmutable::now());
         $availability = $this->availabilityPresenter->cardAvailability($rows)

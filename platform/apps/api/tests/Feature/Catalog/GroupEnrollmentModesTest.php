@@ -3,6 +3,7 @@
 namespace Tests\Feature\Catalog;
 
 use App\Domain\Catalog\Models\OrganizationCatalogProfile;
+use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
@@ -83,8 +84,61 @@ class GroupEnrollmentModesTest extends TestCase
                 'accepted_terms_version' => AppliedTerms::standard(BillingKind::fromEnrollmentMode($mode) ?? BillingKind::Monthly)->key(),
             ]);
         };
-        $apply($beginners, 'monthly', 'beginners-monthly')->assertCreated()->assertJsonPath('application.price.amount_cents', 6000);
+        $applicationId = $apply($beginners, 'monthly', 'beginners-monthly')->assertCreated()->assertJsonPath('application.price.amount_cents', 6000)->json('application.id');
         $apply($advanced, 'monthly', 'advanced-monthly')->assertUnprocessable()->assertJsonValidationErrors('price_option_id');
         $apply($advanced, 'full_period', 'advanced-period')->assertCreated()->assertJsonPath('application.price.unit', 'period');
+        // A price of another activity of the same organization is not this group's.
+        $other = $team()->postJson('/api/v1/catalog/activities', [
+            'title' => 'Рисуване', 'category' => 'Изкуство', 'summary' => 'Синтетично описание.', 'age_label' => '7–10 г.',
+            'offering' => ['price_options' => [['enrollment_mode' => 'monthly', 'unit' => 'month', 'amount_cents' => 1000]]],
+        ])->assertCreated()->json('activity.offering.price_options.0.id');
+        $prices['other'] = $other;
+        $apply($beginners, 'other', 'other-activity')->assertUnprocessable()->assertJsonValidationErrors('price_option_id');
+
+        // The team moves a child only with a price the target group takes.
+        $team()->postJson("/api/v1/enrollment/applications/{$applicationId}/review", ['decision' => 'approve', 'version' => 1])->assertOk();
+        app(TenantContext::class)->select($organization);
+        $enrollmentId = Enrollment::query()->where('application_id', $applicationId)->value('id');
+        app(TenantContext::class)->clear();
+        $options = $team()->getJson("/api/v1/enrollment/enrollments/{$enrollmentId}/transfer-options")->assertOk();
+        $this->assertSame(['full_period'], array_column(collect($options->json('groups'))->firstWhere('id', $advanced)['prices'], 'enrollment_mode'));
+        $move = fn (string $mode) => $team()->postJson("/api/v1/enrollment/enrollments/{$enrollmentId}/transfer", [
+            'target_group_id' => $advanced, 'price_option_id' => $prices[$mode], 'effective_date' => '2026-11-11',
+            'reason' => 'Детето напредна.', 'version' => 1,
+        ]);
+        $move('monthly')->assertUnprocessable()->assertJsonValidationErrors('price_option_id');
+        $move('full_period')->assertOk()->assertJsonPath('enrollment.group_id', $advanced);
+    }
+
+    public function test_a_group_without_a_price_for_its_ways_is_not_published(): void
+    {
+        $organization = Organization::query()->withoutGlobalScopes()->create([
+            'name' => 'Школа', 'slug' => 'modes-'.Str::lower(Str::random(10)), 'status' => 'active', 'public_contact_email' => 'school@example.test',
+        ]);
+        $owner = User::factory()->create();
+        OrganizationMembership::query()->withoutGlobalScopes()->create([
+            'organization_id' => $organization->id, 'user_id' => $owner->id, 'role' => 'organization_owner', 'status' => 'active',
+        ]);
+        $team = fn () => $this->actingAs($owner)->withSession(['active_organization_id' => $organization->id]);
+        $activity = $team()->postJson('/api/v1/catalog/activities', [
+            'title' => 'Танци', 'category' => 'Спорт', 'summary' => 'Синтетично описание.', 'age_label' => '7–10 г.',
+            'offering' => ['price_options' => [
+                ['enrollment_mode' => 'monthly', 'unit' => 'month', 'amount_cents' => 6000],
+                ['enrollment_mode' => 'single', 'unit' => 'session', 'amount_cents' => 1500],
+            ]],
+        ])->assertCreated()->json('activity');
+        $team()->postJson("/api/v1/catalog/activities/{$activity['id']}/groups", [
+            'name' => 'Само посещения', 'capacity_max' => 10, 'enrollment_modes' => ['single'],
+            'schedule_pattern' => ['start_date' => '2026-11-02', 'end_date' => '2026-11-30', 'frequency' => 'weekly',
+                'slots' => [['weekday' => 1, 'starts_at' => '16:00', 'duration_minutes' => 60]]],
+        ])->assertCreated();
+        // The single visit leaves step 6: the group takes no way of enrolling with a price any more.
+        $current = $team()->getJson("/api/v1/catalog/activities/{$activity['id']}")->json('activity.version');
+        $version = $team()->patchJson("/api/v1/catalog/activities/{$activity['id']}", ['version' => $current, 'offering' => ['price_options' => [
+            ['enrollment_mode' => 'monthly', 'unit' => 'month', 'amount_cents' => 6000],
+        ]]])->assertOk()->json('activity.version');
+
+        $team()->postJson("/api/v1/catalog/activities/{$activity['id']}/publish", ['version' => $version])
+            ->assertUnprocessable()->assertJsonValidationErrors('price_options');
     }
 }

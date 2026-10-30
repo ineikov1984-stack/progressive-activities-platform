@@ -70,19 +70,19 @@ class Group extends Model
     }
 
     /**
-     * The prices a child can be enrolled with in this group: the group's own prices, and the activity's prices for
-     * the ways of enrolling the group takes (a group's own price for a way wins). Pass the activity's prices when
-     * they are already loaded with the needed filter.
+     * The prices a child can be enrolled with in this group, only for the ways of enrolling it takes: its own
+     * prices, and the activity's where the group has no available price of its own for that way. Pass the
+     * activity's prices when they are already loaded with the needed filter. Callers still check `is_available`.
      *
      * @param  Collection<int, PriceOption>|null  $offeringPrices
      * @return Collection<int, PriceOption>
      */
     public function pricesForEnrollment(?Collection $offeringPrices = null): Collection
     {
-        $own = $this->priceOptions;
+        $own = $this->priceOptions->filter(fn (PriceOption $price): bool => $this->takesMode($price->enrollment_mode));
         $shared = ($offeringPrices ?? $this->offering->priceOptions)->whereNull('group_id')
             ->filter(fn (PriceOption $price): bool => $this->takesMode($price->enrollment_mode)
-                && ! $own->contains(fn (PriceOption $mine): bool => $mine->enrollment_mode === $price->enrollment_mode));
+                && ! $own->contains(fn (PriceOption $mine): bool => $mine->is_available && $mine->enrollment_mode === $price->enrollment_mode));
 
         return $own->concat($shared)->values();
     }

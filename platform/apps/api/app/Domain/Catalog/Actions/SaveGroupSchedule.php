@@ -57,7 +57,7 @@ final readonly class SaveGroupSchedule
             ] : null;
             $group->fill(Arr::only($data, ['name', 'age_label', 'capacity_min', 'capacity_max', 'location_id', 'enrollment_approval_mode', 'enrollment_modes']));
             if (($data['enrollment_modes'] ?? null) !== null) {
-                $this->assertActivityHasModes($offering, $data['enrollment_modes']);
+                $this->assertActivityHasModes($offering, $group, $data['enrollment_modes']);
             }
             if (! $group->exists) {
                 $group->offering_id = $offering->id;
@@ -232,9 +232,11 @@ final readonly class SaveGroupSchedule
      *
      * @param  array<int, string>  $modes
      */
-    private function assertActivityHasModes(Offering $offering, array $modes): void
+    private function assertActivityHasModes(Offering $offering, Group $group, array $modes): void
     {
-        $priced = $offering->priceOptions()->pluck('enrollment_mode')->all();
+        // The activity's own prices, or this group's.
+        $priced = $offering->priceOptions()->where(fn ($query) => $query->whereNull('group_id')
+            ->when($group->exists, fn ($own) => $own->orWhere('group_id', $group->id)))->pluck('enrollment_mode')->all();
         foreach ($modes as $index => $mode) {
             if (! in_array($mode, $priced, true)) {
                 throw ValidationException::withMessages(["enrollment_modes.{$index}" => 'Дейността няма такъв начин на записване. Добавете го в стъпка 6 „Цени и записване“.']);
