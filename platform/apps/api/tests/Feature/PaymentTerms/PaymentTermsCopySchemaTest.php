@@ -38,9 +38,17 @@ class PaymentTermsCopySchemaTest extends TestCase
             // never another organization's, never a set for another way of paying (composite key).
             $this->choose($pdo, $first, 'monthly', $first['terms']);
             $this->checkKeys($pdo);
-            $this->refused($pdo, function () use ($pdo, $first, $second): void {
-                $this->choose($pdo, $first, 'package', $second['terms']);
+            // Only the organization differs here: the other organization's set is for the same way of paying.
+            $secondCourse = $this->insertSet($pdo, $second['organization'], 'full_period');
+            $this->refused($pdo, function () use ($pdo, $first, $secondCourse): void {
+                $this->choose($pdo, $first, 'full_period', $secondCourse);
                 $this->checkKeys($pdo);
+            }, '23503');
+            // A row of one organization never points at another organization's activity.
+            $this->refused($pdo, function () use ($pdo, $first, $second): void {
+                $pdo->prepare('INSERT INTO offering_payment_terms (offering_id, organization_id, billing_kind, payment_terms_id, created_at, updated_at) '
+                    ."VALUES (:offering, :organization, 'monthly', :terms, NOW(), NOW())")
+                    ->execute(['offering' => $first['offering'], 'organization' => $second['organization'], 'terms' => $second['terms']]);
             }, '23503');
             $this->refused($pdo, function () use ($pdo, $first): void {
                 $this->choose($pdo, $first, 'visit', $first['terms']);
@@ -50,10 +58,13 @@ class PaymentTermsCopySchemaTest extends TestCase
             $this->refused($pdo, fn () => $this->choose($pdo, $first, 'monthly', $first['terms']), '23505');
             // The choices are read only inside their organization.
             $this->choose($pdo, $second, 'monthly', $second['terms']);
+            $firstCourse = $this->insertSet($pdo, $first['organization'], 'full_period');
             $pdo->exec('SET LOCAL ROLE progressive_app');
             $this->tenant($pdo, $second['organization']);
             $this->assertSame([$second['offering']], $pdo->query('SELECT offering_id FROM offering_payment_terms')->fetchAll(\PDO::FETCH_COLUMN));
             $this->assertSame(0, $pdo->exec("DELETE FROM offering_payment_terms WHERE offering_id = '{$first['offering']}'"));
+            // …and written only for the organization that is set (RLS WITH CHECK).
+            $this->refused($pdo, fn () => $this->choose($pdo, $first, 'full_period', $firstCourse), '42501');
             $pdo->exec('RESET ROLE');
 
             // An application keeps a copy of a version of its own organization…
@@ -149,6 +160,16 @@ class PaymentTermsCopySchemaTest extends TestCase
             ['id' => $ids['child'], 'parent' => $ids['parent']]);
 
         return $ids;
+    }
+
+    private function insertSet(\PDO $pdo, string $organization, string $kind): string
+    {
+        $id = (string) Str::uuid();
+        $pdo->prepare('INSERT INTO payment_terms (id, organization_id, billing_kind, name, preset, is_default, self_service, status, version, created_at, updated_at) '
+            ."VALUES (:id, :organization, :kind, 'Цял курс', 'standard', false, '{}', 'active', 1, NOW(), NOW())")
+            ->execute(['id' => $id, 'organization' => $organization, 'kind' => $kind]);
+
+        return $id;
     }
 
     /** @param array{organization: string, offering: string} $organization */

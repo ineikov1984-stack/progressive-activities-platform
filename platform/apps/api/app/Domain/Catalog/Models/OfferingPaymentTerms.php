@@ -4,6 +4,7 @@ namespace App\Domain\Catalog\Models;
 
 use App\Domain\Catalog\Concerns\BelongsToCatalogTenant;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -27,4 +28,16 @@ class OfferingPaymentTerms extends Model
     public $incrementing = false;
 
     protected $keyType = 'string';
+
+    /**
+     * The real key is (offering, way of paying): an update or delete of one choice never touches the others.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    protected function setKeysForSaveQuery($query)
+    {
+        return $query->where('offering_id', $this->getOriginal('offering_id') ?? $this->getAttribute('offering_id'))
+            ->where('billing_kind', $this->getOriginal('billing_kind') ?? $this->getAttribute('billing_kind'));
+    }
 }
