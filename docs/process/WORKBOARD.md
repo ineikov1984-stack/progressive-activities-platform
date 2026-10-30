@@ -19,6 +19,7 @@
 |---|---|---|---|---|
 | Екип и назначения — етап 1 (`docs/product/team.md`), PR 2а: хората от екипа (списък, добави, данни, архивиране, профил на преподавател) | Claude | `claude/team-invitations` | Organizations (екип), Catalog (профили, назначения — само четене); `routes/api.php` | PR 1 (#70) е слят → TDD; после PR 2б: покана и роли |
 | Езикова редакция — публични страници, вход, имейли до родителите | Claude | `claude/texts-public` | `apps/web/src/features/catalog/public`, `features/auth`, `features/dashboard` (заглавие), имейлите до родителите | по одобрения речник; условията за такси — отделно, след одобрение „преди → след“ |
+| Условията за такси, отсъствия и отказ пред родителя — пълни изречения и пример в евро (одобрено „преди → след“, DECISIONS 31.10.2026) | Claude | `claude/terms-wording` | `apps/web/src/features/payment-terms`, `features/catalog/public/visit-offer-list.tsx`, етикетите в `api/app/Domain/PaymentTerms/Enums/BillingKind.php`; тестовете към тях | код и тестове — готови локално; следва PR и проверка в браузъра на 390/768/1440 px |
 
 ## Опашка (по приоритет)
 
