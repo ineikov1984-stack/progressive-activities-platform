@@ -59,7 +59,8 @@ const navigationGroups: Array<Omit<DashboardNavGroup, 'items'> & { items: Naviga
       { id: 'locations', label: 'Места', icon: 'locations', isAvailable: false },
       { id: 'team', label: 'Екип', icon: 'team', href: '/dashboard#team', isAvailable: true },
       { id: 'media', label: 'Медия', icon: 'media', isAvailable: false },
-      { id: 'settings', label: 'Настройки', icon: 'settings', isAvailable: false },
+      // Only "Условия за плащане" so far; the other settings join it later.
+      { id: 'settings', label: 'Условия за плащане', icon: 'settings', href: '/dashboard/settings/payment-terms', isAvailable: true },
     ],
   },
 ];
