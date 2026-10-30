@@ -10,11 +10,13 @@ use App\Domain\Catalog\Enums\EnrollmentMode;
 use App\Domain\Catalog\Enums\PriceUnit;
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
+use App\Domain\Catalog\Models\OrganizationCatalogProfile;
 use App\Domain\Catalog\Services\ScheduleConflictDetector;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Enums\OrganizationStatus;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
+use App\Domain\PaymentTerms\Services\PaymentTermsResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
@@ -25,6 +27,7 @@ final readonly class PublishActivityInternally
         private TenantContext $context,
         private ScheduleConflictDetector $conflicts,
         private AuditRecorder $audit,
+        private PaymentTermsResolver $paymentTerms,
     ) {}
 
     public function handle(User $actor, Activity $activity, int $expectedVersion): Activity
@@ -54,6 +57,9 @@ final readonly class PublishActivityInternally
             foreach ($groups as $group) {
                 $this->validateGroup($group);
             }
+            if (OrganizationCatalogProfile::query()->where('is_published', true)->exists()) {
+                $this->validateMarketplaceTerms($groups);
+            }
 
             $locked->status = ActivityStatus::Published;
             $locked->published_at = now()->toImmutable();
@@ -76,6 +82,24 @@ final readonly class PublishActivityInternally
         foreach (['title', 'category', 'summary', 'age_label'] as $field) {
             if (trim($activity->{$field}) === '') {
                 throw ValidationException::withMessages([$field => 'Полето е задължително за публикуване.']);
+            }
+        }
+    }
+
+    /**
+     * In the public catalog every price's terms stay in the platform's frame (docs/product/payment-policies.md,
+     * т. 7.5). Sets saved before the organization joined the catalog are checked here.
+     *
+     * @param  iterable<Group>  $groups
+     */
+    private function validateMarketplaceTerms(iterable $groups): void
+    {
+        foreach ($groups as $group) {
+            $prices = $group->priceOptions->concat($group->offering->priceOptions->whereNull('group_id'))->where('is_available', true);
+            foreach ($prices as $price) {
+                if ($this->paymentTerms->forPrice($price->enrollment_mode, $group->offering->payment_terms_id)?->marketplaceViolations()) {
+                    throw ValidationException::withMessages(['payment_terms' => 'Условията за плащане на тази дейност не са в рамките на каталога на платформата. Променете ги в „Настройки → Условия за плащане“.']);
+                }
             }
         }
     }

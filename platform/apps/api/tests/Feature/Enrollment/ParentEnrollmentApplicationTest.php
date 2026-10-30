@@ -18,10 +18,12 @@ use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Support\AcceptsPaymentTerms;
 use Tests\TestCase;
 
 class ParentEnrollmentApplicationTest extends TestCase
 {
+    use AcceptsPaymentTerms;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -46,7 +48,7 @@ class ParentEnrollmentApplicationTest extends TestCase
                 'source' => 'staff',
                 'organization_id' => Str::uuid()->toString(),
                 'parent_user_id' => User::factory()->create()->id,
-                'accepted_terms_version' => 'terms-2026-10',
+                'accepted_terms_version' => $this->standardTermsVersion($price->id),
             ]);
 
         $response->assertCreated()
@@ -60,7 +62,9 @@ class ParentEnrollmentApplicationTest extends TestCase
             ->assertJsonPath('application.price.amount_cents', 4500)
             ->assertJsonPath('application.price.currency', 'EUR')
             ->assertJsonPath('application.price.unit', 'month')
-            ->assertJsonPath('application.accepted_terms_version', 'terms-2026-10');
+            ->assertJsonPath('application.accepted_terms_version', $this->standardTermsVersion($price->id))
+            ->assertJsonPath('application.payment_terms.billing_kind', 'monthly')
+            ->assertJsonPath('application.payment_terms.preset', 'standard');
 
         $this->assertDatabaseHas('enrollment_applications', [
             'organization_id' => $organization->id,
@@ -71,7 +75,8 @@ class ParentEnrollmentApplicationTest extends TestCase
             'amount_cents_snapshot' => 4500,
             'currency_snapshot' => 'EUR',
             'unit_snapshot' => 'month',
-            'accepted_terms_version' => 'terms-2026-10',
+            'accepted_terms_version' => $this->standardTermsVersion($price->id),
+            'payment_terms_version_id' => null,
         ]);
         $this->assertNotNull(EnrollmentApplication::query()->withoutGlobalScopes()->firstOrFail()->accepted_terms_at);
     }
@@ -292,7 +297,7 @@ class ParentEnrollmentApplicationTest extends TestCase
             'child_id' => $childId,
             'group_id' => $groupId,
             'price_option_id' => $priceId,
-            'accepted_terms_version' => 'terms-v1',
+            'accepted_terms_version' => $this->standardTermsVersion($priceId),
         ];
     }
 

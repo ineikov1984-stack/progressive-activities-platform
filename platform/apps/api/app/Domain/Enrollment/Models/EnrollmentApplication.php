@@ -25,6 +25,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property EnrollmentSource $source
  * @property EnrollmentApplicationStatus $status
  * @property CarbonImmutable|null $accepted_terms_at
+ * @property string|null $payment_terms_version_id
+ * @property array<string, mixed>|null $payment_terms_snapshot the accepted terms (AppliedTerms::snapshot); never changes
  */
 #[Fillable([
     'parent_user_id', 'child_id', 'group_id', 'price_option_id', 'session_id',
@@ -32,7 +34,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'accepted_terms_at', 'amount_cents_snapshot', 'currency_snapshot',
     'unit_snapshot', 'visit_offer_id', 'visit_offer_title_snapshot',
     'fee_reason_snapshot', 'cancellation_policy_snapshot', 'public_reason',
-    'internal_note', 'parent_note', 'version',
+    'internal_note', 'parent_note', 'version', 'payment_terms_version_id', 'payment_terms_snapshot',
 ])]
 class EnrollmentApplication extends Model
 {
@@ -106,6 +108,7 @@ class EnrollmentApplication extends Model
             'source' => EnrollmentSource::class,
             'status' => EnrollmentApplicationStatus::class,
             'accepted_terms_at' => 'immutable_datetime',
+            'payment_terms_snapshot' => 'array',
             'amount_cents_snapshot' => 'integer',
             'version' => 'integer',
         ];

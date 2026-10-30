@@ -46,7 +46,10 @@ final class ParentEnrollmentController extends Controller
             'price_option_id' => ['required_without:visit_offer_id', 'uuid'],
             'visit_offer_id' => ['sometimes', 'nullable', 'uuid'],
             'session_id' => ['required_with:visit_offer_id', 'nullable', 'uuid'],
+            // For a price: the `payment_terms.version` the parent read on the activity's page.
             'accepted_terms_version' => ['required', 'string', 'max:100'],
+            // The child starts before the 14 days to withdraw are over, at the parent's request (payment-policies.md, т. 3.6).
+            'early_start' => ['sometimes', 'boolean:strict'],
             // Seen only by the organization's team; health details have their own place later.
             'parent_note' => ['sometimes', 'nullable', 'string', 'max:500'],
         ], ['parent_note.max' => 'Бележката е до 500 знака.']);
@@ -181,6 +184,15 @@ final class ParentEnrollmentController extends Controller
             'status' => $application->status->value,
             'accepted_terms_version' => $application->accepted_terms_version,
             'accepted_terms_at' => $application->accepted_terms_at?->toIso8601String(),
+            // The parent's own copy of the terms (who on the team accepted a later copy is not shown).
+            'payment_terms' => $application->payment_terms_snapshot === null ? null : [
+                'name' => $application->payment_terms_snapshot['name'] ?? null,
+                'billing_kind' => $application->payment_terms_snapshot['billing_kind'] ?? null,
+                'preset' => $application->payment_terms_snapshot['preset'] ?? null,
+                'schema_version' => $application->payment_terms_snapshot['schema_version'] ?? null,
+                'rules' => $application->payment_terms_snapshot['rules'] ?? null,
+                'early_start' => $application->payment_terms_snapshot['early_start'] ?? false,
+            ],
             'price' => [
                 'amount_cents' => $application->amount_cents_snapshot,
                 'currency' => $application->currency_snapshot,

@@ -25,6 +25,8 @@ use App\Domain\Enrollment\Services\EnrollmentChain;
 use App\Domain\Enrollment\Services\SessionAllocation;
 use App\Domain\Enrollment\Services\SessionApplicability;
 use App\Domain\Identity\Models\User;
+use App\Domain\PaymentTerms\Enums\BillingKind;
+use App\Domain\PaymentTerms\Services\PaymentTermsResolver;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -55,6 +57,7 @@ final class ChangeEnrollment
         private readonly SessionApplicability $applicability,
         private readonly AuditRecorder $audit,
         private readonly EnrollmentChain $chain,
+        private readonly PaymentTermsResolver $paymentTerms,
     ) {}
 
     public function transfer(
@@ -131,6 +134,7 @@ final class ChangeEnrollment
 
             $application = $current->application;
             $priceChanged = $price->amount_cents !== $application->amount_cents_snapshot || $price->unit !== $application->unit_snapshot;
+            $terms = $this->movedTerms($actor, $application, $price, $target);
             $targetApplication = EnrollmentApplication::query()->create([
                 'parent_user_id' => $application->parent_user_id,
                 'child_id' => $current->child_id,
@@ -141,9 +145,9 @@ final class ChangeEnrollment
                 'status' => EnrollmentApplicationStatus::Approved,
                 // Version in the key: after a cancelled move the same enrollment may be transferred again.
                 'idempotency_key' => 'transfer-'.$current->id.'-'.$current->version,
-                // Same activity, same terms; the history records that the team made the change.
-                'accepted_terms_version' => $application->accepted_terms_version,
-                'accepted_terms_at' => $application->accepted_terms_at,
+                // The terms move with the child (docs/product/payment-policies.md, т. 7.3); the history records
+                // that the team made the change.
+                ...$terms['columns'],
                 'amount_cents_snapshot' => $price->amount_cents,
                 'currency_snapshot' => $price->currency,
                 'unit_snapshot' => $price->unit,
@@ -155,7 +159,8 @@ final class ChangeEnrollment
                 'from_status' => null,
                 'to_status' => EnrollmentApplicationStatus::Approved->value,
                 'public_reason' => $reason,
-                'metadata' => ['terms_basis' => 'staff_transfer', 'transferred_from_id' => $current->id, 'price_changed' => $priceChanged],
+                'metadata' => ['terms_basis' => 'staff_transfer', 'transferred_from_id' => $current->id, 'price_changed' => $priceChanged,
+                    'payment_terms' => $terms['basis']],
             ]);
             $moved = Enrollment::query()->create([
                 'application_id' => $targetApplication->id,
@@ -591,5 +596,38 @@ final class ChangeEnrollment
             'payload' => [...$payload, 'transition_id' => $transition->id],
             'occurred_at' => now(),
         ]);
+    }
+
+    /**
+     * The copy of the terms for the enrollment a move creates (docs/product/payment-policies.md, т. 7.3): the old
+     * copy when the new price is paid the same way (or there is no copy — an enrollment from before the terms);
+     * for another way of paying, a copy of the new group's terms that the team accepts for the parent.
+     *
+     * @return array{columns: array<string, mixed>, basis: string}
+     */
+    private function movedTerms(User $actor, EnrollmentApplication $application, PriceOption $price, Group $target): array
+    {
+        $copy = $application->payment_terms_snapshot;
+        $kind = BillingKind::fromEnrollmentMode($price->enrollment_mode);
+        if ($copy === null || ($copy['billing_kind'] ?? null) === $kind?->value) {
+            return ['basis' => $copy === null ? 'none' : 'inherited', 'columns' => [
+                'accepted_terms_version' => $application->accepted_terms_version,
+                'accepted_terms_at' => $application->accepted_terms_at,
+                'payment_terms_version_id' => $application->payment_terms_version_id,
+                'payment_terms_snapshot' => $copy,
+            ]];
+        }
+        $terms = $this->paymentTerms->forPrice($price->enrollment_mode, $target->offering?->payment_terms_id);
+        if ($terms === null) {
+            throw ValidationException::withMessages(['price_option_id' => 'Изберете цена на новата група.']);
+        }
+        $now = CarbonImmutable::now();
+
+        return ['basis' => 'accepted_by_team', 'columns' => [
+            'accepted_terms_version' => $terms->key(),
+            'accepted_terms_at' => $now,
+            'payment_terms_version_id' => $terms->versionId,
+            'payment_terms_snapshot' => $terms->snapshot('team', $now, $actor->id),
+        ]];
     }
 }

@@ -8,6 +8,7 @@ const demo = {
   organizationId: '00000000-0000-4000-8000-000000000101',
   // LocalDemoSeeder::ACTIVITY_ID — the published "Шахмат" activity.
   publishedActivityId: '00000000-0000-4000-8000-000000000201',
+  publicActivityPath: 'public/organizations/progressive-academy-demo/activities/shahmat',
   // Its first group and the monthly price of that group.
   groupId: '00000000-0000-4000-8000-000000000206',
   groupName: 'Група 1 · 1.–2. клас',
@@ -238,12 +239,26 @@ test('the team pauses a child from the group roster and undoes it', async () => 
   const [firstName, ...rest] = childName.split(' ');
   const child = await api(page, 'parent/children', { method: 'POST', body: { first_name: firstName, last_name: rest.join(' ') } });
   expect(child.status, child.body).toBe(201);
+  // The parent accepts the terms shown with the price on the activity's public page.
+  const publicActivity = JSON.parse((await api(page, demo.publicActivityPath)).body) as {
+    activity: { groups: { id: string; prices: { id: string; payment_terms: { version: string } | null }[] }[] };
+  };
+  const termsVersion = publicActivity.activity.groups.find((group) => group.id === demo.groupId)
+    ?.prices.find((price) => price.id === demo.monthlyPriceId)?.payment_terms?.version;
+  expect(termsVersion).toBeTruthy();
+  const stale = await api(page, 'parent/enrollment-applications', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': `e2e-pause-stale-${Date.now()}` },
+    body: { child_id: JSON.parse(child.body).child.id, group_id: demo.groupId, price_option_id: demo.monthlyPriceId, accepted_terms_version: 'old' },
+  });
+  expect(stale.status, stale.body).toBe(422);
   const application = await api(page, 'parent/enrollment-applications', {
     method: 'POST',
     headers: { 'Idempotency-Key': `e2e-pause-${Date.now()}` },
-    body: { child_id: JSON.parse(child.body).child.id, group_id: demo.groupId, price_option_id: demo.monthlyPriceId, accepted_terms_version: 'e2e' },
+    body: { child_id: JSON.parse(child.body).child.id, group_id: demo.groupId, price_option_id: demo.monthlyPriceId, accepted_terms_version: termsVersion },
   });
   expect(application.status, application.body).toBe(201);
+  expect(JSON.parse(application.body).application.payment_terms).toMatchObject({ billing_kind: 'monthly' });
   const review = await api(page, `enrollment/applications/${JSON.parse(application.body).application.id}/review`, {
     method: 'POST', organizationId: demo.organizationId, body: { decision: 'approve', version: 1 },
   });

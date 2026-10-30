@@ -12,11 +12,13 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Support\AcceptsPaymentTerms;
 use Tests\Support\VisitOfferFixture;
 use Tests\TestCase;
 
 class VisitAllocationInvariantTest extends TestCase
 {
+    use AcceptsPaymentTerms;
     use RefreshDatabase, VisitOfferFixture;
 
     public static function modes(): array
@@ -106,7 +108,7 @@ class VisitAllocationInvariantTest extends TestCase
         $price = $group->offering->priceOptions()->create(['group_id' => $group->id, 'enrollment_mode' => 'monthly',
             'unit' => 'month', 'amount_cents' => 5000, 'currency' => 'EUR', 'is_available' => true]);
         $application = app(SubmitEnrollmentApplication::class)->handle($child->owner, ['child_id' => $child->id,
-            'group_id' => $group->id, 'price_option_id' => $price->id, 'accepted_terms_version' => 'v1'], 'regular');
+            'group_id' => $group->id, 'price_option_id' => $price->id, 'accepted_terms_version' => $this->standardTermsVersion($price->id)], 'regular');
         app(TenantContext::class)->select($org);
         try {
             app(ReviewEnrollmentApplication::class)->handle($child->owner, $application, 'approve', 1, null, null);

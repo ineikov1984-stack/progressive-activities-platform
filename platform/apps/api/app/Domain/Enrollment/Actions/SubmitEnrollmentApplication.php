@@ -23,6 +23,8 @@ use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Enums\OrganizationStatus;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
+use App\Domain\PaymentTerms\Services\AppliedTerms;
+use App\Domain\PaymentTerms\Services\PaymentTermsResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -34,6 +36,7 @@ final class SubmitEnrollmentApplication
         private readonly VisitOfferEligibility $eligibility,
         private readonly EnrollmentCapacity $capacity,
         private readonly SessionAllocation $allocation,
+        private readonly PaymentTermsResolver $paymentTerms,
     ) {}
 
     /** @param array<string, mixed> $payload */
@@ -128,6 +131,8 @@ final class SubmitEnrollmentApplication
                     throw ValidationException::withMessages(['visit_offer_id' => 'Изберете публикувано предложение за посещение.']);
                 }
                 $session = $this->resolveSession($payload['session_id'] ?? null, $group, $scope);
+                $terms = $offer === null ? $this->acceptedTerms($price->enrollment_mode, $group->offering->payment_terms_id, $payload) : null;
+                $acceptedAt = now()->toImmutable();
                 $status = EnrollmentApplicationStatus::Submitted;
                 $metadata = [];
                 if ($offer !== null && $session !== null) {
@@ -169,7 +174,10 @@ final class SubmitEnrollmentApplication
                     'status' => $status,
                     'idempotency_key' => $idempotencyKey,
                     'accepted_terms_version' => $payload['accepted_terms_version'],
-                    'accepted_terms_at' => now(),
+                    'accepted_terms_at' => $acceptedAt,
+                    // The copy of the terms the parent accepted; visits keep their offer's terms until step 2d-3.
+                    'payment_terms_version_id' => $terms?->versionId,
+                    'payment_terms_snapshot' => $terms?->snapshot('parent', $acceptedAt, null, ($payload['early_start'] ?? false) === true),
                     'amount_cents_snapshot' => $offer !== null ? $offer->amount_cents : $price->amount_cents,
                     'currency_snapshot' => $offer !== null ? $offer->currency : $price->currency,
                     'unit_snapshot' => $offer !== null ? 'session' : $price->unit,
@@ -206,6 +214,26 @@ final class SubmitEnrollmentApplication
         } finally {
             $this->context->clear();
         }
+    }
+
+    /**
+     * The terms for the chosen price, as the parent saw them (docs/product/payment-policies.md, т. 7.3): a
+     * changed set asks the parent to look again instead of holding them to numbers they did not read.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function acceptedTerms(string $enrollmentMode, ?string $chosenTermsId, array $payload): AppliedTerms
+    {
+        $terms = $this->paymentTerms->forPrice($enrollmentMode, $chosenTermsId);
+        // The organization is in the public catalog (checked above), so its frame applies (т. 7.5).
+        if ($terms === null || $terms->marketplaceViolations() !== []) {
+            throw ValidationException::withMessages(['price_option_id' => 'Избраната цена не е достъпна.']);
+        }
+        if (($payload['accepted_terms_version'] ?? null) !== $terms->key()) {
+            throw ValidationException::withMessages(['accepted_terms_version' => 'Условията са променени — прегледайте ги отново.']);
+        }
+
+        return $terms;
     }
 
     private function scopeFor(EnrollmentMode $mode): EnrollmentScope

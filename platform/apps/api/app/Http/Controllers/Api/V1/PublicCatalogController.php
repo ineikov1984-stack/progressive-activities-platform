@@ -19,6 +19,7 @@ use App\Domain\Catalog\Services\PublicAvailabilityPresenter;
 use App\Domain\Organizations\Enums\OrganizationStatus;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
+use App\Domain\PaymentTerms\Services\PaymentTermsResolver;
 use App\Http\Controllers\Controller;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -31,6 +32,7 @@ final class PublicCatalogController extends Controller
     public function __construct(
         private readonly TenantContext $context,
         private readonly PublicAvailabilityPresenter $availabilityPresenter,
+        private readonly PaymentTermsResolver $paymentTerms,
     ) {}
 
     public function catalog(string $organizationSlug): JsonResponse
@@ -284,7 +286,11 @@ final class PublicCatalogController extends Controller
             'location' => $location ? $this->presentLocation($location) : null,
             'prices' => $group->priceOptions
                 ->concat($publicOffering->priceOptions)
-                ->unique('id')->values()->map($this->presentPrice(...))->all(),
+                ->unique('id')->values()->map(fn (PriceOption $price) => [
+                    ...$this->presentPrice($price),
+                    // What the parent reads and accepts before applying (docs/product/payment-policies.md, т. 8).
+                    'payment_terms' => $this->paymentTerms->forPrice($price->enrollment_mode, $publicOffering->payment_terms_id)?->presentForParent(),
+                ])->all(),
             'sessions' => $group->sessions->map(fn (Session $session) => [
                 'id' => $session->id,
                 'starts_at' => $session->starts_at->toIso8601String(),
