@@ -80,7 +80,7 @@ test.afterAll(async () => {
 test('sign in leads to the home screen with tasks', async () => {
   await signIn(page);
   await slow(page.getByRole('heading', { level: 1, name: 'Progressive Academy Demo' })).toBeVisible();
-  await slow(page.getByRole('heading', { name: 'Какво чака вас' })).toBeVisible();
+  await slow(page.getByRole('heading', { name: 'Какво ви чака' })).toBeVisible();
   await slow(page.getByRole('link', { name: 'Създай нова дейност' })).toBeVisible();
   await expect(page.getByText(/catalog\.|tenant|organization_id/)).toHaveCount(0);
 });

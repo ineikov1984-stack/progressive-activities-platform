@@ -37,7 +37,7 @@ final class ParentEnrollmentController extends Controller
     {
         $idempotencyKey = trim((string) $request->header('Idempotency-Key'));
         if ($idempotencyKey === '' || mb_strlen($idempotencyKey) > 120) {
-            throw ValidationException::withMessages(['idempotency_key' => 'Изпратете валиден ключ за заявката.']);
+            throw ValidationException::withMessages(['idempotency_key' => 'Нещо се обърка. Презаредете страницата и опитайте отново.']);
         }
 
         $payload = $request->validate([
@@ -52,7 +52,7 @@ final class ParentEnrollmentController extends Controller
             'early_start' => ['sometimes', 'boolean:strict'],
             // Seen only by the organization's team; health details have their own place later.
             'parent_note' => ['sometimes', 'nullable', 'string', 'max:500'],
-        ], ['parent_note.max' => 'Бележката е до 500 знака.']);
+        ], ['parent_note.max' => 'Бележката може да е до 500 знака.']);
         $application = $submit->handle($request->user(), $payload, $idempotencyKey);
 
         return response()->json(

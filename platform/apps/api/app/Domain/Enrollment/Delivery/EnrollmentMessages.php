@@ -79,7 +79,7 @@ final class EnrollmentMessages
                     ["Екипът на {$org} ще я разгледа и ще ви пише, когато реши. Дотогава мястото не е запазено."],
                     [
                         $fact('Дейност', $this->groupTitle($group)),
-                        $visit ? $sessionFact($application->scope->value === 'trial' ? 'Пробно занимание' : 'Посещение', $application->session) : $fact('Ден и час', $weekly),
+                        $visit ? $sessionFact($application->scope->value === 'trial' ? 'Пробно занимание' : 'Еднократно посещение', $application->session) : $fact('Дни и часове', $weekly),
                         $placeFact,
                         $fact('Подадена', BulgarianDates::day((string) $application->created_at?->toDateString())),
                     ],
@@ -96,7 +96,7 @@ final class EnrollmentMessages
                     [$visit ? "Очакваме {$child} на заниманието." : "Мястото в групата е запазено. Очакваме {$child} на първото занимание."],
                     [
                         $first === null ? null : $fact($visit ? 'Занимание' : 'Първо занимание', $this->sessionText($first, $group)),
-                        $visit ? null : $fact('После', $weekly),
+                        $visit ? null : $fact('След това', $weekly),
                         $placeFact,
                     ],
                     button: $mapButton,
@@ -106,7 +106,7 @@ final class EnrollmentMessages
                 return $this->waitlisted($mail, $child, $where, $quote, $reply, [$groupFact, $fact('Подадена', BulgarianDates::day((string) $application->created_at?->toDateString()))]);
             case 'enrollment.application_rejected':
                 return $mail(
-                    "Заявката за {$child} за {$where} не е одобрена",
+                    "Заявката за {$child} в {$where} не е одобрена",
                     "Заявката за {$where} не е одобрена",
                     ["Благодарим за интереса. Екипът на {$org} този път не може да запише {$child} в тази група."],
                     [$fact('Заявка', $this->groupTitle($group), $submitted)],
@@ -127,10 +127,10 @@ final class EnrollmentMessages
                     "{$child} се премества в {$where}",
                     ['Мястото в новата група е запазено.'],
                     [
-                        $lastOld !== null ? $fact("Последно в {$oldName}", $this->sessionText($lastOld, $from->group))
+                        $lastOld !== null ? $fact("Последно занимание в {$oldName}", $this->sessionText($lastOld, $from->group))
                             : ($from?->ends_on === null ? null : $fact("Последен ден в {$oldName}", BulgarianDates::weekdayDay($from->ends_on->toDateString()))),
-                        $first === null ? null : $fact('Първо в новата група', $this->sessionText($first, $group)),
-                        $fact('Дни и час', $weekly),
+                        $first === null ? null : $fact('Първо занимание в новата група', $this->sessionText($first, $group)),
+                        $fact('Дни и часове', $weekly),
                         $placeFact,
                     ],
                     quoteBlock: $quote,
@@ -142,9 +142,9 @@ final class EnrollmentMessages
                     : $this->firstSession($enrollment, CarbonImmutable::parse($text('ends_on'))->addDay()->toDateString());
 
                 return $mail(
-                    "Пауза за {$child}: ".BulgarianDates::day($text('starts_on')).' – '.BulgarianDates::day($text('ends_on')),
-                    "Пауза за {$child}: ".BulgarianDates::day($text('starts_on')).' – '.BulgarianDates::day($text('ends_on')),
-                    ["Мястото на {$child} в {$where} се пази. Заниманията в паузата не се броят."],
+                    "Пауза за {$child}: ".BulgarianDates::period($text('starts_on'), $text('ends_on')),
+                    "Пауза за {$child}: ".BulgarianDates::period($text('starts_on'), $text('ends_on')),
+                    ["Мястото на {$child} в {$where} се пази. За заниманията в паузата важат условията за пауза."],
                     [
                         $fact('Пауза', 'от '.BulgarianDates::weekdayDay($text('starts_on')).' до '.BulgarianDates::weekdayDay($text('ends_on'))),
                         $sessionFact('Връща се', $back),
@@ -165,7 +165,7 @@ final class EnrollmentMessages
                     $cancelled ? "Паузата за {$child} е отменена" : "{$child} се връща от паузата на ".BulgarianDates::day($text('resume_on')),
                     $cancelled ? "Паузата за {$child} е отменена" : "{$child} се връща от паузата",
                     [$cancelled ? "{$child} продължава в {$where} без пауза." : "{$child} продължава в {$where}."],
-                    [$fact($cancelled ? 'Отменена пауза' : 'Пауза', $range), $sessionFact($cancelled ? 'Следващо занимание' : 'Връща се', $next), $fact('Дни и час', $weekly), $placeFact],
+                    [$fact($cancelled ? 'Отменена пауза' : 'Пауза', $range), $sessionFact($cancelled ? 'Следващо занимание' : 'Връща се', $next), $fact('Дни и часове', $weekly), $placeFact],
                     button: $mapButton,
                     after: [$question],
                 );
@@ -198,7 +198,7 @@ final class EnrollmentMessages
                     "{$child} продължава в {$where}",
                     "{$child} продължава в {$where}",
                     ["Прекратяването е отменено — {$child} продължава в групата."],
-                    [$sessionFact('Следващо занимание', $next), $fact('Дни и час', $weekly), $placeFact],
+                    [$sessionFact('Следващо занимание', $next), $fact('Дни и часове', $weekly), $placeFact],
                     button: $mapButton,
                     after: [$question],
                 );
@@ -214,7 +214,7 @@ final class EnrollmentMessages
                     return $mail(
                         "{$child} пропуска заниманието на {$day}",
                         "{$child} пропуска заниманието на {$day}",
-                        ["Заниманието на {$day} в {$where} не се брои за {$child}."],
+                        ["{$child} няма да е на заниманието на {$day}."],
                         [
                             $session === null ? null : $fact('Пропуска', $this->sessionText($session, $group),
                                 $next === null && $enrollment?->scope->value === 'full_period' ? "След него няма други занимания за {$child} в този период." : null),
@@ -361,7 +361,7 @@ final class EnrollmentMessages
         return $mail(
             "{$child} е в списъка на чакащите за {$where}",
             "{$child} е в списъка на чакащите",
-            ["Групата {$where} в момента е пълна. Ще ви пишем, когато има място за {$child}."],
+            ["В {$where} в момента няма свободни места. Ще ви пишем, когато има място за {$child}."],
             $facts,
             ['title' => 'Чака място', 'text' => "Мястото не е запазено, докато не получите имейл „Записахме {$child}“."],
             $quote,
@@ -390,7 +390,7 @@ final class EnrollmentMessages
     private function icon(string $label, string $webUrl): string
     {
         $name = match (true) {
-            in_array($label, ['После', 'Дни и час', 'Ден и час'], true) => 'repeat',
+            in_array($label, ['След това', 'Дни и часове'], true) => 'repeat',
             $label === 'Място' => 'pin',
             in_array($label, ['Група', 'Дейност', 'Заявка', 'Заявка за'], true) => 'group',
             in_array($label, ['Места днес', 'Мястото'], true) => 'seat',

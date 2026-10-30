@@ -14,7 +14,7 @@ import {
 import styles from './enrollments.module.css';
 
 type Tab = 'submitted' | 'waitlisted' | 'groups';
-/** A link from "Какво чака вас" can open a view directly (?view=waitlisted, ?view=groups). */
+/** A link from "Какво ви чака" can open a view directly (?view=waitlisted, ?view=groups). */
 function initialTab(view: string | null): Tab {
   return view === 'waitlisted' || view === 'groups' ? view : 'submitted';
 }
@@ -304,7 +304,7 @@ export function EnrollmentsPage() {
     requestAnimationFrame(() => detailsOpener.current?.focus());
   }, []);
   const [openGroup, setOpenGroup] = useState<string | undefined>(() => searchParams.get('group') ?? undefined);
-  // Opened from "Какво чака вас": once the groups are loaded, bring that group into view and focus it.
+  // Opened from "Какво ви чака": once the groups are loaded, bring that group into view and focus it.
   const linkedGroup = useRef(searchParams.get('group'));
   useEffect(() => {
     if (!groups || !linkedGroup.current) return;
@@ -471,7 +471,7 @@ export function EnrollmentsPage() {
             {list === undefined || visible === undefined ? <span className={styles.skeleton} aria-busy="true" /> : list.length === 0 ? (
               <div className={styles.empty}>
                 <strong>{filtering ? 'Няма заявки, които отговарят на търсенето' : tab === 'submitted' ? 'Няма нови заявки' : 'Никой не чака място'}</strong>
-                <p>{filtering ? 'Променете търсенето или изчистете филтрите.' : tab === 'submitted' ? 'Когато родител подаде заявка, тя ще се появи тук и в „Какво чака вас“.' : 'Тук ще са децата, които чакат свободно място в пълна група.'}</p>
+                <p>{filtering ? 'Променете търсенето или изчистете филтрите.' : tab === 'submitted' ? 'Когато родител подаде заявка, тя ще се появи тук и в „Какво ви чака“.' : 'Тук ще са децата, които чакат свободно място в пълна група.'}</p>
               </div>
             ) : tab === 'waitlisted' ? (
               <WaitingQueues queues={queues ?? []} counts={filtering ? new Map() : queueCounts} busyId={busyId} canManage={canManage} onDecide={decide} onDetails={openDetails} />

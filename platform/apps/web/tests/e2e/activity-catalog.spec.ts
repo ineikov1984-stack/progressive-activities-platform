@@ -46,12 +46,12 @@ async function assertAdministrativeWrite(page: Page): Promise<void> {
 
 async function assertPublicChessJourney(page: Page): Promise<void> {
   await page.goto(`${baseUrl}/o/progressive-academy-demo`);
-  await catalogExpect(page.getByRole('heading', { name: 'Открийте занимание, което вдъхновява' })).toBeVisible();
+  await catalogExpect(page.getByRole('heading', { name: 'Открийте занимание, което ще вдъхнови детето ви' })).toBeVisible();
   const chessCard = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Шахмат' }) });
   await catalogExpect(chessCard.getByText(/15,00\s*€/)).toBeVisible();
   await Promise.all([
     page.waitForURL(/\/o\/progressive-academy-demo\/activities\/shahmat$/),
-    chessCard.getByRole('link', { name: /Научи повече/ }).click(),
+    chessCard.getByRole('link', { name: /Повече за дейността/ }).click(),
   ]);
 
   await catalogExpect(page).toHaveURL(/\/o\/progressive-academy-demo\/activities\/shahmat$/);
@@ -60,9 +60,8 @@ async function assertPublicChessJourney(page: Page): Promise<void> {
   await catalogExpect(page.getByRole('heading', { name: 'Група 1 · 1.–2. клас' })).toBeVisible();
   await catalogExpect(page.getByRole('heading', { name: 'Група 2 · 3.–4. клас' })).toBeVisible();
   await catalogExpect(page.getByRole('heading', { name: 'Александър Петров' })).toBeVisible();
-  await catalogExpect(page.getByRole('link', { name: /Навигация до мястото/ }).first()).toHaveAttribute('href', /google\.com\/maps/);
-  await catalogExpect(page.getByText('Записването ще бъде добавено в следващ етап').last()).toBeVisible();
-  await catalogExpect(page.getByText('На този етап бутонът не изпраща заявка.')).toBeVisible();
+  await catalogExpect(page.getByRole('link', { name: /Как да стигнете/ }).first()).toHaveAttribute('href', /google\.com\/maps/);
+  await catalogExpect(page.getByText('Онлайн записването предстои. Дотогава се свържете с организацията.')).toBeVisible();
 }
 
 test('demo owner sees the published chess activity in administration and its public page', async () => {

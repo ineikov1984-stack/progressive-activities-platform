@@ -4,13 +4,13 @@ import * as presentation from '../src/features/catalog/public/presentation';
 describe('public visit offer presentation', () => {
   it.each([
     ['available', 'Има места'], ['limited', 'Остават 2 места'],
-    ['last_place', 'Последно място'], ['full', 'Няма свободни места'], ['closed', 'Записването е затворено'],
+    ['last_place', 'Последно свободно място'], ['full', 'Няма свободни места'], ['closed', 'Записването е затворено'],
   ] as const)('renders the server %s state without deriving it from capacity', (status, label) => {
     expect(presentation.availabilityLabel({ status, remaining_places: 2 })).toBe(label);
   });
 
   it('limits badges to availability and the server special offer, keeping audience separate', () => {
-    expect(presentation.publicBadges({ availability: { status: 'last_place', remaining_places: 1 }, special_offer: 'trial' })).toEqual(['Последно място', 'Пробно посещение']);
+    expect(presentation.publicBadges({ availability: { status: 'last_place', remaining_places: 1 }, special_offer: 'trial' })).toEqual(['Последно свободно място', 'Пробно занимание']);
     expect(presentation.publicBadges({ availability: { status: 'full', remaining_places: 0 }, special_offer: 'open_day' })).toEqual(['Няма свободни места', 'Отворени врати']);
     expect(presentation.publicBadges({ availability: { status: 'available', remaining_places: null }, special_offer: 'single' })).toEqual(['Има места', 'Еднократно посещение']);
     expect(presentation.audienceLabel({ audience: ' 6–8 г. · I–II клас ', age_label: '6–8 г.' })).toBe('6–8 г. · I–II клас');
@@ -31,25 +31,32 @@ describe('public visit offer presentation', () => {
     expect(presentation.optionalActivitySections({ about: ' ', benefits: [' ', ' Концентрация '], methodology: '\n', gallery: [{ url: ' ', alt: ' ' }], faq: [{ question: ' ', answer: 'Да' }, { question: 'Как?', answer: ' ' }] })).toEqual([{ key: 'benefits', title: 'Какво развива заниманието?', value: ['Концентрация'] }]);
   });
 
-  it.each([['apply', 'Има възможност за записване'], ['waitlist', 'Има списък на чакащи'], ['closed', 'Записването е затворено']] as const)('provides honest %s information without an enrollment href', (action, label) => {
+  it.each([['apply', 'Записването е отворено'], ['waitlist', 'Местата са заети — има списък на чакащите'], ['closed', 'Записването е затворено']] as const)('provides honest %s information without an enrollment href', (action, label) => {
     const result = presentation.offerAction(action);
     expect(result.label).toBe(label);
     expect(result).not.toHaveProperty('href');
   });
 
   it('requires an explicit choice for multiple offers without choosing an offer or session', () => {
-    expect(presentation.offerTarget(2)).toEqual({ href: '#visit-offers', label: 'Избери посещение' });
-    expect(presentation.offerTarget(1)).toEqual({ href: '#visit-offers', label: 'Виж посещението' });
-    expect(presentation.offerTarget(0)).toEqual({ href: '#groups', label: 'Виж графика' });
+    expect(presentation.offerTarget(2)).toEqual({ href: '#visit-offers', label: 'Изберете посещение' });
+    expect(presentation.offerTarget(1)).toEqual({ href: '#visit-offers', label: 'Вижте посещението' });
+    expect(presentation.offerTarget(0)).toEqual({ href: '#groups', label: 'Вижте графика' });
   });
 
-  it('formats actual local session time including timezone, without changing action eligibility', () => {
-    expect(presentation.visitSchedule({ starts_at: '2035-11-03T23:30:00Z', ends_at: '2035-11-04T00:30:00Z', timezone: 'Asia/Tokyo' })).toContain('08:30–09:30 · Asia/Tokyo');
+  it('formats actual local session time in the session timezone without showing its technical name', () => {
+    expect(presentation.visitSchedule({ starts_at: '2035-11-03T23:30:00Z', ends_at: '2035-11-04T00:30:00Z', timezone: 'Asia/Tokyo' })).toContain('08:30–09:30');
+    expect(presentation.visitSchedule({ starts_at: '2035-11-03T23:30:00Z', ends_at: '2035-11-04T00:30:00Z', timezone: 'Asia/Tokyo' })).not.toContain('Asia/Tokyo');
     expect(presentation.visitSchedule({ starts_at: '2035-11-03T23:30:00Z', ends_at: '2035-11-04T00:30:00Z', timezone: 'Asia/Tokyo' })).toContain('4 ноември');
   });
 
   it('shows every published weekly slot in practical group information', () => {
-    expect(presentation.groupScheduleLines({ frequency: 'weekly', timezone: 'Europe/Sofia', slots: [{ weekday: 1, starts_at: '16:00', duration_minutes: 60 }, { weekday: 4, starts_at: '17:30', duration_minutes: 90 }] })).toEqual(['Всеки понеделник · 16:00–17:00 · Europe/Sofia', 'Всеки четвъртък · 17:30–19:00 · Europe/Sofia']);
-    expect(presentation.groupScheduleLines(null)).toEqual(['Все още не е обявено']);
+    expect(presentation.groupScheduleLines({ frequency: 'weekly', timezone: 'Europe/Sofia', slots: [{ weekday: 1, starts_at: '16:00', duration_minutes: 60 }, { weekday: 4, starts_at: '17:30', duration_minutes: 90 }] })).toEqual(['Всеки понеделник · 16:00–17:00', 'Всеки четвъртък · 17:30–19:00']);
+    expect(presentation.groupScheduleLines(null)).toEqual(['Графикът още не е обявен']);
+  });
+
+  it('says the booking deadline with the right word for one hour and for none', () => {
+    expect(presentation.bookingDeadlineLabel(12)).toBe('До 12 часа преди началото');
+    expect(presentation.bookingDeadlineLabel(1)).toBe('До 1 час преди началото');
+    expect(presentation.bookingDeadlineLabel(0)).toBe('До началото');
   });
 });

@@ -20,7 +20,7 @@ export function ActivityPage({ response }: { response: PublicActivityResponse })
   const mode = sectionCount > 4 ? 'rich' : sectionCount > 0 ? 'balanced' : 'minimal';
 
   return <main className={styles.publicShell} style={accent} data-content-mode={mode}>
-    <nav className={styles.publicNav} aria-label="Път до дейността"><Link href={`/o/${organization.slug}`}>← Всички дейности</Link><span>{organization.public_name}</span></nav>
+    <nav className={styles.publicNav} aria-label="Навигация"><Link href={`/o/${organization.slug}`}>← Всички дейности</Link><span>{organization.public_name}</span></nav>
     <section className={styles.hero}>
       <div className={styles.heroCopy}>
         <p className={styles.eyebrow}>{activity.category}</p>
@@ -30,7 +30,6 @@ export function ActivityPage({ response }: { response: PublicActivityResponse })
         {meaningfulText(activity.summary) && <p className={styles.lead}>{activity.summary.trim()}</p>}
         <div className={styles.heroPrice}><small>ЦЕНА</small><strong>{cardPriceLabel(activity.price)}</strong></div>
         <div className={styles.heroActions}><a className={styles.primaryButton} href={target.href}>{target.label} <span aria-hidden="true">↓</span></a></div>
-        <p className={styles.heroNotice}>{enrollmentCta}.</p>
       </div>
       <div className={styles.heroVisual}><PublicMedia url={activity.hero_image_url} title={activity.title} category={activity.category} priority /></div>
     </section>
@@ -40,7 +39,7 @@ export function ActivityPage({ response }: { response: PublicActivityResponse })
     {sections.methodology && <ContentSection eyebrow="ПОДХОД" title="Как протичат заниманията?"><p>{sections.methodology}</p></ContentSection>}
 
     {offers.length > 0 && <section className={styles.contentSection} id="visit-offers" aria-labelledby="visit-offers-title" tabIndex={-1}>
-      <p className={styles.eyebrow}>ЕДНО МАЛКО НАЧАЛО</p><h2 id="visit-offers-title">Посещения и предложения</h2>
+      <p className={styles.eyebrow}>ЗА НАЧАЛО</p><h2 id="visit-offers-title">Пробни занимания и посещения</h2>
       <VisitOfferList offers={offers} groups={activity.groups} />
     </section>}
 
@@ -50,8 +49,8 @@ export function ActivityPage({ response }: { response: PublicActivityResponse })
         <div><h3>{group.name}</h3>{meaningfulText(group.age_label) && <p className={styles.audience}>{group.age_label!.trim()}</p>}{groupScheduleLines(group.schedule).map((line, i) => <p key={i}>{line}</p>)}<span className={styles.statusBadge} data-status={group.availability.status}>{availabilityLabel(group.availability)}</span></div>
         <PublicLocationDetails location={group.location} />
         <div className={styles.priceList}><small>ЦЕНА ЗА ГРУПАТА</small>{group.prices.length ? group.prices.map((price, i) => <div key={i}><strong>{cardPriceLabel(price)}</strong>{meaningfulText(price.terms) && <span>{price.terms!.trim()}</span>}</div>) : <span>Все още не е обявено</span>}</div>
-      </article>)}</div> : <p>График: Все още не е обявено</p>}
-      <div className={styles.enrollmentNotice}><strong>{enrollmentCta}</strong><p>На този етап бутонът не изпраща заявка.</p></div>
+      </article>)}</div> : <p>Графикът още не е обявен.</p>}
+      <div className={styles.enrollmentNotice}><strong>{enrollmentCta}</strong></div>
     </section>
 
     {(sections.participation_terms || terms.length > 0) && <ContentSection eyebrow="УСЛОВИЯ" title={`Условия за участие в „${activity.title}“`}>

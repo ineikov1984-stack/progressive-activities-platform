@@ -66,7 +66,7 @@ class AuthenticationTest extends TestCase
         $wrongPassword->assertUnprocessable();
         $unknownEmail->assertUnprocessable();
         $this->assertSame($wrongPassword->json(), $unknownEmail->json());
-        $this->assertSame('Невалиден имейл или парола.', $wrongPassword->json('message'));
+        $this->assertSame('Грешен имейл или парола.', $wrongPassword->json('message'));
     }
 
     public function test_inactive_user_cannot_log_in(): void
@@ -81,7 +81,7 @@ class AuthenticationTest extends TestCase
             'email' => 'inactive@example.test',
             'password' => 'Correct-horse-42',
         ])->assertUnprocessable()
-            ->assertJsonPath('message', 'Невалиден имейл или парола.');
+            ->assertJsonPath('message', 'Грешен имейл или парола.');
 
         $this->assertGuest();
     }

@@ -18,9 +18,29 @@ class EmailWordingTest extends TestCase
         ));
         $slot = fn (int $weekday, string $at = '17:30', int $minutes = 60): array => ['weekday' => $weekday, 'starts_at' => $at, 'duration_minutes' => $minutes];
         $this->assertSame('Всяка сряда · 17:30–18:30', BulgarianDates::weekly(['frequency' => 'weekly', 'slots' => [$slot(3)]]));
-        $this->assertSame('Всеки вторник · 16:00–16:45, четвъртък · 16:00–16:45', BulgarianDates::weekly(['frequency' => 'weekly', 'slots' => [$slot(2, '16:00', 45), $slot(4, '16:00', 45)]]));
         $this->assertSame('През седмица: събота · 10:00–11:30', BulgarianDates::weekly(['frequency' => 'biweekly', 'slots' => [$slot(6, '10:00', 90)]]));
         $this->assertSame('', BulgarianDates::weekly(null));
+    }
+
+    public function test_days_with_the_same_time_are_said_once_and_every_day_agrees_with_its_gender(): void
+    {
+        $slot = fn (int $weekday, string $at = '17:30', int $minutes = 60): array => ['weekday' => $weekday, 'starts_at' => $at, 'duration_minutes' => $minutes];
+        $weekly = fn (array ...$slots): string => BulgarianDates::weekly(['frequency' => 'weekly', 'slots' => array_values($slots)]);
+
+        $this->assertSame('Всеки вторник и четвъртък · 16:00–16:45', $weekly($slot(2, '16:00', 45), $slot(4, '16:00', 45)));
+        $this->assertSame('Всяка сряда и всеки петък · 17:30–18:30', $weekly($slot(3), $slot(5)));
+        $this->assertSame('Всяка събота и неделя · 10:00–11:30', $weekly($slot(6, '10:00', 90), $slot(7, '10:00', 90)));
+        $this->assertSame('Всеки понеделник, всяка сряда и всеки петък · 17:30–18:30', $weekly($slot(1), $slot(3), $slot(5)));
+        // Different times stay apart, each with its own word.
+        $this->assertSame('Всеки понеделник · 16:00–17:00, всяка сряда · 17:30–18:30', $weekly($slot(1, '16:00'), $slot(3)));
+        $this->assertSame('През седмица: вторник и четвъртък · 16:00–16:45', BulgarianDates::weekly(['frequency' => 'biweekly', 'slots' => [$slot(2, '16:00', 45), $slot(4, '16:00', 45)]]));
+    }
+
+    public function test_a_period_within_one_month_is_written_short(): void
+    {
+        $this->assertSame('3–10 ноември', BulgarianDates::period('2026-11-03', '2026-11-10'));
+        $this->assertSame('30 ноември – 6 декември', BulgarianDates::period('2026-11-30', '2026-12-06'));
+        $this->assertSame('3 ноември', BulgarianDates::period('2026-11-03', '2026-11-03'));
     }
 
     public function test_text_on_the_organizations_colour_stays_readable(): void

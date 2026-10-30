@@ -1,6 +1,8 @@
 import type { ActivitySections, Availability, PublicActivityCard, PublicLocation, PublicPrice, PublicSchedule, PublicVisitOffer } from './api';
 
 const weekdays = ['', 'понеделник', 'вторник', 'сряда', 'четвъртък', 'петък', 'събота', 'неделя'];
+/** Сряда, събота и неделя are feminine: „всяка сряда“, but „всеки вторник“. */
+const feminineWeekdays = new Set([3, 6, 7]);
 const unitLabels: Record<string, string> = { session: 'занимание', month: 'месец', period: 'период', package: 'пакет' };
 
 export function formatPublicPrice(price: Pick<PublicPrice, 'amount_cents' | 'currency' | 'unit'>): string {
@@ -11,8 +13,8 @@ export function formatPublicPrice(price: Pick<PublicPrice, 'amount_cents' | 'cur
 export function availabilityLabel(availability: Availability): string {
   switch (availability.status) {
     case 'available': return 'Има места';
-    case 'limited': return availability.remaining_places === null ? 'Ограничени места' : `Остават ${availability.remaining_places} места`;
-    case 'last_place': return 'Последно място';
+    case 'limited': return availability.remaining_places === null ? 'Малко свободни места' : `Остават ${availability.remaining_places} места`;
+    case 'last_place': return 'Последно свободно място';
     case 'full': return 'Няма свободни места';
     case 'closed': return 'Записването е затворено';
   }
@@ -22,7 +24,7 @@ export const meaningfulText = (value?: string | null): string => value?.trim() ?
 export const safeAccent = (value?: string | null): string => /^#[0-9a-f]{6}$/i.test(value ?? '') ? value! : '#2f8b6d';
 
 export function publicBadges(card: Pick<PublicActivityCard, 'availability' | 'special_offer'>): string[] {
-  const special = { trial: 'Пробно посещение', single: 'Еднократно посещение', open_day: 'Отворени врати' };
+  const special = { trial: 'Пробно занимание', single: 'Еднократно посещение', open_day: 'Отворени врати' };
   return [availabilityLabel(card.availability), ...(card.special_offer ? [special[card.special_offer]] : [])];
 }
 
@@ -41,11 +43,17 @@ export function visitPriceLabel(offer: Pick<PublicVisitOffer, 'fee_type' | 'amou
 }
 
 export function offerAction(action: PublicVisitOffer['action']): { label: string } {
-  return { label: { apply: 'Има възможност за записване', waitlist: 'Има списък на чакащи', closed: 'Записването е затворено' }[action] };
+  return { label: { apply: 'Записването е отворено', waitlist: 'Местата са заети — има списък на чакащите', closed: 'Записването е затворено' }[action] };
 }
 
 export function offerTarget(count: number): { href: string; label: string } {
-  return count === 0 ? { href: '#groups', label: 'Виж графика' } : { href: '#visit-offers', label: count === 1 ? 'Виж посещението' : 'Избери посещение' };
+  return count === 0 ? { href: '#groups', label: 'Вижте графика' } : { href: '#visit-offers', label: count === 1 ? 'Вижте посещението' : 'Изберете посещение' };
+}
+
+/** „До 12 часа преди началото“, „До 1 час преди началото“, „До началото“. */
+export function bookingDeadlineLabel(hours: number): string {
+  if (hours <= 0) return 'До началото';
+  return `До ${hours} ${hours === 1 ? 'час' : 'часа'} преди началото`;
 }
 
 export function localDayLabel(date: string): string {
@@ -58,7 +66,7 @@ export function visitSchedule(offer: Pick<PublicVisitOffer, 'starts_at' | 'ends_
   const time = new Intl.DateTimeFormat('bg-BG', { ...options, hour: '2-digit', minute: '2-digit' });
   const start = new Date(offer.starts_at); const end = new Date(offer.ends_at);
   const endDate = date.format(start) === date.format(end) ? '' : `${date.format(end)} · `;
-  return `${date.format(start)} · ${time.format(start)}–${endDate}${time.format(end)} · ${offer.timezone}`;
+  return `${date.format(start)} · ${time.format(start)}–${endDate}${time.format(end)}`;
 }
 
 function endTime(start: string, minutes: number): string {
@@ -69,15 +77,17 @@ function endTime(start: string, minutes: number): string {
 
 export function summarizePublicSchedule(schedule?: PublicSchedule | null): string {
   const slot = schedule?.slots?.[0];
-  if (!slot) return 'Все още не е обявено';
+  if (!slot) return 'Графикът още не е обявен';
   const day = weekdays[slot.weekday] ?? 'избран ден';
-  const frequency = schedule?.frequency === 'biweekly' ? `През седмица, ${day}` : `Всеки ${day}`;
+  const frequency = schedule?.frequency === 'biweekly'
+    ? `През седмица ${slot.weekday === 2 ? 'във' : 'в'} ${day}`
+    : `${feminineWeekdays.has(slot.weekday) ? 'Всяка' : 'Всеки'} ${day}`;
   return `${frequency} · ${slot.starts_at}–${endTime(slot.starts_at, slot.duration_minutes)}`;
 }
 
 export function groupScheduleLines(schedule?: PublicSchedule | null): string[] {
-  if (!schedule?.slots?.length) return ['Все още не е обявено'];
-  return schedule.slots.map((slot) => `${summarizePublicSchedule({ ...schedule, slots: [slot] })} · ${schedule.timezone}`);
+  if (!schedule?.slots?.length) return ['Графикът още не е обявен'];
+  return schedule.slots.map((slot) => summarizePublicSchedule({ ...schedule, slots: [slot] }));
 }
 
 export function optionalActivitySections(sections: ActivitySections): { key: keyof ActivitySections; title: string; value: unknown }[] {
@@ -104,7 +114,7 @@ export function cleanActivitySections(sections: ActivitySections): ActivitySecti
 
 export function navigationAction(location?: Pick<PublicLocation, 'type' | 'navigation_url'> | null): { label: string; href: string } | null {
   if (location?.type !== 'physical' || !meaningfulText(location.navigation_url)) return null;
-  return { label: 'Навигация до мястото', href: meaningfulText(location.navigation_url) };
+  return { label: 'Как да стигнете', href: meaningfulText(location.navigation_url) };
 }
 
-export const enrollmentCta = 'Записването ще бъде добавено в следващ етап';
+export const enrollmentCta = 'Онлайн записването предстои. Дотогава се свържете с организацията.';

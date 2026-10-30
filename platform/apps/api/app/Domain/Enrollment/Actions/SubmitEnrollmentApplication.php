@@ -52,9 +52,9 @@ final class SubmitEnrollmentApplication
                         $payload['visit_offer_id'] ?? null, $actor->id,
                     ])?->id;
                     if ($tenant === null) {
-                        throw ValidationException::withMessages([
-                            isset($payload['visit_offer_id']) ? 'visit_offer_id' : 'group_id' => 'Избраното предложение не е достъпно.',
-                        ]);
+                        throw ValidationException::withMessages(isset($payload['visit_offer_id'])
+                            ? ['visit_offer_id' => 'Това посещение вече не е достъпно.']
+                            : ['group_id' => 'Избраната група не е достъпна.']);
                     }
                     $this->context->select($tenant);
                     $this->setDatabaseTenant();
@@ -74,7 +74,7 @@ final class SubmitEnrollmentApplication
         $offerId = $payload['visit_offer_id'] ?? null;
         $selectedOffer = $offerId === null ? null : VisitOffer::query()->withoutGlobalScopes()->find($offerId);
         if ($offerId !== null && $selectedOffer === null) {
-            throw ValidationException::withMessages(['visit_offer_id' => 'Предложението не е достъпно.']);
+            throw ValidationException::withMessages(['visit_offer_id' => 'Това посещение вече не е достъпно.']);
         }
         $groupId = $selectedOffer !== null ? $selectedOffer->group_id : ($payload['group_id'] ?? null);
         $group = Group::query()->withoutGlobalScopes()->find($groupId);
@@ -119,7 +119,7 @@ final class SubmitEnrollmentApplication
 
                 $offer = $offerId === null ? null : VisitOffer::query()->whereKey($offerId)->lockForUpdate()->firstOrFail();
                 if ($offer !== null && isset($payload['price_option_id'])) {
-                    throw ValidationException::withMessages(['price_option_id' => 'Цената на посещение по предложение идва от предложението.']);
+                    throw ValidationException::withMessages(['price_option_id' => 'Цената на това посещение е определена от организацията.']);
                 }
                 // The group's own prices and the activity's for the ways of enrolling the group takes; a trial or single
                 // visit on chosen dates — the activity's price for it from step 6 (docs/product/visits.md, т. 8a.1).
@@ -129,7 +129,7 @@ final class SubmitEnrollmentApplication
                     throw ValidationException::withMessages(['price_option_id' => 'Избраната цена не е достъпна.']);
                 }
                 if ($offer !== null && $offer->type !== VisitOfferType::OpenDay && $price === null) {
-                    throw ValidationException::withMessages(['visit_offer_id' => 'Предложението не е достъпно.']);
+                    throw ValidationException::withMessages(['visit_offer_id' => 'Това посещение вече не е достъпно.']);
                 }
 
                 $scope = $offer !== null
@@ -249,7 +249,7 @@ final class SubmitEnrollmentApplication
         // The organization is in the public catalog (checked above), so its frame applies (т. 7.5).
         if ($terms === null || $terms->marketplaceViolations() !== []) {
             throw ValidationException::withMessages($offer
-                ? ['visit_offer_id' => 'Предложението не е достъпно.']
+                ? ['visit_offer_id' => 'Това посещение вече не е достъпно.']
                 : ['price_option_id' => 'Избраната цена не е достъпна.']);
         }
         if (($payload['accepted_terms_version'] ?? null) !== $terms->key()) {

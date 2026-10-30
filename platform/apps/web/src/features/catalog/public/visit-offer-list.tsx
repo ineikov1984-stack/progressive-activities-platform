@@ -3,13 +3,13 @@
 import { useId, useState } from 'react';
 import { describeTerms } from '../../payment-terms/rules';
 import type { PublicGroup, PublicLocation, PublicVisitOffer } from './api';
-import { availabilityLabel, enrollmentCta, meaningfulText, navigationAction, offerAction, visitPriceLabel, visitSchedule } from './presentation';
+import { availabilityLabel, bookingDeadlineLabel, meaningfulText, navigationAction, offerAction, visitPriceLabel, visitSchedule } from './presentation';
 import styles from './catalog.module.css';
 
 export function PublicLocationDetails({ location }: { location?: PublicLocation | null }) {
   const navigation = navigationAction(location);
   return <div className={styles.locationBlock}>
-    <small>ЛОКАЦИЯ</small><strong>{meaningfulText(location?.name) || 'Все още не е обявено'}</strong>
+    <small>МЯСТО</small><strong>{meaningfulText(location?.name) || 'Мястото ще бъде уточнено'}</strong>
     {location?.type === 'physical' && meaningfulText(location.address) && <span>{location.address!.trim()}</span>}
     {meaningfulText(location?.public_directions) && <span>{location!.public_directions!.trim()}</span>}
     {navigation && <a href={navigation.href} target="_blank" rel="noreferrer">{navigation.label} ↗</a>}
@@ -34,7 +34,7 @@ export function VisitOfferList({ offers, groups, headingLevel = 3 }: { offers: P
   const selected = offers.find((offer) => `${offer.visit_offer_id}:${offer.session_id}` === selectedKey);
   const Heading = headingLevel === 4 ? 'h4' : 'h3';
   return <div>
-    {multiple && <p className={styles.chooserHint}>Изберете конкретно посещение, за да прегледате възможността за участие. Изборът не запазва място.</p>}
+    {multiple && <p className={styles.chooserHint}>Изберете дата, за да видите подробностите. Изборът не запазва място.</p>}
     <fieldset className={styles.offerFieldset}>
       <legend className={styles.srOnly}>{multiple ? 'Изберете посещение' : 'Подробности за посещението'}</legend>
       <div className={styles.offerGrid}>{offers.map((offer, index) => {
@@ -54,20 +54,20 @@ export function VisitOfferList({ offers, groups, headingLevel = 3 }: { offers: P
           </div>
           <div className={styles.offerDetails}>
           <dl className={styles.offerTerms}>
-            <div><dt>Записване</dt><dd>До {offer.booking_deadline_hours} часа преди началото</dd></div>
+            <div><dt>Записване</dt><dd>{bookingDeadlineLabel(offer.booking_deadline_hours)}</dd></div>
           </dl>
           <VisitTerms terms={offer.payment_terms} same={index > 0 && offers[index - 1].payment_terms.version === offer.payment_terms.version} />
-          {offer.type === 'trial' && <p className={styles.trialRule}>Пробното е веднъж на дете за тази дейност в учебната година.</p>}
+          {offer.type === 'trial' && <p className={styles.trialRule}>Всяко дете може да посети едно пробно занимание по тази дейност през учебната година.</p>}
           {groups && <PublicLocationDetails location={group?.location} />}
           <p className={styles.actionState}>{state.label}</p>
           {multiple && offer.action !== 'closed' && <label className={styles.offerChoice}>
             <input type="radio" name={name} value={key} checked={selectedKey === key} onChange={() => setSelectedKey(key)} />
-            <span>Избирам: {offer.title}<small>{visitSchedule(offer)}</small></span>
+            <span>{offer.title}<small>{visitSchedule(offer)}</small></span>
           </label>}
           </div>
         </article>;
       })}</div>
     </fieldset>
-    {selected && <div role="status" className={styles.selectionNotice}><strong>Избрано посещение: {selected.title}</strong><p>{visitSchedule(selected)} · {visitPriceLabel(selected)}</p><p>{offerAction(selected.action).label}. {enrollmentCta}. Не е изпратена заявка и не е запазено място.</p></div>}
+    {selected && <div role="status" className={styles.selectionNotice}><strong>Избрано посещение: {selected.title}</strong><p>{visitSchedule(selected)} · {visitPriceLabel(selected)}</p><p>{offerAction(selected.action).label}. Засега изборът не изпраща заявка и не запазва място.</p></div>}
   </div>;
 }

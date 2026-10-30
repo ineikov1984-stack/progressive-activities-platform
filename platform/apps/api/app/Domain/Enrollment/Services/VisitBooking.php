@@ -62,7 +62,7 @@ final class VisitBooking
                     ->where('starts_at', '>=', $from->utc())->where('starts_at', '<', $until->utc()))
                 ->where($sameActivity)->exists();
         if ($used) {
-            throw ValidationException::withMessages(['trial_limit' => 'Пробното занимание за тази дейност вече е използвано тази учебна година.']);
+            throw ValidationException::withMessages(['trial_limit' => 'Детето вече има пробно занимание или заявка за пробно занимание по тази дейност през тази учебна година.']);
         }
     }
 }
