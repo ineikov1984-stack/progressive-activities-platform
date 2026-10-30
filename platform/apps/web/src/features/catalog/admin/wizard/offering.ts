@@ -19,7 +19,7 @@ export type OfferingDraft = {
 
 export const enrollmentModes = [
   { value: 'monthly', label: 'Месечен абонамент' },
-  { value: 'full_period', label: 'За целия период' },
+  { value: 'full_period', label: 'За определен период' },
   { value: 'package', label: 'Пакет посещения' },
   { value: 'single', label: 'Еднократно посещение' },
   { value: 'trial', label: 'Пробно занимание' },
@@ -35,7 +35,7 @@ export const priceUnits = [
 /** One sentence per way of enrolling, so people pick the right one without guessing. */
 export const modeHints: Record<string, string> = {
   monthly: 'Родителят плаща всеки месец, докато детето посещава.',
-  full_period: 'Една цена за целия период на групата — например учебен срок или сезон.',
+  full_period: 'Една цена за определен период — например учебен срок, модул или сезон.',
   package: 'Определен брой посещения за фиксирана цена. Напишете броя и срока в условията.',
   single: 'Плащане за едно посещение, без записване за период.',
   trial: 'Първо посещение, за да опитат. Безплатни пробни посещения се правят в стъпка 8.',

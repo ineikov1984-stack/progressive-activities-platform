@@ -200,9 +200,10 @@ final class PublicCatalogController extends Controller
     private function presentCard(Activity $activity, string $organizationSlug): array
     {
         $groups = $activity->offerings->flatMap->groups;
+        // "From" the cheapest price a parent can actually enroll with in some group.
         /** @var PriceOption|null $price */
-        $price = $groups->flatMap->priceOptions
-            ->concat($activity->offerings->flatMap->priceOptions)
+        $price = $activity->offerings->flatMap(fn (Offering $offering) => $offering->groups
+            ->flatMap(fn (Group $group) => $group->pricesForEnrollment($offering->priceOptions)))
             ->sortBy('amount_cents')->first();
         $rows = $this->availabilityPresenter->rows($activity->visitOffers, CarbonImmutable::now());
         $availability = $this->availabilityPresenter->cardAvailability($rows)
@@ -285,13 +286,12 @@ final class PublicCatalogController extends Controller
             'schedule' => $group->schedule_pattern,
             'availability' => $this->availabilityPresenter->groupAvailability(collect([$group]), CarbonImmutable::now()),
             'location' => $location ? $this->presentLocation($location) : null,
-            'prices' => $group->priceOptions
-                ->concat($publicOffering->priceOptions)
-                ->unique('id')->values()->map(fn (PriceOption $price) => [
-                    ...$this->presentPrice($price),
-                    // What the parent reads and accepts before applying (docs/product/payment-policies.md, т. 8).
-                    'payment_terms' => $this->paymentTerms->forPrice($price->enrollment_mode, $publicOffering->paymentTermsByKind())?->presentForParent(),
-                ])->all(),
+            // The ways of enrolling this group takes (its own prices win over the activity's).
+            'prices' => $group->pricesForEnrollment($publicOffering->priceOptions)->map(fn (PriceOption $price) => [
+                ...$this->presentPrice($price),
+                // What the parent reads and accepts before applying (docs/product/payment-policies.md, т. 8).
+                'payment_terms' => $this->paymentTerms->forPrice($price->enrollment_mode, $publicOffering->paymentTermsByKind())?->presentForParent(),
+            ])->all(),
             'sessions' => $group->sessions->map(fn (Session $session) => [
                 'id' => $session->id,
                 'starts_at' => $session->starts_at->toIso8601String(),

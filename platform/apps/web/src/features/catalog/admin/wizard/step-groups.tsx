@@ -14,9 +14,14 @@ const weekdays = ['Понеделник', 'Вторник', 'Сряда', 'Че�
 const durations = [30, 45, 60, 75, 90, 120];
 const defaultSlot = (): Slot => ({ weekday: 1, starts_at: '16:00', duration_minutes: 60 });
 
+/** One of the activity's ways of enrolling (step 6), named with its price. */
+export type GroupMode = { value: string; label: string; price: string };
+
 type Props = {
   organizationId: string;
   activityId: string;
+  /** The activity's ways of enrolling; a group takes some or all of them. */
+  modes: GroupMode[];
   ageLabel: string;
   groups: ActivityGroup[];
   locations: Location[];
@@ -26,13 +31,20 @@ type Props = {
   onGroup: (group: ActivityGroup) => void;
 };
 
-export function StepGroups({ organizationId, activityId, ageLabel, groups, locations, instructors, defaultLocationId, locked, onGroup }: Props) {
+function modesText(modes: GroupMode[], takes: string[] | null): string {
+  if (takes === null) return 'всички начини';
+  return modes.filter((mode) => takes.includes(mode.value)).map((mode) => mode.label.toLocaleLowerCase('bg')).join(', ') || 'няма избран начин';
+}
+
+export function StepGroups({ organizationId, activityId, modes, ageLabel, groups, locations, instructors, defaultLocationId, locked, onGroup }: Props) {
   const [editing, setEditing] = useState<ActivityGroup | 'new' | undefined>(groups.length === 0 ? 'new' : undefined);
   const [slots, setSlots] = useState<Slot[]>([defaultSlot()]);
   const [extraDates, setExtraDates] = useState<ExtraDate[]>([]);
   const [excluded, setExcluded] = useState('');
   const [frequency, setFrequency] = useState<'weekly' | 'biweekly'>('weekly');
   const [approval, setApproval] = useState<'manual' | 'automatic'>('manual');
+  // null — every way of enrolling the activity has, including ones added later.
+  const [takes, setTakes] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -44,6 +56,7 @@ export function StepGroups({ organizationId, activityId, ageLabel, groups, locat
     setExcluded(group?.schedule_pattern.excluded_dates?.join('\n') ?? '');
     setFrequency(group?.schedule_pattern.frequency ?? 'weekly');
     setApproval(group?.enrollment_approval_mode ?? 'manual');
+    setTakes(group?.enrollment_modes ?? null);
     setError(''); setNotice('');
   }
 
@@ -52,6 +65,8 @@ export function StepGroups({ organizationId, activityId, ageLabel, groups, locat
     const form = new FormData(event.currentTarget);
     const existing = editing && editing !== 'new' ? editing : undefined;
     const value = (name: string) => String(form.get(name) ?? '').trim();
+    const chosen = takes === null ? null : modes.map((mode) => mode.value).filter((mode) => takes.includes(mode));
+    if (chosen !== null && chosen.length === 0) { setError('Изберете поне един начин на записване за групата.'); return; }
     setBusy(true); setError(''); setNotice('');
     try {
       const group = await saveGroup(organizationId, activityId, {
@@ -63,6 +78,8 @@ export function StepGroups({ organizationId, activityId, ageLabel, groups, locat
         location_id: value('location_id') || null,
         instructor_ids: form.getAll('instructor_ids').map(String),
         enrollment_approval_mode: approval,
+        // All ways chosen means "all", so a way added later in step 6 applies to the group too.
+        enrollment_modes: chosen === null || chosen.length === modes.length ? null : chosen,
         schedule_pattern: buildSchedulePattern({ startDate: value('start_date'), endDate: value('end_date'), frequency, slots, excludedDates: excluded, addedDates: extraDates.filter((item) => item.date) }),
       }, existing?.id);
       onGroup(group);
@@ -89,6 +106,7 @@ export function StepGroups({ organizationId, activityId, ageLabel, groups, locat
               <span className={styles.muted}>{summarizeSchedule(group.schedule_pattern)}</span>
               <span className={styles.muted}>{group.sessions.length} занятия · до {group.capacity_max} деца{group.location_id ? ` · ${locations.find((item) => item.id === group.location_id)?.name ?? ''}` : ''}</span>
               <span className={styles.muted}>{group.enrollment_approval_mode === 'automatic' ? 'Заявките се одобряват автоматично, ако има място' : 'Заявките се одобряват от екипа'}</span>
+              {modes.length > 1 ? <span className={styles.muted}>Записване: {modesText(modes, group.enrollment_modes ?? null)}</span> : null}
               {group.conflicts.map((conflict, index) => {
                 const view = conflictPresentation(conflict);
                 return <span key={index} className={view.tone === 'danger' ? styles.conflictDanger : styles.conflictWarning}><Icon path={icons.warn} /><span><strong>{view.label}.</strong> {view.message}</span></span>;
@@ -142,6 +160,30 @@ export function StepGroups({ organizationId, activityId, ageLabel, groups, locat
             <Field id="g-min" label="Минимум деца"><input id="g-min" name="capacity_min" type="number" min={1} className={styles.input} defaultValue={current?.capacity_min ?? 1} /></Field>
             <Field id="g-max" label="Максимум деца"><input id="g-max" name="capacity_max" type="number" min={1} className={styles.input} required defaultValue={current?.capacity_max ?? 12} /></Field>
           </div>
+          {modes.length > 1 ? (
+            <fieldset className={styles.fieldset}>
+              <legend className={styles.label}>Начини на записване в тази група</legend>
+              <p className={styles.hint}>Например начинаещите — с месечен абонамент и еднократно посещение, а напредналите — само за определен период, за да не пропускат материал.</p>
+              <div className={styles.choiceGrid}>
+                {modes.map((mode) => {
+                  const on = takes === null || takes.includes(mode.value);
+                  return (
+                    <label key={mode.value} className={`${styles.choice} ${on ? styles.choiceOn : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={(event) => {
+                          const current = takes ?? modes.map((item) => item.value);
+                          setTakes(event.target.checked ? [...current, mode.value] : current.filter((item) => item !== mode.value));
+                        }}
+                      />
+                      <span className={styles.choiceText}><strong>{mode.label}</strong><span>{mode.price}</span></span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+          ) : null}
           <fieldset className={styles.fieldset}>
             <legend className={styles.label}>Как се одобряват заявките</legend>
             <div className={styles.choiceGrid}>

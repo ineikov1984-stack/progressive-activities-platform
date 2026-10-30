@@ -91,8 +91,9 @@ final class ChangeEnrollment
             $date = $this->day($effectiveDate, $this->timezone($target), 'effective_date');
             $this->assertNotStarted($source, $date, 'effective_date');
             $this->assertNotStarted($target, $date, 'effective_date');
-            $price = PriceOption::query()->whereKey($priceOptionId)->where('group_id', $target->id)
-                ->where('is_available', true)->whereIn('enrollment_mode', self::FULL_PERIOD_MODES)->first();
+            // The group's own prices and the activity's for the ways of enrolling the group takes.
+            $price = $target->pricesForEnrollment()->where('is_available', true)
+                ->whereIn('enrollment_mode', self::FULL_PERIOD_MODES)->firstWhere('id', $priceOptionId);
             if ($price === null) {
                 throw ValidationException::withMessages(['price_option_id' => 'Изберете цена на новата група.']);
             }
