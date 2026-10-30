@@ -37,7 +37,7 @@ class EmailWordingTest extends TestCase
 
     public function test_a_colour_that_is_not_a_colour_falls_back_to_the_platform(): void
     {
-        $brand = Branding::forOrganization('Клуб', null, 'http://localhost:8080');
+        $brand = Branding::forOrganization('Клуб', null, 'http://localhost:3000', true);
         $this->assertSame(Branding::PLATFORM, $brand->accent);
         $this->assertNull($brand->logoUrl);
     }

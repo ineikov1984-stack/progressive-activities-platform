@@ -2,6 +2,7 @@
 
 namespace App\Domain\Enrollment\Delivery;
 
+use App\Domain\Catalog\Actions\CatalogMediaStore;
 use App\Domain\Catalog\Models\OrganizationCatalogProfile;
 use App\Domain\Enrollment\Enums\EnrollmentApplicationStatus;
 use App\Domain\Enrollment\Models\Enrollment;
@@ -24,6 +25,7 @@ final class ComposeDelivery
     public function __construct(
         private readonly EnrollmentMessages $messages,
         private readonly EnrollmentCapacity $capacity,
+        private readonly CatalogMediaStore $media,
     ) {}
 
     /** @return array{to: string, mail: MailContent}|array{skip: string} */
@@ -31,7 +33,7 @@ final class ComposeDelivery
     {
         $event = EnrollmentEvent::query()->find($delivery->event_id);
         $application = $event?->application_id === null ? null : EnrollmentApplication::query()
-            ->with(['child', 'parent', 'group.offering.activity', 'group.offering.location', 'group.location'])
+            ->with(['child', 'parent', 'session', 'group.offering.activity', 'group.offering.location', 'group.location'])
             ->find($event->application_id);
         if ($event === null || $application === null) {
             return ['skip' => 'no_recipient'];
@@ -88,11 +90,17 @@ final class ComposeDelivery
         return ['to' => $to, 'mail' => $this->messages->parent($event, $application, $enrollment, [
             'organization' => $name,
             'platform' => $platform,
-            'brand' => Branding::forOrganization($name, $profile, (string) config('app.url')),
+            'brand' => Branding::forOrganization($name, $profile, (string) config('platform.web_url'), $this->logoStored($profile)),
             'replyTo' => $this->replyTo($application, $organization),
             'reason' => $transition?->public_reason,
             'byParent' => $transition !== null && $transition->actor_user_id === $application->parent_user_id,
         ])];
+    }
+
+    /** The logo's file and its record are on disk (read under the organization's context). */
+    private function logoStored(?OrganizationCatalogProfile $profile): bool
+    {
+        return is_string($profile?->logo_path) && $this->media->metadata($profile->logo_path) !== null;
     }
 
     /** The address is read now, from the account or the contact field; a confirmed account address only. */

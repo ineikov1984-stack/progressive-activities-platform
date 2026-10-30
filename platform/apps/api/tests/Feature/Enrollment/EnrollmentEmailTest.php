@@ -25,6 +25,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Group as TestGroup;
 use Symfony\Component\Mailer\Exception\TransportException;
 use Tests\TestCase;
@@ -247,8 +249,13 @@ class EnrollmentEmailTest extends TestCase
         $ended = $byTo->first(fn (array $sent): bool => str_starts_with($sent['mail']->envelope()->subject, 'Последен ден'))['mail'];
         // The parent knows what they wrote; it may be about health — it stays out of the email.
         $this->assertStringContainsString('30 ноември', $ended->render());
+        $this->assertStringContainsString('Последно занимание', $ended->render());
+        $this->assertStringContainsString('сряда, 25 ноември · 17:30–18:30', $ended->render());
         $this->assertStringNotContainsString('Местим се', $ended->render());
         $pause = $byTo->first(fn (array $sent): bool => str_starts_with($sent['mail']->envelope()->subject, 'Пауза'))['mail'];
+        foreach (['от понеделник, 9 ноември до неделя, 15 ноември', 'Връща се', 'сряда, 18 ноември · 17:30–18:30', 'Датите не са верни?'] as $expected) {
+            $this->assertStringContainsString($expected, $pause->render());
+        }
         $this->assertStringNotContainsString('health', $pause->render());
         $this->assertStringNotContainsString('Здравословни', $pause->render());
         $team = $byTo->firstWhere('to', 'info@zvezda.example')['mail'];
@@ -256,6 +263,80 @@ class EnrollmentEmailTest extends TestCase
             $this->assertStringNotContainsString($private, $team->render());
         }
         $this->assertStringContainsString('view=groups&amp;group='.$f['group']->id, $team->render());
+        foreach (['Всяка сряда · 17:30–18:30', 'понеделник, 30 ноември', 'се освобождава от 1 декември'] as $expected) {
+            $this->assertStringContainsString($expected, $team->render());
+        }
+    }
+
+    public function test_a_session_counted_again_says_when_and_where_and_tells_the_team_which_one(): void
+    {
+        $f = $this->fixture();
+        $enrollment = $this->withTenant($f['organization'], function () use ($f): Enrollment {
+            $f['application']->forceFill(['status' => 'approved'])->save();
+
+            return Enrollment::query()->create([
+                'application_id' => $f['application']->id, 'child_id' => $f['child']->id, 'group_id' => $f['group']->id,
+                'price_option_id' => $f['application']->price_option_id, 'scope' => 'full_period', 'status' => 'active', 'starts_on' => '2026-10-01',
+            ]);
+        });
+        $session = $this->withTenant($f['organization'], fn () => $f['group']->sessions()->orderBy('starts_at')->firstOrFail());
+        $byParent = $this->transition($f, $enrollment, $f['parent'], null);
+        $this->event($f, 'enrollment.session_restored', ['session_id' => $session->id], $enrollment, $byParent);
+
+        app(DeliverEvents::class)->run();
+
+        $byAddress = collect($this->mailer->sent)->keyBy('to');
+        $parent = $byAddress[$f['parent']->email]['mail'];
+        $this->assertSame('Заниманието на 4 ноември отново се брои за Ния', $parent->envelope()->subject);
+        foreach (['Очакваме Ния на заниманието.', 'сряда, 4 ноември · 17:30–18:30', 'Шахмат · Група 2', 'Зала 1, ул. Пример 1, София', 'Как да стигнете', 'Отговорете на този имейл'] as $expected) {
+            $this->assertStringContainsString($expected, $parent->render());
+        }
+        $team = $byAddress['info@zvezda.example']['mail'];
+        $this->assertSame('Родител отмени пропуска на 4 ноември в „Шахмат · Група 2“', $team->envelope()->subject);
+        foreach (['сряда, 4 ноември · 17:30–18:30', 'Всяка сряда · 17:30–18:30', 'Отвори групата'] as $expected) {
+            $this->assertStringContainsString($expected, $team->render());
+        }
+        foreach (['Ния', 'Мария'] as $private) {
+            $this->assertStringNotContainsString($private, $team->render());
+        }
+    }
+
+    public function test_the_logo_comes_through_the_web_address_and_only_when_its_file_is_stored(): void
+    {
+        Storage::fake('local');
+        config(['platform.web_url' => 'https://app.example']);
+        $f = $this->fixture();
+        $id = (string) Str::uuid();
+        $profile = $this->withTenant($f['organization'], function () use ($id): OrganizationCatalogProfile {
+            $profile = OrganizationCatalogProfile::query()->sole();
+            $profile->forceFill(['logo_path' => "catalog/{$id}.png"])->save();
+
+            return $profile;
+        });
+        $parentHtml = function (): string {
+            $sent = collect($this->mailer->sent)->firstWhere('to', 'maria@example.com');
+            $this->mailer->sent = [];
+
+            return $sent['mail']->render();
+        };
+
+        // The file is not on disk: the initials, never a broken picture.
+        $this->event($f, 'enrollment.application_submitted', ['status' => 'submitted']);
+        app(DeliverEvents::class)->run();
+        $html = $parentHtml();
+        $this->assertStringNotContainsString('<img', $html);
+        $this->assertStringContainsString('ШЗ', $html);
+
+        Storage::disk('local')->put("catalog/{$f['organization']->id}/{$id}.png", 'png');
+        Storage::disk('local')->put("catalog/{$f['organization']->id}/{$id}.json", json_encode([
+            'organization_id' => $f['organization']->id, 'activity_id' => null, 'path' => "catalog/{$id}.png", 'mime' => 'image/png',
+        ], JSON_THROW_ON_ERROR));
+        $this->event($f, 'enrollment.application_submitted', ['status' => 'submitted']);
+        app(DeliverEvents::class)->run();
+        $html = $parentHtml();
+        // Through the web app's public proxy, as on the public page — not the API's own address.
+        $this->assertStringContainsString('src="https://app.example/backend/api/v1/public/organizations/'.$profile->slug.'/media/'.$id.'.png"', $html);
+        $this->assertStringContainsString('alt="ШЗ"', $html);
     }
 
     public function test_the_teams_words_come_from_the_transition_not_from_the_application(): void
