@@ -65,7 +65,7 @@ class ParentVisitOfferApplicationTest extends TestCase
             [$org, , $group, $session, $offer, $child] = $this->visitFixture([], ['enrollment_approval_mode' => 'automatic']);
             $secondChild = $child->owner->children()->create(['first_name' => 'Ben', 'last_name' => 'Smith']);
             $price = $group->offering->priceOptions()->create(['group_id' => $group->id, 'enrollment_mode' => 'monthly', 'unit' => 'month', 'amount_cents' => 4500, 'currency' => 'EUR', 'is_available' => true]);
-            $payload = ['child_id' => $child->id, 'accepted_terms_version' => $mode === 'visit' ? 'v1' : $this->standardTermsVersion($price->id)];
+            $payload = ['child_id' => $child->id, 'accepted_terms_version' => $mode === 'visit' ? $this->visitTerms() : $this->standardTermsVersion($price->id)];
             $payload += $mode === 'visit'
                 ? ['visit_offer_id' => $offer->id, 'session_id' => $session->id]
                 : ['group_id' => $group->id, 'price_option_id' => $price->id];
@@ -87,7 +87,7 @@ class ParentVisitOfferApplicationTest extends TestCase
             $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'hidden-catalog')
                 ->postJson('/api/v1/parent/enrollment-applications', [
                     'child_id' => $child->id, 'visit_offer_id' => $hiddenOffer->id,
-                    'session_id' => $hiddenSession->id, 'accepted_terms_version' => 'v1',
+                    'session_id' => $hiddenSession->id, 'accepted_terms_version' => $this->visitTerms(),
                 ])->assertUnprocessable();
             $response = $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'pg-'.$mode)
                 ->postJson('/api/v1/parent/enrollment-applications', $payload)->assertCreated()
@@ -128,7 +128,7 @@ class ParentVisitOfferApplicationTest extends TestCase
     public function test_hidden_or_missing_catalog_rejects_new_applications_but_preserves_owned_replay(): void
     {
         [$org, , , $session, $offer, $child] = $this->visitFixture();
-        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1'];
+        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms()];
         $first = $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'published')->postJson('/api/v1/parent/enrollment-applications', $payload)->assertCreated();
         app(TenantContext::class)->select($org);
         OrganizationCatalogProfile::query()->update(['is_published' => false]);
@@ -143,7 +143,7 @@ class ParentVisitOfferApplicationTest extends TestCase
     public function test_approved_response_replay_and_owned_listing_expose_only_the_owned_enrollment_id(): void
     {
         [$org, , , $session, $offer, $child] = $this->visitFixture([], ['enrollment_approval_mode' => 'automatic']);
-        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1'];
+        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms()];
         $response = $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'discover')->postJson('/api/v1/parent/enrollment-applications', $payload)->assertCreated();
         $id = $response->json('application.enrollment_id');
         $this->assertNotNull($id);
@@ -157,36 +157,34 @@ class ParentVisitOfferApplicationTest extends TestCase
         $this->actingAs($foreignChild->owner)->postJson('/api/v1/parent/enrollment-applications', $payload)->assertNotFound()->assertDontSee($id);
     }
 
-    public function test_type_change_cannot_approve_two_submitted_trials_under_new_rules(): void
+    public function test_a_waiting_trial_holds_the_trial_and_a_type_change_blocks_approval(): void
     {
         [$org, , , $session, $offer, $child] = $this->visitFixture(['visit_limit' => 1]);
-        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1'];
+        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms()];
         $secondSession = $session->replicate();
         $secondSession->starts_at = $session->starts_at->addWeek();
         $secondSession->ends_at = $session->ends_at->addWeek();
         $secondSession->save();
         $offer->sessions()->attach($secondSession);
         $first = app(SubmitEnrollmentApplication::class)->handle($child->owner, $payload, 'first-trial');
-        $second = app(SubmitEnrollmentApplication::class)->handle($child->owner, [...$payload, 'session_id' => $secondSession->id], 'second-trial');
+        // One trial in the school year: a waiting one already counts (docs/product/visits.md, т. 8a.5).
+        try {
+            app(SubmitEnrollmentApplication::class)->handle($child->owner, [...$payload, 'session_id' => $secondSession->id], 'second-trial');
+            $this->fail('A second trial must be refused while the first one waits.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('trial_limit', $exception->errors());
+        }
         app(TenantContext::class)->select($org);
         $offer->update(['type' => 'single']);
-        foreach ([$first, $second] as $application) {
-            try {
-                app(ReviewEnrollmentApplication::class)->handle($child->owner, $application, 'approve', 1, null, null);
-                $this->fail('Review must reject a changed accepted offer type.');
-            } catch (ValidationException $exception) {
-                $this->assertArrayHasKey('visit_offer_id', $exception->errors());
-            }
+        try {
+            app(ReviewEnrollmentApplication::class)->handle($child->owner, $first, 'approve', 1, null, null);
+            $this->fail('Review must reject a changed accepted offer type.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('visit_offer_id', $exception->errors());
         }
         $this->assertDatabaseCount('enrollments', 0);
         $offer->update(['type' => 'trial']);
         app(ReviewEnrollmentApplication::class)->handle($child->owner, $first, 'approve', 1, null, null);
-        try {
-            app(ReviewEnrollmentApplication::class)->handle($child->owner, $second, 'approve', 1, null, null);
-            $this->fail('Restoring the type must still enforce the original trial rule.');
-        } catch (ValidationException $exception) {
-            $this->assertArrayHasKey('trial_limit', $exception->errors());
-        }
         $this->assertDatabaseCount('enrollments', 1);
     }
 
@@ -194,7 +192,7 @@ class ParentVisitOfferApplicationTest extends TestCase
     {
         [$org, , , $session, $offer, $child] = $this->visitFixture(['type' => 'single']);
         $application = app(SubmitEnrollmentApplication::class)->handle($child->owner, [
-            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1',
+            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms(),
         ], 'single-to-open-day');
         app(TenantContext::class)->select($org);
         $this->assertSame('single', $application->transitions()->firstOrFail()->metadata['visit_offer_type']);
@@ -206,7 +204,7 @@ class ParentVisitOfferApplicationTest extends TestCase
     public function test_manual_approval_enrollment_id_is_discoverable_by_owned_replay_and_listing(): void
     {
         [$org, , , $session, $offer, $child] = $this->visitFixture();
-        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1'];
+        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms()];
         $response = $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'manual-discover')
             ->postJson('/api/v1/parent/enrollment-applications', $payload)->assertCreated()->assertJsonPath('application.enrollment_id', null);
         app(TenantContext::class)->select($org);
@@ -218,45 +216,74 @@ class ParentVisitOfferApplicationTest extends TestCase
         $this->getJson('/api/v1/parent/enrollment-applications')->assertOk()->assertJsonPath('applications.0.enrollment_id', $id);
     }
 
-    public function test_offer_alone_derives_scope_tenant_group_price_and_immutable_terms(): void
+    public function test_offer_alone_derives_scope_tenant_group_step_six_price_and_a_copy_of_the_terms(): void
     {
-        [$organization, , $group, $session, $offer, $child] = $this->visitFixture([
-            'type' => 'single', 'title' => 'One chess class', 'fee_type' => 'paid',
-            'amount_cents' => 1250, 'fee_reason' => 'Materials', 'terms_version' => 'visit-v2',
-            'cancellation_policy' => 'Credit for another date', 'cancellation_outcome' => 'credit',
-        ]);
+        [$organization, , $group, $session, $offer, $child] = $this->visitFixture(['type' => 'single', 'title' => 'One chess class']);
+        $price = $group->offering->priceOptions()->whereNull('group_id')->where('enrollment_mode', 'single')->firstOrFail();
         $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id,
-            'accepted_terms_version' => 'visit-v2', 'group_id' => (string) Str::uuid(),
-            'price_option_id' => (string) Str::uuid(), 'scope' => 'full_period', 'amount_cents_snapshot' => 1];
+            'accepted_terms_version' => $this->visitTerms(), 'group_id' => (string) Str::uuid(),
+            'scope' => 'full_period', 'amount_cents_snapshot' => 1];
+        // The price comes from step 6, never from the request (docs/product/visits.md, т. 8a.4).
+        $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'offer-with-price')
+            ->postJson('/api/v1/parent/enrollment-applications', [...$payload, 'price_option_id' => $price->id])
+            ->assertUnprocessable()->assertJsonValidationErrors('price_option_id');
         $first = $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'offer-snapshot')
             ->postJson('/api/v1/parent/enrollment-applications', $payload)->assertCreated()
             ->assertJsonPath('application.organization_id', $organization->id)
             ->assertJsonPath('application.group_id', $group->id)
             ->assertJsonPath('application.scope', 'single')
-            ->assertJsonPath('application.price_option_id', null)
+            ->assertJsonPath('application.price_option_id', $price->id)
             ->assertJsonPath('application.visit_offer_id', $offer->id)
-            ->assertJsonPath('application.price.amount_cents', 1250)
+            ->assertJsonPath('application.price.amount_cents', 1500)
             ->assertJsonPath('application.price.currency', 'EUR')
             ->assertJsonPath('application.price.unit', 'session')
             ->assertJsonPath('application.visit_offer_title_snapshot', 'One chess class')
-            ->assertJsonPath('application.fee_reason_snapshot', 'Materials')
-            ->assertJsonPath('application.cancellation_policy_snapshot', 'Credit for another date');
+            ->assertJsonPath('application.fee_reason_snapshot', null)
+            ->assertJsonPath('application.cancellation_policy_snapshot', null)
+            ->assertJsonPath('application.payment_terms.billing_kind', 'visit');
         app(TenantContext::class)->select($organization);
-        $offer->update(['title' => 'Changed', 'amount_cents' => 2200, 'status' => 'closed']);
+        $offer->update(['title' => 'Changed', 'status' => 'closed']);
+        $price->update(['amount_cents' => 2200]);
         $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'offer-snapshot')
             ->postJson('/api/v1/parent/enrollment-applications', $payload)->assertOk()
             ->assertJsonPath('application.id', $first->json('application.id'))
-            ->assertJsonPath('application.price.amount_cents', 1250);
+            ->assertJsonPath('application.price.amount_cents', 1500);
         $this->assertDatabaseCount('enrollment_applications', 1);
         $transition = EnrollmentTransition::withoutGlobalScopes()->where('application_id', $first->json('application.id'))->firstOrFail();
-        $this->assertSame(24, $transition->metadata['cancellation_deadline_hours']);
-        $this->assertSame('credit', $transition->metadata['cancellation_outcome']);
+        $this->assertSame('single', $transition->metadata['visit_offer_type']);
+        $this->assertArrayHasKey('session_starts_at', $transition->metadata);
+        $this->assertArrayNotHasKey('cancellation_deadline_hours', $transition->metadata);
+    }
+
+    public function test_an_open_day_keeps_its_own_fee_and_a_trial_without_a_step_six_price_is_not_bookable(): void
+    {
+        [$organization, , $group, $session, $offer, $child] = $this->visitFixture([
+            'type' => 'open_day', 'fee_type' => 'paid', 'amount_cents' => 500, 'fee_reason' => 'Materials',
+        ]);
+        $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'open-day')
+            ->postJson('/api/v1/parent/enrollment-applications', [
+                'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms(),
+            ])->assertCreated()
+            ->assertJsonPath('application.scope', 'single')
+            ->assertJsonPath('application.price_option_id', null)
+            ->assertJsonPath('application.price.amount_cents', 500)
+            ->assertJsonPath('application.fee_reason_snapshot', 'Materials')
+            ->assertJsonPath('application.payment_terms.billing_kind', 'visit');
+
+        app(TenantContext::class)->select($organization);
+        $offer->update(['type' => 'trial', 'fee_type' => 'free', 'amount_cents' => 0, 'fee_reason' => null]);
+        $group->offering->priceOptions()->where('enrollment_mode', 'trial')->update(['is_available' => false]);
+        $other = $child->owner->children()->create(['first_name' => 'Ben', 'last_name' => 'Smith']);
+        $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'no-price')
+            ->postJson('/api/v1/parent/enrollment-applications', [
+                'child_id' => $other->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms(),
+            ])->assertUnprocessable()->assertJsonValidationErrors('visit_offer_id');
     }
 
     public function test_unpublished_unselected_foreign_and_deadline_sessions_are_rejected(): void
     {
         [$org, , $group, $session, $offer, $child] = $this->visitFixture(['terms_version' => 'v1']);
-        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1'];
+        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms()];
         foreach (['draft', 'closed', 'cancelled'] as $status) {
             app(TenantContext::class)->select($org);
             $offer->update(['status' => $status]);
@@ -280,7 +307,7 @@ class ParentVisitOfferApplicationTest extends TestCase
         [$org, , $group, $session, $offer, $child] = $this->visitFixture(['visit_limit' => 1], ['enrollment_approval_mode' => 'automatic']);
         $this->visitEnrollment($child, $group, $session, 'trial', $offer);
         $other = $child->owner->children()->create(['first_name' => 'Ben', 'last_name' => 'Smith']);
-        $payload = ['child_id' => $other->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1'];
+        $payload = ['child_id' => $other->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms()];
         $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'full-offer')->postJson('/api/v1/parent/enrollment-applications', $payload)->assertCreated()->assertJsonPath('application.status', 'waitlisted');
         app(TenantContext::class)->select($org);
         $offer->update(['waitlist_enabled' => false]);
@@ -305,7 +332,7 @@ class ParentVisitOfferApplicationTest extends TestCase
     {
         [$org, , $group, $session, $offer, $child] = $this->visitFixture();
         $application = app(SubmitEnrollmentApplication::class)->handle($child->owner, [
-            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1',
+            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms(),
         ], 'manual-eligibility');
         app(TenantContext::class)->select($org);
         $past = $session->replicate();
@@ -330,19 +357,20 @@ class ParentVisitOfferApplicationTest extends TestCase
 
     public function test_full_session_rejects_when_group_waitlist_is_disabled_and_stale_terms_are_rejected(): void
     {
-        [$org, , $group, $session, $offer, $child] = $this->visitFixture(['terms_version' => 'v2'], ['waitlist_enabled' => false], ['capacity' => 1]);
+        [$org, , $group, $session, $offer, $child] = $this->visitFixture([], ['waitlist_enabled' => false], ['capacity' => 1]);
         $other = $child->owner->children()->create(['first_name' => 'Ben', 'last_name' => 'Smith']);
         $this->visitEnrollment($other, $group, null, 'full_period', startsOn: '2026-11-01');
-        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1'];
+        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v2'];
+        // The parent accepts the activity's visit terms, not an offer's own version (т. 8a.3).
         $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'stale')->postJson('/api/v1/parent/enrollment-applications', $payload)->assertUnprocessable()->assertJsonValidationErrors('accepted_terms_version');
-        $this->withHeader('Idempotency-Key', 'full')->postJson('/api/v1/parent/enrollment-applications', [...$payload, 'accepted_terms_version' => 'v2'])->assertUnprocessable()->assertJsonValidationErrors('capacity');
+        $this->withHeader('Idempotency-Key', 'full')->postJson('/api/v1/parent/enrollment-applications', [...$payload, 'accepted_terms_version' => $this->visitTerms()])->assertUnprocessable()->assertJsonValidationErrors('capacity');
     }
 
     public function test_manual_eligibility_override_is_retained_when_capacity_requires_waitlisting(): void
     {
         [$org, , $group, $session, $offer, $child] = $this->visitFixture(['visit_limit' => 1]);
         $application = app(SubmitEnrollmentApplication::class)->handle($child->owner, [
-            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1',
+            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms(),
         ], 'waitlisted-override');
         app(TenantContext::class)->select($org);
         $past = $session->replicate();
@@ -364,7 +392,7 @@ class ParentVisitOfferApplicationTest extends TestCase
     {
         [$org, , , $session, $offer, $child] = $this->visitFixture();
         $application = app(SubmitEnrollmentApplication::class)->handle($child->owner, [
-            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1',
+            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms(),
         ], 'past-review');
         app(TenantContext::class)->select($org);
         $this->travelTo('2026-11-03T15:00:00Z');
@@ -377,9 +405,10 @@ class ParentVisitOfferApplicationTest extends TestCase
         $migration = require database_path('migrations/2026_10_28_000400_allow_offer_backed_enrollment_prices.php');
         $migration->down();
         $migration->up();
-        [$org, , , $session, $offer, $child] = $this->visitFixture();
+        // An open day keeps its own fee, so its application has no price option.
+        [$org, , , $session, $offer, $child] = $this->visitFixture(['type' => 'open_day']);
         $application = app(SubmitEnrollmentApplication::class)->handle($child->owner, [
-            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1',
+            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms(),
         ], 'migration');
         try {
             $migration->down();

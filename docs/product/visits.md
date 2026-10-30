@@ -136,7 +136,7 @@
    - отворени врати: `price_option_id = null`, сумата и валутата на предложението, единица `session`;
    - `price_option_id`, изпратен заедно с `visit_offer_id` → 422 (`prohibited`);
    - преход при подаване: `visit_offer_type` и `session_starts_at` (без `cancellation_*`).
-5. **Правила.** Пробното по предложение е под общото правило „веднъж в учебната година“ (`VisitBooking::assertTrialOnce`, т. 2.3) — при подаване и при одобрение (без самата заявка). Еднократните и отворените врати (`scope = single`) — без ограничение. Важи и за чакащите заявки отпреди. Изключение с основание няма. `trial_limit_per_academic_year`, `single_visit_limit`, `single_visit_window_days`, `unlimited_single_visits`, `no_show_trial_limit` вече не се четат.
+5. **Правила.** Пробното по предложение е под общото правило „веднъж в учебната година“ (`VisitBooking::assertTrialOnce`, т. 2.3) — при подаване и при одобрение (без самата заявка). Еднократните и отворените врати (`scope = single`) — без ограничение. Важи и за чакащите заявки отпреди. Изключение с основание остава само вътрешно — от служител с активно членство и записано основание (`VisitOfferEligibility`, както досега); родителят няма такава възможност и публичен маршрут за него няма. `trial_limit_per_academic_year`, `single_visit_limit`, `single_visit_window_days`, `unlimited_single_visits`, `no_show_trial_limit` вече не се четат.
 6. **Остават в предложението:** датите, местата (`visit_limit`), срокът за записване (`booking_deadline_hours`), списъкът на чакащите.
 7. **Резултат от посещението** (`RecordVisitOutcome`), по ред:
    1. има копие с `billing_kind = visit` → т. 5.4, `terms_key`;

@@ -114,7 +114,7 @@ final class ReviewEnrollmentApplication
                 if ($current->session === null || now()->greaterThanOrEqualTo($current->session->starts_at)) {
                     throw ValidationException::withMessages(['session_id' => 'Избраната дата вече е започнала.']);
                 }
-                $this->eligibility->assertEligible($current->child, $offer, $current->session, $actor, $eligibilityOverrideReason);
+                $this->eligibility->assertEligible($current->child, $offer, $current->session, $actor, $eligibilityOverrideReason, $current->id);
                 if ($eligibilityOverrideReason !== null) {
                     $this->eligibility->assertOverride($actor, $eligibilityOverrideReason);
                 }

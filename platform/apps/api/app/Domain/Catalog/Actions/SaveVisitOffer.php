@@ -20,22 +20,16 @@ use Illuminate\Validation\ValidationException;
 
 final readonly class SaveVisitOffer
 {
+    // The terms fields and the per-offer limits are retired (docs/product/visits.md, т. 8a.8): never written here.
     private const FIELDS = [
         'activity_id', 'group_id', 'type', 'title', 'description',
         'audience_age_label', 'audience_class_label', 'visit_limit', 'fee_type',
-        'amount_cents', 'currency', 'fee_reason', 'booking_deadline_hours',
-        'cancellation_deadline_hours', 'cancellation_policy', 'cancellation_outcome',
-        'terms_version', 'trial_limit_per_academic_year', 'single_visit_limit',
-        'single_visit_window_days', 'unlimited_single_visits', 'no_show_trial_limit',
-        'waitlist_enabled',
+        'amount_cents', 'currency', 'fee_reason', 'booking_deadline_hours', 'waitlist_enabled',
     ];
 
     private const PROTECTED_FIELDS = [
         'activity_id', 'group_id', 'type', 'visit_limit', 'fee_type', 'amount_cents',
-        'currency', 'fee_reason', 'booking_deadline_hours', 'cancellation_deadline_hours',
-        'cancellation_policy', 'cancellation_outcome', 'terms_version',
-        'trial_limit_per_academic_year', 'single_visit_limit', 'single_visit_window_days',
-        'unlimited_single_visits', 'no_show_trial_limit', 'waitlist_enabled',
+        'currency', 'fee_reason', 'booking_deadline_hours', 'waitlist_enabled',
     ];
 
     public function __construct(private TenantContext $context, private AuditRecorder $audit) {}
@@ -66,9 +60,6 @@ final readonly class SaveVisitOffer
             abort_unless($locked->version === $expectedVersion, 409, 'Visit offer version conflict.');
             abort_if($locked->status === VisitOfferStatus::Cancelled, 409, 'Cancelled offers cannot be edited.');
             $effective = array_merge($locked->only(self::FIELDS), $data);
-            if ($locked->status === VisitOfferStatus::Published && trim((string) $effective['terms_version']) === '') {
-                throw ValidationException::withMessages(['terms_version' => 'Публикуваното предложение изисква версия на условията.']);
-            }
             $this->checkRelations($effective, $data['session_ids'] ?? $locked->sessions()->pluck('activity_sessions.id')->all());
 
             $before = $locked->only(self::FIELDS);
@@ -108,12 +99,8 @@ final readonly class SaveVisitOffer
             $groups = [
                 [AuditAction::CatalogVisitOfferCapacityChanged, ['visit_limit']],
                 [AuditAction::CatalogVisitOfferPriceChanged, ['fee_type', 'amount_cents', 'currency', 'fee_reason']],
-                [AuditAction::CatalogVisitOfferDeadlineChanged, ['booking_deadline_hours', 'cancellation_deadline_hours']],
-                [AuditAction::CatalogVisitOfferPolicyChanged, [
-                    'cancellation_policy', 'cancellation_outcome', 'terms_version', 'trial_limit_per_academic_year',
-                    'single_visit_limit', 'single_visit_window_days', 'unlimited_single_visits',
-                    'no_show_trial_limit', 'waitlist_enabled',
-                ]],
+                [AuditAction::CatalogVisitOfferDeadlineChanged, ['booking_deadline_hours']],
+                [AuditAction::CatalogVisitOfferPolicyChanged, ['waitlist_enabled']],
             ];
             foreach ($groups as [$action, $fields]) {
                 $changes = [];

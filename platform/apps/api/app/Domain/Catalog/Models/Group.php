@@ -89,6 +89,17 @@ class Group extends Model
         return $own->concat($shared)->values();
     }
 
+    /**
+     * The available price for a way of enrolling whether or not the group takes it in every session: its own, else
+     * the activity's. A visit on chosen dates uses it (docs/product/visits.md, т. 8a.1).
+     */
+    public function availablePriceFor(string $mode): ?PriceOption
+    {
+        return $this->priceOptions->first(fn (PriceOption $price): bool => $price->is_available && $price->enrollment_mode === $mode)
+            ?? $this->offering->priceOptions->first(fn (PriceOption $price): bool => $price->group_id === null
+                && $price->is_available && $price->enrollment_mode === $mode);
+    }
+
     public function takesMode(string $mode): bool
     {
         return $this->enrollment_modes === null || in_array($mode, $this->enrollment_modes, true);

@@ -88,6 +88,15 @@ class VisitOffer extends Model
             ->withTimestamps();
     }
 
+    /**
+     * The price of a trial or a single visit on chosen dates — the activity's from step 6 (docs/product/visits.md,
+     * т. 8a.1). An open day keeps its own fee, so it has none. Null for a trial or single without such a price.
+     */
+    public function stepSixPrice(): ?PriceOption
+    {
+        return $this->type === VisitOfferType::OpenDay ? null : $this->group?->availablePriceFor($this->type->value);
+    }
+
     /** @return HasMany<EnrollmentApplication, $this> */
     public function applications(): HasMany
     {

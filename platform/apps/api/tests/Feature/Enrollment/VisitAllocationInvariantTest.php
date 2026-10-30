@@ -34,7 +34,7 @@ class VisitAllocationInvariantTest extends TestCase
         $other = $offer->replicate();
         $other->save();
         $other->sessions()->attach($session);
-        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1'];
+        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms()];
         app(SubmitEnrollmentApplication::class)->handle($child->owner, $payload, 'first');
         $payload['visit_offer_id'] = $competing ? $other->id : $offer->id;
         try {
@@ -52,7 +52,7 @@ class VisitAllocationInvariantTest extends TestCase
     {
         $this->travelTo('2026-10-28T10:00:00Z');
         [$org, , , $session, $offer, $child] = $this->visitFixture(['type' => 'open_day'], ['enrollment_approval_mode' => 'automatic']);
-        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1'];
+        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms()];
         $first = app(SubmitEnrollmentApplication::class)->handle($child->owner, $payload, 'first');
         app(TenantContext::class)->select($org);
         $other = $offer->replicate();
@@ -77,7 +77,7 @@ class VisitAllocationInvariantTest extends TestCase
     {
         $this->travelTo('2026-10-28T10:00:00Z');
         [$org, , , $session, $offer, $child] = $this->visitFixture([], ['enrollment_approval_mode' => 'automatic']);
-        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1'];
+        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms()];
         $first = app(SubmitEnrollmentApplication::class)->handle($child->owner, $payload, 'first');
         app(TenantContext::class)->select($org);
         app(RecordVisitOutcome::class)->handle($child->owner, $first->enrollment, 'cancelled_in_time', null);
@@ -91,7 +91,7 @@ class VisitAllocationInvariantTest extends TestCase
     {
         $this->travelTo('2026-10-28T10:00:00Z');
         [$org, , , $session, $offer, $child] = $this->visitFixture(['type' => 'single']);
-        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1'];
+        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms()];
         $first = app(SubmitEnrollmentApplication::class)->handle($child->owner, $payload, 'first');
         app(TenantContext::class)->select($org);
         $this->actingAs($child->owner)->postJson('/api/v1/parent/enrollment-applications/'.$first->id.'/withdraw', ['version' => 1])->assertOk();
@@ -161,7 +161,8 @@ class VisitAllocationInvariantTest extends TestCase
                 try {
                     $actor = \App\Domain\Identity\Models\User::findOrFail($argv[1]);
                     $application = app(\App\Domain\Enrollment\Actions\SubmitEnrollmentApplication::class)->handle($actor, [
-                        'child_id' => $argv[2], 'visit_offer_id' => $argv[3], 'session_id' => $argv[4], 'accepted_terms_version' => 'v1',
+                        'child_id' => $argv[2], 'visit_offer_id' => $argv[3], 'session_id' => $argv[4],
+                        'accepted_terms_version' => \App\Domain\PaymentTerms\Services\AppliedTerms::standard(\App\Domain\PaymentTerms\Enums\BillingKind::Visit)->key(),
                     ], $argv[5]);
                     echo $application->status->value;
                 } catch (\Illuminate\Validation\ValidationException $exception) {

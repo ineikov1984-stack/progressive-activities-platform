@@ -44,6 +44,13 @@ class VisitFromPriceSchemaTest extends TestCase
             foreach (['trial', 'single'] as $scope) {
                 $this->refused($pdo, fn () => $this->insertApplication($pdo, $ids, $scope, null), 'P0001');
             }
+            // …with an offer too (visits on chosen dates, т. 8a.11).
+            $offer = (string) Str::uuid();
+            $pdo->prepare('INSERT INTO visit_offers (id, organization_id, activity_id, group_id, type, status, title, visit_limit, created_at, updated_at) '
+                ."VALUES (:id, :organization, :activity, :group, 'trial', 'draft', 'Пробно', 3, NOW(), NOW())")
+                ->execute(['id' => $offer, 'organization' => $ids['organization'], 'activity' => $ids['activity'], 'group' => $ids['group']]);
+            $this->refused($pdo, fn () => $this->insertApplication($pdo, $ids, 'trial', null, $offer), 'P0001');
+            $this->insertApplication($pdo, $ids, 'trial', '{"key": "standard-visit", "billing_kind": "visit"}', $offer);
             $this->insertApplication($pdo, $ids, 'single', '{"key": "standard-visit", "billing_kind": "visit"}');
             // …while a period enrollment without a copy is still possible (applications from before the terms).
             $this->insertApplication($pdo, $ids, 'full_period', null);
@@ -83,7 +90,7 @@ class VisitFromPriceSchemaTest extends TestCase
         $pdo->prepare("SELECT set_config('app.current_organization_id', :id, true)")->execute(['id' => $organization]);
     }
 
-    /** @return array{organization: string, group: string, session: string, parent: string, child: string} */
+    /** @return array{organization: string, activity: string, group: string, session: string, parent: string, child: string} */
     private function organization(\PDO $pdo): array
     {
         $ids = array_map(fn () => (string) Str::uuid(), array_flip(['organization', 'activity', 'offering', 'group', 'session', 'parent', 'child']));
@@ -108,19 +115,19 @@ class VisitFromPriceSchemaTest extends TestCase
         return $ids;
     }
 
-    /** @param array{organization: string, group: string, session: string, parent: string, child: string} $ids */
-    private function insertApplication(\PDO $pdo, array $ids, string $scope, ?string $snapshot): string
+    /** @param array{organization: string, activity: string, group: string, session: string, parent: string, child: string} $ids */
+    private function insertApplication(\PDO $pdo, array $ids, string $scope, ?string $snapshot, ?string $offer = null): string
     {
         $id = (string) Str::uuid();
-        $pdo->prepare('INSERT INTO enrollment_applications (id, organization_id, parent_user_id, child_id, group_id, session_id, scope, source, '
-            .'status, idempotency_key, accepted_terms_version, accepted_terms_at, amount_cents_snapshot, unit_snapshot, payment_terms_snapshot, '
-            .'created_at, updated_at) '
-            ."VALUES (:id, :organization, :parent, :child, :group, :session, :scope, 'organization_catalog', 'submitted', :key, 'v', NOW(), 0, "
-            ."'session', CAST(:snapshot AS jsonb), NOW(), NOW())")
+        $pdo->prepare('INSERT INTO enrollment_applications (id, organization_id, parent_user_id, child_id, group_id, session_id, visit_offer_id, '
+            .'scope, source, status, idempotency_key, accepted_terms_version, accepted_terms_at, amount_cents_snapshot, unit_snapshot, '
+            .'payment_terms_snapshot, created_at, updated_at) '
+            ."VALUES (:id, :organization, :parent, :child, :group, :session, :offer, :scope, 'organization_catalog', 'submitted', :key, 'v', "
+            ."NOW(), 0, 'session', CAST(:snapshot AS jsonb), NOW(), NOW())")
             ->execute([
                 'id' => $id, 'organization' => $ids['organization'], 'parent' => $ids['parent'], 'child' => $ids['child'],
-                'group' => $ids['group'], 'session' => $scope === 'full_period' ? null : $ids['session'], 'scope' => $scope,
-                'key' => 'visit-'.$id, 'snapshot' => $snapshot,
+                'group' => $ids['group'], 'session' => $scope === 'full_period' ? null : $ids['session'], 'offer' => $offer,
+                'scope' => $scope, 'key' => 'visit-'.$id, 'snapshot' => $snapshot,
             ]);
 
         return $id;

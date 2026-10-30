@@ -29,15 +29,15 @@ class VisitOutcomeTest extends TestCase
         $this->travelTo('2026-10-28T10:00:00Z');
     }
 
-    public function test_timely_cancellation_uses_accepted_deadline_releases_place_and_records_policy_without_refund(): void
+    public function test_timely_cancellation_follows_the_copy_of_the_terms_releases_place_and_refunds_nothing(): void
     {
-        [$org, , , $session, $offer, $child] = $this->visitFixture([
-            'visit_limit' => 1, 'cancellation_outcome' => 'refund', 'cancellation_policy' => 'Refund eligible',
-        ], ['enrollment_approval_mode' => 'automatic']);
+        [$org, , , $session, $offer, $child] = $this->visitFixture(['visit_limit' => 1], ['enrollment_approval_mode' => 'automatic']);
         $application = app(SubmitEnrollmentApplication::class)->handle($child->owner, [
-            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => 'v1',
+            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $session->id, 'accepted_terms_version' => $this->visitTerms(),
         ], 'cancel');
         app(TenantContext::class)->select($org);
+        // The offer's own columns no longer decide (docs/product/visits.md, т. 8a.7): the standard visit terms are free
+        // until 24 hours before the start.
         $offer->update(['cancellation_deadline_hours' => 72, 'cancellation_outcome' => 'non_refundable']);
         $enrollment = $application->enrollment;
         $this->travelTo('2026-11-02T14:00:00Z');
@@ -45,7 +45,8 @@ class VisitOutcomeTest extends TestCase
         $this->assertSame('cancelled', $enrollment->refresh()->status->value);
         $this->assertSame(1, app(EnrollmentCapacity::class)->remainingForOffer($offer, $session));
         $this->assertSame('cancelled_in_time', $transition->metadata['outcome']);
-        $this->assertSame('refund', $transition->metadata['cancellation_outcome']);
+        $this->assertSame($this->visitTerms(), $transition->metadata['terms_key']);
+        $this->assertArrayNotHasKey('cancellation_outcome', $transition->metadata);
         $this->assertFalse($transition->metadata['refund_performed']);
         $this->assertSame('Cannot attend', $transition->public_reason);
         $event = EnrollmentEvent::where('type', 'enrollment.visit_outcome_recorded')->firstOrFail();
@@ -72,26 +73,25 @@ class VisitOutcomeTest extends TestCase
         $this->assertDatabaseHas('enrollment_transitions', ['enrollment_id' => $enrollment->id, 'to_status' => 'ended']);
     }
 
-    public function test_two_no_shows_block_trials_only_in_the_same_organization_and_staff_override_requires_a_reason(): void
+    public function test_a_used_trial_blocks_another_in_the_activity_and_staff_override_requires_a_reason(): void
     {
-        [$org, , $group, $session, $offer, $child] = $this->visitFixture(['trial_limit_per_academic_year' => 10, 'no_show_trial_limit' => 2]);
+        [$org, , $group, $session, $offer, $child] = $this->visitFixture();
         $staff = User::factory()->create();
         OrganizationMembership::create(['organization_id' => $org->id, 'user_id' => $staff->id, 'role' => 'coordinator', 'status' => 'active']);
         $this->travelTo('2026-11-03T15:00:00Z');
-        for ($i = 0; $i < 2; $i++) {
-            $enrollment = $this->visitEnrollment($child, $group, $session, 'trial', $offer);
-            app(RecordVisitOutcome::class)->handle($staff, $enrollment, 'no_show', 'Absent');
-            $this->assertSame('ended', $enrollment->refresh()->status->value);
-        }
+        $enrollment = $this->visitEnrollment($child, $group, $session, 'trial', $offer);
+        app(RecordVisitOutcome::class)->handle($staff, $enrollment, 'no_show', 'Absent');
+        $this->assertSame('ended', $enrollment->refresh()->status->value);
         $next = $group->sessions()->create(['starts_at' => '2026-11-10T14:00:00Z', 'ends_at' => '2026-11-10T15:00:00Z', 'status' => 'scheduled']);
         $offer->sessions()->attach($next->id);
-        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $next->id, 'accepted_terms_version' => 'v1'];
+        $payload = ['child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $next->id, 'accepted_terms_version' => $this->visitTerms()];
+        // One trial in the school year, by any route (docs/product/visits.md, т. 8a.5).
         foreach ([[$child->owner, 'Parent override'], [$staff, '   '], [null, null]] as [$actor, $reason]) {
             try {
                 app(SubmitEnrollmentApplication::class)->handle($child->owner, $payload, 'denied-'.uniqid(), $actor, $reason);
-                $this->fail('Two no-shows require an authorized, reasoned override.');
+                $this->fail('A used trial requires an authorized, reasoned override.');
             } catch (ValidationException $exception) {
-                $this->assertArrayHasKey('no_show_limit', $exception->errors());
+                $this->assertArrayHasKey('trial_limit', $exception->errors());
             }
         }
         $allowed = app(SubmitEnrollmentApplication::class)->handle($child->owner, $payload, 'reasoned', $staff, 'Transport issue resolved');
@@ -100,7 +100,8 @@ class VisitOutcomeTest extends TestCase
         $this->assertSame('Transport issue resolved', $history->metadata['eligibility_override_reason']);
         $this->assertSame($staff->id, $history->actor_user_id);
 
-        [, , , $foreignSession, $foreignOffer] = $this->visitFixture(['no_show_trial_limit' => 2], [], ['starts_at' => '2026-11-12T14:00:00Z', 'ends_at' => '2026-11-12T15:00:00Z']);
+        // Another organization's activity is a trial of its own.
+        [, , , $foreignSession, $foreignOffer] = $this->visitFixture([], [], ['starts_at' => '2026-11-12T14:00:00Z', 'ends_at' => '2026-11-12T15:00:00Z']);
         $foreign = app(SubmitEnrollmentApplication::class)->handle($child->owner, [...$payload,
             'visit_offer_id' => $foreignOffer->id, 'session_id' => $foreignSession->id,
         ], 'other-organization');
@@ -109,7 +110,7 @@ class VisitOutcomeTest extends TestCase
 
     public function test_parent_cannot_cancel_after_start_and_staff_no_show_still_counts(): void
     {
-        [$org, , $group, $session, $offer, $child] = $this->visitFixture(['trial_limit_per_academic_year' => 10, 'no_show_trial_limit' => 1]);
+        [$org, , $group, $session, $offer, $child] = $this->visitFixture();
         $enrollment = $this->visitEnrollment($child, $group, $session, 'trial', $offer);
         $staff = User::factory()->create();
         OrganizationMembership::create(['organization_id' => $org->id, 'user_id' => $staff->id, 'role' => 'coordinator', 'status' => 'active']);
@@ -125,8 +126,8 @@ class VisitOutcomeTest extends TestCase
         $next = $group->sessions()->create(['starts_at' => '2026-11-10T14:00:00Z', 'ends_at' => '2026-11-10T15:00:00Z', 'status' => 'scheduled']);
         $offer->sessions()->attach($next->id);
         $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'after-no-show')->postJson('/api/v1/parent/enrollment-applications', [
-            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $next->id, 'accepted_terms_version' => 'v1',
-        ])->assertUnprocessable()->assertJsonValidationErrors('no_show_limit');
+            'child_id' => $child->id, 'visit_offer_id' => $offer->id, 'session_id' => $next->id, 'accepted_terms_version' => $this->visitTerms(),
+        ])->assertUnprocessable()->assertJsonValidationErrors('trial_limit');
     }
 
     public function test_unrelated_parent_and_foreign_staff_cannot_record_outcomes(): void
