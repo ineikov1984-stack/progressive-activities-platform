@@ -21,6 +21,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group as TestGroup;
 use Tests\Support\TeamRightsFixture;
 use Tests\TestCase;
@@ -97,6 +98,78 @@ class TeamAssignmentRightsTest extends TestCase
         $mine = (string) $this->profileOf($f['organization'], $this->personFor($f['organization'], $coordinator, teaches: true))->id;
         $this->signInTo($coordinator, $f['organization'])
             ->postJson("/api/v1/catalog/groups/{$f['thursday']->id}/assignments", ['instructor_profile_id' => $mine])->assertCreated();
+    }
+
+    /** @return array<string, array{string}> */
+    public static function ownAssignmentEnds(): array
+    {
+        return ['extend' => ['2026-11-20'], 'shorten' => ['2026-11-05']];
+    }
+
+    #[DataProvider('ownAssignmentEnds')]
+    public function test_an_added_assignment_right_cannot_change_ones_own_assignment_end(string $endsOn): void
+    {
+        $f = $this->rightsFixture();
+        $teacher = $this->memberOf($f['organization'], 'instructor');
+        $person = $this->personFor($f['organization'], $teacher, teaches: true);
+        $own = (string) $this->profileOf($f['organization'], $person)->id;
+        $this->inTenant($f['organization'], function () use ($f, $person): void {
+            $person->forceFill(['access_scope' => 'all'])->save();
+            StaffGrant::query()->create([
+                'staff_member_id' => $person->id, 'ability' => 'team.assign',
+                'granted_by' => $f['owner']->id, 'granted_at' => now()->subDay(),
+            ]);
+        });
+        ['group' => $group, 'session' => $session] = $this->draft($f, $own);
+        $this->inTenant($f['organization'], fn () => Group::query()->findOrFail($group)->assignments()
+            ->updateExistingPivot($own, ['starts_on' => '2026-11-01', 'ends_on' => '2026-11-10']));
+        $auditCount = DB::table('audit_events')->count();
+
+        $this->signInTo($teacher, $f['organization'])
+            ->postJson("/api/v1/catalog/groups/{$group}/assignments/{$own}/end", ['ends_on' => $endsOn, 'version' => 1])
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('activity_group_instructors', [
+            'group_id' => $group, 'instructor_profile_id' => $own, 'ends_on' => '2026-11-10', 'version' => 1,
+        ]);
+        $this->assertDatabaseHas('activity_groups', ['id' => $group, 'version' => 1]);
+        $this->assertDatabaseHas('activity_session_instructors', ['session_id' => $session, 'instructor_profile_id' => $own]);
+        $this->assertSame($auditCount, DB::table('audit_events')->count());
+    }
+
+    public function test_an_added_assignment_right_can_end_another_teachers_assignment(): void
+    {
+        $f = $this->rightsFixture();
+        [$editor] = $this->viewerWith($f, ['team.assign'], teaches: true);
+        $other = $this->teacherProfile($f, 'Друг преподавател');
+        ['group' => $group, 'session' => $session] = $this->draft($f, $other);
+
+        $this->signInTo($editor, $f['organization'])
+            ->postJson("/api/v1/catalog/groups/{$group}/assignments/{$other}/end", ['ends_on' => '2026-11-05', 'version' => 1])
+            ->assertOk();
+
+        $this->assertDatabaseHas('activity_group_instructors', [
+            'group_id' => $group, 'instructor_profile_id' => $other, 'ends_on' => '2026-11-05', 'version' => 2,
+        ]);
+        $this->assertDatabaseMissing('activity_session_instructors', ['session_id' => $session, 'instructor_profile_id' => $other]);
+    }
+
+    public function test_a_role_with_assignment_rights_can_change_its_own_assignment_end(): void
+    {
+        $f = $this->rightsFixture();
+        $coordinator = $this->memberOf($f['organization'], 'coordinator');
+        $own = (string) $this->profileOf($f['organization'], $this->personFor($f['organization'], $coordinator, teaches: true))->id;
+        ['group' => $group] = $this->draft($f, $own);
+        $this->inTenant($f['organization'], fn () => Group::query()->findOrFail($group)->assignments()
+            ->updateExistingPivot($own, ['ends_on' => '2026-11-10']));
+
+        $this->signInTo($coordinator, $f['organization'])
+            ->postJson("/api/v1/catalog/groups/{$group}/assignments/{$own}/end", ['ends_on' => '2026-11-20', 'version' => 1])
+            ->assertOk();
+
+        $this->assertDatabaseHas('activity_group_instructors', [
+            'group_id' => $group, 'instructor_profile_id' => $own, 'ends_on' => '2026-11-20', 'version' => 2,
+        ]);
     }
 
     /**
