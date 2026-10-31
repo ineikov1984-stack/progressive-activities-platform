@@ -18,7 +18,7 @@
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
 | Учителят обогатява своите дейности — спецификация (DECISIONS 31.10.2026) | Claude | `claude/teacher-content-spec` | `docs/product/teacher-content.md`, `published-activity-changes.md`, `team-rights.md`, `docs/process/DECISIONS.md` | ревю на архитект — поправено → PR 0, 1a, 1b, 2 (среда, изчистени снимки, предложения, уеб) |
-| „Моят профил“ (DECISIONS 31.10.2026 „Моят профил и заместник“) | Claude | `claude/my-profile` | API: `AuthController::updateContact`, `UpdateOwnStaffContact`, `OrganizationContextController` (`grants`); уеб: `features/me`, `app/dashboard/me`, `features/dashboard` (обвивка, меню от аватара, „Начало“); e2e `stack-smoke` | код и тестове → CI → проверка на 390/768/1440 px |
+| Екип — последен вход, „Намерени: N“, филтър по няколко роли (DECISIONS 31.10.2026) | Claude | `claude/team-last-login` | **горещ:** `database/migrations/**` (`2026_10_31_141500_add_last_login_to_organization_memberships`); `ResolveTenant`, `AuthController::login`, `OrganizationContextController::select`, `TeamController::present`, `MembershipActivity`; уеб: `features/team` (списък, профил, `presentation.ts`) | код и тестове → CI → проверка на 390/768/1440 px |
 
 ## Опашка (по приоритет)
 
