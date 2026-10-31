@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadDashboard, loadWorkspaceOverview } from '../src/features/dashboard/api';
+import { loadDashboard, loadOrganizationAccess, loadWorkspaceOverview, withAccess } from '../src/features/dashboard/api';
 
 const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -72,5 +72,21 @@ describe('dashboard API', () => {
 
     expect(overview).toEqual({ invitations: [], auditEvents: [] });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it('adds the added rights to the menu and the buttons, under the names the screens use, and never takes any away', async () => {
+    const organization = { id: 'org-1', name: 'Школа', slug: 'school', status: 'active', role: 'viewer', permissions: ['view', 'enrollment.view', 'team.view'] };
+    const access = { role: 'viewer', scope: 'groups', abilities: ['enrollment.enroll', 'enrollment.view', 'contacts.view'], groups: ['g-1'], activities: [] };
+    const merged = withAccess(organization, access);
+    expect(merged.permissions).toEqual(expect.arrayContaining(['view', 'team.view', 'enrollment.enroll', 'enrollment.manage', 'contacts.view', 'enrollment.contacts']));
+    expect(merged.access).toEqual(access);
+    expect(withAccess(organization, { ...access, abilities: [] }).permissions).toEqual(organization.permissions);
+    expect(withAccess(organization, null)).toBe(organization);
+
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({ organization: {}, access })).mockResolvedValueOnce(jsonResponse({ message: 'Server Error' }, 500));
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await loadOrganizationAccess('org-1')).toEqual(access);
+    expect(fetchMock).toHaveBeenCalledWith('/backend/api/v1/context/organization', expect.objectContaining({ headers: expect.objectContaining({ 'X-Organization-Id': 'org-1' }) }));
+    // When it cannot be read, the role's rights stay.
+    expect(await loadOrganizationAccess('org-1')).toBeNull();
   });
 });

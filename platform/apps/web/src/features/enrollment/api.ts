@@ -34,6 +34,9 @@ export type RosterEnrollment = {
   paused_today?: boolean;
   pauses?: RosterPause[];
   skipped_sessions?: { session_id: string; starts_at: string | null }[];
+  /** A teacher with "Вижда телефона и имейла" added in the group may show the parent's contact on request. */
+  can_reveal_contact?: boolean;
+  enrollment_id?: string;
 };
 export type GroupRoster = {
   group: { id: string; name: string; activity_id: string | null; activity_title: string | null; capacity_max: number | null; enrolled_for_period: number; remaining: number | null; waitlist_enabled: boolean; enrollment_approval_mode?: ApprovalMode | string };
@@ -127,9 +130,18 @@ export type ApplicationFilters = { q?: string; activityId?: string; groupId?: st
 export type DetailsTarget = { kind: 'application' | 'enrollment'; id: string };
 /** Age, school and kindergarten group only for those who see contacts. */
 export type ChildDetails = StaffChild & { age?: number | null; school_name?: string | null; institution_group?: string | null };
-export type ParentContact = { source: string; name: string | null; phone: string | null; phone_display: string | null; email: string | null; email_verified: boolean };
-/** shown — in the window; outside_window — the record is closed; not_allowed — the role does not see contacts. */
-export type ContactStatus = 'shown' | 'outside_window' | 'not_allowed';
+export type ParentContact = {
+  source: string; name: string | null; phone: string | null; phone_display: string | null; email: string | null; email_verified: boolean;
+  /** Behind "Покажи телефона": the phone and the e-mail come only from the reveal (docs/product/team-rights.md, т. 6). */
+  hidden?: boolean; has_phone?: boolean; has_email?: boolean; can_reveal?: boolean;
+};
+/** The parent's contact after "Покажи телефона": kept only in the page's memory. */
+export type RevealedContact = Pick<ParentContact, 'source' | 'name' | 'phone' | 'phone_display' | 'email' | 'email_verified'>;
+/**
+ * shown — the owner sees it at once; hidden — the others with the right, after "Покажи телефона"; outside_window — the
+ * record is closed; not_allowed — no right to the parents' contacts in this group.
+ */
+export type ContactStatus = 'shown' | 'hidden' | 'outside_window' | 'not_allowed';
 export type ChildRecord =
   | {
     kind: 'enrollment'; id: string; status: string; scope: string; activity_title: string | null; group_id: string; group_name: string | null;
@@ -162,6 +174,8 @@ type DetailsCommon = {
   records: ChildRecord[];
   /** Only for those who manage enrollments. */
   history: HistoryItem[] | null;
+  /** Who was shown the parent's contact, newest first — only for those who manage the team. */
+  contact_reveals?: { by: string | null; at: string; from: string | null }[] | null;
 };
 export type ApplicationDetails = DetailsCommon & {
   kind: 'application';
@@ -172,6 +186,15 @@ export type ChildDetailsResponse = ApplicationDetails | EnrollmentDetails;
 
 export const loadDetails = (organizationId: string, target: DetailsTarget) =>
   request<ChildDetailsResponse>(organizationId, `/${target.kind === 'application' ? 'applications' : 'enrollments'}/${target.id}`);
+
+/**
+ * "Покажи телефона": a POST, because every reveal is recorded; the answer is not cached. 429 — too many reveals in a
+ * short time.
+ */
+export const revealContact = (organizationId: string, target: DetailsTarget, from: 'details' | 'roster') =>
+  request<{ contact: RevealedContact }>(organizationId, `/${target.kind === 'application' ? 'applications' : 'enrollments'}/${target.id}/contact/reveal`, {
+    method: 'POST', body: JSON.stringify({ from }), cache: 'no-store',
+  }).then((x) => x.contact);
 
 export const loadApplications = (organizationId: string, status: 'submitted' | 'waitlisted' = 'submitted', filters: ApplicationFilters = {}) => {
   const query = new URLSearchParams({ status });

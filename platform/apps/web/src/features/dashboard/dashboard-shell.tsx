@@ -5,9 +5,11 @@ import { usePathname, useRouter } from 'next/navigation';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AuthenticationRequiredError,
+  loadOrganizationAccess,
   loadOrganizationContext,
   type DashboardOrganization,
   type DashboardUser,
+  withAccess,
 } from './api';
 import { DashboardContext } from './dashboard-context';
 import {
@@ -68,9 +70,11 @@ export function DashboardShell({ children }: DashboardShellProps) {
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    loadOrganizationContext(new URLSearchParams(window.location.search).get('organization')).then((context) => {
+    loadOrganizationContext(new URLSearchParams(window.location.search).get('organization')).then(async (context) => {
+      // The added rights before the first frame, so the menu does not change under the user.
+      const access = await loadOrganizationAccess(context.organization.id);
       setUser(context.user);
-      setOrganization(context.organization);
+      setOrganization(withAccess(context.organization, access));
       setOrganizations(context.organizations);
       const key = dashboardNavigationStorageKey(context.user.id, context.organization.id);
       const saved = parseDashboardNavigationPreference(window.localStorage.getItem(key));

@@ -6,14 +6,15 @@ import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { useDashboardContext } from '@/features/dashboard/dashboard-context';
 import { shortDay, sofiaDay } from '@/features/enrollment/presentation';
 import {
-  archiveMember, changeRole, inviteMember, loadMember, type HistoryEntry, type MemberChanges, type MemberDetails, type SentInvitation, TeamApiError,
-  type TeamMember, updateMember,
+  type AccessCard, archiveMember, inviteMember, loadAccess, loadMember, type HistoryEntry, type MemberChanges, type MemberDetails, type SentInvitation,
+  TeamApiError, type TeamMember, updateMember,
 } from './api';
 import { MemberGroups } from './member-groups';
 import {
-  changeableRoles, focusLater, historyItem, initials, invitableRoles, invitationFold, memberRole, memberStatus, roleLabel, roleLabels, type TeamRole,
+  focusLater, historyItem, initials, invitableRoles, invitationFold, memberRole, memberStatus, roleLabel, roleLabels, type TeamRole,
 } from './presentation';
-import { RoleAccessList } from './role-access';
+import { accessSummary, draftFromCard, rightsHeadline, templateLabel } from './rights';
+import { AccessLists, RoleAccessList } from './role-access';
 import { SentInvitationNotice } from './sent-invitation';
 import { NoTeamAccess } from './team-page';
 import styles from './team.module.css';
@@ -140,90 +141,61 @@ function InviteCard({ organizationId, actorRole, member, now, startOpen, onChang
   );
 }
 
-/** "Права": the role and what it means; a change is confirmed first and sent with the version. */
-function RightsCard({ organizationId, actorRole, member, canManage, onChanged, onNotice }: {
-  organizationId: string; actorRole: string; member: TeamMember; canManage: boolean; onChanged: () => void; onNotice: Notify;
-}) {
-  const options = member.state === 'login' && canManage ? changeableRoles(actorRole, member.role) : null;
-  const [changing, setChanging] = useState(false);
-  const [next, setNext] = useState(member.role ?? '');
-  const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [stale, setStale] = useState(false);
+/**
+ * "Права" in the profile: the role, "Само преглед + 2 права" and the template's label, and what the person can do —
+ * with the added rights. The card itself, with the role change, is its own page ("Промени правата").
+ */
+function RightsCard({ organizationId, member, canManage }: { organizationId: string; member: TeamMember; canManage: boolean }) {
+  const [card, setCard] = useState<AccessCard>();
+  const [failed, setFailed] = useState(false);
+  const wanted = member.state !== 'archived';
 
-  function ask(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (next && next !== member.role) { setConfirming(true); setError(''); focusLater('rights-yes'); }
-  }
+  useEffect(() => {
+    if (!wanted) return;
+    let active = true;
+    loadAccess(organizationId, member.id)
+      .then((loaded) => { if (active) setCard(loaded); })
+      .catch(() => { if (active) setFailed(true); });
+    return () => { active = false; };
+  }, [organizationId, member.id, wanted]);
 
-  function stop() {
-    setChanging(false); setConfirming(false); setNext(member.role ?? '');
-    focusLater('rights-change');
-  }
-
-  async function confirm() {
-    setBusy(true); setError('');
-    try {
-      await changeRole(organizationId, member.id, next, member.version);
-      onNotice(`Ролята на ${member.full_name} вече е „${roleLabel(next)}“.`);
-      onChanged();
-    } catch (reason) {
-      setStale(reason instanceof TeamApiError && reason.status === 409);
-      setError(failure(reason, 'Ролята не беше сменена.'));
-      setConfirming(false);
-      focusLater('rights-role');
-    } finally {
-      setBusy(false);
-    }
-  }
-
+  const href = `/dashboard/team/${encodeURIComponent(member.id)}/rights`;
+  const withAccess = card?.state === 'access';
+  const role = card?.role ?? (member.state === 'login' ? member.role : null);
+  const draft = card ? draftFromCard(card) : null;
+  const label = templateLabel(card?.template);
   return (
     <section className={styles.card} aria-labelledby="rights-title">
       <div className={styles.cardHead}>
         <h2 id="rights-title">Права</h2>
-        {options && !changing ? (
-          <button id="rights-change" type="button" className={styles.secondary} onClick={() => { setChanging(true); focusLater('rights-role'); }}>Смени ролята</button>
+        {withAccess && (card?.editable || canManage) ? (
+          <Link id="rights-open" className={styles.secondary} href={href}>{card?.editable ? 'Промени правата' : 'Виж правата'}</Link>
         ) : null}
       </div>
-      {member.state === 'login' ? (
-        <>
-          <p>Роля: <strong>{roleLabel(member.role)}</strong></p>
-          <RoleAccessList role={member.role ?? ''} when="now" />
-        </>
-      ) : member.state === 'archived' ? (
+      {member.state === 'archived' ? (
         <p>Записът е в архива — няма достъп и роля в организацията.</p>
+      ) : card && !withAccess ? (
+        <p>Още няма роля, защото няма достъп. Ролята избирате в поканата.</p>
+      ) : role ? (
+        <>
+          <p className={styles.headLine}>
+            <span>Роля: <strong className={styles.strong}>{draft ? rightsHeadline(role, draft) : roleLabel(role)}</strong></span>
+            {label ? <span className={`${styles.badge} ${styles.tone_info}`}>{label}</span> : null}
+          </p>
+          {member.state !== 'login' ? <p className={styles.small}>Ролята и правата важат, щом приеме поканата.</p> : null}
+          {card && draft ? (
+            <AccessLists summary={accessSummary({
+              role, scope: draft.scope, grants: draft.grants, selected: draft.targets.length,
+              teaches: card.rights.some((right) => right.source === 'assignment'),
+            })} when={member.state === 'login' ? 'now' : 'later'} />
+          ) : <RoleAccessList role={role} when={member.state === 'login' ? 'now' : 'later'} />}
+          {failed ? <p className={styles.small}>Добавените права не се заредиха — показваме само ролята.</p> : null}
+        </>
+      ) : !card && !failed ? (
+        <span className={styles.skeleton} aria-label="Зареждане на правата" />
       ) : (
         <p>Още няма роля, защото няма достъп. Ролята избирате в поканата.</p>
       )}
-      {error ? <p className={styles.error} role="alert">{error}</p> : null}
-      {stale ? <div className={styles.actions}><button type="button" className={styles.secondary} onClick={onChanged}>Зареди новите данни</button></div> : null}
-      {member.state === 'login' && canManage && !options ? <p className={styles.muted}>Тази роля може да смени само собственикът.</p> : null}
-      {options && changing ? (
-        confirming ? (
-          <div className={styles.confirm} role="group" aria-labelledby="rights-confirm">
-            <p id="rights-confirm">Да сменим ли ролята на {member.full_name} от „{roleLabel(member.role)}“ на „{roleLabel(next)}“?</p>
-            <RoleAccessList role={next} when="later" />
-            <div className={styles.actions}>
-              <button id="rights-yes" type="button" className={styles.primary} disabled={busy} aria-busy={busy} onClick={confirm}>{busy ? 'Смяна…' : 'Да, смени ролята'}</button>
-              <button type="button" className={styles.secondary} onClick={() => { setConfirming(false); focusLater('rights-role'); }}>Отказ</button>
-            </div>
-          </div>
-        ) : (
-          <form className={styles.inline} onSubmit={ask}>
-            <div className={styles.field}>
-              <label htmlFor="rights-role">Нова роля</label>
-              <select id="rights-role" className={styles.input} value={next} onChange={(event) => setNext(event.target.value)}>
-                {options.map((option) => <option key={option} value={option}>{roleLabels[option]}</option>)}
-              </select>
-            </div>
-            <div className={styles.actions}>
-              <button type="submit" className={styles.primary} disabled={!next || next === member.role}>Смени ролята</button>
-              <button type="button" className={styles.secondary} onClick={stop}>Отказ</button>
-            </div>
-          </form>
-        )
-      ) : null}
     </section>
   );
 }
@@ -536,7 +508,7 @@ export function MemberProfile({ memberId }: { memberId: string }) {
           {history ? <HistoryCard history={history} /> : null}
         </div>
         <div className={styles.column}>
-          <RightsCard key={`rights-${member.version}`} organizationId={organization.id} actorRole={organization.role} member={member} canManage={canManage} onChanged={reload} onNotice={notify} />
+          <RightsCard key={`rights-${member.version}`} organizationId={organization.id} member={member} canManage={canManage} />
           <DetailsCard key={`details-${member.version}`} organizationId={organization.id} member={member} canManage={canManage} onChanged={reload} onNotice={notify} />
           {editable ? <ArchiveCard key={`archive-${member.version}`} organizationId={organization.id} member={member} onChanged={reload} onNotice={notify} /> : null}
         </div>

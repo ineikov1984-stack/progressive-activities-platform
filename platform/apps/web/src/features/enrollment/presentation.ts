@@ -367,3 +367,11 @@ export function actorText(actor: HistoryActor | null): string {
   if (actor.kind === 'automatic') return 'автоматично';
   return actor.name ?? 'екипът';
 }
+
+/** Why "Покажи телефона" did not show the contact (docs/product/team-rights.md, т. 6). */
+export function revealErrorText(status: number): string {
+  if (status === 429) return 'Показахте много контакти за кратко. Опитайте по-късно.';
+  if (status === 404) return 'Контактът вече не е достъпен.';
+  if (status === 403) return 'Нямате право да виждате контактите на родителите в тази група.';
+  return 'Контактът не се показа. Проверете връзката и опитайте отново.';
+}

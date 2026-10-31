@@ -1,0 +1,94 @@
+'use client';
+
+import { useId, useState } from 'react';
+import { type DetailsTarget, EnrollmentApiError, revealContact, type RevealedContact } from './api';
+import { revealErrorText } from './presentation';
+import styles from './enrollments.module.css';
+
+/**
+ * The parent's phone and e-mail: the number to read out and "Обади се", the e-mail and "Пиши". The phone link is the
+ * main button on a phone and secondary on a computer (CSS).
+ */
+export function ContactFacts({ contact, childName }: { contact: RevealedContact; childName: string }) {
+  return (
+    <>
+      <dl className={styles.facts}>
+        <div>
+          <dt>Телефон</dt>
+          <dd className={contact.phone_display ? styles.phoneValue : undefined}>{contact.phone_display ?? 'Родителят още не е добавил телефон.'}</dd>
+        </div>
+        <div>
+          <dt>Имейл</dt>
+          <dd>{contact.email}</dd>
+        </div>
+      </dl>
+      {contact.email_verified ? null : <p className={styles.contactHint}>Имейлът още не е потвърден от родителя — може да е грешен. По-сигурно е да се обадите.</p>}
+      <div className={styles.actions}>
+        {contact.phone ? <a className={`${styles.primaryLink} ${styles.callLink}`} href={`tel:${contact.phone}`}>Обади се<span className={styles.srOnly}> на родителя на {childName}</span></a> : null}
+        {contact.email ? <a className={styles.secondaryLink} href={`mailto:${contact.email}`}>Пиши<span className={styles.srOnly}> на родителя на {childName}</span></a> : null}
+      </div>
+    </>
+  );
+}
+
+type Props = {
+  organizationId: string;
+  target: DetailsTarget;
+  from: 'details' | 'roster';
+  childName: string;
+  hasPhone: boolean;
+  hasEmail: boolean;
+};
+
+/**
+ * "Покажи телефона" (docs/product/team-rights.md, т. 6, 10): for everyone but the owner the phone and the e-mail come
+ * only after the button, and every reveal is recorded. The answer stays in this component's memory only — never in
+ * the browser's storage, the address or a log — and is gone when the panel or the row closes.
+ */
+export function ContactReveal({ organizationId, target, from, childName, hasPhone, hasEmail }: Props) {
+  const hint = useId();
+  const [contact, setContact] = useState<RevealedContact>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<{ text: string; final: boolean }>();
+
+  async function reveal() {
+    setBusy(true);
+    setError(undefined);
+    try {
+      setContact(await revealContact(organizationId, target, from));
+    } catch (reason) {
+      const status = reason instanceof EnrollmentApiError ? reason.status : 0;
+      // Too many in a short time, or the contact is no longer there: the message takes the button's place.
+      setError({ text: revealErrorText(status), final: status === 429 || status === 404 || status === 403 });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (contact) {
+    return (
+      <div className={styles.reveal}>
+        <ContactFacts contact={contact} childName={childName} />
+        <p className={styles.small}>Показването се записва.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.reveal}>
+      {hasPhone ? null : <p className={styles.muted}>Родителят още не е добавил телефон.</p>}
+      {error ? <p className={styles.error} role="alert">{error.text}</p> : null}
+      {(hasPhone || hasEmail) && !error?.final ? (
+        <>
+          <div className={styles.actions}>
+            <button type="button" className={styles.secondary} disabled={busy} aria-busy={busy} aria-describedby={hint} onClick={reveal}>
+              {busy ? 'Показване…' : hasPhone ? 'Покажи телефона' : 'Покажи имейла'}
+              <span className={styles.srOnly}> на родителя на {childName}</span>
+            </button>
+          </div>
+          <p id={hint} className={styles.small}>Показването се записва.</p>
+        </>
+      ) : null}
+    </div>
+  );
+}

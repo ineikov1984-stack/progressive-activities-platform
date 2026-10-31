@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ChildRecord, GroupRoster, HistoryItem, RosterEnrollment, StaffGroup } from '../src/features/enrollment/api';
 import {
   activitySummary, actorText, addDays, ageText, applicationPlaces, childLine, historyText, ordinalText, queueText, reasonText, recordStatusText, recordTone, needsGroupPlace, waitingQueues, groupFill, groupsByActivity, hasPlaceForWaiting, lastDayOfMonth, matchesGroupFilter, matchesGroupSearch, moveInSummary,
-  placesText, priceText, rosterNotes, scheduleText, skippableSessions, sofiaDay, waitingText, weekdayDay,
+  placesText, priceText, rosterNotes, scheduleText, skippableSessions, sofiaDay, waitingText, weekdayDay, revealErrorText,
 } from '../src/features/enrollment/presentation';
 
 const enrollment = (patch: Partial<RosterEnrollment> = {}): RosterEnrollment => ({
@@ -180,5 +180,11 @@ describe('enrollment presentation', () => {
     expect(reasonText(item({ public_reason: 'Рожден ден', actor: { kind: 'parent', name: null } }))).toBe('Причина от родителя: „Рожден ден“');
     expect(reasonText(item({ public_reason: 'Групата е пълна', actor: { kind: 'team', name: 'Петя' } }))).toBe('Казахме на родителя: „Групата е пълна“');
     expect(reasonText(item({}))).toBe('');
+  });
+  it('says why "Покажи телефона" did not show the contact, without a technical word', () => {
+    expect(revealErrorText(429)).toBe('Показахте много контакти за кратко. Опитайте по-късно.');
+    expect(revealErrorText(404)).toBe('Контактът вече не е достъпен.');
+    expect(revealErrorText(403)).toBe('Нямате право да виждате контактите на родителите в тази група.');
+    expect(revealErrorText(0)).toMatch(/^Контактът не се показа/);
   });
 });
