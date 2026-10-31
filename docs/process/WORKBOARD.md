@@ -18,6 +18,7 @@
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
 | Права — роля плюс допълнителни права (`docs/product/team-rights.md`) | Claude | `claude/team-rights-spec` | само документи: `docs/product/team-rights.md`, DECISIONS, WORKBOARD | спецификация готова → ревю на архитекта → план → PR 1 (модел и услуга) |
+| Права, PR 1: модел, услуги, миграция (`docs/product/team-rights.md`, т. 12) | Claude | `claude/team-rights-model` | **горещ:** `database/migrations/**`; `Domain/Organizations` (права, `TeamRoles`), `Domain/Catalog` (`AccessScope`, `TeachingScope`, назначенията), политиките, `RecordVisitOutcome`, `VisitOfferEligibility` | код и тестове → CI → ревю по сигурност |
 | Екип — групата води към децата ѝ в „Записвания“ (DECISIONS 31.10.2026 „Права…“) | Claude | `claude/team-group-link` | `features/team` (списък, профил, `presentation.ts`), `tests/team-presentation.test.ts` | код и тест готови → CI → проверка на 390/768/1440 px |
 
 ## Опашка (по приоритет)
