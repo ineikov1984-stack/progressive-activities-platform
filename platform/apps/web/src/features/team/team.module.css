@@ -98,9 +98,24 @@
 .access p { margin: 0; }
 .formActions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
 
-/* The link for copying, shown once after an invitation is sent. */
+/* The link for copying, shown once after an invitation is sent, folded: it is only for someone who already logs in. */
 .copy { display: grid; gap: var(--space-2); }
 .copyRow { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+.more summary { display: flex; align-items: center; min-height: var(--control-height); color: var(--ink); font-size: 15px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; list-style: none; }
+.more summary::-webkit-details-marker { display: none; }
+.more summary::before { content: "+"; display: inline-block; width: 1.2em; text-decoration: none; }
+.more[open] summary::before { content: "−"; }
+.moreBody { display: grid; gap: var(--space-2); padding-top: var(--space-1); }
+
+/* "Покана за вход" folded to one line in the profile; it opens on a tap. On a phone the card is tighter, so the line fits. */
+.foldCard { padding: var(--space-2) var(--space-3); }
+.card .foldHeading { margin: 0; font: inherit; }
+.fold { display: flex; align-items: center; gap: var(--space-1); width: 100%; min-height: var(--control-height); box-sizing: border-box; padding: 0; border: 0; color: var(--ink-body); background: transparent; font: inherit; font-size: 14px; font-weight: 400; text-align: left; cursor: pointer; }
+.foldText { flex: 1 1 auto; min-width: 0; line-height: 22px; }
+.foldAction { color: var(--ink); font-weight: 650; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+.foldChevron { flex: none; margin-left: auto; color: var(--ink); transition: transform .15s ease; }
+.foldChevronOpen { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .foldChevron { transition: none; } }
 
 /* The profile. */
 .back { justify-self: start; display: inline-flex; align-items: center; min-height: var(--control-height); color: var(--ink); font-size: 15px; font-weight: 600; text-decoration: none; }
@@ -138,7 +153,8 @@
   .choices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .choices legend { grid-column: 1 / -1; }
   .copyRow { grid-template-columns: minmax(0, 1fr) auto; }
-  .card { padding: var(--space-4) var(--space-6); }
+  .card, .foldCard { padding: var(--space-4) var(--space-6); }
+  .fold { gap: var(--space-2); font-size: 15px; }
   .facts > div { grid-template-columns: 10rem minmax(0, 1fr); gap: var(--space-3); }
 }
 

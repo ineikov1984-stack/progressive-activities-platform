@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { loadStaffGroups, type StaffGroup } from '@/features/enrollment/api';
 import { shortDay, sofiaDay } from '@/features/enrollment/presentation';
 import { assignGroup, createTeacherProfile, endAssignment, type GroupAssignment, TeamApiError, type TeamMember } from './api';
@@ -16,6 +16,9 @@ type Props = {
   /** A teacher profile for a person: owner and administrator (`team.manage`). */
   canManage: boolean;
   onChanged: () => void;
+  /** Right after "Добави човека": the form for the first group opens by itself. */
+  openAddOnStart?: boolean;
+  onAddOpened?: () => void;
 };
 
 const phaseOrder = { current: 0, coming: 1, ended: 2 } as const;
@@ -129,7 +132,7 @@ function AddForm({ groups, taken, busy, onAdd, onCancel }: {
  * "Групи" in the profile (docs/product/team.md, т. 5, 10): lead or assistant, from a day to a day; works in published
  * groups too. Ending sends the assignment's version from the profile; a stale one gets 409.
  */
-export function MemberGroups({ organizationId, member, canAssign, canManage, onChanged }: Props) {
+export function MemberGroups({ organizationId, member, canAssign, canManage, onChanged, openAddOnStart = false, onAddOpened }: Props) {
   const [today] = useState(() => sofiaDay(new Date()));
   const [groups, setGroups] = useState<StaffGroup[]>();
   const [adding, setAdding] = useState(false);
@@ -142,6 +145,22 @@ export function MemberGroups({ organizationId, member, canAssign, canManage, onC
   const assignments = [...member.groups].sort((a, b) => phaseOrder[assignmentPhase(a, today)] - phaseOrder[assignmentPhase(b, today)]);
   const taken = new Set(member.groups.filter((item) => assignmentPhase(item, today) !== 'ended').map((item) => item.group_id));
   const message = (reason: unknown, fallback: string) => (reason instanceof Error && reason.message ? reason.message : fallback);
+
+  const canAdd = canAssign && !archived && profileId !== null;
+  useEffect(() => {
+    if (!openAddOnStart || !canAdd) return;
+    let active = true;
+    loadStaffGroups(organizationId)
+      .then((loaded) => {
+        if (!active) return;
+        setGroups(loaded);
+        setAdding(true);
+        onAddOpened?.();
+        focusLater('assign-group');
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [openAddOnStart, canAdd, organizationId, onAddOpened]);
 
   async function organizationGroups(): Promise<StaffGroup[]> {
     if (groups) return groups;
@@ -255,7 +274,7 @@ export function MemberGroups({ organizationId, member, canAssign, canManage, onC
           {canAssign && !archived ? (
             adding && groups
               ? <AddForm groups={groups} taken={taken} busy={busy} onAdd={add} onCancel={() => { setAdding(false); focusLater('add-group-button'); }} />
-              : <button id="add-group-button" type="button" className={styles.linkButton} onClick={openAdd}>+ Добави група</button>
+              : <div className={styles.actions}><button id="add-group-button" type="button" className={styles.secondary} onClick={openAdd}>+ Добави група</button></div>
           ) : !canAssign ? <p className={styles.small}>Групите разпределят собственикът, администраторът и координаторът.</p> : null}
         </>
       )}

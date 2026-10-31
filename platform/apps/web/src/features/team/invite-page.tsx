@@ -7,7 +7,7 @@ import {
   type AcceptedInvitation, type InvitationSummary, joinByInvitation, lookupInvitation, registerByInvitation, type SignedInUser, signedInUser, signOut,
   TeamApiError,
 } from './api';
-import { tokenFromHash, welcomeText } from './presentation';
+import { firstErrorField, focusLater, guestModeFor, tokenFromHash, welcomeText } from './presentation';
 import styles from './invite.module.css';
 
 type GuestMode = 'register' | 'login';
@@ -22,6 +22,16 @@ type View =
 /** This tab only: a reload or the login keeps the invitation, and the token leaves the address bar. */
 const STORAGE_KEY = 'progressive:invite-token';
 const untilFormat = new Intl.DateTimeFormat('bg-BG', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Sofia' });
+/** The fields of each form in the order shown: the first one with an error takes the focus. */
+const fieldIds: Record<GuestMode, Record<string, string>> = {
+  register: { name: 'invite-name', password: 'invite-password', password_confirmation: 'invite-password-again' },
+  login: { email: 'invite-login-email', password: 'invite-login-password' },
+};
+
+function focusFirstError(mode: GuestMode, errors: Record<string, string>): void {
+  const field = firstErrorField(errors, Object.keys(fieldIds[mode]));
+  if (field) focusLater(fieldIds[mode][field]);
+}
 
 /**
  * The token is in the fragment (`/invite#…`), which the browser never sends to a server. It is read here once, kept in
@@ -77,7 +87,8 @@ async function open(token: string | null): Promise<View> {
     return { kind: 'gone', why: invitation.status === 'accepted' ? 'accepted' : 'expired' };
   }
   const user = await signedInUser();
-  return user ? { kind: 'signed_in', invitation, user } : { kind: 'guest', invitation, mode: 'register', notice: '' };
+  // The inviter's link joins only an existing profile: it opens at the login, not at a new profile.
+  return user ? { kind: 'signed_in', invitation, user } : { kind: 'guest', invitation, mode: guestModeFor(invitation.link), notice: '' };
 }
 
 const fieldMessages = (reason: unknown): Record<string, string> => (reason instanceof TeamApiError
@@ -85,14 +96,14 @@ const fieldMessages = (reason: unknown): Record<string, string> => (reason insta
   : {});
 const failure = (reason: unknown, fallback: string) => (reason instanceof Error && reason.message ? reason.message : fallback);
 
-function Field({ id, name, label, type, autoComplete, error, hint }: {
-  id: string; name: string; label: string; type: 'text' | 'email' | 'password'; autoComplete: string; error?: string; hint?: string;
+function Field({ id, name, label, type, autoComplete, error, hint, defaultValue }: {
+  id: string; name: string; label: string; type: 'text' | 'email' | 'password'; autoComplete: string; error?: string; hint?: string; defaultValue?: string;
 }) {
   const described = [hint ? `${id}-hint` : '', error ? `${id}-error` : ''].filter(Boolean).join(' ') || undefined;
   return (
     <div className={styles.field}>
       <label htmlFor={id}>{label}</label>
-      <input id={id} name={name} className={styles.input} type={type} autoComplete={autoComplete} required
+      <input id={id} name={name} className={styles.input} type={type} autoComplete={autoComplete} required defaultValue={defaultValue}
         aria-invalid={error ? true : undefined} aria-describedby={described} {...(type === 'email' ? { inputMode: 'email' as const } : {})} />
       {hint ? <p id={`${id}-hint`} className={styles.hint}>{hint}</p> : null}
       {error ? <p id={`${id}-error`} className={styles.fieldError}>{error}</p> : null}
@@ -168,7 +179,10 @@ export function InvitePage() {
     else if (password !== confirmation) found.password_confirmation = 'Паролите не съвпадат.';
     setError('');
     setFieldErrors(found);
-    if (Object.keys(found).length > 0) return;
+    if (Object.keys(found).length > 0) {
+      focusFirstError('register', found);
+      return;
+    }
 
     setBusy(true);
     try {
@@ -187,8 +201,10 @@ export function InvitePage() {
         });
         return;
       }
-      setFieldErrors(fieldMessages(reason));
+      const fields = fieldMessages(reason);
+      setFieldErrors(fields);
       setError(failure(reason, 'Профилът не беше създаден.'));
+      focusFirstError('register', fields);
     } finally {
       setBusy(false);
     }
@@ -205,7 +221,10 @@ export function InvitePage() {
     if (!password) found.password = 'Въведете паролата си.';
     setError('');
     setFieldErrors(found);
-    if (Object.keys(found).length > 0) return;
+    if (Object.keys(found).length > 0) {
+      focusFirstError('login', found);
+      return;
+    }
 
     setBusy(true);
     try {
@@ -213,6 +232,7 @@ export function InvitePage() {
     } catch (reason) {
       setError(failure(reason, 'Грешен имейл или парола.'));
       setBusy(false);
+      focusLater(fieldIds.login.email);
       return;
     }
     await accept(view.invitation);
@@ -321,12 +341,20 @@ export function InvitePage() {
       );
     }
 
+    const fromMail = invitation.link === 'email';
     return view.mode === 'register' ? (
       <>
         {head}
         {view.notice ? <p className={styles.notice} role="status">{view.notice}</p> : null}
-        <p className={styles.text}>Създайте профил, за да приемете поканата. Профилът ще е с имейла, на който я получихте.</p>
+        <p className={styles.text}>Създайте профил, за да приемете поканата.</p>
         <form className={styles.form} onSubmit={register} noValidate>
+          {invitation.email ? (
+            <div className={styles.field}>
+              <label htmlFor="invite-email">Имейл</label>
+              <input id="invite-email" className={`${styles.input} ${styles.readOnly}`} type="email" value={invitation.email} readOnly aria-describedby="invite-email-hint" />
+              <p id="invite-email-hint" className={styles.hint}>Профилът ще е с имейла, на който получихте поканата.</p>
+            </div>
+          ) : null}
           <Field id="invite-name" name="name" label="Име и фамилия" type="text" autoComplete="name" error={fieldErrors.name} />
           <Field id="invite-password" name="password" label="Парола" type="password" autoComplete="new-password" hint="Поне 10 знака." error={fieldErrors.password} />
           <Field id="invite-password-again" name="password_confirmation" label="Повторете паролата" type="password" autoComplete="new-password" error={fieldErrors.password_confirmation} />
@@ -339,15 +367,18 @@ export function InvitePage() {
       <>
         {head}
         {view.notice ? <p className={styles.notice} role="status">{view.notice}</p> : null}
-        <p className={styles.text}>Влезте с имейла, на който е изпратена поканата.</p>
+        {fromMail
+          ? <p className={styles.text}>Влезте с имейла, на който е изпратена поканата.</p>
+          : <p className={styles.notice}>Тази връзка е за човек, който вече влиза в системата. Ако нямате профил, отворете писмото с поканата.</p>}
         <form className={styles.form} onSubmit={signInAndAccept} noValidate>
-          <Field id="invite-login-email" name="email" label="Имейл" type="email" autoComplete="email" error={fieldErrors.email} />
+          <Field id="invite-login-email" name="email" label="Имейл" type="email" autoComplete="email" error={fieldErrors.email} defaultValue={invitation.email} />
           <Field id="invite-login-password" name="password" label="Парола" type="password" autoComplete="current-password" error={fieldErrors.password} />
           {errorLine}
           <button type="submit" className={styles.primary} disabled={busy} aria-busy={busy}>{busy ? 'Влизане…' : 'Влез и приеми'}</button>
         </form>
-        <p className={styles.hint}>Нямате профил? Отворете връзката от писмото с поканата — само от нея се създава нов профил.</p>
-        <p className={styles.switchLine}><button type="button" className={styles.linkButton} onClick={() => switchMode('register')}>Създай нов профил</button></p>
+        {fromMail ? (
+          <p className={styles.switchLine}>Нямате профил? <button type="button" className={styles.linkButton} onClick={() => switchMode('register')}>Създайте нов</button></p>
+        ) : null}
       </>
     );
   }

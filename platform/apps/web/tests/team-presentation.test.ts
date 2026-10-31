@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { TeamMember } from '../src/features/team/api';
 import {
-  assignmentPhase, assignmentText, changeableRoles, daysText, expiresText, historySentence, invitableRoles, matchesFilters, memberRole, memberStatus,
-  parseStateFilter, periodText, roleAccess, roleLabel, teamErrorMessage, tokenFromHash, waitingAction, welcomeText,
+  assignmentPhase, assignmentText, changeableRoles, daysText, expiresText, firstErrorField, guestModeFor, historySentence, invitableRoles, invitationLine,
+  matchesFilters, memberRole, memberStatus, parseStateFilter, periodText, roleAccess, roleLabel, teamErrorMessage, tokenFromHash, waitingAction, welcomeText,
 } from '../src/features/team/presentation';
 
 // 10:00 in Sofia on 1 November 2026 (EET, UTC+2).
@@ -52,6 +52,16 @@ describe('what waits for a person', () => {
     expect(waitingAction(member(), false)).toBeNull();
     expect(waitingAction(member({ state: 'login', role: 'instructor' }), true)).toBeNull();
     expect(waitingAction(member({ state: 'archived' }), true)).toBeNull();
+  });
+});
+
+describe('the folded invitation in the profile', () => {
+  it('says on one line what the state is and what to do', () => {
+    expect(invitationLine(member(), now)).toEqual({ state: 'Не влиза в системата', action: 'Покани да влиза' });
+    expect(invitationLine(member({ invitation: { status: 'pending', expires_at: '2026-11-06T09:00:00Z' } }), now))
+      .toEqual({ state: 'Поканен · изтича след 5 дни', action: 'Изпрати поканата пак' });
+    expect(invitationLine(member({ invitation: { status: 'expired', expires_at: '2026-10-31T09:00:00Z' } }), now))
+      .toEqual({ state: 'Поканата изтече', action: 'Изпрати поканата пак' });
   });
 });
 
@@ -167,6 +177,21 @@ describe('the list filters', () => {
     expect(parseStateFilter('archived')).toBe('archived');
     expect(parseStateFilter('everything')).toBe('');
     expect(parseStateFilter(null)).toBe('');
+  });
+});
+
+describe('the invitation page', () => {
+  it('opens the inviter\'s link at the login and only the e-mail\'s link at a new profile', () => {
+    expect(guestModeFor('email')).toBe('register');
+    expect(guestModeFor('copy')).toBe('login');
+    expect(guestModeFor('anything else')).toBe('login');
+  });
+
+  it('finds the first field with an error in the order of the form', () => {
+    const order = ['name', 'password', 'password_confirmation'];
+    expect(firstErrorField({ password_confirmation: 'Паролите не съвпадат.', name: 'Напишете името си.' }, order)).toBe('name');
+    expect(firstErrorField({ password: 'Паролата трябва да е поне 10 знака.' }, order)).toBe('password');
+    expect(firstErrorField({ name: '' }, order)).toBeUndefined();
   });
 });
 

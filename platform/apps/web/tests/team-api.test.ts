@@ -36,13 +36,14 @@ describe('team API', () => {
   it('sends the invitation token in the body, never in the address', async () => {
     const token = 'A1'.repeat(32);
     const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({ invitation: {
-      organization_name: 'Школа', role: 'instructor', role_label: 'Преподавател', expires_at: '2026-11-07T10:00:00+00:00', status: 'pending',
+      organization_name: 'Школа', role: 'instructor', role_label: 'Преподавател', expires_at: '2026-11-07T10:00:00+00:00', status: 'pending', link: 'copy',
     } }));
     vi.stubGlobal('fetch', fetchMock);
 
     const invitation = await lookupInvitation(token);
 
-    expect(invitation.role_label).toBe('Преподавател');
+    expect(invitation).toMatchObject({ role_label: 'Преподавател', link: 'copy' });
+    expect(invitation.email).toBeUndefined();
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('/backend/api/v1/invitations/lookup');
     expect(url).not.toContain(token);

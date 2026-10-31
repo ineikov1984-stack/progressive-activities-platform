@@ -11,7 +11,7 @@ import {
 } from './api';
 import { MemberGroups } from './member-groups';
 import {
-  changeableRoles, expiresText, focusLater, historySentence, initials, invitableRoles, memberRole, memberStatus, roleAccess, roleLabel, roleLabels,
+  changeableRoles, focusLater, historySentence, initials, invitableRoles, invitationLine, memberRole, memberStatus, roleAccess, roleLabel, roleLabels,
   type TeamRole,
 } from './presentation';
 import { SentInvitationNotice } from './sent-invitation';
@@ -38,21 +38,35 @@ function Access({ role }: { role: string }) {
   );
 }
 
-/** "Покана за вход": for a person without a login; sending again gives new links and the old ones stop working. */
-function InviteCard({ organizationId, actorRole, member, now, headingRef, onChanged }: {
-  organizationId: string; actorRole: string; member: TeamMember; now: Date; headingRef: RefObject<HTMLHeadingElement | null>; onChanged: () => void;
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg className={`${styles.foldChevron} ${open ? styles.foldChevronOpen : ''}`} viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false">
+      <path d="M5 7.5 10 12.5 15 7.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/**
+ * "Покана за вход" for a person without a login, folded to one line ("Не влиза в системата · Покани да влиза") and
+ * open from the start only when the list's "Покани да влиза" led here. After sending, the form folds away; sending
+ * again gives new links and the old ones stop working.
+ */
+function InviteCard({ organizationId, actorRole, member, now, startOpen, toggleRef, onChanged }: {
+  organizationId: string; actorRole: string; member: TeamMember; now: Date; startOpen: boolean;
+  toggleRef: RefObject<HTMLButtonElement | null>; onChanged: () => void;
 }) {
   const roles = invitableRoles(actorRole);
+  const [open, setOpen] = useState(startOpen);
   const [role, setRole] = useState<TeamRole>(member.instructor_profile_id ? 'instructor' : 'coordinator');
   const [email, setEmail] = useState(member.email ?? '');
   const [sent, setSent] = useState<SentInvitation>();
+  const [again, setAgain] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [emailError, setEmailError] = useState('');
-  const invited = memberStatus(member, now).key === 'invited';
-  const status = member.invitation
-    ? invited ? `Поканен — поканата ${expiresText(member.invitation.expires_at, now)}.` : 'Поканата изтече. Изпратете я пак.'
-    : 'Още не е поканен. Без вход профилът също работи — тогава екипът отбелязва вместо него.';
+  const line = invitationLine(member, now);
+  const resending = Boolean(member.invitation || sent);
+  const formShown = !sent || again;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -64,6 +78,7 @@ function InviteCard({ organizationId, actorRole, member, now, headingRef, onChan
     setBusy(true); setError(''); setEmailError('');
     try {
       setSent(await inviteMember(organizationId, member.id, role, email.trim()));
+      setAgain(false);
       onChanged();
     } catch (reason) {
       const field = reason instanceof TeamApiError ? reason.fieldErrors.email?.[0] : undefined;
@@ -77,34 +92,55 @@ function InviteCard({ organizationId, actorRole, member, now, headingRef, onChan
   }
 
   return (
-    <section id="invite" className={`${styles.card} ${styles.cardWarm}`} aria-labelledby="invite-title">
-      <h2 id="invite-title" ref={headingRef} tabIndex={-1}>Покана за вход</h2>
-      <p>{status}</p>
-      {sent ? <SentInvitationNotice sent={sent} /> : null}
-      {error ? <p className={styles.error} role="alert">{error}</p> : null}
-      <form className={styles.form} onSubmit={submit} noValidate>
-        <div className={styles.fieldGrid}>
-          <div className={styles.field}>
-            <label htmlFor="invite-role">Роля</label>
-            <select id="invite-role" className={styles.input} value={role} onChange={(event) => setRole(event.target.value as TeamRole)}>
-              {roles.map((option) => <option key={option} value={option}>{roleLabels[option]}</option>)}
-            </select>
-          </div>
-          <div className={styles.field}>
-            <label htmlFor="invite-email">Имейл</label>
-            <input id="invite-email" className={styles.input} type="email" inputMode="email" autoComplete="off" value={email} required
-              aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? 'invite-email-error' : undefined}
-              onChange={(event) => { setEmail(event.target.value); setEmailError(''); }} />
-            {emailError ? <p id="invite-email-error" className={styles.fieldError}>{emailError}</p> : null}
-          </div>
+    <section id="invite" className={`${styles.card} ${styles.cardWarm} ${styles.foldCard}`} aria-label="Покана за вход">
+      <h2 className={styles.foldHeading}>
+        <button ref={toggleRef} type="button" className={styles.fold} aria-expanded={open} aria-controls="invite-body" onClick={() => setOpen((value) => !value)}>
+          <span className={styles.foldText}>{line.state} <span aria-hidden="true">·</span> <span className={styles.foldAction}>{line.action}</span></span>
+          <Chevron open={open} />
+        </button>
+      </h2>
+      {open ? (
+        <div id="invite-body" className={styles.form}>
+          {sent ? <SentInvitationNotice sent={sent} /> : null}
+          {error ? <p className={styles.error} role="alert">{error}</p> : null}
+          {formShown ? (
+            <form className={styles.form} onSubmit={submit} noValidate>
+              {resending ? null : <p>Без вход профилът също работи — тогава екипът отбелязва вместо него.</p>}
+              <div className={styles.fieldGrid}>
+                <div className={styles.field}>
+                  <label htmlFor="invite-role">Роля</label>
+                  <select id="invite-role" className={styles.input} value={role} onChange={(event) => setRole(event.target.value as TeamRole)}>
+                    {roles.map((option) => <option key={option} value={option}>{roleLabels[option]}</option>)}
+                  </select>
+                </div>
+                <div className={styles.field}>
+                  <label htmlFor="invite-email">Имейл</label>
+                  <input id="invite-email" className={styles.input} type="email" inputMode="email" autoComplete="off" value={email} required
+                    aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? 'invite-email-error' : undefined}
+                    onChange={(event) => { setEmail(event.target.value); setEmailError(''); }} />
+                  {emailError ? <p id="invite-email-error" className={styles.fieldError}>{emailError}</p> : null}
+                </div>
+              </div>
+              <Access role={role} />
+              <div className={styles.actions}>
+                <button type="submit" className={styles.primary} disabled={busy} aria-busy={busy} aria-describedby={resending ? 'invite-again-hint' : undefined}>
+                  {busy ? 'Изпращане…' : resending ? 'Изпрати поканата пак' : 'Изпрати поканата'}
+                </button>
+              </div>
+              {resending ? <p id="invite-again-hint" className={styles.small}>Старото писмо и старата връзка спират да важат.</p> : null}
+            </form>
+          ) : (
+            <div className={styles.form}>
+              <div className={styles.actions}>
+                <button type="button" className={styles.secondary} aria-describedby="invite-again-hint" onClick={() => { setAgain(true); focusLater('invite-email'); }}>
+                  Изпрати поканата пак
+                </button>
+              </div>
+              <p id="invite-again-hint" className={styles.small}>Старото писмо и старата връзка спират да важат.</p>
+            </div>
+          )}
         </div>
-        <Access role={role} />
-        <div className={styles.actions}>
-          <button type="submit" className={styles.primary} disabled={busy} aria-busy={busy}>
-            {busy ? 'Изпращане…' : member.invitation || sent ? 'Изпрати поканата пак' : 'Изпрати поканата'}
-          </button>
-        </div>
-      </form>
+      ) : null}
     </section>
   );
 }
@@ -328,8 +364,11 @@ export function MemberProfile({ memberId }: { memberId: string }) {
   const [notice, setNotice] = useState<{ text: string } | undefined>(() => (searchParams.get('added') === '1' ? { text: 'Човекът е добавен в екипа. Добавете групите, които води.' } : undefined));
   const [now] = useState(() => new Date());
   const noticeRef = useRef<HTMLParagraphElement>(null);
-  const inviteHeading = useRef<HTMLHeadingElement>(null);
-  const wantsInvite = useRef(searchParams.get('invite') === '1');
+  const inviteToggle = useRef<HTMLButtonElement>(null);
+  const [inviteOpen] = useState(() => searchParams.get('invite') === '1');
+  const wantsInvite = useRef(inviteOpen);
+  // After "Добави човека" the form for the first group opens by itself, once.
+  const [addGroupNow, setAddGroupNow] = useState(() => searchParams.get('added') === '1');
   const key = `${organization.id}|${memberId}|${attempt}`;
 
   useEffect(() => {
@@ -348,6 +387,7 @@ export function MemberProfile({ memberId }: { memberId: string }) {
   const error = failed?.key === key ? failed : undefined;
   const reload = useCallback(() => setAttempt((value) => value + 1), []);
   const notify = useCallback((text: string) => setNotice({ text }), []);
+  const addGroupOpened = useCallback(() => setAddGroupNow(false), []);
 
   // A message takes the focus, so it is seen and read; the one after adding waits until the profile is shown.
   const ready = details !== undefined;
@@ -361,8 +401,8 @@ export function MemberProfile({ memberId }: { memberId: string }) {
   useEffect(() => {
     if (!details || !wantsInvite.current) return;
     wantsInvite.current = false;
-    inviteHeading.current?.scrollIntoView({ block: 'start' });
-    inviteHeading.current?.focus();
+    inviteToggle.current?.scrollIntoView({ block: 'start' });
+    inviteToggle.current?.focus();
   }, [details]);
 
   const back = <Link className={styles.back} href="/dashboard/team"><span aria-hidden="true">←&nbsp;</span>Екип</Link>;
@@ -423,7 +463,7 @@ export function MemberProfile({ memberId }: { memberId: string }) {
       ) : null}
 
       {canManage && member.state === 'profile_only' ? (
-        <InviteCard key={member.id} organizationId={organization.id} actorRole={organization.role} member={member} now={now} headingRef={inviteHeading} onChanged={reload} />
+        <InviteCard key={member.id} organizationId={organization.id} actorRole={organization.role} member={member} now={now} startOpen={inviteOpen} toggleRef={inviteToggle} onChanged={reload} />
       ) : null}
 
       <div className={styles.tabs} role="group" aria-label="Раздели на профила">
@@ -449,7 +489,10 @@ export function MemberProfile({ memberId }: { memberId: string }) {
           {editable ? <ArchiveCard key={`archive-${member.version}`} organizationId={organization.id} member={member} onChanged={reload} onNotice={notify} /> : null}
         </>
       ) : null}
-      {shownTab === 'groups' ? <MemberGroups organizationId={organization.id} member={member} canAssign={canAssign} canManage={canManage} onChanged={reload} /> : null}
+      {shownTab === 'groups' ? (
+        <MemberGroups organizationId={organization.id} member={member} canAssign={canAssign} canManage={canManage} onChanged={reload}
+          openAddOnStart={addGroupNow} onAddOpened={addGroupOpened} />
+      ) : null}
       {shownTab === 'rights' ? (
         <RightsCard key={`rights-${member.version}`} organizationId={organization.id} actorRole={organization.role} member={member} canManage={canManage} onChanged={reload} onNotice={notify} />
       ) : null}

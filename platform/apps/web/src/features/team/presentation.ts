@@ -120,6 +120,13 @@ export function memberStatus(member: Pick<TeamMember, 'state' | 'invitation'>, n
   return { key: 'profile_only', label: 'Само профил, без вход', tone: 'muted' };
 }
 
+/** The folded "Покана за вход" in the profile, on one line: the state, then what to do ("Не влиза в системата · Покани да влиза"). */
+export function invitationLine(member: Pick<TeamMember, 'invitation'>, now: Date): { state: string; action: string } {
+  if (!member.invitation) return { state: 'Не влиза в системата', action: 'Покани да влиза' };
+  if (invitationOpen(member.invitation, now)) return { state: `Поканен · ${expiresText(member.invitation.expires_at, now)}`, action: 'Изпрати поканата пак' };
+  return { state: 'Поканата изтече', action: 'Изпрати поканата пак' };
+}
+
 /** What waits for the person in "Чака": only for those who manage the team, and only for a profile without a login. */
 export function waitingAction(member: Pick<TeamMember, 'id' | 'state' | 'invitation'>, canManage: boolean): { label: string; href: string } | null {
   if (!canManage || member.state !== 'profile_only') return null;
@@ -218,6 +225,16 @@ export function matchesFilters(member: TeamMember, filters: TeamFilters, now: Da
   if (filters.state === 'invited') return status === 'invited' || status === 'invitation_expired';
   if (filters.state === 'login' || filters.state === 'profile_only' || filters.state === 'archived') return status === filters.state;
   return true;
+}
+
+/** The inviter's link only joins an existing profile, so it opens at the login; the e-mail's link offers a new profile. */
+export function guestModeFor(link: string): 'register' | 'login' {
+  return link === 'email' ? 'register' : 'login';
+}
+
+/** The first field with an error, in the order the form shows them; it takes the focus. */
+export function firstErrorField(errors: Record<string, string | undefined>, order: readonly string[]): string | undefined {
+  return order.find((field) => Boolean(errors[field]));
 }
 
 /** The token of an invitation link: 64 letters and digits after "#", nothing else. */

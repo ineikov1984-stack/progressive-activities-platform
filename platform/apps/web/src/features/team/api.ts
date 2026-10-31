@@ -139,7 +139,14 @@ export function endAssignment(organizationId: string, groupId: string, profileId
 
 /* The page "/invite" (т. 7.4): the token always travels in the request body, never in a path or a query string. */
 
-export type InvitationSummary = { organization_name: string; role: string; role_label: string; expires_at: string; status: 'pending' | 'expired' | 'accepted' | string };
+/**
+ * `link`: which link was opened — `email` may make a new profile, `copy` (the inviter's) only joins an existing one.
+ * `email` comes only for the e-mail's link: its holder owns the address.
+ */
+export type InvitationSummary = {
+  organization_name: string; role: string; role_label: string; expires_at: string; status: 'pending' | 'expired' | 'accepted' | string;
+  link: 'email' | 'copy' | string; email?: string;
+};
 export type AcceptedInvitation = { organization: { id: string; name: string; slug: string; status: string }; membership: { id: string; role: string; status: string } };
 export type SignedInUser = { id: string; name: string; email: string };
 

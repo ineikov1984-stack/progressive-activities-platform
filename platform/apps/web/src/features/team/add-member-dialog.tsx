@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { type FormEvent, type MouseEvent, useEffect, useRef, useState } from 'react';
+import { type FormEvent, type MouseEvent, type SyntheticEvent, useEffect, useRef, useState } from 'react';
 import { addMember, inviteMember, type SentInvitation, TeamApiError, type TeamMember } from './api';
 import { focusLater, invitableRoles, roleAccess, roleHints, roleLabels, type TeamRole } from './presentation';
 import { SentInvitationNotice } from './sent-invitation';
@@ -40,7 +40,10 @@ export function AddMemberDialog({ organizationId, actorRole, onClose, onAdded }:
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<Done>();
+  const [leaving, setLeaving] = useState(false);
   const invites = role !== 'instructor' || inviteTeacher;
+  // Something typed would be lost: a click outside the panel or Esc asks first.
+  const dirty = !done && Object.values(values).some((value) => value.trim() !== '');
   const access = roleAccess(role);
 
   useEffect(() => {
@@ -53,8 +56,21 @@ export function AddMemberDialog({ organizationId, actorRole, onClose, onAdded }:
     if (done) heading.current?.focus();
   }, [done]);
 
+  function askToLeave() {
+    setLeaving(true);
+    focusLater('add-keep');
+  }
+
   function outside(event: MouseEvent<HTMLDialogElement>) {
-    if (event.target === dialog.current) dialog.current?.close();
+    if (event.target !== dialog.current) return;
+    if (dirty) askToLeave();
+    else dialog.current?.close();
+  }
+
+  function escape(event: SyntheticEvent<HTMLDialogElement>) {
+    if (!dirty) return;
+    event.preventDefault();
+    askToLeave();
   }
 
   function change(field: Field, value: string) {
@@ -126,7 +142,7 @@ export function AddMemberDialog({ organizationId, actorRole, onClose, onAdded }:
   const describe = (field: Field) => (errors[field] ? `add-${field}-error` : undefined);
 
   return (
-    <dialog ref={dialog} className={styles.drawer} aria-labelledby="add-member-title" onClose={onClose} onClick={outside}>
+    <dialog ref={dialog} className={styles.drawer} aria-labelledby="add-member-title" onClose={onClose} onCancel={escape} onClick={outside}>
       <div className={styles.drawerInner}>
         <header className={styles.drawerHead}>
           <div className={styles.heading}>
@@ -137,6 +153,15 @@ export function AddMemberDialog({ organizationId, actorRole, onClose, onAdded }:
         </header>
 
         <div className={styles.drawerBody}>
+          {leaving ? (
+            <div className={styles.confirm} role="group" aria-labelledby="add-leave-title">
+              <p id="add-leave-title">Да откажа ли? Въведеното ще се загуби.</p>
+              <div className={styles.actions}>
+                <button id="add-keep" type="button" className={styles.primary} onClick={() => { setLeaving(false); focusField('full_name'); }}>Продължи попълването</button>
+                <button type="button" className={styles.secondary} onClick={() => dialog.current?.close()}>Да, откажи</button>
+              </div>
+            </div>
+          ) : null}
           {done ? (
             <>
               {done.sent ? <SentInvitationNotice sent={done.sent} /> : (
