@@ -7,6 +7,8 @@ export type DashboardContextValue = {
   user: DashboardUser;
   organization: DashboardOrganization;
   organizations: DashboardOrganization[];
+  /** After "Моят профил" saves the name or the phone, the frame shows the new ones. */
+  updateUser?: (user: DashboardUser) => void;
 };
 
 export const DashboardContext = createContext<DashboardContextValue | undefined>(undefined);

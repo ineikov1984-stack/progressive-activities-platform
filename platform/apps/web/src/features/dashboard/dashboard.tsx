@@ -156,7 +156,8 @@ export function Dashboard() {
     <div className={styles.page}>
       <header className={styles.header}>
         <div className={styles.heading}>
-          <p className={styles.eyebrow}>{greeting(new Date())}, {firstName}</p>
+          {/* The name opens "Моят профил" — for a teacher the way to their details and rights. */}
+          <p className={styles.eyebrow}>{greeting(new Date())}, <Link className={styles.nameLink} href="/dashboard/me">{firstName}<span className="sr-only"> — Моят профил</span></Link></p>
           <h1>{organization.name}</h1>
           <p className={styles.muted}>{roleLabel(organization.role)}{activities && canSeeCatalog ? ` · ${plural(published, 'публикувана дейност', 'публикувани дейности')}` : ''}</p>
         </div>
