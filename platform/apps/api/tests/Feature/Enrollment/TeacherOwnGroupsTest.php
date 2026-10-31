@@ -62,6 +62,9 @@ class TeacherOwnGroupsTest extends TestCase
             ->assertOk();
         $this->travelTo('2026-11-09 21:00:00');
         $this->signIn($teacher, $f['organization'])->getJson("/api/v1/enrollment/groups/{$f['tuesday']->id}/roster")->assertOk();
+        // 22:30 UTC on 9 November is already 10 November in Sofia.
+        $this->travelTo('2026-11-09 22:30:00');
+        $this->getJson("/api/v1/enrollment/groups/{$f['tuesday']->id}/roster")->assertForbidden();
         $this->travelTo('2026-11-10 10:00:00');
         $this->getJson("/api/v1/enrollment/groups/{$f['tuesday']->id}/roster")
             ->assertForbidden()->assertJsonPath('message', 'Нямате достъп до тази група.');
@@ -189,6 +192,9 @@ class TeacherOwnGroupsTest extends TestCase
         $this->postJson("{$base}/reopen", ['version' => 1])->assertForbidden();
         $this->postJson("{$base}/skipped-sessions", ['session_id' => $session->id, 'reason' => 'Състезание', 'version' => 1])->assertForbidden();
         $this->deleteJson("{$base}/skipped-sessions/{$session->id}?version=1")->assertForbidden();
+        // Marking how a visit went is not for a teacher yet (the roles are listed in RecordVisitOutcome); a month's
+        // enrollment has no visit, so the refusal may come as "not found" first.
+        $this->assertContains($this->postJson("/api/v1/enrollments/{$f['enrollment']->id}/visit-outcome", ['outcome' => 'attended'])->status(), [403, 404]);
         // No page "Екип" for a teacher (т. 4).
         $this->getJson('/api/v1/team')->assertForbidden();
 
@@ -216,6 +222,9 @@ class TeacherOwnGroupsTest extends TestCase
             $there->forceFill(['staff_member_id' => $person->id])->save();
             $foreign['thursday']->assignments()->attach($there->id, ['role' => 'lead']);
             Offering::query()->whereKey($foreign['chess']->id)->update(['lead_instructor_profile_id' => $there->id]);
+            // And an old profile there, without a person, that still names the user.
+            $old = InstructorProfile::query()->create(['public_name' => 'Учител (стар)', 'user_id' => $teacher->id]);
+            $foreign['tuesday']->assignments()->attach($old->id, ['role' => 'assistant']);
         });
 
         $this->signIn($teacher, $f['organization']);
