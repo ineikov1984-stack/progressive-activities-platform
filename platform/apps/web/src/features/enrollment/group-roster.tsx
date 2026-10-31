@@ -8,6 +8,7 @@ import {
 import { ApprovalSetting } from './approval-setting';
 import { ChangePanel } from './change-panel';
 import { DetailsName } from './child-details';
+import { ContactReveal, REVEAL_NOTE } from './contact-reveal';
 import { addDays, dateText, needsGroupPlace, placesText, type RosterNote, rosterNotes, scopeLabels, shortDay, sofiaDay } from './presentation';
 import styles from './enrollments.module.css';
 
@@ -82,6 +83,8 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
   if (!roster) return <span className={styles.skeleton} aria-busy="true" />;
   const today = sofiaDay();
   const fullPeriodCount = roster.enrollments.filter((item) => item.scope === 'full_period').length;
+  // A teacher's list has no waiting list (TeacherRosterPresenter).
+  const waitlist = roster.waitlist ?? [];
   const groupFull = roster.group.remaining !== null && roster.group.remaining <= 0;
   // Only a place for the whole period waits for the group; a trial or one-off visit has its own session.
   const blockedByGroup = (item: StaffApplication) => groupFull && needsGroupPlace(item);
@@ -93,10 +96,13 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
 
   return (
     <div className={styles.roster}>
-      <p className={styles.places}>
-        Заети места: <strong>{roster.group.enrolled_for_period}</strong>{roster.group.capacity_max ? ` от ${roster.group.capacity_max}` : ''} · {placesText(roster.group.remaining)}
-        {roster.enrollments.length > fullPeriodCount ? ` · ${roster.enrollments.length - fullPeriodCount} с еднократно или пробно посещение` : ''}
-      </p>
+      {/* A teacher's list carries no places. */}
+      {typeof roster.group.enrolled_for_period === 'number' ? (
+        <p className={styles.places}>
+          Заети места: <strong>{roster.group.enrolled_for_period}</strong>{roster.group.capacity_max ? ` от ${roster.group.capacity_max}` : ''} · {placesText(roster.group.remaining)}
+          {roster.enrollments.length > fullPeriodCount ? ` · ${roster.enrollments.length - fullPeriodCount} с еднократно или пробно посещение` : ''}
+        </p>
+      ) : null}
       <ApprovalSetting key={roster.group.enrollment_approval_mode} organizationId={organizationId} groupId={groupId} canManage={canManage}
         mode={roster.group.enrollment_approval_mode === 'automatic' ? 'automatic' : 'manual'} onSaved={() => onChanged?.()} />
       <p ref={topNotice} tabIndex={-1} className={topText ? styles.rowNotice : styles.srOnly}>{topText}</p>
@@ -109,6 +115,10 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
         </div>
       ) : null}
       <h5 className={styles.subTitle}>Записани деца ({roster.enrollments.length})</h5>
+      {/* Once above the children, not under each one. */}
+      {roster.enrollments.some((item) => item.can_reveal_contact) ? (
+        <p className={styles.small}>С „Покажи телефона“ на реда на детето виждате контакта на родителя. {REVEAL_NOTE}</p>
+      ) : null}
       {roster.enrollments.length === 0 ? <p className={styles.muted}>Все още няма записани деца.</p> : shown.length === 0 ? <p className={styles.muted}>Няма дете с това име в групата.</p> : (
         <ul className={styles.rows}>
           {shown.map((item) => (
@@ -131,12 +141,12 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
           ))}
         </ul>
       )}
-      {roster.waitlist.length > 0 ? (
+      {waitlist.length > 0 ? (
         <>
-          <h5 className={styles.subTitle}>Чакащи ({roster.waitlist.length})</h5>
-          {canManage && roster.waitlist.some(blockedByGroup) ? <p id={`roster-full-${groupId}`} className={styles.smallWarning}>Няма свободно място — записване за периода ще е възможно, когато място се освободи.</p> : null}
+          <h5 className={styles.subTitle}>Чакащи ({waitlist.length})</h5>
+          {canManage && waitlist.some(blockedByGroup) ? <p id={`roster-full-${groupId}`} className={styles.smallWarning}>Няма свободно място — записване за периода ще е възможно, когато място се освободи.</p> : null}
           <ol className={styles.waitList}>
-            {roster.waitlist.map((item) => (
+            {waitlist.map((item) => (
               <li key={item.id}>
                 <span className={styles.waitWho}>
                   {onDetails ? <span className={styles.listName}><DetailsName name={item.child.name ?? 'Дете'} onOpen={(opener) => onDetails({ kind: 'application', id: item.id }, opener)} /></span>
@@ -278,6 +288,11 @@ function RosterRow({ onActivity, organizationId, roster, enrollment, today, canM
               </li>
             ))}
           </ul>
+        ) : null}
+        {/* A teacher with "Вижда телефона и имейла" added: the contact only on request, never in the list itself. */}
+        {enrollment.can_reveal_contact ? (
+          <ContactReveal organizationId={organizationId} target={{ kind: 'enrollment', id: enrollment.enrollment_id ?? enrollment.id }} from="roster"
+            childName={name} hasPhone hasEmail showNote={false} />
         ) : null}
         {confirm ? (
           <div className={styles.confirm}>

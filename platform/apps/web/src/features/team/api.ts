@@ -32,7 +32,14 @@ export type TeamList = { members: TeamMember[]; can_manage: boolean };
 export type HistoryEntry = { action: string; at: string; by: string | null };
 /** `history` comes only for those who manage the team. */
 export type MemberDetails = { member: TeamMember; history?: HistoryEntry[] };
-export type NewMember = { full_name: string; phone: string; email?: string | null; teaches: boolean };
+/** Rights are given only together with an invitation: `access` without `invitation` is refused and nobody is added. */
+export type NewMember = {
+  full_name: string; phone: string; email?: string | null; teaches: boolean;
+  invitation?: { role: string; email: string };
+  access?: AccessPayload;
+};
+/** The person; with an invitation, also what was sent and the inviter's link (shown once). */
+export type AddedMember = { member: TeamMember; sent: SentInvitation | null };
 /** Only the fields that changed: a person backfilled without a phone keeps saving a new name. */
 export type MemberChanges = { version: number; full_name?: string; phone?: string; email?: string | null };
 export type SentInvitation = {
@@ -40,6 +47,55 @@ export type SentInvitation = {
   /** The inviter's link for copying: it joins only an existing profile; shown once. */
   link: string;
 };
+/*
+ * The card "Права" (docs/product/team-rights.md, т. 9, 10). The keys of the rights are for the screen to name, never
+ * to show; `grantable`, `history` and `changes` come only for those who manage the team.
+ */
+export type AccessScope = 'own' | 'groups' | 'all';
+/** Where a right comes from: the role, an added right (with its last day, or brought along by another) or leading a group. */
+export type AccessRight = {
+  key: string; area: string; source: 'role' | 'grant' | 'assignment' | string; grant_id: string | null;
+  /** The last day the added right holds, "YYYY-MM-DD"; none — without an end. */
+  expires_on: string | null;
+  /** Brought along by another added right ("Публикува" brings "Създава и променя"). */
+  implied: boolean;
+};
+/** Identifiers and keys only — never a parent's phone, e-mail or name. */
+export type AccessHistoryEntry = {
+  action: string; at: string; by: string | null; group_label: string | null;
+  ability?: string; reason?: string; expires_at?: string | null; from?: string | null; to?: string | null; role?: string;
+  starts_on?: string | null; ends_on?: string | null;
+};
+/** What a new role would take away, before it is confirmed. */
+export type AccessChanges = {
+  revoke: { ability: string; reason: string }[]; clear_scope: boolean; remove_groups: number; clear_template: boolean; loses_finance: boolean;
+};
+export type AccessCard = {
+  member_id: string;
+  state: 'archived' | 'no_access' | 'access' | string;
+  /** Also the role of a waiting invitation. */
+  role: string | null;
+  scope: AccessScope | null;
+  allowed_scopes: AccessScope[];
+  groups: { group_id: string; label: string | null }[];
+  activities: { activity_id: string; title: string | null }[];
+  rights: AccessRight[];
+  template: string | null;
+  version: number;
+  editable: boolean;
+  /** Why the card cannot be changed by the signed-in person, in Bulgarian. */
+  reason: string | null;
+  grantable?: string[];
+  history?: AccessHistoryEntry[];
+  changes?: AccessChanges;
+};
+/** A group, or a whole activity with its future groups. */
+export type AccessTarget = { group_id: string } | { activity_id: string };
+export type AccessGrant = { ability: string; expires_on: string | null };
+export type AccessPayload = {
+  scope: AccessScope | null; groups: AccessTarget[]; grants: AccessGrant[]; template: string | null; confirm_finance?: boolean;
+};
+
 export type NewAssignment = { instructor_profile_id: string; role: 'lead' | 'assistant'; starts_on?: string | null; ends_on?: string | null };
 
 export class TeamApiError extends Error {
@@ -53,7 +109,7 @@ function cookie(name: string): string | undefined {
 }
 
 type RequestOptions = {
-  method?: 'GET' | 'POST' | 'PATCH';
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT';
   body?: unknown;
   organizationId?: string;
   headers?: Record<string, string>;
@@ -95,11 +151,31 @@ export function loadMember(organizationId: string, memberId: string): Promise<Me
   return request<MemberDetails>(`/team/members/${encodeURIComponent(memberId)}`, staff(organizationId));
 }
 
-/** The same key for a retried or double-tapped request adds the person once. */
-export function addMember(organizationId: string, member: NewMember, idempotencyKey: string): Promise<TeamMember> {
-  return request<{ member: TeamMember }>('/team/members', {
+/**
+ * The same key for a retried or double-tapped request adds the person once. With `invitation` the person is added and
+ * invited in one step, and `access` gives the rights with it; a refusal of any part adds nobody.
+ */
+export function addMember(organizationId: string, member: NewMember, idempotencyKey: string): Promise<AddedMember> {
+  return request<{ member: TeamMember } & Partial<SentInvitation>>('/team/members', {
     ...staff(organizationId), method: 'POST', body: member, headers: { 'Idempotency-Key': idempotencyKey },
-  }).then((result) => result.member);
+  }).then((result) => ({
+    member: result.member,
+    sent: result.invitation && typeof result.link === 'string' ? { invitation: result.invitation, link: result.link } : null,
+  }));
+}
+
+/** The card "Права"; with `role`, also what that role would take away (`changes`). */
+export function loadAccess(organizationId: string, memberId: string, role?: string): Promise<AccessCard> {
+  const query = role ? `?${new URLSearchParams({ role }).toString()}` : '';
+  return request<{ access: AccessCard }>(`/team/members/${encodeURIComponent(memberId)}/access${query}`, staff(organizationId))
+    .then((result) => result.access);
+}
+
+/** The whole card at once, under its version: 409 — someone changed it meanwhile. */
+export function saveAccess(organizationId: string, memberId: string, payload: AccessPayload, version: number): Promise<AccessCard> {
+  return request<{ access: AccessCard }>(`/team/members/${encodeURIComponent(memberId)}/access`, {
+    ...staff(organizationId), method: 'PUT', body: { ...payload, version },
+  }).then((result) => result.access);
 }
 
 export function updateMember(organizationId: string, memberId: string, changes: MemberChanges): Promise<TeamMember> {

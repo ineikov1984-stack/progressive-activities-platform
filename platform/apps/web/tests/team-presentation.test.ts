@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { GroupAssignment, TeamMember } from '../src/features/team/api';
 import {
-  accessAction, accessHeadings, assignmentPhase, changeableRoles, daysText, expiresText, firstErrorField, groupLink, groupsByActivity, groupsMeta, groupSummary,
+  accessAction, assignmentPhase, changeableRoles, daysText, expiresText, firstErrorField, groupLink, groupsByActivity, groupsMeta, groupSummary,
   groupTags, guestModeFor, historyItem, historyText, invitableRoles, invitationFold, matchesFilters, memberRole, memberStatus, noGroupsText,
-  parseStateFilter, periodText, roleAccess, roleLabel, stateFilterLabels, teamErrorMessage, tokenFromHash, welcomeText,
+  parseStateFilter, periodText, roleLabel, stateFilterLabels, teamErrorMessage, tokenFromHash, welcomeText,
 } from '../src/features/team/presentation';
 
 // 10:00 in Sofia on 1 November 2026 (EET, UTC+2).
@@ -72,22 +72,6 @@ describe('roles', () => {
     expect(memberRole(member())).toBe('instructor');
     expect(memberRole(member({ instructor_profile_id: null }))).toBeNull();
     expect(memberRole(member({ state: 'login', role: 'coordinator', invitation: waiting }))).toBe('coordinator');
-  });
-
-  it('lists what each role sees, does not see and cannot do — the owner sees everything', () => {
-    expect(roleAccess('organization_owner').hidden).toEqual([]);
-    expect(roleAccess('instructor')).toEqual({
-      sees: ['своите групи и децата в тях — име и клас', 'дейностите на организацията'],
-      hidden: ['телефоните, имейлите и плащанията на родителите', 'другите групи и хората в екипа'], cannot: [],
-    });
-    expect(roleAccess('coordinator').cannot).toEqual(['да кани хора, да сменя роли и да публикува дейности']);
-    expect(roleAccess('organization_admin')).toMatchObject({ hidden: ['финансите'], cannot: ['да дава роля „Собственик“ или „Администратор“'] });
-    for (const role of ['organization_admin', 'coordinator', 'instructor', 'finance', 'viewer']) expect(roleAccess(role).sees.length > 0).toBe(true);
-  });
-
-  it('says "Вижда" for the role in force and "Ще вижда" for the one an invitation gives', () => {
-    expect(accessHeadings('now')).toEqual({ sees: 'Вижда', hidden: 'Не вижда', cannot: 'Не може' });
-    expect(accessHeadings('later')).toEqual({ sees: 'Ще вижда', hidden: 'Няма да вижда', cannot: 'Няма да може' });
   });
 
   it('never invites an owner, and only the owner invites or makes an administrator', () => {

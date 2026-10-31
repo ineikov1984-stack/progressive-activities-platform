@@ -1,7 +1,7 @@
 'use client';
 
 import { useId } from 'react';
-import { accessHeadings, roleAccess } from './presentation';
+import { accessHeadings, accessSummary, type AccessSummary, defaultScope } from './rights';
 import styles from './team.module.css';
 
 function Mark({ kind }: { kind: 'yes' | 'no' }) {
@@ -26,18 +26,21 @@ function Items({ title, items, kind }: { title: string; items: string[]; kind: '
 }
 
 /**
- * What a role sees, does not see and cannot do (DECISIONS 31.10.2026 „Екип — полиран списък и профил“): "Вижда" for
- * the role in force, "Ще вижда" for the role an invitation or a change will give. The words carry the meaning; the
- * marks only add to them.
+ * "Може да / Вижда / Не вижда" (docs/product/team-rights.md, т. 10): "Вижда" for the rights in force, "Ще вижда" for
+ * the ones an invitation or a change will give. The words carry the meaning; the marks only add to them.
  */
-export function RoleAccessList({ role, when }: { role: string; when: 'now' | 'later' }) {
-  const access = roleAccess(role);
+export function AccessLists({ summary, when }: { summary: AccessSummary; when: 'now' | 'later' }) {
   const titles = accessHeadings(when);
   return (
     <div className={styles.access}>
-      <Items title={titles.sees} items={access.sees} kind="yes" />
-      {access.hidden.length > 0 ? <Items title={titles.hidden} items={access.hidden} kind="no" /> : null}
-      {access.cannot.length > 0 ? <Items title={titles.cannot} items={access.cannot} kind="no" /> : null}
+      <Items title={titles.can} items={summary.can} kind="yes" />
+      {summary.sees.length > 0 ? <Items title={titles.sees} items={summary.sees} kind="yes" /> : null}
+      {summary.hidden.length > 0 ? <Items title={titles.hidden} items={summary.hidden} kind="no" /> : null}
     </div>
   );
+}
+
+/** What a role gives by itself, without additions. */
+export function RoleAccessList({ role, when }: { role: string; when: 'now' | 'later' }) {
+  return <AccessLists summary={accessSummary({ role, scope: defaultScope(role), grants: {} })} when={when} />;
 }

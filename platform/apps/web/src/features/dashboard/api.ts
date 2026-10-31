@@ -10,8 +10,13 @@ export type DashboardOrganization = {
   slug: string;
   status: string;
   role: string;
+  /** The role's rights; inside the frame also the added ones (`withAccess`). */
   permissions: string[];
+  access?: OrganizationAccess;
 };
+
+/** What the user has in the organization (docs/product/team-rights.md, т. 9): the rights with the added ones and the scope. */
+export type OrganizationAccess = { role: string | null; scope: string; abilities: string[]; groups: string[]; activities: string[] };
 
 export type DashboardInvitation = {
   id: string;
@@ -84,6 +89,35 @@ export async function loadOrganizationContext(preferredId?: string | null): Prom
     ?? organizations.find((item) => item.role === 'organization_owner') ?? organizations[0];
   if (!organization) throw new Error('Профилът няма активна организация.');
   return { user, organization, organizations };
+}
+
+/** The rights with the added ones; null when they cannot be read — then the role's rights stay as they are. */
+export async function loadOrganizationAccess(organizationId: string): Promise<OrganizationAccess | null> {
+  try {
+    const body = await requestJson<{ access?: OrganizationAccess }>('/backend/api/v1/context/organization', { headers: { 'X-Organization-Id': organizationId } });
+    return body.access && Array.isArray(body.access.abilities) ? body.access : null;
+  } catch (reason) {
+    if (reason instanceof AuthenticationRequiredError) throw reason;
+    return null;
+  }
+}
+
+/** The API names two rights anew; the screens still ask for the old names. */
+const formerNames: Record<string, string> = { 'enrollment.enroll': 'enrollment.manage', 'contacts.view': 'enrollment.contacts' };
+
+/**
+ * The menu and the buttons follow the rights with the added ones, and never hide more than the role's rights do: the
+ * added rights only add. Where a right holds only in some groups, the API still decides group by group.
+ */
+export function withAccess(organization: DashboardOrganization, access: OrganizationAccess | null): DashboardOrganization {
+  if (!access) return organization;
+  const permissions = new Set(organization.permissions);
+  for (const ability of access.abilities) {
+    permissions.add(ability);
+    const former = formerNames[ability];
+    if (former) permissions.add(former);
+  }
+  return { ...organization, permissions: [...permissions], access };
 }
 
 export async function loadDashboard(): Promise<DashboardData> {

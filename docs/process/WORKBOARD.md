@@ -19,6 +19,7 @@
 |---|---|---|---|---|
 | Права, PR 2: API за правата и контактите (`docs/product/team-rights.md`, т. 12) | Claude | `claude/team-rights-api` | **горещ:** `routes/api.php`; `Domain/Organizations` (права, покана, роля, архив), `TeamController`, „Записвания“ (контролери, презентери, `RecordVisitOutcome`), `AuditEventController`, `OrganizationContextController` | код и тестове → CI → ревю по сигурност |
 | Екип — групата води към децата ѝ в „Записвания“ (DECISIONS 31.10.2026 „Права…“) | Claude | `claude/team-group-link` | `features/team` (списък, профил, `presentation.ts`), `tests/team-presentation.test.ts` | код и тест готови → CI → проверка на 390/768/1440 px |
+| Права, PR 3: уеб — „Добави в екипа“, страница „Права“, „Покажи телефона“, менюто по `access` (`docs/product/team-rights.md`, т. 12) | Claude | `claude/team-rights-web` (върху `claude/team-rights-api`) | `features/team` (добавяне, профил, `rights*.ts(x)`, `member-rights.tsx`), `app/dashboard/team/[memberId]/rights`, `features/enrollment` (подробности, списък на групата, `contact-reveal.tsx`), `features/dashboard` (`api.ts`, shell), `LocalDemoSeeder` (демо администратор), e2e `stack-smoke` | код и тестове → CI след merge на PR 2 → UX ревю → 390/768/1440 px |
 
 ## Опашка (по приоритет)
 

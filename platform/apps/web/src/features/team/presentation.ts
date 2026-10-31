@@ -41,44 +41,6 @@ export const roleHints: Record<TeamRole, string> = {
   viewer: 'Само гледа, без да променя',
 };
 
-/** What a role sees, does not see and cannot do, as short items (from OrganizationRole::abilities). */
-export type RoleAccess = { sees: string[]; hidden: string[]; cannot: string[] };
-
-export function roleAccess(role: string): RoleAccess {
-  switch (role) {
-    case 'organization_owner':
-      return { sees: ['всичко в организацията — дейностите, записванията, контактите на родителите, финансите и правата на екипа'], hidden: [], cannot: [] };
-    case 'organization_admin':
-      return {
-        sees: ['дейностите и записванията', 'контактите на родителите и условията за такси', 'екипа — добавя и кани хора'],
-        hidden: ['финансите'], cannot: ['да дава роля „Собственик“ или „Администратор“'],
-      };
-    case 'coordinator':
-      return {
-        sees: ['дейностите и групите', 'записванията и контактите на родителите', 'кой е в екипа'],
-        hidden: ['телефоните и имейлите на екипа'], cannot: ['да кани хора, да сменя роли и да публикува дейности'],
-      };
-    case 'instructor':
-      return {
-        sees: ['своите групи и децата в тях — име и клас', 'дейностите на организацията'],
-        hidden: ['телефоните, имейлите и плащанията на родителите', 'другите групи и хората в екипа'], cannot: [],
-      };
-    case 'finance':
-      return { sees: ['записванията по групи', 'финансите', 'кой е в екипа'], hidden: ['контактите на родителите и на екипа'], cannot: ['да променя дейности и записвания'] };
-    case 'viewer':
-      return { sees: ['дейностите', 'записванията', 'кой е в екипа'], hidden: ['контактите на родителите и на екипа'], cannot: ['да променя каквото и да е'] };
-    default:
-      return { sees: ['това, което позволява ролята'], hidden: ['нищо извън ролята'], cannot: [] };
-  }
-}
-
-/** The headings of the lists: the role in force ("Вижда") or the one an invitation will give ("Ще вижда"). */
-export function accessHeadings(when: 'now' | 'later'): { sees: string; hidden: string; cannot: string } {
-  return when === 'now'
-    ? { sees: 'Вижда', hidden: 'Не вижда', cannot: 'Не може' }
-    : { sees: 'Ще вижда', hidden: 'Няма да вижда', cannot: 'Няма да може' };
-}
-
 /** Who may be invited with which role (TeamRoles::assertMayInvite): never the owner; an administrator only by the owner. */
 export function invitableRoles(actorRole: string): TeamRole[] {
   return actorRole === 'organization_owner'

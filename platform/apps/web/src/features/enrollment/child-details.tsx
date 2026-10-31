@@ -6,6 +6,7 @@ import {
   actorText, childLine, dateText, dateTimeText, historyText, kindLabels, pauseReasonLabels, priceText, queueText, reasonText, recordStatusText, recordTone,
   scheduleText, sessionText, shortDay, sofiaDay,
 } from './presentation';
+import { ContactFacts, ContactReveal } from './contact-reveal';
 import styles from './enrollments.module.css';
 
 type Props = { organizationId: string; target: DetailsTarget; onClose: () => void };
@@ -67,7 +68,7 @@ export function ChildDetailsPanel({ organizationId, target, onClose }: Props) {
           <div className={styles.drawerBody}><span className={styles.skeleton} /><span className={styles.skeleton} /></div>
         ) : (
           <div className={styles.drawerBody}>
-            <ParentSection details={details} name={name} />
+            <ParentSection organizationId={organizationId} target={target} details={details} name={name} />
             <RecordSection details={details} />
             <HereSection details={details} />
             {details.history ? <HistorySection details={details} /> : null}
@@ -91,9 +92,15 @@ export function DetailsName({ name, onOpen }: { name: string; onOpen: (opener: H
   );
 }
 
-function ParentSection({ details, name }: { details: ChildDetailsResponse; name: string }) {
+/**
+ * The parent: the owner sees the phone and the e-mail at once; everyone else with the right sees the name and
+ * "Покажи телефона" (docs/product/team-rights.md, т. 6). Without the right, nothing.
+ */
+function ParentSection({ organizationId, target, details, name }: { organizationId: string; target: DetailsTarget; details: ChildDetailsResponse; name: string }) {
   if (details.contact_status === 'not_allowed') return null;
   const contact = details.contact;
+  const hidden = details.contact_status === 'hidden' || contact?.hidden === true;
+  const reveals = details.contact_reveals ?? [];
   return (
     <section className={styles.detailSection} aria-labelledby="details-parent">
       <h3 id="details-parent">Родител</h3>
@@ -102,22 +109,19 @@ function ParentSection({ details, name }: { details: ChildDetailsResponse; name:
       ) : (
         <>
           <p className={styles.contactName}>{contact.name}</p>
-          <dl className={styles.facts}>
-            <div>
-              <dt>Телефон</dt>
-              <dd className={contact.phone_display ? styles.phoneValue : undefined}>{contact.phone_display ?? 'Родителят още не е добавил телефон.'}</dd>
-            </div>
-            <div>
-              <dt>Имейл</dt>
-              <dd>{contact.email}</dd>
-            </div>
-          </dl>
-          {contact.email_verified ? null : <p className={styles.contactHint}>Имейлът още не е потвърден от родителя — може да е грешен. По-сигурно е да се обадите.</p>}
-          <div className={styles.actions}>
-            {/* On a computer a phone link often does nothing: there the number is the main thing and the button is secondary (CSS). */}
-            {contact.phone ? <a className={`${styles.primaryLink} ${styles.callLink}`} href={`tel:${contact.phone}`}>Обади се<span className={styles.srOnly}> на родителя на {name}</span></a> : null}
-            {contact.email ? <a className={styles.secondaryLink} href={`mailto:${contact.email}`}>Пиши<span className={styles.srOnly}> на родителя на {name}</span></a> : null}
-          </div>
+          {hidden ? (
+            contact.can_reveal ? (
+              <ContactReveal organizationId={organizationId} target={target} from="details" childName={name}
+                hasPhone={contact.has_phone === true} hasEmail={contact.has_email === true} />
+            ) : null
+          ) : <ContactFacts contact={contact} childName={name} />}
+          {reveals.length > 0 ? (
+            <ul className={styles.reveals} aria-label="Кой е видял телефона">
+              {reveals.slice(0, 3).map((item) => (
+                <li key={`${item.at}-${item.by ?? ''}`} className={styles.small}>Телефонът е показан на {item.by ?? 'член на екипа'} · {dateTimeText(item.at)}</li>
+              ))}
+            </ul>
+          ) : null}
           {details.parent_note ? (
             <figure className={styles.parentNote}>
               {/* Written when the parent applied: for an enrolled child the date says it is not new. */}

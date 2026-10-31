@@ -117,10 +117,10 @@
 /* The link for copying, shown once after an invitation is sent, folded: it is only for someone who already logs in. */
 .copy { display: grid; gap: var(--space-2); }
 .copyRow { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
-.more summary { display: flex; align-items: center; min-height: var(--control-height); color: var(--ink); font-size: 15px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; list-style: none; }
-.more summary::-webkit-details-marker { display: none; }
-.more summary::before { content: "+"; display: inline-block; width: 1.2em; text-decoration: none; }
-.more[open] summary::before { content: "−"; }
+.more > summary { display: flex; align-items: center; min-height: var(--control-height); color: var(--ink); font-size: 15px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; list-style: none; }
+.more > summary::-webkit-details-marker { display: none; }
+.more > summary::before { content: "+"; display: inline-block; width: 1.2em; text-decoration: none; }
+.more[open] > summary::before { content: "−"; }
 .moreBody { display: grid; gap: var(--space-2); padding-top: var(--space-1); }
 
 
@@ -172,6 +172,64 @@
 .inline { display: grid; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--surface-warm); }
 .confirm { display: grid; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-left: 4px solid var(--action); border-radius: var(--radius-sm); background: var(--surface-warm); }
 
+/* Rights (docs/product/team-rights.md, т. 10): the role card of "Добави в екипа", the areas and the card "Права". */
+.strong { color: var(--ink); font-weight: 650; }
+.roleCard { display: grid; gap: var(--space-2); }
+.roleAs { margin: 0; color: var(--ink); font-size: 16px; font-weight: 700; }
+.extras { display: grid; gap: var(--space-1); }
+.extrasOff { margin: 0; color: var(--ink-muted); font-size: 15px; font-weight: 600; }
+.scopes { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); min-width: 0; margin: 0; padding: 0; border: 0; }
+.scopes legend { padding: 0 0 var(--space-2); color: var(--ink); font-size: 16px; font-weight: 700; }
+.selection { display: grid; gap: var(--space-2); }
+.selection:focus { outline: none; }
+.picker { display: grid; gap: var(--space-3); }
+.pickerPlaces { display: grid; gap: var(--space-1); }
+.pickerActivity { display: grid; gap: 0; min-width: 0; margin: 0; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.pickerActivity legend { padding: 0 var(--space-1); color: var(--ink); font-size: 15px; font-weight: 700; }
+.pickerItem { display: flex; align-items: center; gap: var(--space-3); min-height: var(--control-height); color: var(--ink-body); font-size: 15px; cursor: pointer; }
+.pickerItem input { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--action); }
+.pickerItem:has(input:disabled) { cursor: default; }
+.legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); margin: 0; }
+.rightTag { display: inline-flex; align-items: center; justify-self: start; min-height: 22px; padding: 0 var(--space-2); border-radius: var(--radius-pill); font-size: 12px; font-weight: 650; line-height: 18px; white-space: nowrap; }
+.rightTag_role { color: var(--status-available); background: var(--status-available-soft); }
+.rightTag_added { color: var(--status-info); background: var(--status-info-soft); }
+.rightTag_locked, .rightTag_none { color: var(--ink-body); background: var(--surface-sunken); }
+.areas { display: grid; gap: var(--space-2); }
+.area { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.area summary { display: flex; align-items: center; gap: var(--space-2) var(--space-3); min-height: var(--control-height); box-sizing: border-box; padding: var(--space-2) var(--space-3); cursor: pointer; list-style: none; }
+.area summary::-webkit-details-marker { display: none; }
+.area summary::after { content: "▾"; flex: none; color: var(--ink-muted); }
+.area[open] summary::after { content: "▴"; }
+.area summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-md); }
+.areaName { flex: 1 1 auto; min-width: 0; color: var(--ink); font-size: 15px; font-weight: 700; }
+.areaCount { flex: 0 1 auto; color: var(--ink-muted); font-size: 13px; text-align: right; }
+.area .rights { padding: 0 var(--space-3) var(--space-2); }
+.rights { display: grid; margin: 0; padding: 0; list-style: none; }
+.right { display: grid; grid-template-columns: 24px minmax(0, 1fr); column-gap: var(--space-3); align-items: center; padding: var(--space-2) 0; border-top: 1px solid var(--border); }
+.right:first-child { border-top: 0; }
+.rightBox { width: 20px; height: 20px; margin: 0; accent-color: var(--action); }
+.rightName { display: flex; align-items: center; min-height: var(--control-height); color: var(--ink); font-size: 15px; font-weight: 600; cursor: pointer; }
+.right:has(.rightBox:disabled) .rightName { cursor: default; }
+.right .rightTag, .rightHint, .rightEnd, .right .fieldError { grid-column: 2; }
+.rightHint { margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 18px; }
+.rightLock { color: var(--ink-body); font-weight: 600; }
+.rightEnd { display: grid; gap: var(--space-1); max-width: 14rem; margin-top: var(--space-2); }
+.rightEnd label { color: var(--ink); font-size: 14px; font-weight: 600; }
+.financeCard { border-style: dashed; }
+.history { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.history li { display: grid; gap: 2px; color: var(--ink-body); font-size: 15px; }
+.dropList { display: grid; gap: var(--space-1); margin: 0; padding-left: var(--space-6); color: var(--ink-body); }
+.rightsLayout { display: grid; gap: var(--space-4); align-items: start; }
+.rightsColumn, .rightsMain, .rightsAside { display: grid; gap: var(--space-4); align-content: start; min-width: 0; }
+.saveError { display: grid; gap: var(--space-2); }
+/* "Отказ" / "Запази промените" stay at the bottom of the screen while the card is long. */
+/* Only one of the two "Какво ще може" cards is shown: before the rights on a phone and a tablet, beside them wider. */
+.wideOnlyBlock { display: none; }
+.dropNote { margin: 0; padding: var(--space-2) var(--space-3); border-left: 4px solid var(--status-limited); border-radius: var(--radius-sm); color: var(--ink); background: var(--status-limited-soft); font-size: 14px; line-height: 20px; }
+/* WCAG 2.4.11: the sticky bar never hides what has the focus — the page scrolls it above the bar. */
+.rightsMain :is(input, select, textarea, button, a, summary, [tabindex="-1"]) { scroll-margin-bottom: calc(var(--control-height) + var(--space-3) * 2 + var(--space-4)); }
+.saveBar { position: sticky; bottom: 0; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-2); padding: var(--space-3) 0; border-top: 1px solid var(--border); background: var(--surface-page); }
+
 @container team (min-width: 560px) {
   .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
   .filters > :first-child { grid-column: 1 / -1; }
@@ -182,12 +240,22 @@
   .copyRow { grid-template-columns: minmax(0, 1fr) auto; }
   .card { padding: var(--space-4) var(--space-6); }
   .facts > div { grid-template-columns: 10rem minmax(0, 1fr); gap: var(--space-3); }
+  .scopes { grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); }
+  .scopes legend, .scopes > p { grid-column: 1 / -1; }
+  .right { grid-template-columns: 24px minmax(0, 1fr) auto; }
+  .right .rightTag { grid-column: 3; grid-row: 1; }
+  .rightHint, .rightEnd, .right .fieldError { grid-column: 2 / -1; }
 }
 
 @container team (min-width: 880px) {
   .filters { grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)); }
   .filters > :first-child { grid-column: auto; }
   .columns { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+  /* "Какво ще може" stays in view beside the card. */
+  .rightsLayout { grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr); }
+  .rightsAside { position: sticky; top: var(--space-6); }
+  .wideOnlyBlock { display: grid; }
+  .narrowOnly { display: none; }
 }
 
 @container team (min-width: 720px) {
