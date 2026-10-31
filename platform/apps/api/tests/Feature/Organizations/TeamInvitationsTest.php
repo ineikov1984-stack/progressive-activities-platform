@@ -417,6 +417,8 @@ class TeamInvitationsTest extends TestCase
         $this->assertAuthenticatedAs($user);
         $this->assertDatabaseMissing('users', ['email' => 'someone@example.test']);
         $this->assertSame($user->id, DB::table('staff_members')->where('id', $person->id)->value('user_id'));
+        // The new profile has signed in: "Последен вход" in its team.
+        $this->assertNotNull(DB::table('organization_memberships')->where('organization_id', $organization->id)->where('user_id', $user->id)->value('last_login_at'));
         $this->getJson('/api/v1/context/organization')->assertOk()->assertJsonPath('organization.id', $organization->id);
 
         // Signed in: no second profile.

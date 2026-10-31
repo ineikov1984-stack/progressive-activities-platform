@@ -27,6 +27,9 @@ export type TeamMember = {
   /** Only for those who manage the team. */
   phone?: string | null;
   email?: string | null;
+  /** When the person last signed in or selected the organization, and last used it — only for those who manage the team. */
+  last_login_at?: string | null;
+  last_seen_at?: string | null;
 };
 export type TeamList = { members: TeamMember[]; can_manage: boolean };
 /**

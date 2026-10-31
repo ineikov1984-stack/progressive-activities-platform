@@ -17,10 +17,8 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Учителят обогатява своите дейности — спецификация (DECISIONS 31.10.2026) | Claude | `claude/teacher-content-spec` | `docs/product/teacher-content.md`, `published-activity-changes.md`, `team-rights.md`, `docs/process/DECISIONS.md` | ревю на архитект — поправено → PR 0, 1a, 1b, 2 (среда, изчистени снимки, предложения, уеб) |
 | Учителят обогатява — PR 0: `gd` и `exif` в образа на API (`teacher-content.md`, т. 10) | Claude | `claude/php-image-extensions` | горещи: `platform/apps/api/composer.json`, `composer.lock`, `.github/workflows/ci.yml`; `platform/apps/api/Dockerfile`, `docker/catalog-uploads.ini` | PR #88: ревю по сигурност — одобрено; добавена проверка на паметта в `docker` → CI → merge |
 | Учителят обогатява — PR 1a: изчистени снимки, `catalog:sanitize-media`, „Махни от страницата“ (`teacher-content.md`, т. 5.2, 5.6) — върху PR 0 | Claude | `claude/image-sanitizer` | горещ: `platform/apps/api/routes/api.php`; API: `CatalogMediaStore`, `ImageSanitizer`, `CatalogMediaUsage`, `RemoveGalleryPhoto`, `SanitizeStoredMedia`, `routes/console.php`, `ActivityController::removeGalleryPhoto`, `AuditAction` | PR #89: поправки след ревюто по сигурност (вид по съдържание, 16 MP за PNG и WebP, `shown_as`) → CI → merge след #88 → собственикът пуска `catalog:sanitize-media` веднъж |
-| „Моят профил“ (DECISIONS 31.10.2026 „Моят профил и заместник“) | Claude | `claude/my-profile` | API: `AuthController::updateContact`, `UpdateOwnStaffContact`, `OrganizationContextController` (`grants`); уеб: `features/me`, `app/dashboard/me`, `features/dashboard` (обвивка, меню от аватара, „Начало“); e2e `stack-smoke` | код и тестове → CI → проверка на 390/768/1440 px |
 
 ## Опашка (по приоритет)
 
@@ -64,6 +62,9 @@
 
 ## Наскоро завършено
 
+- 31.10.2026 — PR #87: екип — последен вход и активност (само за управляващите екипа), „Намерени: N“, филтър по няколко роли; записът на активността — след отговора, в отделна транзакция; ревю по сигурност (Claude).
+- 31.10.2026 — PR #86: спецификация „Учителят обогатява своите дейности“ (`docs/product/teacher-content.md`) след ревю на архитект (Claude).
+- 31.10.2026 — PR #85: „Моят профил“ за всеки от екипа — свои данни, правата и групите; телефонът и имейлът за връзка (Claude).
 - 31.10.2026 — PR #84: учителят вижда само „Начало“ и своите групи; таксите — четири роли (`terms.view`); „Ръчно/Автоматично“ — с `catalog.manage`; историята на правата казва какво е дадено и отнето; ревю по сигурност (Claude).
 - 31.10.2026 — PR #83: права, PR 3 — уеб: „Добави в екипа“ с права, страница „Права“, „Покажи телефона“ в подробностите и в списъка на учителя, менюто по `access` (Claude).
 - 31.10.2026 — PR #82: права, PR 2 — API за правата и контактите: картата „Права“ с версия, почистване при смяна на роля, покана и архив, скритите контакти с „Покажи телефона“ и лимит; ревю по сигурност (Claude).

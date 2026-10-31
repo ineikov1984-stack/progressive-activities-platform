@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
+use App\Domain\Organizations\Services\MembershipActivity;
 use App\Domain\Organizations\Services\StaffRights;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Closure;
@@ -14,7 +15,14 @@ use Symfony\Component\HttpFoundation\Response;
 
 class ResolveTenant
 {
-    public function __construct(private readonly TenantContext $context, private readonly StaffRights $rights) {}
+    /** The membership whose "Последна активност" is due, kept on the request for `terminate`. */
+    private const SEEN = 'tenant.membership_seen';
+
+    public function __construct(
+        private readonly TenantContext $context,
+        private readonly StaffRights $rights,
+        private readonly MembershipActivity $activity,
+    ) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -35,19 +43,20 @@ class ResolveTenant
                 DB::select("SELECT set_config('app.current_user_id', ?, true)", [$userId]);
             }
 
-            $membershipExists = OrganizationMembership::query()
+            // The same check as before; it also reads when the person was last seen here.
+            $membership = OrganizationMembership::query()
                 ->withoutGlobalScopes()
                 ->where('organization_id', $organizationId)
                 ->where('user_id', $userId)
                 ->where('status', 'active')
-                ->exists();
+                ->first(['id', 'last_seen_at']);
 
             $organization = Organization::query()
                 ->withoutGlobalScopes()
                 ->whereKey($organizationId)
                 ->first();
 
-            if (! $membershipExists || $organization === null) {
+            if ($membership === null || $organization === null) {
                 return new JsonResponse(['message' => 'Организацията не е намерена.'], Response::HTTP_NOT_FOUND);
             }
 
@@ -57,6 +66,10 @@ class ResolveTenant
                 if (DB::getDriverName() === 'pgsql') {
                     DB::select("SELECT set_config('app.current_organization_id', ?, true)", [$organizationId]);
                 }
+                // "Последна активност" is written after the response, in a transaction of its own (`terminate`).
+                if ($this->activity->isDue($membership->last_seen_at)) {
+                    $request->attributes->set(self::SEEN, ['organization' => $organizationId, 'membership' => (string) $membership->getKey()]);
+                }
 
                 // The rights of the request's user are read once for the request (docs/product/team-rights.md, т. 4.5).
                 return $this->rights->remembering(fn (): Response => $next($request));
@@ -64,5 +77,17 @@ class ResolveTenant
                 $this->context->clear();
             }
         });
+    }
+
+    /**
+     * After the response: "Последна активност" of the membership the request checked, at most once in five minutes —
+     * outside the request's transaction, so the membership row is never held while a request runs.
+     */
+    public function terminate(Request $request, Response $response): void
+    {
+        $seen = $request->attributes->get(self::SEEN);
+        if (is_array($seen) && is_string($seen['organization'] ?? null) && is_string($seen['membership'] ?? null)) {
+            $this->activity->seen($seen['organization'], $seen['membership']);
+        }
     }
 }

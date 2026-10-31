@@ -11,7 +11,7 @@ import {
 } from './api';
 import { MemberGroups } from './member-groups';
 import {
-  focusLater, initials, invitableRoles, invitationFold, memberRole, memberStatus, roleLabel, roleLabels, type TeamRole,
+  activityLine, focusLater, initials, invitableRoles, invitationFold, memberRole, memberStatus, roleLabel, roleLabels, type TeamRole,
 } from './presentation';
 import { accessSummary, draftFromCard, memberHistoryItem, rightsHeadline, templateLabel } from './rights';
 import { AccessLists, RoleAccessList } from './role-access';
@@ -485,6 +485,8 @@ export function MemberProfile({ memberId }: { memberId: string }) {
             {status.detail ? <span className={styles.small}>{status.detail}</span> : null}
             {member.phone ? <a className={styles.phone} href={`tel:${member.phone}`}>{member.phone}</a> : null}
           </p>
+          {/* For those who manage the team, of someone who logs in. */}
+          {member.state === 'login' && activityLine(member, now) ? <p className={styles.small}>{activityLine(member, now)}</p> : null}
         </div>
         {addInHeader ? (
           <button id="add-group-header" type="button" className={`${styles.primary} ${styles.wideOnly}`} onClick={() => setAddRequest((value) => value + 1)}>+ Добави група</button>
