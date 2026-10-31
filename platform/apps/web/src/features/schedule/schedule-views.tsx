@@ -1,10 +1,10 @@
 'use client';
 
-import type { CSSProperties } from 'react';
-import type { ScheduleActivity, ScheduleSession } from './api';
+import { type CSSProperties, Fragment, type ReactNode } from 'react';
+import type { ScheduleActivity, ScheduleBoard, ScheduleSession } from './api';
 import {
-  activityColor, clock, dayName, instructorsText, legend, markLabels, placesText, type ScheduleNames, sessionMark, sessionsByDay, sofiaMinutes,
-  startClock, timeRange, waitingText, type Week, weekLayout,
+  activityColor, clock, dayBlockDetail, type DayColumns, dayLayout, dayName, instructorsText, legend, markLabels, placesText, type ScheduleNames,
+  sessionMark, sessionsByDay, sofiaMinutes, startClock, timeRange, waitingText, type Week, type WeekBlock, weekLayout,
 } from './presentation';
 import styles from './schedule.module.css';
 
@@ -13,11 +13,11 @@ export type OpenMore = (sessions: ScheduleSession[], opener: HTMLElement) => voi
 
 type ViewProps = { week: Week; sessions: ScheduleSession[]; names: ScheduleNames; today: string; now: Date; onOpen: OpenSession };
 
-const vars = (values: Record<string, number>) => Object.fromEntries(Object.entries(values).map(([key, value]) => [`--${key}`, value])) as CSSProperties;
-const colorClass = (activity: ScheduleActivity | undefined) => styles[`cat_${activityColor(activity?.color)}`];
+export const vars = (values: Record<string, number>) => Object.fromEntries(Object.entries(values).map(([key, value]) => [`--${key}`, value])) as CSSProperties;
+export const colorClass = (activity: ScheduleActivity | undefined) => styles[`cat_${activityColor(activity?.color)}`];
 
 /** The colours of the activities shown, with their names (т. 3.6). */
-function Legend({ activities }: { activities: ScheduleActivity[] }) {
+export function Legend({ activities }: { activities: ScheduleActivity[] }) {
   if (activities.length < 2) return null;
   return (
     <ul className={styles.legend} aria-label="Цветове на дейностите">
@@ -28,73 +28,141 @@ function Legend({ activities }: { activities: ScheduleActivity[] }) {
   );
 }
 
+function Mark({ session, now }: { session: ScheduleSession; now: Date }) {
+  const mark = sessionMark(session, now);
+  if (mark !== 'now' && mark !== 'cancelled' && mark !== 'moved') return null;
+  return <span className={`${styles.mark} ${styles[`mark_${mark}`]}`}>{markLabels[mark]}</span>;
+}
+
+type GridColumn = { key: string; head: ReactNode; label: string; blocks: WeekBlock[]; today?: boolean };
+
+/**
+ * The hours on the left and a column for each day (Седмица) or each place or person (Ден). On a narrow screen the
+ * columns scroll inside, the hours stay; the page itself does not scroll sideways.
+ */
+function TimeGrid({ label, kind, columns, startHour, endHour, now, nowInColumn, block, more }: {
+  label: string; kind: 'week' | 'day'; columns: GridColumn[]; startHour: number; endHour: number; now: Date;
+  nowInColumn: (column: GridColumn) => boolean;
+  block: (session: ScheduleSession, position: CSSProperties) => ReactNode;
+  more: (sessions: ScheduleSession[], position: CSSProperties, start: number, column: GridColumn) => ReactNode;
+}) {
+  const rows = endHour - startHour;
+  const offset = startHour * 60;
+  const nowMinutes = sofiaMinutes(now);
+  return (
+    <div className={styles.weekScroll} role="region" aria-label={label} tabIndex={0}>
+      <div className={`${styles.weekGrid} ${kind === 'day' ? styles.gridDay : ''}`} style={vars({ rows, columns: columns.length })}>
+        <span className={styles.corner} aria-hidden="true" />
+        {columns.map((column) => <div key={column.key} className={styles.dayHead} aria-hidden="true">{column.head}</div>)}
+        <div className={styles.hours} aria-hidden="true">
+          {Array.from({ length: rows }, (_, index) => <span key={index} style={vars({ at: index })}>{clock((startHour + index) * 60)}</span>)}
+        </div>
+        {columns.map((column) => (
+          <div key={column.key} role="group" aria-label={column.label} className={`${styles.column} ${column.today ? styles.columnToday : ''}`}>
+            {column.blocks.length === 0 ? <span className="sr-only">Няма занимания</span> : null}
+            {column.blocks.map((item) => {
+              const position = vars({ top: item.start - offset, length: item.end - item.start, lane: item.lane, lanes: item.lanes });
+              return item.kind === 'more'
+                ? <Fragment key={`more-${item.start}`}>{more(item.sessions, position, item.start, column)}</Fragment>
+                : <Fragment key={item.session.id}>{block(item.session, position)}</Fragment>;
+            })}
+            {nowInColumn(column) && nowMinutes >= offset && nowMinutes <= endHour * 60 ? <span className={styles.nowLine} style={vars({ top: nowMinutes - offset })} aria-hidden="true" /> : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function eventClass(session: ScheduleSession, names: ScheduleNames, now: Date): string {
+  const mark = sessionMark(session, now);
+  return `${styles.event} ${colorClass(names.activity(session.activity_id))} ${mark === 'now' ? styles.isNow : ''} ${mark === 'cancelled' ? styles.isCancelled : ''}`;
+}
+
 /**
  * Седмица (т. 3.1): Monday to Sunday with the hours of the week's sessions; a block shows the time, the activity, the
- * group and the place. Up to four at the same time stand side by side; with more, "+N още" opens the rest.
+ * group and the place. Up to four at the same time stand side by side; with more, "+N още" — the day by places, or
+ * for "Моят график" the rest in the panel.
  */
-export function WeekView({ week, sessions, activities, names, today, now, onOpen, onMore }: ViewProps & { activities: ScheduleActivity[]; onMore: OpenMore }) {
+export function WeekView({ week, sessions, activities, names, today, now, onOpen, onMore, moreOpensDay }: ViewProps & {
+  activities: ScheduleActivity[]; onMore: (sessions: ScheduleSession[], opener: HTMLElement, day: string) => void; moreOpensDay: boolean;
+}) {
   const layout = weekLayout(sessions, week.days);
-  const rows = layout.endHour - layout.startHour;
-  const offset = layout.startHour * 60;
-  const nowMinutes = sofiaMinutes(now);
-
+  const columns = layout.days.map(({ day, blocks }) => {
+    const name = dayName(day);
+    const isToday = day === today;
+    return {
+      key: day, blocks, today: isToday, label: `${name.weekday}, ${name.date}${isToday ? ', днес' : ''}`,
+      head: isToday ? <span className={styles.today}>{name.short} {name.number} · днес</span> : <>{name.short} <strong>{name.number}</strong></>,
+    };
+  });
   return (
     <section className={styles.week} aria-label="Седмица">
       <Legend activities={legend(sessions, activities)} />
-      <div className={styles.weekScroll}>
-        <div className={styles.weekGrid} style={vars({ rows })}>
-          <span aria-hidden="true" />
-          {week.days.map((day) => {
-            const name = dayName(day);
-            return (
-              <div key={day} className={styles.dayHead} aria-hidden="true">
-                {day === today ? <span className={styles.today}>{name.short} {name.number} · днес</span> : <>{name.short} <strong>{name.number}</strong></>}
-              </div>
-            );
-          })}
-          <div className={styles.hours} aria-hidden="true">
-            {Array.from({ length: rows }, (_, index) => <span key={index} style={vars({ at: index })}>{clock((layout.startHour + index) * 60)}</span>)}
-          </div>
-          {layout.days.map(({ day, blocks }) => {
-            const name = dayName(day);
-            const isToday = day === today;
-            return (
-              <div key={day} role="group" aria-label={`${name.weekday}, ${name.date}${isToday ? ', днес' : ''}`} className={`${styles.column} ${isToday ? styles.columnToday : ''}`}>
-                {blocks.length === 0 ? <span className="sr-only">Няма занимания</span> : null}
-                {blocks.map((block) => {
-                  const position = vars({ top: block.start - offset, length: block.end - block.start, lane: block.lane, lanes: block.lanes });
-                  if (block.kind === 'more') {
-                    const count = block.sessions.length;
-                    return (
-                      <button key={`more-${block.start}`} type="button" className={styles.more} style={position} aria-haspopup="dialog"
-                        aria-label={`Още ${count} занимания от ${clock(block.start)}`} onClick={(event) => onMore(block.sessions, event.currentTarget)}>
-                        +{count} още
-                      </button>
-                    );
-                  }
-                  const { session } = block;
-                  const activity = names.activity(session.activity_id);
-                  const mark = sessionMark(session, now);
-                  const place = names.location(session.location_id);
-                  return (
-                    <button key={session.id} type="button" style={position} aria-haspopup="dialog" onClick={(event) => onOpen(session, event.currentTarget)}
-                      className={`${styles.event} ${colorClass(activity)} ${mark === 'now' ? styles.isNow : ''} ${mark === 'cancelled' ? styles.isCancelled : ''}`}>
-                      <span className={styles.eventBody}>
-                        <strong><span className={styles.eventTime}>{startClock(session)} </span>{activity?.title ?? 'Занимание'}</strong>
-                        <span className="sr-only">до {clock(sofiaMinutes(session.ends_at))},</span>
-                        <span className={styles.eventGroup}>{names.group(session.group_id)?.name}</span>
-                        {place ? <span className={styles.eventPlace}>{place}</span> : null}
-                        {mark === 'now' || mark === 'cancelled' || mark === 'moved' ? <span className={`${styles.mark} ${styles[`mark_${mark}`]}`}>{markLabels[mark]}</span> : null}
-                      </span>
-                    </button>
-                  );
-                })}
-                {isToday && nowMinutes >= offset && nowMinutes <= layout.endHour * 60 ? <span className={styles.nowLine} style={vars({ top: nowMinutes - offset })} aria-hidden="true" /> : null}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <TimeGrid label="Седмица по часове" kind="week" columns={columns} startHour={layout.startHour} endHour={layout.endHour} now={now}
+        nowInColumn={(column) => Boolean(column.today)}
+        block={(session, position) => {
+          const place = names.location(session.location_id);
+          return (
+            <button type="button" style={position} aria-haspopup="dialog" onClick={(event) => onOpen(session, event.currentTarget)} className={eventClass(session, names, now)}>
+              <span className={styles.eventBody}>
+                <strong><span className={styles.eventTime}>{startClock(session)} </span>{names.activity(session.activity_id)?.title ?? 'Занимание'}</strong>
+                <span className="sr-only">до {clock(sofiaMinutes(session.ends_at))},</span>
+                <span className={styles.eventGroup}>{names.group(session.group_id)?.name}</span>
+                {place ? <span className={styles.eventPlace}>{place}</span> : null}
+                <Mark session={session} now={now} />
+              </span>
+            </button>
+          );
+        }}
+        more={(hidden, position, start, column) => (
+          <button type="button" className={styles.more} style={position} aria-haspopup={moreOpensDay ? undefined : 'dialog'}
+            onClick={(event) => onMore(hidden, event.currentTarget, column.key)}>
+            <span>+{hidden.length} още</span>
+            <span className="sr-only"> занимания от {clock(start)}, {column.label}</span>
+            {moreOpensDay ? <span className={styles.moreHint}>виж деня</span> : null}
+          </button>
+        )} />
+    </section>
+  );
+}
+
+/**
+ * Ден (т. 3.3): a column for each place of the day ("Без зала" last), or for each person who leads ("Без
+ * преподавател" last). A block shows the time from–to, the activity and group, who leads (or the place, by people)
+ * and the places.
+ */
+export function DayView({ day, by, sessions, dictionary, names, today, now, onOpen, onMore }: {
+  day: string; by: DayColumns; sessions: ScheduleSession[]; dictionary: Pick<ScheduleBoard, 'activities' | 'locations' | 'instructors'>;
+  names: ScheduleNames; today: string; now: Date; onOpen: OpenSession; onMore: OpenMore;
+}) {
+  const layout = dayLayout(sessions, day, by, dictionary);
+  const name = dayName(day);
+  const columns = layout.columns.map((column) => ({ key: column.id, head: column.title, label: column.title, blocks: column.blocks, today: day === today }));
+  return (
+    <section className={styles.week} aria-label={`${name.weekday}, ${name.date} — ${by === 'rooms' ? 'по зали' : 'по треньори'}`}>
+      <Legend activities={legend(sessions, dictionary.activities)} />
+      <TimeGrid label={`${name.weekday} по часове`} kind="day" columns={columns} startHour={layout.startHour} endHour={layout.endHour} now={now}
+        nowInColumn={(column) => Boolean(column.today)}
+        block={(session, position) => {
+          const group = names.group(session.group_id)?.name;
+          return (
+            <button type="button" style={position} aria-haspopup="dialog" onClick={(event) => onOpen(session, event.currentTarget)} className={eventClass(session, names, now)}>
+              <span className={styles.eventBody}>
+                <span className={styles.eventTime}><strong>{timeRange(session)}</strong></span>
+                <strong>{names.activity(session.activity_id)?.title ?? 'Занимание'}{group ? ` · ${group}` : ''}</strong>
+                <span className={styles.eventGroup}>{dayBlockDetail(session, by, names)}</span>
+                {session.status === 'cancelled' ? null : <span className={styles.eventPlace}>{placesText(session, 'short')}</span>}
+                <Mark session={session} now={now} />
+              </span>
+            </button>
+          );
+        }}
+        more={(hidden, position, start) => (
+          <button type="button" className={styles.more} style={position} aria-haspopup="dialog" onClick={(event) => onMore(hidden, event.currentTarget)}>
+            +{hidden.length} още<span className="sr-only"> занимания от {clock(start)}</span>
+          </button>
+        )} />
     </section>
   );
 }
@@ -140,12 +208,11 @@ export function CardsView({ week, sessions, names, today, now, onOpen }: ViewPro
 }
 
 /** The loading state: the shape of the view, not an empty page. */
-export function ScheduleSkeleton({ view }: { view: 'week' | 'cards' }) {
+export function ScheduleSkeleton({ cards }: { cards: boolean }) {
   return (
     <div aria-hidden="true">
-      {view === 'week' ? <span className={`${styles.skeleton} ${styles.skeletonWeek}`} /> : (
-        <div className={styles.skeletonCards}>{[0, 1, 2].map((item) => <span key={item} className={styles.skeleton} />)}</div>
-      )}
+      {cards ? <div className={styles.skeletonCards}>{[0, 1, 2].map((item) => <span key={item} className={styles.skeleton} />)}</div>
+        : <span className={`${styles.skeleton} ${styles.skeletonWeek}`} />}
     </div>
   );
 }

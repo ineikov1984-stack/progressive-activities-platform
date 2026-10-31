@@ -2,16 +2,30 @@ import type { ScheduleActivity, ScheduleBoard, ScheduleGroup, ScheduleInstructor
 
 /*
  * "График" (docs/product/schedule.md, т. 3–4): what the page shows, without React — the days and hours by Sofia, the
- * week's layout, the address of the page, the words for the states and the people.
+ * month, week and day layouts, the address of the page, the words for the states and the people.
  */
 
 export const SCHEDULE_TIMEZONE = 'Europe/Sofia';
 
-/** The views of PR 2; "Месец" and "Ден по зали" join them in PR 3 (т. 8), in the order "Месец · Седмица · Ден · Карти". */
-export type ScheduleView = 'week' | 'cards';
+/** The four views (т. 3). */
+export type ScheduleView = 'month' | 'week' | 'day' | 'cards';
 export const scheduleViews: { id: ScheduleView; label: string }[] = [
+  { id: 'month', label: 'Месец' },
   { id: 'week', label: 'Седмица' },
+  { id: 'day', label: 'Ден по зали' },
   { id: 'cards', label: 'Карти' },
+];
+
+/** "Моят график" has the week and the cards only (т. 2, решение от 31.10.2026). */
+export function viewsFor(own: boolean): { id: ScheduleView; label: string }[] {
+  return own ? scheduleViews.filter((item) => item.id === 'week' || item.id === 'cards') : scheduleViews;
+}
+
+/** The columns of "Ден": the places of the day, or the people who lead (т. 3.3). */
+export type DayColumns = 'rooms' | 'teachers';
+export const dayColumnChoices: { id: DayColumns; label: string }[] = [
+  { id: 'rooms', label: 'По зали' },
+  { id: 'teachers', label: 'По треньори' },
 ];
 
 const months = ['януари', 'февруари', 'март', 'април', 'май', 'юни', 'юли', 'август', 'септември', 'октомври', 'ноември', 'декември'];
@@ -110,6 +124,63 @@ export function sessionWhen(session: Pick<ScheduleSession, 'starts_at' | 'ends_a
   return `${name.weekday}, ${name.date} · ${timeRange(session)}`;
 }
 
+/** Six weeks from the Monday of the week that holds the month's first day (т. 3.2): always 42 days. */
+export function monthGrid(day: string): Week & { month: string } {
+  const month = day.slice(0, 7);
+  const from = weekOf(`${month}-01`).from;
+  const days = Array.from({ length: 42 }, (_, index) => addDays(from, index));
+  return { month, from, to: days[41], days };
+}
+
+export type Period = Week & { label: string };
+
+/**
+ * What a view shows for a day and asks the API for: the month's six weeks ("Ноември 2026"), the week of the day
+ * ("16–22 ноември 2026", also for the cards) or the day itself ("Сряда, 18 ноември 2026").
+ */
+export function periodOf(view: ScheduleView, day: string): Period {
+  if (view === 'month') {
+    const grid = monthGrid(day);
+    const [year, month] = grid.month.split('-').map(Number);
+    const name = months[month - 1];
+    return { from: grid.from, to: grid.to, days: grid.days, label: `${name[0].toUpperCase()}${name.slice(1)} ${year}` };
+  }
+  if (view === 'day') {
+    const name = dayName(day);
+    return { from: day, to: day, days: [day], label: `${name.weekday}, ${name.date} ${day.slice(0, 4)}` };
+  }
+  const week = weekOf(day);
+  return { ...week, label: periodLabel(week.from, week.to) };
+}
+
+/** ‹ › — a month, a week or a day back or forward. A month goes to its first day. */
+export function stepDay(view: ScheduleView, day: string, step: 1 | -1): string {
+  if (view === 'day') return addDays(day, step);
+  if (view === 'month') {
+    const [year, month] = day.split('-').map(Number);
+    const first = new Date(Date.UTC(year, month - 1 + step, 1, 12));
+    return first.toISOString().slice(0, 10);
+  }
+  return addDays(weekOf(day).from, 7 * step);
+}
+
+export const stepLabels: Record<'month' | 'week' | 'day', { previous: string; next: string }> = {
+  month: { previous: 'Предишен месец', next: 'Следващ месец' },
+  week: { previous: 'Предишна седмица', next: 'Следваща седмица' },
+  day: { previous: 'Предишен ден', next: 'Следващ ден' },
+};
+
+export function stepsOf(view: ScheduleView): { previous: string; next: string } {
+  return stepLabels[view === 'cards' ? 'week' : view];
+}
+
+/** The empty view says what is empty. */
+export function emptyText(view: ScheduleView): string {
+  if (view === 'month') return 'Няма занимания в този месец.';
+  if (view === 'day') return 'Няма занимания в този ден.';
+  return 'Няма занимания в тази седмица.';
+}
+
 // ---- The address of the page --------------------------------------------------------------------------------------
 
 export type FilterKey = 'activity' | 'group' | 'instructor' | 'location';
@@ -117,8 +188,8 @@ export const filterKeys: FilterKey[] = ['activity', 'group', 'instructor', 'loca
 export type ScheduleFilters = Record<FilterKey, string[]>;
 export const noFilters: ScheduleFilters = { activity: [], group: [], instructor: [], location: [] };
 
-/** What the address holds: `?view=week&date=2026-11-18&activity=…&group=…` (т. 3). */
-export type ScheduleAddress = { view: ScheduleView | null; date: string | null; filters: ScheduleFilters };
+/** What the address holds: `?view=day&date=2026-11-18&by=teachers&activity=…&group=…` (т. 3). */
+export type ScheduleAddress = { view: ScheduleView | null; date: string | null; by: DayColumns; filters: ScheduleFilters };
 
 /** As many as the API takes in one filter. */
 const MAX_CHOICES = 50;
@@ -126,8 +197,8 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Reads the address. Anything that is not a known view, a real day or an identifier is left out, so that a broken
- * link opens the schedule instead of an error. "Моят график" has no filter by teacher: one from a colleague's link is
- * dropped, so that no filter works unseen.
+ * link opens the schedule instead of an error. "Моят график" has no filter by teacher and only the week and the cards:
+ * those from a colleague's link are dropped, so that no filter works unseen.
  */
 export function parseScheduleAddress(search: string | URLSearchParams, options: { own?: boolean } = {}): ScheduleAddress {
   const params = typeof search === 'string' ? new URLSearchParams(search) : search;
@@ -139,25 +210,27 @@ export function parseScheduleAddress(search: string | URLSearchParams, options: 
     filters[key] = [...new Set(params.getAll(key).filter((value) => uuid.test(value)).map((value) => value.toLowerCase()))].slice(0, MAX_CHOICES);
   }
   return {
-    view: scheduleViews.some((item) => item.id === view) ? view as ScheduleView : null,
+    view: viewsFor(Boolean(options.own)).find((item) => item.id === view)?.id ?? null,
     date: isDay(date) ? date : null,
+    by: params.get('by') === 'teachers' ? 'teachers' : 'rooms',
     filters,
   };
 }
 
-/** The address for a state: "?view=week&date=2026-11-18&activity=…", in a stable order. */
+/** The address for a state: "?view=day&date=2026-11-18&by=teachers&activity=…", in a stable order; by places is the default. */
 export function scheduleAddress(address: ScheduleAddress): string {
   const params = new URLSearchParams();
   if (address.view) params.set('view', address.view);
   if (address.date) params.set('date', address.date);
+  if (address.by === 'teachers') params.set('by', 'teachers');
   for (const key of filterKeys) for (const id of address.filters[key]) params.append(key, id);
   const query = params.toString();
   return query ? `?${query}` : '';
 }
 
-/** The request for the week: `from`, `to` and `activity[]`, … as the API reads them (т. 6.1). */
-export function scheduleQuery(week: Pick<Week, 'from' | 'to'>, filters: ScheduleFilters): string {
-  const params = new URLSearchParams({ from: week.from, to: week.to });
+/** The request for the period: `from`, `to` and `activity[]`, … as the API reads them (т. 6.1). */
+export function scheduleQuery(period: Pick<Week, 'from' | 'to'>, filters: ScheduleFilters): string {
+  const params = new URLSearchParams({ from: period.from, to: period.to });
   for (const key of filterKeys) for (const id of filters[key]) params.append(`${key}[]`, id);
   return params.toString();
 }
@@ -177,8 +250,8 @@ export function scheduleViewStorageKey(userId: string): string {
   return `progressive:schedule-view:${userId}`;
 }
 
-export function parseStoredView(value: string | null | undefined): ScheduleView | undefined {
-  return scheduleViews.find((item) => item.id === value)?.id;
+export function parseStoredView(value: string | null | undefined, own = false): ScheduleView | undefined {
+  return viewsFor(own).find((item) => item.id === value)?.id;
 }
 
 /** Without a choice: the week on a tablet and a computer (768 px and wider), the cards on a phone (т. 3). */
@@ -317,7 +390,7 @@ export function sessionLabel(session: ScheduleSession, names: ScheduleNames, now
   ].filter(Boolean).join(', ');
 }
 
-// ---- The week ------------------------------------------------------------------------------------------------------
+// ---- The week and the day: a time grid ---------------------------------------------------------------------------
 
 /** The shortest a block is drawn, so that its time and name fit. */
 const MIN_MINUTES = 30;
@@ -329,68 +402,171 @@ export type WeekBlock =
   | { kind: 'more'; sessions: ScheduleSession[]; start: number; end: number; lane: number; lanes: number };
 export type WeekLayout = { startHour: number; endHour: number; days: { day: string; blocks: WeekBlock[] }[] };
 
-type Placed = { session: ScheduleSession; start: number; end: number; lane: number };
+type Spanned = { session: ScheduleSession; start: number; end: number };
+type Placed = Spanned & { lane: number };
 
-function span(session: ScheduleSession, day: string): { start: number; end: number } {
+function span(session: ScheduleSession, day: string): Spanned {
   const start = sofiaMinutes(session.starts_at);
   // A session past midnight is drawn to the end of its day.
   const end = sofiaDay(session.ends_at) === day ? sofiaMinutes(session.ends_at) : 24 * 60;
-  return { start, end: Math.min(24 * 60, Math.max(end, start + MIN_MINUTES)) };
+  return { session, start, end: Math.min(24 * 60, Math.max(end, start + MIN_MINUTES)) };
+}
+
+/** From an hour before the earliest start to an hour after the latest end; a working day's hours when there is none. */
+function hours(items: Spanned[]): { startHour: number; endHour: number } {
+  if (items.length === 0) return { startHour: 8, endHour: 20 };
+  return {
+    startHour: Math.max(0, Math.floor(Math.min(...items.map((item) => item.start)) / 60) - 1),
+    endHour: Math.min(24, Math.ceil(Math.max(...items.map((item) => item.end)) / 60) + 1),
+  };
+}
+
+/**
+ * Sessions at the same time stand side by side; up to `maxLanes` at once all show, with more the first ones fill all
+ * but the last place, which is "+N още" with the rest.
+ */
+function placeBlocks(spanned: Spanned[], maxLanes: number): WeekBlock[] {
+  // Stable: the API's order (start, then activity) stays for the same start.
+  const items = spanned.map((item, index) => ({ ...item, index })).sort((a, b) => a.start - b.start || a.index - b.index);
+  const blocks: WeekBlock[] = [];
+  let cluster: Placed[] = [];
+  let clusterEnd = -1;
+  let laneEnds: number[] = [];
+  const flush = () => {
+    if (cluster.length === 0) return;
+    const lanes = laneEnds.length;
+    if (lanes <= maxLanes) {
+      for (const item of cluster) blocks.push({ kind: 'session', ...item, lanes });
+    } else {
+      const hidden = cluster.filter((item) => item.lane >= maxLanes - 1);
+      for (const item of cluster) if (item.lane < maxLanes - 1) blocks.push({ kind: 'session', ...item, lanes: maxLanes });
+      blocks.push({
+        kind: 'more', sessions: hidden.map((item) => item.session), lane: maxLanes - 1, lanes: maxLanes,
+        start: Math.min(...hidden.map((item) => item.start)), end: Math.max(...hidden.map((item) => item.end)),
+      });
+    }
+    cluster = [];
+    laneEnds = [];
+    clusterEnd = -1;
+  };
+  for (const item of items) {
+    if (item.start >= clusterEnd) flush();
+    let lane = laneEnds.findIndex((laneEnd) => laneEnd <= item.start);
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(item.end); } else laneEnds[lane] = item.end;
+    cluster.push({ session: item.session, start: item.start, end: item.end, lane });
+    clusterEnd = Math.max(clusterEnd, item.end);
+  }
+  flush();
+  return blocks;
 }
 
 /**
  * The week as a calendar (т. 3.1): each session in its day by Sofia, the hours from the earliest start to the latest
- * end with an hour above and below. Sessions at the same time stand side by side; up to four at once all show, with
- * more the first three show and the fourth place is "+N още" with the rest.
+ * end with an hour above and below. Up to four at once all show; with more, three and "+N още".
  */
 export function weekLayout(sessions: ScheduleSession[], days: string[], maxLanes = MAX_LANES): WeekLayout {
-  const byDay = new Map(days.map((day) => [day, [] as { session: ScheduleSession; start: number; end: number }[]]));
+  const byDay = new Map(days.map((day) => [day, [] as Spanned[]]));
   for (const session of sessions) {
     const day = sofiaDay(session.starts_at);
-    byDay.get(day)?.push({ session, ...span(session, day) });
+    byDay.get(day)?.push(span(session, day));
   }
-  const all = [...byDay.values()].flat();
-  const startHour = all.length ? Math.max(0, Math.floor(Math.min(...all.map((item) => item.start)) / 60) - 1) : 8;
-  const endHour = all.length ? Math.min(24, Math.ceil(Math.max(...all.map((item) => item.end)) / 60) + 1) : 20;
-
   return {
-    startHour,
-    endHour,
-    days: days.map((day) => {
-      // Stable: the API's order (start, then activity) stays for the same start.
-      const items = (byDay.get(day) ?? []).map((item, index) => ({ ...item, index })).sort((a, b) => a.start - b.start || a.index - b.index);
-      const blocks: WeekBlock[] = [];
-      let cluster: Placed[] = [];
-      let clusterEnd = -1;
-      let laneEnds: number[] = [];
-      const flush = () => {
-        if (cluster.length === 0) return;
-        const lanes = laneEnds.length;
-        if (lanes <= maxLanes) {
-          for (const item of cluster) blocks.push({ kind: 'session', ...item, lanes });
-        } else {
-          const hidden = cluster.filter((item) => item.lane >= maxLanes - 1);
-          for (const item of cluster) if (item.lane < maxLanes - 1) blocks.push({ kind: 'session', ...item, lanes: maxLanes });
-          blocks.push({
-            kind: 'more', sessions: hidden.map((item) => item.session), lane: maxLanes - 1, lanes: maxLanes,
-            start: Math.min(...hidden.map((item) => item.start)), end: Math.max(...hidden.map((item) => item.end)),
-          });
-        }
-        cluster = [];
-        laneEnds = [];
-        clusterEnd = -1;
-      };
-      for (const item of items) {
-        if (item.start >= clusterEnd) flush();
-        let lane = laneEnds.findIndex((end) => end <= item.start);
-        if (lane === -1) { lane = laneEnds.length; laneEnds.push(item.end); } else laneEnds[lane] = item.end;
-        cluster.push({ session: item.session, start: item.start, end: item.end, lane });
-        clusterEnd = Math.max(clusterEnd, item.end);
-      }
-      flush();
-      return { day, blocks };
-    }),
+    ...hours([...byDay.values()].flat()),
+    days: days.map((day) => ({ day, blocks: placeBlocks(byDay.get(day) ?? [], maxLanes) })),
   };
+}
+
+export type DayColumn = { id: string; title: string; blocks: WeekBlock[] };
+export type DayLayout = { startHour: number; endHour: number; columns: DayColumn[] };
+/** The column of the sessions without a place, or without anyone who leads. */
+export const NO_COLUMN = 'none';
+
+/** Who a column by people holds: those who lead and those who stand in; an assistant is in the block, not a column. */
+function leaders(session: ScheduleSession): ScheduleInstructor[] {
+  return session.instructors.filter((person) => person.role !== 'assistant');
+}
+
+/**
+ * "Ден" (т. 3.3): by places — the places of the day's sessions in the order of the dictionary, and "Без зала" last
+ * when a session has no place; by people — those who lead or stand in, in the order of the dictionary, and "Без
+ * преподавател" last. A session led by two is in both columns. The hours are the day's.
+ */
+export function dayLayout(
+  sessions: ScheduleSession[], day: string, by: DayColumns,
+  dictionary: Pick<ScheduleBoard, 'locations' | 'instructors'>, maxLanes = MAX_LANES,
+): DayLayout {
+  const items = sessions.filter((session) => sofiaDay(session.starts_at) === day).map((session) => span(session, day));
+  const columns = new Map<string, { title: string; items: Spanned[] }>();
+  const add = (id: string, title: string, item: Spanned) => {
+    const column = columns.get(id) ?? { title, items: [] };
+    column.items.push(item);
+    columns.set(id, column);
+  };
+  for (const item of items) {
+    if (by === 'rooms') {
+      const place = item.session.location_id;
+      const name = place ? dictionary.locations.find((location) => location.id === place)?.name : undefined;
+      if (place && name) add(place, name, item); else add(NO_COLUMN, 'Без зала', item);
+    } else {
+      const people = leaders(item.session);
+      if (people.length === 0) add(NO_COLUMN, 'Без преподавател', item);
+      for (const person of people) add(person.profile_id, person.name, item);
+    }
+  }
+  const order = (by === 'rooms' ? dictionary.locations : dictionary.instructors).map((entry) => entry.id);
+  const rank = (id: string) => (id === NO_COLUMN ? Number.MAX_SAFE_INTEGER : order.indexOf(id) === -1 ? order.length : order.indexOf(id));
+  return {
+    ...hours(items),
+    columns: [...columns.entries()]
+      .sort(([a, first], [b, second]) => rank(a) - rank(b) || first.title.localeCompare(second.title, 'bg'))
+      .map(([id, column]) => ({ id, title: column.title, blocks: placeBlocks(column.items, maxLanes) })),
+  };
+}
+
+/** The third line of a block in "Ден": who leads by places; the place, and whom one stands in for, by people. */
+export function dayBlockDetail(session: ScheduleSession, by: DayColumns, names: Pick<ScheduleNames, 'location'>): string {
+  if (by === 'rooms') return instructorsText(session.instructors) || 'Без преподавател';
+  const replaces = session.instructors.flatMap((person) => (person.role === 'substitute' ? person.replaces ?? [] : []));
+  return [names.location(session.location_id) ?? 'Без зала', replaces.length ? `замества ${replaces.map((person) => person.name).join(', ')}` : '']
+    .filter(Boolean).join(' · ');
+}
+
+// ---- The month ----------------------------------------------------------------------------------------------------
+
+/** In a day of the month: this many lines, then "+N още" (т. 3.2). */
+export const MONTH_ROWS = 3;
+
+export type MonthDay = { day: string; number: number; inMonth: boolean; sessions: ScheduleSession[]; shown: ScheduleSession[]; more: number };
+export type MonthLayout = { month: string; weeks: MonthDay[][] };
+
+/** The month's six weeks; each day with its sessions by Sofia, the first three of them and how many more. */
+export function monthLayout(sessions: ScheduleSession[], day: string, rows = MONTH_ROWS): MonthLayout {
+  const grid = monthGrid(day);
+  const byDay = new Map(grid.days.map((item) => [item, [] as ScheduleSession[]]));
+  for (const session of sessions) byDay.get(sofiaDay(session.starts_at))?.push(session);
+  const days = grid.days.map((item) => {
+    // The API's order: by start, then by activity.
+    const list = [...(byDay.get(item) ?? [])].sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at));
+    return { day: item, number: Number(item.slice(8)), inMonth: item.startsWith(grid.month), sessions: list, shown: list.slice(0, rows), more: Math.max(0, list.length - rows) };
+  });
+  return { month: grid.month, weeks: Array.from({ length: 6 }, (_, week) => days.slice(week * 7, week * 7 + 7)) };
+}
+
+/** "Група 1" → "Гр. 1"; other names stay. */
+export function shortGroupName(name: string): string {
+  return name.replace(/^Група\s+/u, 'Гр. ');
+}
+
+/** A line in a day of the month: "16:00 Шахмат · Гр. 1". */
+export function monthLine(session: ScheduleSession, names: Pick<ScheduleNames, 'activity' | 'group'>): string {
+  const group = names.group(session.group_id)?.name;
+  return `${startClock(session)} ${names.activity(session.activity_id)?.title ?? 'Занимание'}${group ? ` · ${shortGroupName(group)}` : ''}`;
+}
+
+/** "3 занимания", "1 занимание", "няма занимания". */
+export function sessionsCount(count: number): string {
+  if (count === 0) return 'няма занимания';
+  return count === 1 ? '1 занимание' : `${count} занимания`;
 }
 
 /** The days of the cards (т. 3.4): only those with sessions, in order. */

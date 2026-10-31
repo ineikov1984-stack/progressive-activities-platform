@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { ScheduleSession } from '../src/features/schedule/api';
 import {
-  activityColor, activityColorToken, addDays, childLink, childMarks, clock, dayName, defaultView, filterChips, filterOptions, groupTitle, instructorLabel,
-  instructorsText, isDay, legend, moreChildrenText, noFilters, parseScheduleAddress, parseStoredView, periodLabel, placesText, scheduleAddress,
-  scheduleQuery, scheduleViewStorageKey, sessionMark, sessionsByDay, sessionWhen, sofiaDay, sofiaMinutes, startClock, timeRange, toggleFilter,
-  waitingText, weekLayout, weekOf,
+  activityColor, activityColorToken, addDays, childLink, childMarks, clock, dayBlockDetail, dayLayout, dayName, defaultView, emptyText, filterChips,
+  filterOptions, groupTitle, instructorLabel, instructorsText, isDay, legend, monthGrid, monthLayout, monthLine, moreChildrenText, NO_COLUMN, noFilters,
+  parseScheduleAddress, parseStoredView, periodLabel, periodOf, placesText, scheduleAddress, scheduleNames, scheduleQuery, scheduleViewStorageKey,
+  sessionMark, sessionsByDay, sessionsCount, sessionWhen, shortGroupName, sofiaDay, sofiaMinutes, startClock, stepDay, stepsOf, timeRange, toggleFilter,
+  viewsFor, waitingText, weekLayout, weekOf,
 } from '../src/features/schedule/presentation';
 
 const A = '0a000000-0000-4000-8000-000000000001';
@@ -154,10 +155,11 @@ describe('schedule — the week as a calendar', () => {
 describe('schedule — the address', () => {
   it('reads the view, the day and the filters, and leaves out what is broken', () => {
     const address = parseScheduleAddress(`?view=week&date=2026-11-18&activity=${A}&activity=${A.toUpperCase()}&group=${G}&instructor=nope&location=${L}`);
-    expect(address).toEqual({ view: 'week', date: '2026-11-18', filters: { activity: [A], group: [G], instructor: [], location: [L] } });
-    // "Месец" and "Ден" come in PR 3; an unknown view and a wrong day fall back to the defaults.
-    expect(parseScheduleAddress('?view=month&date=2026-02-30')).toEqual({ view: null, date: null, filters: noFilters });
+    expect(address).toEqual({ view: 'week', date: '2026-11-18', by: 'rooms', filters: { activity: [A], group: [G], instructor: [], location: [L] } });
+    // An unknown view and a wrong day fall back to the defaults.
+    expect(parseScheduleAddress('?view=year&date=2026-02-30')).toEqual({ view: null, date: null, by: 'rooms', filters: noFilters });
     expect(parseScheduleAddress(new URLSearchParams({ view: 'cards' })).view).toBe('cards');
+    expect(['month', 'week', 'day', 'cards'].map((view) => parseScheduleAddress(`?view=${view}`).view)).toEqual(['month', 'week', 'day', 'cards']);
     const many = new URLSearchParams();
     for (let index = 0; index < 60; index += 1) many.append('group', `0b000000-0000-4000-8000-${String(index).padStart(12, '0')}`);
     expect(parseScheduleAddress(many).filters.group).toHaveLength(50);
@@ -168,12 +170,28 @@ describe('schedule — the address', () => {
     expect(parseScheduleAddress(`?instructor=${P}`).filters.instructor).toEqual([P]);
   });
 
+  it('gives "Моят график" the week and the cards only', () => {
+    expect(viewsFor(false).map((view) => view.label)).toEqual(['Месец', 'Седмица', 'Ден по зали', 'Карти']);
+    expect(viewsFor(true).map((view) => view.label)).toEqual(['Седмица', 'Карти']);
+    expect(parseScheduleAddress('?view=month', { own: true }).view).toBeNull();
+    expect(parseScheduleAddress('?view=day', { own: true }).view).toBeNull();
+    expect(parseScheduleAddress('?view=cards', { own: true }).view).toBe('cards');
+  });
+
+  it('keeps the columns of the day in the address, by places unless chosen otherwise', () => {
+    expect(parseScheduleAddress('?view=day&by=teachers').by).toBe('teachers');
+    expect(parseScheduleAddress('?view=day&by=rooms').by).toBe('rooms');
+    expect(parseScheduleAddress('?view=day&by=nope').by).toBe('rooms');
+    expect(scheduleAddress({ view: 'day', date: '2026-11-18', by: 'teachers', filters: noFilters })).toBe('?view=day&date=2026-11-18&by=teachers');
+    expect(scheduleAddress({ view: 'day', date: '2026-11-18', by: 'rooms', filters: noFilters })).toBe('?view=day&date=2026-11-18');
+  });
+
   it('writes the state back in a stable order, and the address reads the same state again', () => {
-    const state = { view: 'cards' as const, date: '2026-11-18', filters: { activity: [A, B], group: [], instructor: [P], location: [L] } };
+    const state = { view: 'cards' as const, date: '2026-11-18', by: 'rooms' as const, filters: { activity: [A, B], group: [], instructor: [P], location: [L] } };
     const search = scheduleAddress(state);
     expect(search).toBe(`?view=cards&date=2026-11-18&activity=${A}&activity=${B}&instructor=${P}&location=${L}`);
     expect(parseScheduleAddress(search)).toEqual(state);
-    expect(scheduleAddress({ view: null, date: null, filters: noFilters })).toBe('');
+    expect(scheduleAddress({ view: null, date: null, by: 'rooms', filters: noFilters })).toBe('');
   });
 
   it('asks the API for the week from Monday to Sunday with the filters as lists', () => {
@@ -196,7 +214,11 @@ describe('schedule — the address', () => {
     expect(scheduleViewStorageKey('user-1')).toBe('progressive:schedule-view:user-1');
     expect(parseStoredView('cards')).toBe('cards');
     expect(parseStoredView('week')).toBe('week');
-    expect(parseStoredView('month')).toBeUndefined();
+    expect(parseStoredView('month')).toBe('month');
+    expect(parseStoredView('day')).toBe('day');
+    // A teacher who chose the month on another profile in this browser gets the default.
+    expect(parseStoredView('month', true)).toBeUndefined();
+    expect(parseStoredView('year')).toBeUndefined();
     expect(parseStoredView(null)).toBeUndefined();
     expect(defaultView(390)).toBe('cards');
     expect(defaultView(767)).toBe('cards');
@@ -276,5 +298,139 @@ describe('schedule — words and colours', () => {
     expect(filterChips({ activity: [A], group: [G, B], instructor: [P], location: [L] }, board).map((chip) => chip.label)).toEqual([
       'Дейност: Шахмат', 'Група: Шахмат · Група 1 · 1.–2. клас', 'Група: не е във вашия график', 'Треньор: Мария Колева', 'Място: Двор',
     ]);
+  });
+});
+
+describe('schedule — periods of the views', () => {
+  it('names and asks for the month\'s six weeks, the week, and the day', () => {
+    expect(periodOf('month', '2026-11-18')).toMatchObject({ from: '2026-10-26', to: '2026-12-06', label: 'Ноември 2026' });
+    expect(periodOf('month', '2026-11-18').days).toHaveLength(42);
+    expect(periodOf('week', '2026-11-18')).toMatchObject({ from: '2026-11-16', to: '2026-11-22', label: '16–22 ноември 2026' });
+    expect(periodOf('cards', '2026-11-18')).toMatchObject({ from: '2026-11-16', to: '2026-11-22' });
+    expect(periodOf('day', '2026-11-18')).toEqual({ from: '2026-11-18', to: '2026-11-18', days: ['2026-11-18'], label: 'Сряда, 18 ноември 2026' });
+  });
+
+  it('moves a month, a week or a day with ‹ ›, and says which', () => {
+    expect(stepDay('month', '2026-11-18', 1)).toBe('2026-12-01');
+    expect(stepDay('month', '2026-12-31', 1)).toBe('2027-01-01');
+    expect(stepDay('month', '2026-01-31', -1)).toBe('2025-12-01');
+    expect(stepDay('week', '2026-11-18', -1)).toBe('2026-11-09');
+    expect(stepDay('cards', '2026-11-18', 1)).toBe('2026-11-23');
+    expect(stepDay('day', '2026-10-25', 1)).toBe('2026-10-26');
+    expect(stepDay('day', '2026-03-01', -1)).toBe('2026-02-28');
+    expect(stepsOf('month')).toEqual({ previous: 'Предишен месец', next: 'Следващ месец' });
+    expect(stepsOf('cards')).toEqual({ previous: 'Предишна седмица', next: 'Следваща седмица' });
+    expect(stepsOf('day')).toEqual({ previous: 'Предишен ден', next: 'Следващ ден' });
+    expect([emptyText('month'), emptyText('week'), emptyText('day'), emptyText('cards')])
+      .toEqual(['Няма занимания в този месец.', 'Няма занимания в тази седмица.', 'Няма занимания в този ден.', 'Няма занимания в тази седмица.']);
+  });
+});
+
+describe('schedule — the month', () => {
+  it('is six weeks from the Monday of the week with the first day, also when the month starts on a Monday', () => {
+    expect(monthGrid('2026-11-30')).toMatchObject({ month: '2026-11', from: '2026-10-26', to: '2026-12-06' });
+    // 1 февруари 2027 is a Monday: the grid starts with it.
+    expect(monthGrid('2027-02-10')).toMatchObject({ from: '2027-02-01', to: '2027-03-14' });
+    const layout = monthLayout([], '2026-11-01');
+    expect(layout.weeks).toHaveLength(6);
+    expect(layout.weeks.every((week) => week.length === 7)).toBe(true);
+    expect(layout.weeks[0].map((day) => [day.number, day.inMonth])).toEqual([[26, false], [27, false], [28, false], [29, false], [30, false], [31, false], [1, true]]);
+    expect(layout.weeks[4][6]).toMatchObject({ day: '2026-11-29', inMonth: true });
+    expect(layout.weeks[5][1]).toMatchObject({ day: '2026-12-01', inMonth: false });
+  });
+
+  it('shows three lines in a day and "+N още" for the rest, in the API\'s order, and leaves out what is outside the grid', () => {
+    const five = ['16:00', '16:00', '17:00', '17:30', '18:00'].map((time, index) => at('2026-11-18', time, 60, { activity_id: index === 1 ? B : A }));
+    const layout = monthLayout([...five, at('2026-12-07', '16:00'), at('2026-10-26', '16:00')], '2026-11-18');
+    const wednesday = layout.weeks[3][2];
+    expect(wednesday).toMatchObject({ day: '2026-11-18', more: 2 });
+    expect(wednesday.shown.map((session) => session.id)).toEqual(five.slice(0, 3).map((session) => session.id));
+    expect(wednesday.sessions).toHaveLength(5);
+    // The first day of the grid is from October, still shown; 7 December is outside the six weeks.
+    expect(layout.weeks[0][0].sessions).toHaveLength(1);
+    expect(layout.weeks.flat().reduce((sum, day) => sum + day.sessions.length, 0)).toBe(6);
+  });
+
+  it('puts a session in its day by Sofia at the change of time in October and in March', () => {
+    // Half past midnight on 25 October is summer time (UTC+3); on 26 October winter time (UTC+2).
+    const october = monthLayout([
+      { ...at('2026-10-25', '00:30'), starts_at: '2026-10-24T21:30:00Z', ends_at: '2026-10-24T22:30:00Z' },
+      { ...at('2026-10-26', '00:30'), starts_at: '2026-10-25T22:30:00Z', ends_at: '2026-10-25T23:30:00Z' },
+    ], '2026-10-01');
+    const day = (layout: ReturnType<typeof monthLayout>, value: string) => layout.weeks.flat().find((item) => item.day === value);
+    expect(october.weeks[0][0].day).toBe('2026-09-28');
+    expect(day(october, '2026-10-24')?.sessions).toHaveLength(0);
+    expect(day(october, '2026-10-25')?.sessions).toHaveLength(1);
+    expect(day(october, '2026-10-26')?.sessions).toHaveLength(1);
+    const march = monthLayout([
+      { ...at('2026-03-29', '00:30'), starts_at: '2026-03-28T22:30:00Z', ends_at: '2026-03-28T23:30:00Z' },
+      { ...at('2026-03-30', '00:30'), starts_at: '2026-03-29T21:30:00Z', ends_at: '2026-03-29T22:30:00Z' },
+    ], '2026-03-15');
+    expect(march.weeks[0][0].day).toBe('2026-02-23');
+    expect(day(march, '2026-03-28')?.sessions).toHaveLength(0);
+    expect(day(march, '2026-03-29')?.sessions).toHaveLength(1);
+    expect(day(march, '2026-03-30')?.sessions).toHaveLength(1);
+  });
+
+  it('writes a line as "16:00 Шахмат · Гр. 1", and counts the sessions in words', () => {
+    const names = scheduleNames({
+      activities: [{ id: A, title: 'Шахмат', color: 0 }], groups: [{ id: G, name: 'Група 1', activity_id: A, age_label: null }], locations: [], instructors: [],
+    });
+    expect(monthLine(at('2026-11-18', '16:00'), names)).toBe('16:00 Шахмат · Гр. 1');
+    expect(shortGroupName('Група 12')).toBe('Гр. 12');
+    expect(shortGroupName('Начинаещи')).toBe('Начинаещи');
+    expect(shortGroupName('Групата на Мими')).toBe('Групата на Мими');
+    expect([sessionsCount(0), sessionsCount(1), sessionsCount(3)]).toEqual(['няма занимания', '1 занимание', '3 занимания']);
+  });
+});
+
+describe('schedule — the day by places and by people', () => {
+  const L2 = '0c000000-0000-4000-8000-000000000002';
+  const P2 = '0d000000-0000-4000-8000-000000000002';
+  const P3 = '0d000000-0000-4000-8000-000000000003';
+  const dictionary = {
+    locations: [{ id: L2, name: 'Ателие' }, { id: L, name: 'Зала „Слънце“' }],
+    instructors: [{ id: P3, name: 'Ани Петрова' }, { id: P2, name: 'Деси Маринова' }, { id: P, name: 'Мария Колева' }],
+  };
+  const lead = (id: string, name: string) => ({ profile_id: id, name, role: 'lead' });
+
+  it('has a column for each place of the day in the dictionary\'s order, and "Без зала" last', () => {
+    const sessions = [
+      at('2026-11-18', '17:00', 60, { location_id: L }),
+      at('2026-11-18', '16:00', 60, { location_id: null }),
+      at('2026-11-18', '17:30', 60, { location_id: L }),
+      at('2026-11-18', '18:00', 60, { location_id: L2 }),
+      at('2026-11-19', '09:00', 60, { location_id: L2 }),
+    ];
+    const layout = dayLayout(sessions, '2026-11-18', 'rooms', dictionary);
+    expect(layout.columns.map((column) => column.title)).toEqual(['Ателие', 'Зала „Слънце“', 'Без зала']);
+    expect(layout.columns[2].id).toBe(NO_COLUMN);
+    // Two at the same time in a place stand side by side.
+    expect(layout.columns[1].blocks.map((block) => [block.lane, block.lanes])).toEqual([[0, 2], [1, 2]]);
+    // The hours of the day only: 9:00 on Thursday does not widen them.
+    expect(layout).toMatchObject({ startHour: 15, endHour: 20 });
+    expect(dayLayout(sessions, '2026-11-17', 'rooms', dictionary).columns).toEqual([]);
+  });
+
+  it('by people has who leads or stands in, a session led by two in both columns, assistants in the block, and "Без преподавател" last', () => {
+    const shared = at('2026-11-18', '16:00', 60, { instructors: [lead(P, 'Мария Колева'), lead(P2, 'Деси Маринова')] });
+    const assisted = at('2026-11-18', '17:00', 60, { instructors: [lead(P, 'Мария Колева'), { profile_id: P3, name: 'Ани Петрова', role: 'assistant' }] });
+    const standIn = at('2026-11-18', '18:00', 60, { instructors: [{ profile_id: P2, name: 'Деси Маринова', role: 'substitute', replaces: [{ profile_id: P3, name: 'Ани Петрова' }] }] });
+    const nobody = at('2026-11-18', '19:00', 60, { instructors: [] });
+    const layout = dayLayout([shared, assisted, standIn, nobody], '2026-11-18', 'teachers', dictionary);
+    expect(layout.columns.map((column) => column.title)).toEqual(['Деси Маринова', 'Мария Колева', 'Без преподавател']);
+    const ids = (index: number) => layout.columns[index].blocks.map((block) => block.kind === 'session' && block.session.id);
+    expect(ids(0)).toEqual([shared.id, standIn.id]);
+    expect(ids(1)).toEqual([shared.id, assisted.id]);
+    expect(ids(2)).toEqual([nobody.id]);
+  });
+
+  it('says who leads by places, and the place and whom one stands in for by people', () => {
+    const names = scheduleNames({ activities: [], groups: [], locations: dictionary.locations, instructors: dictionary.instructors });
+    const standIn = at('2026-11-18', '18:00', 60, { location_id: L, instructors: [{ profile_id: P2, name: 'Деси Маринова', role: 'substitute', replaces: [{ profile_id: P3, name: 'Ани Петрова' }] }] });
+    expect(dayBlockDetail(standIn, 'rooms', names)).toBe('Деси Маринова · замества Ани Петрова');
+    expect(dayBlockDetail(standIn, 'teachers', names)).toBe('Зала „Слънце“ · замества Ани Петрова');
+    expect(dayBlockDetail(at('2026-11-18', '18:00'), 'teachers', names)).toBe('Без зала');
+    expect(dayBlockDetail(at('2026-11-18', '18:00'), 'rooms', names)).toBe('Без преподавател');
   });
 });
