@@ -22,15 +22,19 @@ export type DashboardInvitation = {
   expires_at: string;
 };
 
+/**
+ * "Последни действия": every role that sees the team gets what happened and when; who did it, on which record,
+ * the details and the request id come only for those who manage the team.
+ */
 export type DashboardAuditEvent = {
   id: string;
-  actor_id?: string;
   action: string;
   subject_type: string;
-  subject_id: string;
-  metadata?: Record<string, unknown>;
-  correlation_id: string;
   created_at: string;
+  actor_id?: string | null;
+  subject_id?: string;
+  metadata?: Record<string, unknown>;
+  correlation_id?: string;
 };
 
 export type DashboardData = {
@@ -85,16 +89,11 @@ export async function loadOrganizationContext(preferredId?: string | null): Prom
 export async function loadDashboard(): Promise<DashboardData> {
   try {
     const { user, organization, organizations } = await loadOrganizationContext();
-    const [{ invitations }, { events: auditEvents }] = await Promise.all([
-      requestJson<{ invitations: DashboardInvitation[] }>(
-        '/backend/api/v1/invitations',
-        { headers: { 'X-Organization-Id': organization.id } },
-      ),
-      requestJson<{ events: DashboardAuditEvent[] }>(
-        '/backend/api/v1/audit-events',
-        { headers: { 'X-Organization-Id': organization.id } },
-      ),
-    ]);
+    const { invitations, auditEvents } = await loadWorkspaceOverview(
+      organization.id,
+      true,
+      organization.permissions.includes('team.view'),
+    );
 
     return { user, organization, organizations, invitations, auditEvents };
   } catch (reason) {
@@ -110,14 +109,21 @@ export async function loadDashboard(): Promise<DashboardData> {
  * The parts of the home screen that the frame does not already hold.
  * User and organization come from DashboardContext, so they are not fetched twice.
  */
-export async function loadWorkspaceOverview(organizationId: string, withInvitations = true): Promise<Pick<DashboardData, 'invitations' | 'auditEvents'>> {
+export async function loadWorkspaceOverview(
+  organizationId: string,
+  withInvitations = true,
+  withAuditEvents = true,
+): Promise<Pick<DashboardData, 'invitations' | 'auditEvents'>> {
   const headers = { 'X-Organization-Id': organizationId };
   const [{ invitations }, { events: auditEvents }] = await Promise.all([
     // Only those who invite see the invitations; for the other roles the list is empty, not an error.
     withInvitations
       ? requestJson<{ invitations: DashboardInvitation[] }>('/backend/api/v1/invitations', { headers })
       : Promise.resolve({ invitations: [] as DashboardInvitation[] }),
-    requestJson<{ events: DashboardAuditEvent[] }>('/backend/api/v1/audit-events', { headers }),
+    // The last actions only for the roles that see the team ("team.view"); a teacher gets no list and no error.
+    withAuditEvents
+      ? requestJson<{ events: DashboardAuditEvent[] }>('/backend/api/v1/audit-events', { headers })
+      : Promise.resolve({ events: [] as DashboardAuditEvent[] }),
   ]);
   return { invitations, auditEvents };
 }

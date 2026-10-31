@@ -152,30 +152,102 @@ class AuditTrailTest extends TestCase
         $this->assertDatabaseHas('audit_events', ['id' => $id, 'action' => 'organization.role_changed']);
     }
 
+    #[Group('tenant-isolation')]
     public function test_authorized_member_can_list_only_the_active_tenant_events(): void
     {
         [$owner, $organization] = $this->memberWithOrganization('organization_owner');
         [, $foreignOrganization] = $this->memberWithOrganization('organization_owner');
-        $this->actingAs($owner);
+        $this->recordRoleChange($owner, $organization, 'own-membership');
+        $this->recordRoleChange($owner, $foreignOrganization, 'foreign-membership');
 
-        $context = app(TenantContext::class);
-        $context->select($organization);
-        app(AuditRecorder::class)->record(
-            AuditAction::OrganizationRoleChanged,
-            new AuditableReference('membership', 'own-membership'),
-        );
-        $context->select($foreignOrganization);
-        app(AuditRecorder::class)->record(
-            AuditAction::OrganizationRoleChanged,
-            new AuditableReference('membership', 'foreign-membership'),
-        );
-        $context->clear();
-
-        $this->withSession(['active_organization_id' => $organization->id])
+        $response = $this->actingAs($owner)
+            ->withHeader('X-Organization-Id', $organization->id)
             ->getJson('/api/v1/audit-events')
             ->assertOk()
             ->assertJsonCount(1, 'events')
             ->assertJsonPath('events.0.subject_id', 'own-membership');
+        $this->assertStringNotContainsString('foreign-membership', (string) $response->getContent());
+
+        // Another organization's events are not found, even for an owner of a different one.
+        $this->actingAs($owner)
+            ->withHeader('X-Organization-Id', $foreignOrganization->id)
+            ->getJson('/api/v1/audit-events')
+            ->assertNotFound()
+            ->assertJsonMissing(['subject_id' => 'foreign-membership']);
+    }
+
+    public function test_a_teacher_does_not_see_the_last_actions(): void
+    {
+        [$owner, $organization] = $this->memberWithOrganization('organization_owner');
+        $this->recordRoleChange($owner, $organization, 'own-membership');
+        $teacher = $this->joinAs($organization, 'instructor');
+
+        $this->actingAs($teacher)
+            ->withHeader('X-Organization-Id', $organization->id)
+            ->getJson('/api/v1/audit-events')
+            ->assertForbidden();
+    }
+
+    public function test_the_team_sees_what_happened_and_only_those_who_manage_it_see_who_and_the_details(): void
+    {
+        [$owner, $organization] = $this->memberWithOrganization('organization_owner');
+        $this->recordRoleChange($owner, $organization, 'own-membership');
+        $this->withHeader('X-Organization-Id', $organization->id);
+
+        foreach (['coordinator', 'finance', 'viewer'] as $role) {
+            $response = $this->actingAs($this->joinAs($organization, $role))
+                ->getJson('/api/v1/audit-events')
+                ->assertOk()
+                ->assertJsonCount(1, 'events')
+                ->assertJsonPath('events.0.action', 'organization.role_changed')
+                ->assertJsonPath('events.0.subject_type', 'membership')
+                ->assertJsonMissingPath('events.0.actor_id')
+                ->assertJsonMissingPath('events.0.subject_id')
+                ->assertJsonMissingPath('events.0.metadata')
+                ->assertJsonMissingPath('events.0.correlation_id');
+            $keys = array_keys($response->json('events.0'));
+            sort($keys);
+            $this->assertSame(['action', 'created_at', 'id', 'subject_type'], $keys, $role);
+            $this->assertStringNotContainsString((string) $owner->id, (string) $response->getContent(), $role);
+        }
+
+        foreach ([$owner, $this->joinAs($organization, 'organization_admin')] as $manager) {
+            $this->actingAs($manager)
+                ->getJson('/api/v1/audit-events')
+                ->assertOk()
+                ->assertJsonCount(1, 'events')
+                ->assertJsonStructure(['events' => [['id', 'action', 'subject_type', 'created_at', 'actor_id', 'subject_id', 'metadata', 'correlation_id']]])
+                ->assertJsonPath('events.0.actor_id', $owner->id)
+                ->assertJsonPath('events.0.subject_id', 'own-membership')
+                ->assertJsonPath('events.0.metadata.to', 'instructor');
+        }
+    }
+
+    /** An event in the organization as the actor did it; the context is cleared afterwards, as after a request. */
+    private function recordRoleChange(User $actor, Organization $organization, string $subjectId): void
+    {
+        $this->actingAs($actor);
+        $context = app(TenantContext::class);
+        $context->select($organization);
+        app(AuditRecorder::class)->record(
+            AuditAction::OrganizationRoleChanged,
+            new AuditableReference('membership', $subjectId),
+            ['from' => 'viewer', 'to' => 'instructor'],
+        );
+        $context->clear();
+    }
+
+    private function joinAs(Organization $organization, string $role): User
+    {
+        $user = User::factory()->create();
+        OrganizationMembership::query()->withoutGlobalScopes()->create([
+            'organization_id' => $organization->id,
+            'user_id' => $user->id,
+            'role' => $role,
+            'status' => 'active',
+        ]);
+
+        return $user;
     }
 
     /** @return array{User, Organization} */

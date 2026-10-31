@@ -203,6 +203,18 @@ export function groupsByActivity(groups: GroupAssignment[]): ActivityGroups[] {
   return [...byActivity].map(([activity, items]) => ({ activity, groups: items })).sort((a, b) => a.activity.localeCompare(b.activity, 'bg'));
 }
 
+/**
+ * A group in "Екип" opens the children of that group in "Записвания" (DECISIONS 31.10.2026 „Права — роля плюс
+ * допълнителни права“); with the schedule it will open the group's schedule instead. The visible text is the group's
+ * name; the link's name says what opens, and holds that visible text.
+ */
+export function groupLink(assignment: Pick<GroupAssignment, 'group_id' | 'activity' | 'group'>): { href: string; label: string } {
+  return {
+    href: `/dashboard/enrollments?view=groups&group=${encodeURIComponent(assignment.group_id)}`,
+    label: `Децата в ${assignment.activity} · ${assignment.group}`,
+  };
+}
+
 export const groupCount = (count: number) => `${count} ${count === 1 ? 'група' : 'групи'}`;
 export const activityCount = (count: number) => `${count} ${count === 1 ? 'дейност' : 'дейности'}`;
 
