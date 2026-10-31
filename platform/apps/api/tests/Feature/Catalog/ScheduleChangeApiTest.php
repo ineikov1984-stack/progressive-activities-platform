@@ -159,6 +159,11 @@ class ScheduleChangeApiTest extends TestCase
         $this->inTenant($f['organization'], fn () => Group::query()->whereKey($f['tuesday']->id)->update(['status' => 'archived']));
         $this->changeAsOwner($f, 'cancel', $next)->assertUnprocessable()->assertJsonPath('errors.sessions.0', 'Групата е в архива.');
         $this->assertSame(1, $this->inTenant($f['organization'], fn (): int => ScheduleChange::query()->count()));
+        // Nor does the panel offer it: neither "Отмени" nor "Възстанови" in an archived group.
+        foreach ([$next, $f['session']] as $session) {
+            $this->signInTo($f['owner'], $f['organization'])->getJson("/api/v1/schedule/sessions/{$session->id}")->assertOk()
+                ->assertJsonPath('abilities.manage', true)->assertJsonPath('actions', []);
+        }
     }
 
     public function test_a_cancelled_session_tells_whom_it_concerns_and_frees_the_visits(): void
@@ -558,6 +563,27 @@ class ScheduleChangeApiTest extends TestCase
         // With the reason for the parents, the history of the enrollment has it as it was written.
         $this->assertSame('Треньорът е болен.', $this->inTenant($f['organization'], fn () => EnrollmentTransition::query()
             ->where('enrollment_id', $f['enrollment']->id)->value('public_reason')));
+    }
+
+    public function test_why_a_session_changed_is_not_shown_to_who_only_views_the_catalog(): void
+    {
+        $f = $this->rightsFixture();
+        $this->changeAsOwner($f, 'cancel', $f['session'], ['reason' => 'Треньорът е болен.'])->assertCreated();
+        $url = "/api/v1/catalog/activities/{$f['activity']->id}/groups";
+        $cancelled = fn (array $groups): array => collect($groups)->flatMap(fn (array $group): array => $group['sessions'])
+            ->firstWhere('id', $f['session']->id);
+
+        // "Само преглед" sees the catalog, and that the session is cancelled, but not why.
+        $viewer = $this->memberOf($f['organization'], 'viewer');
+        $this->personFor($f['organization'], $viewer);
+        $seen = $this->signInTo($viewer, $f['organization'])->getJson($url)->assertOk();
+        $this->assertSame('cancelled', $cancelled($seen->json('groups'))['status']);
+        $this->assertArrayNotHasKey('change_reason', $cancelled($seen->json('groups')));
+        $this->assertStringNotContainsString('болен', (string) $seen->getContent());
+
+        // Who changes the schedule sees it, as in the panel.
+        $office = $this->signInTo($f['owner'], $f['organization'])->getJson($url)->assertOk();
+        $this->assertSame('Треньорът е болен.', $cancelled($office->json('groups'))['change_reason']);
     }
 
     public function test_a_failure_leaves_neither_the_change_nor_a_letter(): void

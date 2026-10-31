@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\DB;
  *
  * @phpstan-import-type SessionTeacher from SessionRoles
  *
- * @phpstan-type ScheduleGroup array{id: string, name: string, age_label: string|null, activity_id: string, activity_title: string, activity_current: bool, location_id: string|null, capacity_max: int|null, lead_profile_id: string|null, lead_name: string|null}
+ * @phpstan-type ScheduleGroup array{id: string, name: string, age_label: string|null, activity_id: string, activity_title: string, activity_current: bool, location_id: string|null, capacity_max: int|null, lead_profile_id: string|null, lead_name: string|null, archived: bool}
  * @phpstan-type ScheduleDictionary array{activities: list<array{id: string, title: string, color: int}>, groups: list<array{id: string, name: string, activity_id: string, age_label: string|null}>, locations: list<array{id: string, name: string}>, instructors: list<array{id: string, name: string}>}
  * @phpstan-type Assignment array{profile_id: string, name: string, role: string, starts_on: string|null, ends_on: string|null}
  * @phpstan-type Teacher array{profile_id: string, name: string}
@@ -173,7 +173,7 @@ final readonly class ScheduleReader
                 ->orWhereIn('activity_groups.id', $withSessions))
             ->get([
                 'activity_groups.id', 'activity_groups.name', 'activity_groups.age_label', 'activity_groups.location_id',
-                'activity_groups.capacity_max', 'activities.id as activity_id', 'activities.title',
+                'activity_groups.capacity_max', 'activity_groups.status as group_status', 'activities.id as activity_id', 'activities.title',
                 'activities.age_label as activity_age_label', 'activities.status as activity_status',
                 'offerings.lead_instructor_profile_id', 'leads.public_name as lead_name',
             ]);
@@ -192,6 +192,8 @@ final readonly class ScheduleReader
                 'capacity_max' => $row->capacity_max === null ? null : (int) $row->capacity_max,
                 'lead_profile_id' => self::text($row->lead_instructor_profile_id),
                 'lead_name' => self::text($row->lead_name),
+                // Seen with its sessions of the period; none of them is changed (т. 4.1).
+                'archived' => $row->group_status === 'archived',
             ];
         }
 

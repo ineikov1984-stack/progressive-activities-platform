@@ -53,7 +53,8 @@ final class SchedulePresenter
      * `GET /schedule/sessions/{session}` (т. 6.2): the session as in the list, the reason for a change and the children
      * when they may be seen, and the names of its group, activity and place. The latest change of the schedule
      * (docs/product/schedule-changes.md, т. 7.5): what and when for everybody, who and why only with "schedule.manage";
-     * the actions the person may take now — only for the team, and none on a session that has started.
+     * the actions the person may take now — only for the team, and none on a session that has started or of an archived
+     * group (the change would be refused, т. 4.1).
      *
      * @param  array{session: Session, teachers: list<SessionTeacher>, group: ScheduleGroup, location: array{id: string, name: string}|null, last_change: LastChange|null}  $panel
      * @param  array<string, int>  $taken
@@ -69,7 +70,7 @@ final class SchedulePresenter
         $group = $panel['group'];
         $last = $panel['last_change'];
         $actions = [];
-        if ($manage && $session->starts_at->isFuture()) {
+        if ($manage && ! $group['archived'] && $session->starts_at->isFuture()) {
             $actions = $session->status === 'cancelled' ? ['restore'] : ['cancel'];
         }
 

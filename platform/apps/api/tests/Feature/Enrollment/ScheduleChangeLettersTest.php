@@ -286,8 +286,34 @@ class ScheduleChangeLettersTest extends TestCase
         $sent = $this->deliverLetters();
 
         $this->assertSame([], $sent->to($this->emailOf($f, $ema)));
+        // Outside inTenant: a nested one clears the organization before the outer query runs.
+        $parentId = $this->parentId($f, $ema);
         $this->assertSame('unverified_email', $this->inTenant($f['organization'], fn () => EnrollmentEventDelivery::query()
-            ->where('recipient_user_id', $this->parentId($f, $ema))->value('skipped_reason')));
+            ->where('recipient_user_id', $parentId)->value('skipped_reason')));
+    }
+
+    public function test_answers_go_to_the_activitys_address_and_without_any_the_letter_says_once_to_call(): void
+    {
+        $f = $this->letterFixture();
+        $this->inTenant($f['organization'], fn () => $f['chess']->forceFill(['contact_email' => 'chess@school.example'])->save());
+
+        $this->changeAsOwner($f, 'cancel', $f['session'])->assertCreated();
+        $mail = $this->deliverLetters()->to($this->emailOf($f, $f['enrollment']))[0];
+        $this->assertSame('chess@school.example', $mail->envelope()->replyTo[0]->address ?? null);
+        $this->assertStringContainsString('Имате въпрос? Отговорете на този имейл', CapturingMailSender::text($mail));
+
+        // Neither the activity's address nor the organization's: no Reply-To, and one line to call — also with an invitation.
+        $this->inTenant($f['organization'], fn () => $f['chess']->forceFill(['contact_email' => null])->save());
+        Organization::query()->withoutGlobalScopes()->whereKey($f['organization']->id)->update(['public_contact_email' => null]);
+        $next = $this->sessionOn($f, $f['tuesday'], '2026-11-10');
+        $trial = $this->visitOn($f, $next, 'Гери');
+        $this->changeAsOwner($f, 'cancel', $next)->assertCreated();
+        $invitation = $this->deliverLetters()->to($this->emailOf($f, $trial))[0];
+        $this->assertSame([], $invitation->envelope()->replyTo);
+        foreach ([CapturingMailSender::html($invitation), CapturingMailSender::text($invitation)] as $body) {
+            $this->assertSame(1, substr_count($body, 'Не отговаряйте на този имейл — свържете се с Школа Звезда по телефона.'));
+            $this->assertStringNotContainsString('Отговорете на този имейл', $body);
+        }
     }
 
     /**

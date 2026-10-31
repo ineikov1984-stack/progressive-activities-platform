@@ -71,9 +71,10 @@ final readonly class ApplyScheduleChange
     private function apply(User $actor, ScheduleChangeRequest $request, string $idempotencyKey, string $hash): array
     {
         if (DB::getDriverName() === 'pgsql') {
-            DB::statement("SET LOCAL lock_timeout = '5s'");
+            // A whole number of milliseconds, never text from outside.
+            $timeout = max(1, (int) config('platform.schedule_lock_timeout_ms', 5000));
+            DB::statement("SET LOCAL lock_timeout = '{$timeout}ms'");
         }
-        $now = CarbonImmutable::now();
         $found = $this->planner->found($request);
         $groupIds = ScheduleChangePlanner::groupIds($found);
         Group::query()->whereKey($groupIds)->orderBy('id')->lockForUpdate()->get(['id']);
@@ -83,6 +84,10 @@ final readonly class ApplyScheduleChange
         }
         $this->planner->assertFound($request, $found);
         $this->effects->lock($request->sessionIds(), $groupIds);
+        // The sessions last; the time is taken once they are held, so a session that began while this change waited is
+        // "already started" (422), and the history, the letters and the answer all have this moment.
+        Session::query()->whereKey($request->sessionIds())->orderBy('id')->lockForUpdate()->get(['id']);
+        $now = CarbonImmutable::now();
         $planned = $this->planner->plan($request, true, $now);
         $effects = $this->effects->assess(array_map(
             fn (PlannedSessionChange $change): array => ['before' => $change->before, 'after' => $change->after], $planned,

@@ -9,8 +9,10 @@ use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\InstructorProfile;
 use App\Domain\Catalog\Models\Session;
+use App\Domain\Catalog\Services\AccessScope;
 use App\Domain\Catalog\Services\GroupTeachers;
 use App\Domain\Catalog\Services\ScheduleConflictDetector;
+use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
@@ -21,7 +23,10 @@ use Illuminate\Support\Facades\Gate;
 
 final class ActivityGroupController extends Controller
 {
-    public function __construct(private readonly ScheduleConflictDetector $conflicts) {}
+    public function __construct(
+        private readonly ScheduleConflictDetector $conflicts,
+        private readonly AccessScope $scope,
+    ) {}
 
     public function index(Request $request, TenantContext $context, string $activity): JsonResponse
     {
@@ -30,7 +35,9 @@ final class ActivityGroupController extends Controller
         $groups = Group::query()->whereHas('offering', fn ($query) => $query->where('activity_id', $record->id))
             ->with(['instructors', 'assignments', 'sessions.instructors'])->orderBy('created_at')->orderBy('id')->get();
 
-        return response()->json(['groups' => $groups->map($this->present(...))->all()]);
+        $reasons = $this->reasons($request);
+
+        return response()->json(['groups' => $groups->map(fn (Group $group): array => $this->present($group, $reasons))->all()]);
     }
 
     public function store(Request $request, TenantContext $context, string $activity, SaveGroupSchedule $action): JsonResponse
@@ -38,7 +45,7 @@ final class ActivityGroupController extends Controller
         Gate::forUser($request->user())->authorize('catalog.manage', Organization::query()->findOrFail($context->organizationId()));
         $group = $action->handle(Activity::query()->findOrFail($activity), $request->except('id'));
 
-        return response()->json(['group' => $this->present($group)], 201);
+        return response()->json(['group' => $this->present($group, $this->reasons($request))], 201);
     }
 
     public function update(Request $request, TenantContext $context, string $group, SaveGroupSchedule $action): JsonResponse
@@ -48,7 +55,7 @@ final class ActivityGroupController extends Controller
         $activity = $record->offering()->firstOrFail()->activity()->firstOrFail();
         $updated = $action->handle($activity, [...$request->all(), 'id' => $record->id]);
 
-        return response()->json(['group' => $this->present($updated)]);
+        return response()->json(['group' => $this->present($updated, $this->reasons($request))]);
     }
 
     /** Lead or assistant in a group, also a published one (docs/product/team.md, т. 5.3). */
@@ -56,18 +63,35 @@ final class ActivityGroupController extends Controller
     {
         $record = Group::query()->findOrFail($group);
 
-        return response()->json(['group' => $this->present($action->handle($request->user(), $record, $request->all()))], 201);
+        $updated = $action->handle($request->user(), $record, $request->all());
+
+        return response()->json(['group' => $this->present($updated, $this->reasons($request))], 201);
     }
 
     public function endAssignment(Request $request, string $group, string $instructor, EndGroupAssignment $action): JsonResponse
     {
         $record = Group::query()->findOrFail($group);
 
-        return response()->json(['group' => $this->present($action->handle($request->user(), $record, $instructor, $request->all()))]);
+        $updated = $action->handle($request->user(), $record, $instructor, $request->all());
+
+        return response()->json(['group' => $this->present($updated, $this->reasons($request))]);
+    }
+
+    /**
+     * Why a session changed is often personal ("Треньорът е болен"): the office sees it, that is "schedule.manage" for the
+     * whole organization, as in the panel of the schedule (docs/product/schedule-changes.md, т. 3.3, 4.1). "catalog.view"
+     * alone does not.
+     */
+    private function reasons(Request $request): bool
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        return $this->scope->allowsEverywhere($user, 'schedule.manage');
     }
 
     /** @return array<string, mixed> */
-    private function present(Group $group): array
+    private function present(Group $group, bool $reasons): array
     {
         $timezone = $group->schedule_pattern['timezone'] ?? 'Europe/Sofia';
 
@@ -97,7 +121,8 @@ final class ActivityGroupController extends Controller
                 'starts_at' => $session->starts_at->setTimezone($timezone)->toIso8601String(),
                 'ends_at' => $session->ends_at->setTimezone($timezone)->toIso8601String(),
                 'location_id' => $session->location_id, 'instructor_ids' => $session->instructors->modelKeys(),
-                'capacity' => $session->capacity, 'status' => $session->status, 'change_reason' => $session->change_reason,
+                'capacity' => $session->capacity, 'status' => $session->status,
+                ...($reasons ? ['change_reason' => $session->change_reason] : []),
             ])->all(),
             'conflicts' => $this->conflicts->forGroup($group),
         ];

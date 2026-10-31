@@ -134,7 +134,7 @@ final class ScheduleLetters
             <=> [self::ORDER[$b['effect']] ?? 9, $b['session']->starts_at->getTimestamp(), self::child($b)]);
 
         $org = $context['organization'];
-        $reply = fn (string $line): string => $context['replyTo'] !== null ? $line : "Не отговаряйте на този имейл — свържете се с {$org} по телефона.";
+        $replyTo = self::replyTo($lines, $context['replyTo']);
         $several = count(array_unique(array_map(fn (array $line): string => self::child($line), $lines))) > 1;
         $paragraphs = [];
         $facts = [];
@@ -199,18 +199,23 @@ final class ScheduleLetters
 
         $first = $lines[0];
         $subject = $this->subject($change, $first, $parentId);
+        // How to answer (т. 6.3); without an address to answer to, one line to call instead.
         $after = [];
-        if ($invites) {
-            $after[] = $reply($freeDays ? 'Отговорете на този имейл с деня, който ви е удобен.' : 'Отговорете на този имейл и екипът ще ви предложи друг ден.');
+        if ($replyTo === null) {
+            $after[] = "Не отговаряйте на този имейл — свържете се с {$org} по телефона.";
+        } else {
+            if ($invites) {
+                $after[] = $freeDays ? 'Отговорете на този имейл с деня, който ви е удобен.' : 'Отговорете на този имейл и екипът ще ви предложи друг ден.';
+            }
+            $after[] = "Имате въпрос? Отговорете на този имейл — ще го получи екипът на {$org}.";
         }
-        $after[] = $reply("Имате въпрос? Отговорете на този имейл — ще го получи екипът на {$org}.");
         $reason = $change->reason_to_parents ? trim((string) $change->reason) : '';
         $names = array_values(array_unique(array_map(fn (array $line): string => self::child($line), $lines)));
 
         return ['to' => $address, 'mail' => new MailContent(
             team: false,
             fromName: "{$org} чрез {$context['platform']}",
-            replyTo: $context['replyTo'],
+            replyTo: $replyTo,
             subject: $subject,
             brand: $context['brand'],
             greeting: self::greeting($parent),
@@ -318,6 +323,20 @@ final class ScheduleLetters
                 : ($session->extra ? 'Допълнително занимание' : 'Заниманието')." по {$activity}: ".self::moment($session),
             default => "Заниманието на {$day} ще се проведе — денят отново е свободен",
         };
+    }
+
+    /**
+     * Answers go to the organization, never to the platform (enrollment-contacts-and-emails.md, т. 6.5): the activity's
+     * contact address when every line of the letter is of that one activity, else the organization's; null — neither.
+     *
+     * @param  list<Line>  $lines
+     */
+    private static function replyTo(array $lines, ?string $organization): ?string
+    {
+        $offerings = array_unique(array_map(fn (array $line): string => (string) $line['session']->group?->offering_id, $lines));
+        $contact = count($offerings) === 1 ? $lines[0]['session']->group?->offering?->contact_email : null;
+
+        return is_string($contact) && filter_var($contact, FILTER_VALIDATE_EMAIL) !== false ? $contact : $organization;
     }
 
     /**
