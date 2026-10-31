@@ -21,6 +21,11 @@ final readonly class ScheduleChangeRequest
         public bool $reasonToParents,
         public bool $notifyParents,
         public array $confirmedWarnings,
+        public ?string $date = null,
+        public ?string $from = null,
+        public ?string $to = null,
+        public bool $locationProvided = false,
+        public ?string $locationId = null,
     ) {}
 
     /** @return list<string> */
@@ -77,6 +82,8 @@ final readonly class ScheduleChangeRequest
             'reason' => $this->reason,
             'reason_to_parents' => $this->reasonToParents,
             'sessions' => $sessions,
+            'date' => $this->date, 'from' => $this->from, 'to' => $this->to,
+            'location_provided' => $this->locationProvided, 'location_id' => $this->locationId,
         ]), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
     }
 

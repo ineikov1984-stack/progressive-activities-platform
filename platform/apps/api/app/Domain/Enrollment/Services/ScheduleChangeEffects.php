@@ -9,6 +9,7 @@ use App\Domain\Enrollment\Enums\EnrollmentScope;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
+use App\Domain\Enrollment\Models\EnrollmentSessionException;
 use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Enrollment\ValueObjects\ScheduleEffects;
 use App\Domain\Identity\Models\User;
@@ -90,11 +91,30 @@ final class ScheduleChangeEffects
         $before = [];
         foreach ($changes as $change) {
             $before[(string) $change['before']->id] = array_values(array_filter($enrollments,
-                fn (Enrollment $enrollment): bool => $this->applicability->appliesTo($enrollment, $change['before'])));
+                fn (Enrollment $enrollment): bool => ($enrollment->scope === EnrollmentScope::FullPeriod || $enrollment->status === EnrollmentStatus::Active)
+                    && $this->applicability->appliesTo($enrollment, $change['before'])));
         }
         $starts = $this->newStarts($notStarted, $changes, $now);
+        $moved = [];
+        foreach ($changes as $change) {
+            if ($change['before']->status === 'scheduled' && $change['after']->status === 'scheduled') {
+                $moved[(string) $change['after']->id] = $change['after'];
+            }
+        }
+        $droppedSkips = [];
+        foreach (EnrollmentSessionException::query()->whereIn('session_id', array_keys($moved))->where('kind', 'excluded')->get() as $skip) {
+            $droppedSkips[(string) $skip->enrollment_id][] = (string) $skip->session_id;
+        }
+        // Include even a skipped enrollment outside both days: dropping its skip still needs history.
+        foreach (Enrollment::query()->whereKey(array_diff(array_keys($droppedSkips), array_keys($enrollments)))
+            ->with(['group', 'sessionExceptions', 'pauses'])->get() as $enrollment) {
+            $enrollments[(string) $enrollment->id] = $enrollment;
+        }
         $later = [];
         foreach ($enrollments as $id => $enrollment) {
+            $enrollment = clone $enrollment;
+            $enrollment->setRelation('sessionExceptions', $enrollment->sessionExceptions->reject(
+                fn ($skip): bool => in_array((string) $skip->session_id, $droppedSkips[$id] ?? [], true))->values());
             if (isset($starts[$id])) {
                 $copy = clone $enrollment;
                 $copy->starts_on = CarbonImmutable::parse($starts[$id]['to']);
@@ -105,7 +125,8 @@ final class ScheduleChangeEffects
         $after = [];
         foreach ($changes as $change) {
             $after[(string) $change['after']->id] = array_values(array_filter($later,
-                fn (Enrollment $enrollment): bool => $this->applicability->appliesTo($enrollment, $change['after'])));
+                fn (Enrollment $enrollment): bool => ($enrollment->scope === EnrollmentScope::FullPeriod || $enrollment->status === EnrollmentStatus::Active)
+                    && $this->applicability->appliesTo($enrollment, $change['after'])));
         }
 
         $cancelled = [];
@@ -119,7 +140,7 @@ final class ScheduleChangeEffects
             }
         }
         // The visit applications still waiting for a cancelled session are refused (т. 5.6).
-        $waiting = $cancelled === [] ? [] : array_values(EnrollmentApplication::query()->whereIn('session_id', $cancelled)
+        $waiting = array_values(EnrollmentApplication::query()->whereIn('session_id', [...$cancelled, ...array_keys($moved)])
             ->whereIn('status', [EnrollmentApplicationStatus::Submitted->value, EnrollmentApplicationStatus::Waitlisted->value])
             ->orderBy('id')->get(['id', 'parent_user_id', 'child_id', 'session_id', 'status'])->all());
         [$freedVisits, $freedApplications] = $this->freedByCancellation($restored);
@@ -160,6 +181,35 @@ final class ScheduleChangeEffects
             foreach ($freedApplications as $application) {
                 if ((string) $application->session_id === $sessionId) {
                     $items[] = self::item((string) $application->parent_user_id, $sessionId, 'visit_day_free_again', null, (string) $application->id, (string) $application->child_id);
+                }
+            }
+        }
+        $visitStarts = [];
+        foreach ($moved as $sessionId => $session) {
+            $affected = [];
+            foreach ([...$before[$sessionId], ...$after[$sessionId]] as $enrollment) {
+                $affected[(string) $enrollment->id] = $enrollment;
+            }
+            foreach ($droppedSkips as $id => $ids) {
+                if (in_array($sessionId, $ids, true) && isset($enrollments[$id])) {
+                    $affected[$id] = $enrollments[$id];
+                }
+            }
+            $comingIds = array_map(fn (Enrollment $enrollment): string => (string) $enrollment->id, $after[$sessionId]);
+            foreach ($affected as $id => $enrollment) {
+                $effect = ! in_array($id, $comingIds, true) ? 'moved_not_attending'
+                    : (in_array($sessionId, $droppedSkips[$id] ?? [], true) ? 'moved_skip_dropped' : 'moved');
+                $items[] = self::item($parentOf($enrollment), $sessionId, $effect, $id, null, (string) $enrollment->child_id);
+                if ($enrollment->scope !== EnrollmentScope::FullPeriod && $enrollment->status === EnrollmentStatus::Active) {
+                    $day = $session->starts_at->setTimezone(SessionApplicability::timezone($enrollment))->toDateString();
+                    if ($enrollment->starts_on->toDateString() !== $day) {
+                        $visitStarts[$id] = ['from' => $enrollment->starts_on->toDateString(), 'to' => $day];
+                    }
+                }
+            }
+            foreach ($waiting as $application) {
+                if ((string) $application->session_id === $sessionId) {
+                    $items[] = self::item((string) $application->parent_user_id, $sessionId, 'moved', null, (string) $application->id, (string) $application->child_id);
                 }
             }
         }
@@ -205,7 +255,7 @@ final class ScheduleChangeEffects
         }
 
         return new ScheduleEffects($items, $sessions, $starts, $statuses, $applicationStatuses, $confirmed, $warnings,
-            count(array_unique($children)));
+            count(array_unique($children)), $droppedSkips, $visitStarts);
     }
 
     /**
@@ -225,6 +275,7 @@ final class ScheduleChangeEffects
         $visits = [];
         $refused = [];
         $withStart = [];
+        $movedApplications = [];
         $row = fn (?string $applicationId, ?string $enrollmentId, ?string $from, string $to, string $reason, array $metadata): array => [
             'id' => (string) Str::uuid7(), 'organization_id' => $organizationId, 'application_id' => $applicationId,
             'enrollment_id' => $enrollmentId, 'actor_user_id' => (string) $actor->id, 'from_status' => $from, 'to_status' => $to,
@@ -235,17 +286,24 @@ final class ScheduleChangeEffects
         foreach ($effects->items as $item) {
             $metadata = ['schedule_change_id' => $changeId, 'session_id' => $item['session_id'], 'effect' => $item['effect']];
             $enrollmentId = $item['enrollment_id'];
+            if ($enrollmentId !== null && in_array($item['session_id'], $effects->droppedSkips[$enrollmentId] ?? [], true)) {
+                $metadata['skip_dropped'] = true;
+            }
             $applicationId = $item['application_id'];
-            if (in_array($item['effect'], ['cancelled', 'restored'], true) && $enrollmentId !== null) {
+            if (in_array($item['effect'], ['cancelled', 'restored', 'moved', 'moved_skip_dropped', 'moved_not_attending'], true) && $enrollmentId !== null) {
                 $status = $effects->statuses[$enrollmentId] ?? EnrollmentStatus::Active->value;
-                $start = $effects->starts[$enrollmentId] ?? null;
+                $start = $effects->starts[$enrollmentId] ?? $effects->visitStarts[$enrollmentId] ?? null;
                 if ($start !== null) {
                     $metadata += ['previous_starts_on' => $start['from'], 'starts_on' => $start['to']];
                     $withStart[$enrollmentId] = true;
                 }
                 $transitions[] = $row(null, $enrollmentId, $status, $status, $reasonForParents ?? ($item['effect'] === 'cancelled'
-                    ? 'Заниманието е отменено от организацията.' : 'Заниманието отново е в графика.'), $metadata);
+                    ? 'Заниманието е отменено от организацията.' : ($item['effect'] === 'restored' ? 'Заниманието отново е в графика.' : 'Заниманието е преместено от организацията.')), $metadata);
                 $touched[] = $enrollmentId;
+            } elseif ($item['effect'] === 'moved' && $applicationId !== null) {
+                $status = $effects->applicationStatuses[$applicationId];
+                $transitions[] = $row($applicationId, null, $status, $status, $reasonForParents ?? 'Заниманието е преместено от организацията.', $metadata);
+                $movedApplications[] = $applicationId;
             } elseif ($item['effect'] === 'visit_cancelled' && $enrollmentId !== null) {
                 // By the organization: no fee, and the trial is free again (т. 5.5).
                 $transitions[] = $row(null, $enrollmentId, EnrollmentStatus::Active->value, EnrollmentStatus::Cancelled->value,
@@ -269,6 +327,13 @@ final class ScheduleChangeEffects
             $touched[] = $enrollmentId;
         }
 
+        if ($movedApplications !== []) {
+            EnrollmentApplication::query()->whereKey($movedApplications)->update(['version' => DB::raw('version + 1')]);
+        }
+        $skippedSessions = array_values(array_unique(array_merge([], ...array_values($effects->droppedSkips))));
+        if ($skippedSessions !== []) {
+            EnrollmentSessionException::query()->whereIn('session_id', $skippedSessions)->where('kind', 'excluded')->delete();
+        }
         if ($touched !== []) {
             Enrollment::query()->whereKey(array_values(array_unique($touched)))->update(['version' => DB::raw('version + 1')]);
         }
@@ -276,7 +341,7 @@ final class ScheduleChangeEffects
             Enrollment::query()->whereKey($visits)->update(['status' => EnrollmentStatus::Cancelled->value]);
         }
         $byDay = [];
-        foreach ($effects->starts as $enrollmentId => $start) {
+        foreach ([...$effects->starts, ...$effects->visitStarts] as $enrollmentId => $start) {
             $byDay[$start['to']][] = $enrollmentId;
         }
         foreach ($byDay as $day => $enrollmentIds) {

@@ -18,13 +18,12 @@ use Illuminate\Validation\ValidationException;
  * Changes of the schedule (docs/product/schedule-changes.md, т. 7): the preview and the change, from one body. Only a
  * person of the team with "schedule.manage" for the whole organization — the platform operator has the right by role
  * but does not change the schedule (decision 8); an added right with a narrower scope gives nothing. The right is
- * checked first, so that without it nobody learns whether a session exists (т. 7.4). This stage: "Отмени" and
- * "Възстанови" of one session; "Премести" and many sessions come with the next steps.
+ * checked first, so that without it nobody learns whether a session exists (т. 7.4). This stage: "Премести", "Отмени" and "Възстанови" of one session.
  */
 final class ScheduleChangeController extends Controller
 {
     /** The actions of this stage. */
-    private const ACTIONS = ['cancel', 'restore'];
+    private const ACTIONS = ['move', 'cancel', 'restore'];
 
     /** The warnings that are confirmed by their key (т. 4.8). */
     private const WARNINGS = ['instructor', 'shared_location', 'exclusive_location', 'overbooked', 'no_lead'];
@@ -78,6 +77,10 @@ final class ScheduleChangeController extends Controller
             'sessions.*' => ['required', 'array'],
             'sessions.*.id' => ['required', 'uuid'],
             'sessions.*.version' => ['required', 'integer', 'min:1'],
+            'date' => ['required_if:action,move', 'date_format:Y-m-d'],
+            'from' => ['required_if:action,move', 'date_format:H:i'],
+            'to' => ['required_if:action,move', 'date_format:H:i', 'after:from'],
+            'location_id' => ['sometimes', 'nullable', 'uuid'],
             'reason' => ['nullable', 'string', 'max:2000'],
             'reason_to_parents' => ['sometimes', 'boolean'],
             'confirmed_warnings' => ['sometimes', 'array', 'max:50'],
@@ -87,6 +90,10 @@ final class ScheduleChangeController extends Controller
             'confirmed_warnings.*.other_session_id' => ['nullable', 'uuid'],
         ], [
             'action.*' => 'Изберете действие.',
+            'date.*' => 'Изберете ден от днес до една година напред.',
+            'from.*' => 'Изберете начален час.',
+            'to.*' => 'Краят трябва да е след началото.',
+            'location_id.*' => 'Мястото не е намерено.',
             'sessions.required' => $sessions,
             'sessions.array' => $sessions,
             'sessions.min' => $sessions,
@@ -102,7 +109,7 @@ final class ScheduleChangeController extends Controller
         $text = is_string($validated['reason'] ?? null) ? trim($validated['reason']) : '';
         $action = (string) $validated['action'];
         // A reason is required to cancel, and is for the office; to restore it may be left out (т. 4.1).
-        if ($text === '' && $action === 'cancel') {
+        if ($text === '' && in_array($action, ['move', 'cancel'], true)) {
             throw ValidationException::withMessages(['reason' => $reason]);
         }
         $list = [];
@@ -123,10 +130,15 @@ final class ScheduleChangeController extends Controller
             action: $action,
             sessions: $list,
             reason: $text === '' ? null : $text,
-            reasonToParents: $request->boolean('reason_to_parents'),
+            reasonToParents: $request->boolean('reason_to_parents', $action === 'move'),
             // A change of one session always goes to the families (decision of 29.10.2026 and decision 4).
             notifyParents: true,
             confirmedWarnings: $confirmed,
+            date: $action === 'move' ? $validated['date'] : null,
+            from: $action === 'move' ? $validated['from'] : null,
+            to: $action === 'move' ? $validated['to'] : null,
+            locationProvided: $action === 'move' && array_key_exists('location_id', $validated),
+            locationId: $action === 'move' && is_string($validated['location_id'] ?? null) ? Str::lower($validated['location_id']) : null,
         );
     }
 }

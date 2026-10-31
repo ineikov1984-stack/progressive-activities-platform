@@ -119,6 +119,12 @@ final class ScheduleLetters
             $enrollment = $enrollment instanceof Enrollment ? $enrollment : null;
             $holds = match ($effect) {
                 'cancelled' => $enrollment !== null && $this->wouldCome($enrollment, $session),
+                'moved', 'moved_skip_dropped' => $enrollment !== null
+                    ? ($enrollment->scope->value === 'full_period' || $enrollment->status === EnrollmentStatus::Active)
+                        && $this->applicability->appliesTo($enrollment, $session)
+                    : in_array($application->status->value, ['submitted', 'waitlisted'], true) && $session->status === 'scheduled',
+                'moved_not_attending' => $enrollment !== null && $this->cameBefore($change, $enrollment, $session)
+                    && ! $this->applicability->appliesTo($enrollment, $session),
                 'restored' => $enrollment !== null && $this->applicability->appliesTo($enrollment, $session),
                 'visit_day_free_again' => $this->invitationSent($change, $session, $enrollment, $application, $parentId),
                 default => $lasting,
@@ -151,6 +157,33 @@ final class ScheduleLetters
             $kind = $line['application']->scope->value === 'trial' ? 'пробно занимание' : 'еднократно посещение';
             $back = $session->status === 'scheduled';
             switch ($line['effect']) {
+                case 'moved':
+                case 'moved_skip_dropped':
+                case 'moved_not_attending':
+                    $old = $this->before($change, $session);
+                    $paragraphs[] = "Заниманието на {$child} ".self::in($title).' се мести от '.self::moment($old).' на '.self::moment($session).'.';
+                    $facts[] = self::fact('Преди', self::sessionText($old), $context['webUrl']);
+                    if ($session->original_starts_at !== null && ! $session->original_starts_at->equalTo($old->starts_at)) {
+                        $original = $session->original_starts_at->setTimezone(self::timezone($session));
+                        $facts[] = self::fact('По график', BulgarianDates::weekdayDay($original->toDateString()).', '.$original->format('H:i'), $context['webUrl']);
+                    }
+                    $facts[] = self::fact('Сега', self::sessionText($session), $context['webUrl']);
+                    if ($line['effect'] === 'moved_skip_dropped') {
+                        $paragraphs[] = "Бяхте ни предупредили, че {$child} няма да дойде на ".self::day($old).'. Новият ден е друг — ако и тогава няма да може, предупредете ни отново.';
+                    } elseif ($line['effect'] === 'moved_not_attending') {
+                        $paragraphs[] = "Новият ден е извън дните за посещение на {$child} — за {$child} заниманието отпада.";
+                    }
+                    if ($line['application']->scope->value !== 'full_period') {
+                        $paragraphs[] = $replyTo === null
+                            ? 'Новият ден не ви е удобен? Свържете се с екипа по телефона — отказът е без такса.'
+                            : 'Новият ден не ви е удобен? Отговорете на този имейл — отказът е без такса.';
+                    }
+                    $place = self::place($session, $change->action === 'move');
+                    if ($place !== null) {
+                        $facts[] = self::fact('Място', $place['text'], $context['webUrl'], $place['hint']);
+                        $button ??= $place['url'] === null ? null : ['label' => 'Как да стигнете', 'url' => $place['url']];
+                    }
+                    break;
                 case 'cancelled':
                     $paragraphs[] = "Заниманието на {$child} ".self::in($title).' '.self::in($moment).', няма да се проведе.';
                     $next = $line['enrollment'] === null ? null : $this->next($line['enrollment'], $session);
@@ -163,7 +196,7 @@ final class ScheduleLetters
                     $paragraphs[] = "{$what} ".self::in($title).' '.self::in($moment).($this->heard($change, $session, $line['enrollment'], $parentId)
                         ? ", няма да бъде отменено. Очакваме {$child}." : ", ще се проведе. Очакваме {$child}.");
                     $facts[] = self::fact('Занимание', self::sessionText($session), $context['webUrl']);
-                    $place = self::place($session);
+                    $place = self::place($session, $change->action === 'move');
                     if ($place !== null) {
                         $facts[] = self::fact('Място', $place['text'], $context['webUrl'], $place['hint']);
                         $button ??= $place['url'] === null ? null : ['label' => 'Как да стигнете', 'url' => $place['url']];
@@ -265,10 +298,16 @@ final class ScheduleLetters
         foreach (array_slice($lines, 0, self::MAX_LINES) as $line) {
             $session = $line['session'];
             $title = self::title($session->group);
-            $paragraphs[] = "Заниманието {$title} ".self::in(self::moment($session))
+            if ($line['effect'] === 'moved') {
+                $old = $this->before($change, $session);
+                $paragraphs[] = "Заниманието {$title} се мести от ".self::moment($old).' на '.self::moment($session).'.';
+                $facts[] = self::fact('Преди', self::sessionText($old), $context['webUrl']);
+            } else {
+                $paragraphs[] = "Заниманието {$title} ".self::in(self::moment($session))
                 .($line['effect'] === 'cancelled' ? ', няма да се проведе.' : ', ще се проведе.');
+            }
             $facts[] = self::fact('Занимание', self::sessionText($session), $context['webUrl']);
-            $place = self::place($session);
+            $place = self::place($session, $change->action === 'move');
             if ($place !== null) {
                 $facts[] = self::fact('Място', $place['text'], $context['webUrl']);
             }
@@ -281,7 +320,9 @@ final class ScheduleLetters
         $first = $lines[0];
         $title = self::title($first['session']->group);
         $subject = count($lines) > 1 ? 'Промени във вашите занимания: '.count($lines)
-            : "Вашето занимание {$title} на ".self::day($first['session']).($first['effect'] === 'cancelled' ? ' е отменено' : ' ще се проведе');
+            : "Вашето занимание {$title} на ".self::day($first['session']).match ($first['effect']) {
+                'cancelled' => ' е отменено', 'moved' => ' се мести', default => ' ще се проведе'
+            };
         $reason = $change->reason_to_parents ? trim((string) $change->reason) : '';
 
         return ['to' => $address, 'mail' => new MailContent(
@@ -315,6 +356,7 @@ final class ScheduleLetters
         $trial = $first['application']->scope->value === 'trial';
 
         return match ($first['effect']) {
+            'moved', 'moved_skip_dropped', 'moved_not_attending' => "Заниманието по {$activity} на {$day} се мести",
             'visit_cancelled' => ($trial ? 'Пробното занимание' : 'Еднократното посещение')." на {$child} на {$day} ".($back ? 'е отменено — изберете ден' : 'се отменя — изберете друг ден'),
             'application_rejected' => 'Заявката за '.($trial ? 'пробно занимание' : 'еднократно посещение')." на {$child} на {$day} — изберете друг ден",
             'cancelled' => "Заниманието по {$activity} на {$day} няма да се проведе",
@@ -360,6 +402,23 @@ final class ScheduleLetters
     {
         return SessionChange::query()->whereIn('session_id', $sessions->keys()->all())->where('schedule_change_id', '>', $change->id)
             ->pluck('session_id')->map(fn (mixed $id): string => (string) $id)->unique()->values()->all();
+    }
+
+    /** The old date and time of this change, from its immutable history, never the first move's time. */
+    private function before(ScheduleChange $change, Session $session): Session
+    {
+        $history = SessionChange::query()->where('schedule_change_id', $change->id)->where('session_id', $session->id)->firstOrFail();
+        $before = clone $session;
+        $before->starts_at = $history->from_starts_at;
+        $before->ends_at = $history->from_ends_at;
+
+        return $before;
+    }
+
+    /** A "no longer attending" line still applies to this enrollment and its old day. */
+    private function cameBefore(ScheduleChange $change, Enrollment $enrollment, Session $session): bool
+    {
+        return $this->wouldCome($enrollment, $this->before($change, $session));
     }
 
     /**
@@ -623,8 +682,11 @@ final class ScheduleLetters
      *
      * @return array{text: string, hint: string|null, url: string|null}|null
      */
-    private static function place(Session $session): ?array
+    private static function place(Session $session, bool $explicit = false): ?array
     {
+        if ($explicit && $session->location_id === null) {
+            return ['text' => 'Без място', 'hint' => null, 'url' => null];
+        }
         $location = $session->location ?? $session->group->location ?? $session->group->offering->location;
         if (! $location instanceof Location) {
             return null;

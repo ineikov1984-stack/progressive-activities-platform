@@ -113,7 +113,7 @@ class ScheduleChangeApiTest extends TestCase
         $f = $this->rightsFixture();
         $preview = fn (array $body) => $this->previewChange($f['owner'], $f['organization'], [...$this->changeBody('cancel', $f['session'], 1), ...$body]);
 
-        $preview(['action' => 'move'])->assertUnprocessable()->assertJsonPath('errors.action.0', 'Изберете действие.');
+        $preview(['action' => 'unknown'])->assertUnprocessable()->assertJsonPath('errors.action.0', 'Изберете действие.');
         $preview(['sessions' => []])->assertUnprocessable()->assertJsonPath('errors.sessions.0', 'Изберете от 1 до 300 занимания.');
         $preview(['sessions' => [['id' => $f['session']->id, 'version' => 1], ['id' => (string) Str::uuid(), 'version' => 1]]])
             ->assertUnprocessable()->assertJsonPath('errors.sessions.0', 'Изберете едно занимание.');

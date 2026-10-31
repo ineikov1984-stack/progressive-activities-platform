@@ -6,6 +6,7 @@ use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\InstructorProfile;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
+use App\Domain\Enrollment\Models\EnrollmentSessionException;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
@@ -95,6 +96,50 @@ class ScheduleChangeApplicationRoleTest extends TestCase
             );
             $this->assertSame(1, DB::table('audit_events')->where('organization_id', $f['organization'])
                 ->where('action', 'schedule.change_applied')->where('subject_id', $changeId)->count());
+        } finally {
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
+            $context->clear();
+            DB::setDefaultConnection($original);
+        }
+    }
+
+    #[TestGroup('tenant-isolation')]
+    public function test_a_move_and_skip_removal_are_written_under_the_application_role(): void
+    {
+        try {
+            DB::connection('pgsql_admin')->getPdo();
+        } catch (Throwable) {
+            $this->markTestSkipped('PostgreSQL is required for a move under the application role.');
+        }
+        Artisan::call('migrate', ['--database' => 'pgsql_admin', '--force' => true]);
+        $this->withoutMiddleware(PreventRequestForgery::class);
+        $original = DB::getDefaultConnection();
+        DB::setDefaultConnection('pgsql_admin');
+        $context = app(TenantContext::class);
+        DB::beginTransaction();
+        try {
+            $f = $this->changeFixture($context);
+            EnrollmentSessionException::query()->create([
+                'enrollment_id' => $f['enrolled'], 'session_id' => $f['session'], 'kind' => 'excluded',
+            ]);
+            $day = CarbonImmutable::now('Europe/Sofia')->addDays(8)->toDateString();
+            $context->clear();
+            DB::statement('SET LOCAL ROLE progressive_app');
+            $body = ['action' => 'move', 'sessions' => [['id' => $f['session'], 'version' => 1]],
+                'date' => $day, 'from' => '17:00', 'to' => '18:00', 'reason' => 'Залата е заета.', 'reason_to_parents' => false];
+            $first = $this->actingAs($f['owner'])->withHeader('X-Organization-Id', $f['organization'])
+                ->withHeader('Idempotency-Key', 'move-under-application-role')->postJson('/api/v1/schedule/changes', $body)
+                ->assertCreated()->assertJsonPath('change.sessions.0.status', 'scheduled')->assertJsonPath('letters.families', 2);
+            $this->postJson('/api/v1/schedule/changes', $body)->assertOk()->assertExactJson($first->json());
+            DB::select("SELECT set_config('app.current_organization_id', ?, true)", [$f['organization']]);
+            $this->assertSame(0, DB::table('enrollment_session_exceptions')->where('enrollment_id', $f['enrolled'])->count());
+            $this->assertSame(2, (int) DB::table('activity_sessions')->where('id', $f['session'])->value('version'));
+            $this->assertSame($day, substr((string) DB::table('enrollments')->where('id', $f['visit'])->value('starts_on'), 0, 10));
+            $this->assertSame(1, DB::table('session_changes')->where('schedule_change_id', $first->json('change.id'))->count());
+            DB::select("SELECT set_config('app.current_organization_id', '', true)");
+            $this->assertSame(0, DB::table('session_changes')->where('schedule_change_id', $first->json('change.id'))->count());
         } finally {
             if (DB::transactionLevel() > 0) {
                 DB::rollBack();
