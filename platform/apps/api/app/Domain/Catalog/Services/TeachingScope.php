@@ -111,6 +111,43 @@ final readonly class TeachingScope
     }
 
     /**
+     * Why each of the profiles' groups (`groupsFor`) is theirs: "assignment", "offering_lead" or "substitute" — the last
+     * only when nothing else makes it theirs. The schedule shows a whole group, or only the sessions stood in
+     * (docs/product/schedule.md, т. 2).
+     *
+     * @param  list<string>  $profiles
+     * @return array<string, string> group => basis
+     */
+    public function bases(array $profiles): array
+    {
+        return array_map(fn (array $row): string => $row['basis'], $this->teaching($profiles));
+    }
+
+    /**
+     * The sessions of these groups that the profiles are on, whatever their day and state.
+     *
+     * @param  list<string>  $profiles
+     * @param  list<string>  $groupIds
+     * @return list<string>
+     */
+    public function sessionsOf(array $profiles, array $groupIds): array
+    {
+        if ($profiles === [] || $groupIds === []) {
+            return [];
+        }
+        $organizationId = $this->context->organizationId();
+
+        return array_values(DB::table('activity_session_instructors')
+            ->join('activity_sessions', 'activity_sessions.id', '=', 'activity_session_instructors.session_id')
+            ->where('activity_session_instructors.organization_id', $organizationId)
+            ->where('activity_sessions.organization_id', $organizationId)
+            ->whereIn('activity_session_instructors.instructor_profile_id', $profiles)
+            ->whereIn('activity_sessions.group_id', $groupIds)
+            ->distinct()->orderBy('activity_sessions.id')
+            ->pluck('activity_sessions.id')->map(fn (mixed $id): string => (string) $id)->all());
+    }
+
+    /**
      * The person's groups for "Моите групи" (`GET /me/teaching`), without archived groups and activities: activity and
      * group, why the group is theirs, the role, the period and the next session — the one still running or the next one
      * they are on; for the lead of an offering without an assignment, the group's next session.
