@@ -811,7 +811,8 @@ class StaffEnrollmentChangesTest extends TestCase
     {
         yield 'finance' => ['finance', 200];
         yield 'viewer' => ['viewer', 200];
-        yield 'instructor' => ['instructor', 403];
+        // A teacher's own groups only (docs/product/team.md, т. 8) — here none.
+        yield 'instructor' => ['instructor', 200];
     }
 
     #[DataProvider('rolesThatMayNotChange')]

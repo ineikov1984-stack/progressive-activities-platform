@@ -8,6 +8,7 @@ use App\Domain\Audit\ValueObjects\AuditableReference;
 use App\Domain\Catalog\Enums\ActivityStatus;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\Session;
+use App\Domain\Catalog\Services\TeachingScope;
 use App\Domain\Enrollment\Actions\ReviewEnrollmentApplication;
 use App\Domain\Enrollment\Enums\EnrollmentApplicationStatus;
 use App\Domain\Enrollment\Enums\EnrollmentScope;
@@ -18,10 +19,12 @@ use App\Domain\Enrollment\Models\EnrollmentPause;
 use App\Domain\Enrollment\Models\EnrollmentSessionException;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
 use App\Domain\Enrollment\Services\EnrollmentChain;
+use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Http\Presenters\StaffEnrollmentPresenter;
+use App\Http\Presenters\TeacherRosterPresenter;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -166,16 +169,25 @@ final class StaffEnrollmentController extends Controller
         ]);
     }
 
-    /** Groups the user may see, with places taken and children waiting — two grouped queries, no capacity math per group. */
-    public function groups(Request $request): JsonResponse
+    /**
+     * Groups the user may see, with places taken and children waiting — two grouped queries, no capacity math per group.
+     * A teacher (enrollment.view_own) gets only their own groups, without the waiting list (docs/product/team.md, т. 8).
+     */
+    public function groups(Request $request, TeachingScope $teaching): JsonResponse
     {
-        $this->authorizeAbility($request, 'enrollment.view');
+        $own = $this->ownGroupsOnly($request, $teaching);
         $groups = Group::query()->with(['offering.activity', 'offering.location', 'location'])->where('status', '!=', 'archived')
             ->whereHas('offering.activity', fn ($query) => $query->where('status', '!=', ActivityStatus::Archived->value))
+            ->when($own !== null, fn ($query) => $query->whereKey($own ?? []))
             ->get()
             ->sortBy(fn (Group $group): string => ($group->offering->activity->title ?? '').'|'.$group->name)
             ->values();
-        $taken = $this->placesTakenByGroup();
+        $taken = $this->placesTakenByGroup($own);
+        if ($own !== null) {
+            return response()->json([
+                'groups' => $groups->map(fn (Group $group): array => TeacherRosterPresenter::group($group, (int) ($taken[$group->id] ?? 0)))->all(),
+            ]);
+        }
         $waiting = EnrollmentApplication::query()->where('status', EnrollmentApplicationStatus::Waitlisted->value)
             ->selectRaw('group_id, count(*) as aggregate')->groupBy('group_id')->pluck('aggregate', 'group_id');
 
@@ -218,27 +230,28 @@ final class StaffEnrollmentController extends Controller
         return response()->json(['group' => ['id' => $record->id, 'enrollment_approval_mode' => $record->enrollment_approval_mode]]);
     }
 
-    public function roster(Request $request, string $group, EnrollmentCapacity $capacity): JsonResponse
+    /**
+     * The children of a group. A teacher (enrollment.view_own) only of their own group — another group of the
+     * organization is 403, another organization's 404 — and only through the teacher's presenter (docs/product/team.md, т. 8).
+     */
+    public function roster(Request $request, string $group, EnrollmentCapacity $capacity, TeachingScope $teaching): JsonResponse
     {
-        $this->authorizeAbility($request, 'enrollment.view');
+        $all = $this->allows($request, 'enrollment.view');
+        if (! $all) {
+            $this->authorizeAbility($request, 'enrollment.view_own');
+        }
         $record = Group::query()->with('offering.activity')->findOrFail($group);
         $timezone = $record->schedule_pattern['timezone'] ?? 'Europe/Sofia';
         $today = CarbonImmutable::now($timezone)->toDateString();
+        if (! $all) {
+            /** @var User $user */
+            $user = $request->user();
+            abort_unless($teaching->includes($user, $record->id), 403, 'Нямате достъп до тази група.');
 
-        // Everyone who holds a place: active, paused, or with an end date still ahead.
-        $enrollments = Enrollment::query()
-            ->where('group_id', $record->id)
-            ->where(fn ($query) => $query
-                ->whereIn('status', [EnrollmentStatus::Active->value, EnrollmentStatus::Paused->value])
-                ->orWhere(fn ($ended) => $ended->where('status', EnrollmentStatus::Ended->value)->whereDate('ends_on', '>=', $today)))
-            ->with([
-                'child',
-                'pauses' => fn ($query) => $query->whereNull('cancelled_at')->whereDate('ends_on', '>=', $today)->orderBy('starts_on'),
-                'sessionExceptions' => fn ($query) => $query->where('kind', 'excluded')->with('session'),
-                'transferredTo' => fn ($query) => $query->where('status', '!=', EnrollmentStatus::Cancelled->value)->with('group'),
-            ])
-            ->orderBy('starts_on')
-            ->get();
+            return response()->json(TeacherRosterPresenter::roster($record, $this->rosterEnrollments($record, $today, false), $today));
+        }
+
+        $enrollments = $this->rosterEnrollments($record, $today, true);
         $contacts = $this->allows($request, 'enrollment.contacts');
         $waiting = EnrollmentApplication::query()
             ->where('group_id', $record->id)
@@ -266,6 +279,29 @@ final class StaffEnrollmentController extends Controller
                 ->where('starts_at', '>', now())->orderBy('starts_at')->limit(12)->get()
                 ->map(fn (Session $session): array => ['id' => $session->id, 'starts_at' => $session->starts_at->toIso8601String()])->all() : [],
         ]);
+    }
+
+    /**
+     * Everyone who holds a place in the group: active, paused, or with an end date still ahead; with the pauses that
+     * have not passed and the skipped sessions, and for the team where the child moves to.
+     *
+     * @return Collection<int, Enrollment>
+     */
+    private function rosterEnrollments(Group $group, string $today, bool $withMoves): Collection
+    {
+        return Enrollment::query()
+            ->where('group_id', $group->id)
+            ->where(fn ($query) => $query
+                ->whereIn('status', [EnrollmentStatus::Active->value, EnrollmentStatus::Paused->value])
+                ->orWhere(fn ($ended) => $ended->where('status', EnrollmentStatus::Ended->value)->whereDate('ends_on', '>=', $today)))
+            ->with([
+                'child',
+                'pauses' => fn ($query) => $query->whereNull('cancelled_at')->whereDate('ends_on', '>=', $today)->orderBy('starts_on'),
+                'sessionExceptions' => fn ($query) => $query->where('kind', 'excluded')->with('session'),
+                ...($withMoves ? ['transferredTo' => fn ($query) => $query->where('status', '!=', EnrollmentStatus::Cancelled->value)->with('group')] : []),
+            ])
+            ->orderBy('starts_on')
+            ->get();
     }
 
     /**
@@ -308,6 +344,23 @@ final class StaffEnrollmentController extends Controller
                     'starts_at' => $exception->session?->starts_at->toIso8601String(),
                 ])->values()->all(),
         ];
+    }
+
+    /**
+     * Null — every group (enrollment.view, as before); otherwise only the user's own groups (enrollment.view_own). Neither → 403.
+     *
+     * @return list<string>|null
+     */
+    private function ownGroupsOnly(Request $request, TeachingScope $teaching): ?array
+    {
+        if ($this->allows($request, 'enrollment.view')) {
+            return null;
+        }
+        $this->authorizeAbility($request, 'enrollment.view_own');
+        /** @var User $user */
+        $user = $request->user();
+
+        return $teaching->groupsFor($user);
     }
 
     private function authorizeAbility(Request $request, string $ability): void
