@@ -170,7 +170,7 @@ final readonly class StaffAccessCard
         $labels = $this->teaching->groupLabels($groupIds);
 
         return $events->map(function (AuditEvent $event) use ($names, $labels): array {
-            $metadata = is_array($event->metadata) ? $event->metadata : [];
+            $metadata = $event->metadata;
             $group = $event->subject_type === 'group' ? $event->subject_id : ($metadata['group_id'] ?? null);
 
             return [
