@@ -222,15 +222,18 @@ class ScheduleApiTest extends TestCase
 
         $panel = $this->getJson("/api/v1/schedule/sessions/{$f['session']->id}")->assertOk()
             ->assertJsonPath('session.children', [
-                ['enrollment_id' => $f['enrollment']->id, 'name' => 'Ани Иванова', 'class' => '3 клас', 'state' => 'active', 'scope' => 'full_period'],
-                ['enrollment_id' => $f['visit']->id, 'name' => 'Вики Петрова', 'class' => null, 'state' => 'active', 'scope' => 'single'],
+                [
+                    'enrollment_id' => $f['enrollment']->id, 'child_id' => $f['enrollment']->child_id, 'name' => 'Ани Иванова', 'class' => '3 клас',
+                    'state' => 'active', 'scope' => 'full_period',
+                ],
+                ['enrollment_id' => $f['visit']->id, 'child_id' => $f['visit']->child_id, 'name' => 'Вики Петрова', 'class' => null, 'state' => 'active', 'scope' => 'single'],
             ])
             ->assertJsonPath('group', ['id' => $f['tuesday']->id, 'name' => 'Вторник', 'age_label' => '2.–4. клас'])
             ->assertJsonPath('activity', ['id' => $f['activity']->id, 'title' => 'Шах'])
             ->assertJsonPath('location', null)
             ->assertJsonMissingPath('session.change_reason');
-        // Name and class only: no parent, contact, health or money.
-        $this->assertSame(['enrollment_id', 'name', 'class', 'state', 'scope'], array_keys($panel->json('session.children.0')));
+        // Name and class only — and the child for the card (т. 4.1): no parent, contact, health or money.
+        $this->assertSame(['enrollment_id', 'child_id', 'name', 'class', 'state', 'scope'], array_keys($panel->json('session.children.0')));
 
         // A selected activity covers its groups.
         $this->selectGroups($f, $person, [], [$f['painting']->id]);
@@ -323,7 +326,9 @@ class ScheduleApiTest extends TestCase
         // Thursday 12 November, 10:00 in Sofia: the day of the session.
         $this->travelTo('2026-11-12 08:00:00');
         $this->getJson("/api/v1/schedule/sessions/{$standIn->id}")->assertOk()
-            ->assertJsonPath('session.children', [['enrollment_id' => $daniel->id, 'name' => 'Дани Колев', 'class' => '2 клас', 'state' => 'active', 'scope' => 'full_period']]);
+            ->assertJsonPath('session.children', [[
+                'enrollment_id' => $daniel->id, 'child_id' => $daniel->child_id, 'name' => 'Дани Колев', 'class' => '2 клас', 'state' => 'active', 'scope' => 'full_period',
+            ]]);
         $this->getJson("/api/v1/schedule/sessions/{$other->id}")->assertNotFound();
     }
 
