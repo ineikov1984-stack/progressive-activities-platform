@@ -187,11 +187,14 @@ export type ChildDetailsResponse = ApplicationDetails | EnrollmentDetails;
 export const loadDetails = (organizationId: string, target: DetailsTarget) =>
   request<ChildDetailsResponse>(organizationId, `/${target.kind === 'application' ? 'applications' : 'enrollments'}/${target.id}`);
 
+/** Where the phone was shown, for the audit log: "Подробности", the list of a group, or the card of a child in "График". */
+export type RevealFrom = 'details' | 'roster' | 'schedule';
+
 /**
  * "Покажи телефона": a POST, because every reveal is recorded; the answer is not cached. 429 — too many reveals in a
  * short time.
  */
-export const revealContact = (organizationId: string, target: DetailsTarget, from: 'details' | 'roster') =>
+export const revealContact = (organizationId: string, target: DetailsTarget, from: RevealFrom) =>
   request<{ contact: RevealedContact }>(organizationId, `/${target.kind === 'application' ? 'applications' : 'enrollments'}/${target.id}/contact/reveal`, {
     method: 'POST', body: JSON.stringify({ from }), cache: 'no-store',
   }).then((x) => x.contact);

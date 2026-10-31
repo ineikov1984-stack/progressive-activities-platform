@@ -138,6 +138,7 @@ class ChildCardTest extends TestCase
         $ani = $f['enrollment']->child_id;
         $this->enrolAgain($f, $ani, $f['thursday'], startsOn: '2026-10-22');
         $dani = $this->enrol($f, $f['thursday'], 'Дани Колев');
+        Child::query()->whereKey($ani)->update(['birth_date' => '2017-05-10']);
         $partner = $this->memberOf($f['organization'], 'viewer');
         $this->selectGroups($f, $this->personFor($f['organization'], $partner), [$f['tuesday']->id]);
         // The same partner, with "Вижда телефона" and "Записва деца" added.
@@ -150,13 +151,14 @@ class ChildCardTest extends TestCase
         $card = $this->signInTo($partner, $f['organization'])->getJson(self::CARD.$ani)->assertOk();
         // Only "Вторник": "Четвъртък" is not even named.
         $this->assertSame([$f['tuesday']->id], array_column($card->json('groups'), 'group_id'));
-        $card->assertJsonPath('groups.0.abilities', self::NONE);
+        // Without the parents' contacts no age either, as in "Подробности" (DECISIONS 30.10.2026).
+        $card->assertJsonPath('groups.0.abilities', self::NONE)->assertJsonPath('age', null);
         $this->assertStringNotContainsString($f['thursday']->id, (string) $card->getContent());
         // Дани goes only to "Четвъртък": as if there were no such child.
         $this->getJson(self::CARD.$dani->child_id)->assertNotFound();
 
         $this->signInTo($helper, $f['organization'])->getJson(self::CARD.$ani)->assertOk()
-            ->assertJsonCount(1, 'groups')->assertJsonPath('groups.0.abilities', self::ALL);
+            ->assertJsonCount(1, 'groups')->assertJsonPath('groups.0.abilities', self::ALL)->assertJsonPath('age', 9);
         $this->getJson(self::CARD.$dani->child_id)->assertNotFound();
     }
 
@@ -175,17 +177,89 @@ class ChildCardTest extends TestCase
             $standIn->forceFill(['instructors_source' => 'manual'])->save();
             $standIn->instructors()->attach($profile->id, ['role' => 'lead']);
         });
+        Child::query()->whereKey($ani)->update(['birth_date' => '2017-05-10']);
         $this->signInTo($teacher, $f['organization']);
 
-        // Their own group only; without added rights the teacher changes nothing here and sees no phone.
+        // Their own group only; without added rights the teacher changes nothing here and sees no phone and no age.
         $card = $this->getJson(self::CARD.$ani)->assertOk();
         $this->assertSame([$f['tuesday']->id], array_column($card->json('groups'), 'group_id'));
-        $card->assertJsonPath('groups.0.abilities', self::NONE);
+        $card->assertJsonPath('groups.0.abilities', self::NONE)->assertJsonPath('age', null);
         $this->getJson(self::CARD.$f['visit']->child_id)->assertOk()->assertJsonPath('groups.0.state', 'single');
         // Дани goes to "Четвъртък", where the teacher only stands in — not before that day and not on it.
         $this->getJson(self::CARD.$dani->child_id)->assertNotFound();
         $this->travelTo('2026-11-05 08:00:00');
         $this->getJson(self::CARD.$dani->child_id)->assertNotFound();
+        // On that day the panel names the children, without the eye to a card that is not there.
+        $panel = $this->getJson("/api/v1/schedule/sessions/{$standIn->id}")->assertOk()->assertJsonCount(2, 'session.children');
+        $this->assertSame([], array_filter(array_column($panel->json('session.children'), 'child_id')));
+    }
+
+    public function test_a_stand_in_who_may_enrol_sees_the_card_on_the_day_of_the_session(): void
+    {
+        $f = $this->rightsFixture();
+        [$teacher, $person] = $this->teacherIn($f);
+        $profile = $this->profileOf($f['organization'], $person);
+        $dani = $this->enrol($f, $f['thursday'], 'Дани Колев');
+        $standIn = $this->sessionOf($f, $f['thursday'], '2026-11-05');
+        $this->inTenant($f['organization'], function () use ($profile, $standIn): void {
+            $standIn->forceFill(['instructors_source' => 'manual'])->save();
+            $standIn->instructors()->attach($profile->id, ['role' => 'lead']);
+        });
+        // "Записва деца" with the scope "Своите групи": a substitution is the teacher's own from the start of its day to
+        // the end of the next (`activeGroupsFor`, team-rights.md т. 4.4).
+        $this->addGrant($f, $person, 'enrollment.enroll');
+        $this->signInTo($teacher, $f['organization']);
+
+        $this->getJson(self::CARD.$dani->child_id)->assertNotFound();
+
+        // Thursday 5 November, 10:00 in Sofia.
+        $this->travelTo('2026-11-05 08:00:00');
+        $this->getJson(self::CARD.$dani->child_id)->assertOk()->assertJsonCount(1, 'groups')
+            ->assertJsonPath('groups.0.group_id', $f['thursday']->id)
+            ->assertJsonPath('groups.0.abilities', ['contacts' => false, 'skip' => true, 'pause' => true]);
+        $this->getJson("/api/v1/schedule/sessions/{$standIn->id}")->assertOk()
+            ->assertJsonPath('session.children.0.child_id', $dani->child_id);
+
+        // Saturday 7 November: the substitution is over.
+        $this->travelTo('2026-11-06 22:30:00');
+        $this->getJson(self::CARD.$dani->child_id)->assertNotFound();
+    }
+
+    public function test_the_age_only_for_who_sees_the_parents_contacts(): void
+    {
+        $f = $this->rightsFixture();
+        $ani = $f['enrollment']->child_id;
+        Child::query()->whereKey($ani)->update(['birth_date' => '2017-05-10']);
+        // The accountant sees the enrollments of the whole organization, not the contacts.
+        $accountant = $this->memberOf($f['organization'], 'finance');
+        $this->personFor($f['organization'], $accountant);
+        $coordinator = $this->memberOf($f['organization'], 'coordinator');
+        $this->personFor($f['organization'], $coordinator);
+
+        $this->signInTo($accountant, $f['organization'])->getJson(self::CARD.$ani)->assertOk()
+            ->assertJsonPath('groups.0.abilities.contacts', false)->assertJsonPath('age', null);
+        $this->signInTo($coordinator, $f['organization'])->getJson(self::CARD.$ani)->assertOk()
+            ->assertJsonPath('groups.0.abilities.contacts', true)->assertJsonPath('age', 9);
+    }
+
+    public function test_an_added_right_that_has_expired_shows_no_card(): void
+    {
+        $f = $this->rightsFixture();
+        $ani = $f['enrollment']->child_id;
+        // Two teachers with "Вторник" selected: "Записва деца" ended yesterday for one, still holds for the other.
+        [$teacher, $person] = $this->teacherIn($f);
+        $this->selectGroups($f, $person, [$f['tuesday']->id]);
+        $this->inTenant($f['organization'], fn () => StaffGrant::query()->create([
+            'staff_member_id' => $person->id, 'ability' => 'enrollment.enroll', 'granted_by' => $f['owner']->id,
+            'granted_at' => now()->subDays(10), 'expires_at' => now()->subDay(),
+        ]));
+        [$colleague, $other] = $this->teacherIn($f);
+        $this->selectGroups($f, $other, [$f['tuesday']->id]);
+        $this->addGrant($f, $other, 'enrollment.enroll');
+
+        $this->signInTo($teacher, $f['organization'])->getJson(self::CARD.$ani)->assertNotFound();
+        $this->signInTo($colleague, $f['organization'])->getJson(self::CARD.$ani)->assertOk()
+            ->assertJsonPath('groups.0.abilities', ['contacts' => false, 'skip' => true, 'pause' => true]);
     }
 
     public function test_a_teacher_with_the_phone_added_may_see_it_in_their_group(): void
@@ -195,9 +269,10 @@ class ChildCardTest extends TestCase
         $profile = $this->profileOf($f['organization'], $person);
         $this->inTenant($f['organization'], fn () => $f['tuesday']->assignments()->attach($profile->id, ['role' => 'lead', 'version' => 1]));
         $this->addGrant($f, $person, 'contacts.view');
+        Child::query()->whereKey($f['enrollment']->child_id)->update(['birth_date' => '2017-05-10']);
 
         $this->signInTo($teacher, $f['organization'])->getJson(self::CARD.$f['enrollment']->child_id)->assertOk()
-            ->assertJsonPath('groups.0.abilities', ['contacts' => true, 'skip' => false, 'pause' => false]);
+            ->assertJsonPath('groups.0.abilities', ['contacts' => true, 'skip' => false, 'pause' => false])->assertJsonPath('age', 9);
     }
 
     public function test_without_a_right_to_the_children_or_an_enrollment_the_child_is_not_found(): void

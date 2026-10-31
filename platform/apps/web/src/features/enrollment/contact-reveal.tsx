@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { type DetailsTarget, EnrollmentApiError, revealContact, type RevealedContact } from './api';
+import { type DetailsTarget, EnrollmentApiError, revealContact, type RevealedContact, type RevealFrom } from './api';
 import { revealErrorText } from './presentation';
 import styles from './enrollments.module.css';
 
@@ -34,7 +34,7 @@ export function ContactFacts({ contact, childName }: { contact: RevealedContact;
 type Props = {
   organizationId: string;
   target: DetailsTarget;
-  from: 'details' | 'roster';
+  from: RevealFrom;
   childName: string;
   hasPhone: boolean;
   hasEmail: boolean;

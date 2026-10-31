@@ -1,11 +1,10 @@
 'use client';
 
-import Link from 'next/link';
 import { type MouseEvent, type RefObject, useEffect, useRef, useState } from 'react';
 import { loadSessionPanel, type ScheduleSession, ScheduleApiError, type SessionChild, type SessionPanel } from './api';
 import { ChildCardDialog } from './child-card';
 import {
-  activityColor, CHILDREN_SHOWN, childLink, childMarks, childrenHeading, dayName, groupTitle, instructorsText, moreChildrenText, type ScheduleNames,
+  activityColor, CHILDREN_SHOWN, childMarks, childrenHeading, dayName, groupTitle, instructorsText, moreChildrenText, type ScheduleNames,
   sessionMark, sessionWhen, sofiaDay, startClock,
 } from './presentation';
 import { SessionCard } from './schedule-views';
@@ -160,8 +159,7 @@ function SessionDetails({ organizationId, session, names, now, withDetails, head
         ) : !panel ? (
           <div className={styles.skeletonKids} aria-hidden="true">{[0, 1, 2, 3].map((item) => <span key={item} className={styles.skeleton} />)}</div>
         ) : panel.session.children ? (
-          <ChildrenList kids={panel.session.children} groupId={current.group_id} withDetails={withDetails} cancelled={mark === 'cancelled'}
-            openId={card?.enrollment_id} onOpen={openCard} />
+          <ChildrenList kids={panel.session.children} cancelled={mark === 'cancelled'} openId={card?.enrollment_id} onOpen={openCard} />
         ) : null}
         {!panel && !loaded?.error ? <span className="sr-only" role="status">Зареждане на децата…</span> : null}
       </div>
@@ -175,13 +173,15 @@ function SessionDetails({ organizationId, session, names, now, withDetails, head
 
 /**
  * Name and class in alphabetical order (the API's), the first eight and "Още N деца"; the states in words. The eye
- * opens the card of the child (т. 4.1); without the child's identifier (an older answer) it leads to "Записвания".
+ * opens the card of the child (т. 4.1). A child without `child_id` — where the person only stands in for the day — has
+ * no card, so no eye either.
  */
-function ChildrenList({ kids, groupId, withDetails, cancelled, openId, onOpen }: {
-  kids: NonNullable<SessionPanel['session']['children']>; groupId: string; withDetails: boolean; cancelled: boolean;
+function ChildrenList({ kids, cancelled, openId, onOpen }: {
+  kids: NonNullable<SessionPanel['session']['children']>; cancelled: boolean;
   openId?: string; onOpen: (child: CardChild, element: HTMLButtonElement) => void;
 }) {
   const [all, setAll] = useState(false);
+  // The focus goes to the first child shown now — to its eye, or to the row when it has none.
   const firstMore = useRef<HTMLElement | null>(null);
   useEffect(() => { if (all) firstMore.current?.focus(); }, [all]);
   const shown = all ? kids : kids.slice(0, CHILDREN_SHOWN);
@@ -193,7 +193,9 @@ function ChildrenList({ kids, groupId, withDetails, cancelled, openId, onOpen }:
       {kids.length === 0 ? <p className={styles.small}>Още няма записани деца.</p> : (
         <ul className={styles.kids}>
           {shown.map((child, index) => (
-            <li key={child.enrollment_id} className={`${styles.kid} ${openId === child.enrollment_id ? styles.kidOpen : ''}`}>
+            <li key={child.enrollment_id} className={`${styles.kid} ${openId === child.enrollment_id ? styles.kidOpen : ''}`}
+              ref={index === CHILDREN_SHOWN && !child.child_id ? (element: HTMLLIElement | null) => { firstMore.current = element; } : undefined}
+              tabIndex={index === CHILDREN_SHOWN && !child.child_id ? -1 : undefined}>
               <span className={styles.kidName}>
                 <strong>{child.name}</strong>
                 {child.class ? <span className={styles.small}>{child.class}</span> : null}
@@ -207,12 +209,7 @@ function ChildrenList({ kids, groupId, withDetails, cancelled, openId, onOpen }:
                   onClick={(event) => onOpen({ ...child, child_id: child.child_id ?? '' }, event.currentTarget)}>
                   <EyeIcon />
                 </button>
-              ) : (
-                <Link ref={index === CHILDREN_SHOWN ? (element: HTMLAnchorElement | null) => { firstMore.current = element; } : undefined} className={styles.eye}
-                  href={childLink(groupId, child.enrollment_id, withDetails)} aria-label={`Виж ${child.name}`}>
-                  <EyeIcon />
-                </Link>
-              )}
+              ) : null}
             </li>
           ))}
         </ul>

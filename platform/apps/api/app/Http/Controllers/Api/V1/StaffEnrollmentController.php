@@ -131,7 +131,9 @@ final class StaffEnrollmentController extends Controller
      * "enrollment.view" in the group or one's own group. Without such an enrollment — another organization's child, a
      * child elsewhere or no right at all — 404, never 403, so that nothing tells the child exists. For each group what the
      * user may do there: show the parent's phone ("contacts.view"), skip a session and pause ("enrollment.enroll", as the
-     * routes `skipped-sessions` and `pauses`). No contacts, money or health; nothing is written to the audit log.
+     * routes `skipped-sessions` and `pauses`). The age only with "contacts.view" in one of the groups given, as in
+     * "Подробности" (DECISIONS 30.10.2026, team-rights.md т. 2.2). No contacts, money or health; nothing is written to
+     * the audit log.
      */
     public function child(Request $request, string $child, ChildCard $cards): JsonResponse
     {
@@ -142,16 +144,15 @@ final class StaffEnrollmentController extends Controller
             abort(404, 'Детето не е намерено.');
         }
         $groups = [];
+        $contacts = false;
         foreach ($card['groups'] as $group) {
             $enrols = $this->scope->allows($user, 'enrollment.enroll', $group['group_id']);
-            $groups[] = [...$group, 'abilities' => [
-                'contacts' => $this->scope->allows($user, 'contacts.view', $group['group_id']),
-                'skip' => $enrols,
-                'pause' => $enrols,
-            ]];
+            $seesContacts = $this->scope->allows($user, 'contacts.view', $group['group_id']);
+            $contacts = $contacts || $seesContacts;
+            $groups[] = [...$group, 'abilities' => ['contacts' => $seesContacts, 'skip' => $enrols, 'pause' => $enrols]];
         }
 
-        return response()->json([...$card, 'groups' => $groups]);
+        return response()->json([...$card, 'age' => $contacts ? $card['age'] : null, 'groups' => $groups]);
     }
 
     /**

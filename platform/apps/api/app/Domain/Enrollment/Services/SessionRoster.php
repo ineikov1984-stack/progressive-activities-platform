@@ -19,11 +19,12 @@ final readonly class SessionRoster
     public function __construct(private SessionApplicability $applicability) {}
 
     /**
-     * The children of the session, by name; `child_id` opens the card of the child (docs/product/schedule.md, т. 4.1).
+     * The children of the session, by name; `child_id` opens the card of the child (docs/product/schedule.md, т. 4.1) —
+     * only where the caller says the card may be seen (`$cards`), so a stand-in for the day gets no eye that leads nowhere.
      *
-     * @return list<array{enrollment_id: string, child_id: string, name: string, class: string|null, state: string, scope: string}>
+     * @return list<array{enrollment_id: string, child_id?: string, name: string, class: string|null, state: string, scope: string}>
      */
-    public function children(Session $session): array
+    public function children(Session $session, bool $cards = true): array
     {
         $probe = self::asScheduled($session);
         $enrollments = $this->applicability->candidates(new SupportCollection([$probe]));
@@ -37,7 +38,7 @@ final readonly class SessionRoster
             $child = $enrollment->child;
             $rows[] = [
                 'enrollment_id' => (string) $enrollment->id,
-                'child_id' => (string) $enrollment->child_id,
+                ...($cards ? ['child_id' => (string) $enrollment->child_id] : []),
                 'name' => $child === null ? '' : trim($child->first_name.' '.$child->last_name),
                 'class' => $child?->class_label,
                 'state' => $state,

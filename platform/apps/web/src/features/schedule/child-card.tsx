@@ -147,7 +147,7 @@ function CardContent({ organizationId, card, name, context, session, withDetails
         <section className={styles.cardSection} aria-labelledby={`${ids}-parents`}>
           <h3 id={`${ids}-parents`} className={styles.cardLabel}>Родители</h3>
           {/* The name and the phone come only from the reveal, which is written down (team-rights.md, т. 6). */}
-          <ContactReveal organizationId={organizationId} target={{ kind: 'enrollment', id: contacts.enrollment_id }} from="roster" childName={name}
+          <ContactReveal organizationId={organizationId} target={{ kind: 'enrollment', id: contacts.enrollment_id }} from="schedule" childName={name}
             hasPhone hasEmail showName />
         </section>
       ) : null}
