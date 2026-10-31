@@ -17,6 +17,7 @@ import {
   dashboardNavigation,
   dashboardNavigationStorageKey,
   defaultDashboardNavigationCollapsed,
+  ownScheduleOnly,
   parseDashboardNavigationPreference,
   type DashboardIconName,
 } from './navigation';
@@ -66,7 +67,9 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const permissions = organization?.permissions;
-  const groups = useMemo(() => dashboardNavigation(pathname, permissions), [pathname, permissions]);
+  // A teacher's menu has "Моят график"; the office's — "График" (by `access`, as the rest of the menu).
+  const ownSchedule = organization ? ownScheduleOnly(organization) : false;
+  const groups = useMemo(() => dashboardNavigation(pathname, permissions, { ownSchedule }), [pathname, permissions, ownSchedule]);
 
   useEffect(() => {
     if (started.current) return;

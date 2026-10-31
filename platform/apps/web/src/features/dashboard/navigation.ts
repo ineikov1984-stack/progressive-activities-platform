@@ -1,3 +1,5 @@
+import type { DashboardOrganization } from './api';
+
 export type DashboardIconName =
   | 'home'
   | 'activities'
@@ -37,6 +39,8 @@ const navigationGroups: Array<Omit<DashboardNavGroup, 'items'> & { items: Naviga
     label: 'Управление',
     items: [
       { id: 'home', label: 'Начало', icon: 'home', href: '/dashboard', isAvailable: true },
+      // Everyone sees the schedule of their scope (docs/product/schedule.md, т. 2); a teacher's is "Моят график".
+      { id: 'schedule', label: 'График', icon: 'calendar', href: '/dashboard/schedule', isAvailable: true },
       // A teacher has "Начало" and their own groups; the catalog only with an added right that needs it.
       { id: 'activities', label: 'Дейности', icon: 'activities', href: '/dashboard/activities', isAvailable: true, requires: 'catalog.view' },
       { id: 'groups', label: 'Групи и графици', icon: 'calendar', isAvailable: false },
@@ -75,17 +79,33 @@ function isActivePath(pathname: string, href?: string): boolean {
 }
 
 /**
+ * "Моят график" — only one's own sessions, without the filters by teacher and child (docs/product/schedule.md, т. 2,
+ * решение от 31.10.2026): who sees their own groups only, without "Вижда целия график". A teacher with selected groups
+ * or the whole organization sees colleagues too, so has the office's "График". Without the rights read (`access`), the
+ * role decides.
+ */
+export function ownScheduleOnly(organization: Pick<DashboardOrganization, 'role' | 'access'>): boolean {
+  const access = organization.access;
+  if (access) return access.scope === 'own' && !access.abilities.includes('schedule.view_all');
+  return organization.role === 'instructor';
+}
+
+/**
  * The navigation shows only destinations that work today: an unfinished area
  * appears when it ships, so the menu never leads to an empty or fake page.
  */
-export function dashboardNavigation(pathname: string, permissions?: string[]): DashboardNavGroup[] {
+export function dashboardNavigation(pathname: string, permissions?: string[], options: { ownSchedule?: boolean } = {}): DashboardNavGroup[] {
   return navigationGroups
     .map((group) => ({
       ...group,
       items: group.items
         .filter((item) => item.isAvailable && item.href)
         .filter((item) => !item.requires || !permissions || permissions.includes(item.requires))
-        .map((item) => ({ ...item, isActive: isActivePath(pathname, item.href) })),
+        .map((item) => ({
+          ...item,
+          label: item.id === 'schedule' && options.ownSchedule ? 'Моят график' : item.label,
+          isActive: isActivePath(pathname, item.href),
+        })),
     }))
     .filter((group) => group.items.length > 0);
 }

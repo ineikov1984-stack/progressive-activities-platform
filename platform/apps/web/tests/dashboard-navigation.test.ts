@@ -3,6 +3,7 @@ import {
   dashboardNavigation,
   defaultDashboardNavigationCollapsed,
   dashboardNavigationStorageKey,
+  ownScheduleOnly,
   parseDashboardNavigationPreference,
 } from '../src/features/dashboard/navigation';
 
@@ -12,7 +13,7 @@ describe('dashboard navigation', () => {
 
     expect(groups.map((group) => group.label)).toEqual(['Управление', 'Организация']);
     expect(groups.map((group) => group.items.map((item) => item.label))).toEqual([
-      ['Начало', 'Дейности', 'Записвания', 'Отворени врати'],
+      ['Начало', 'График', 'Дейности', 'Записвания', 'Отворени врати'],
       ['Екип', 'Такси, отсъствия и отказ'],
     ]);
     expect(groups.flatMap((group) => group.items).every((item) => item.isAvailable && item.href)).toBe(true);
@@ -29,20 +30,38 @@ describe('dashboard navigation', () => {
 
   // DECISIONS 31.10.2026 „Учителят — само своите групи; кой одобрява и кой вижда таксите“: the rights as the API gives
   // them (OrganizationRole::abilities, and the added ones with what they bring along).
-  it('follows the rights: a teacher has only "Начало" until a right is added', () => {
-    const labels = (permissions: string[]) => dashboardNavigation('/dashboard', permissions).flatMap((group) => group.items).map((item) => item.label);
+  it('follows the rights: a teacher has only "Начало" and "Моят график" until a right is added', () => {
+    const labels = (permissions: string[], ownSchedule = false) => dashboardNavigation('/dashboard', permissions, { ownSchedule }).flatMap((group) => group.items).map((item) => item.label);
     const teacher = ['view', 'enrollment.view_own'];
-    expect(labels(teacher)).toEqual(['Начало']);
+    expect(labels(teacher, true)).toEqual(['Начало', 'Моят график']);
     // "Записва деца" brings "Вижда децата и записванията".
-    expect(labels([...teacher, 'enrollment.enroll', 'enrollment.view', 'enrollment.manage'])).toEqual(['Начало', 'Записвания']);
+    expect(labels([...teacher, 'enrollment.enroll', 'enrollment.view', 'enrollment.manage'], true)).toEqual(['Начало', 'Моят график', 'Записвания']);
     // "Създава и променя дейности" brings the catalog and the payment terms its editor chooses from.
-    expect(labels([...teacher, 'catalog.manage', 'catalog.view', 'terms.view'])).toEqual(['Начало', 'Дейности', 'Отворени врати', 'Такси, отсъствия и отказ']);
+    expect(labels([...teacher, 'catalog.manage', 'catalog.view', 'terms.view'], true)).toEqual(['Начало', 'Моят график', 'Дейности', 'Отворени врати', 'Такси, отсъствия и отказ']);
 
-    expect(labels(['view', 'catalog.view', 'enrollment.view', 'team.view', 'attendance.view_month'])).toEqual(['Начало', 'Дейности', 'Записвания', 'Отворени врати', 'Екип']);
+    expect(labels(['view', 'catalog.view', 'enrollment.view', 'team.view', 'attendance.view_month'])).toEqual(['Начало', 'График', 'Дейности', 'Записвания', 'Отворени врати', 'Екип']);
     expect(labels(['finance', 'view', 'enrollment.view', 'team.view', 'attendance.view_month', 'finance.view', 'terms.view']))
-      .toEqual(['Начало', 'Записвания', 'Екип', 'Такси, отсъствия и отказ']);
+      .toEqual(['Начало', 'График', 'Записвания', 'Екип', 'Такси, отсъствия и отказ']);
     expect(labels(['view', 'catalog.view', 'catalog.manage', 'enrollment.view', 'team.view', 'terms.view']))
-      .toEqual(['Начало', 'Дейности', 'Записвания', 'Отворени врати', 'Екип', 'Такси, отсъствия и отказ']);
+      .toEqual(['Начало', 'График', 'Дейности', 'Записвания', 'Отворени врати', 'Екип', 'Такси, отсъствия и отказ']);
+  });
+
+  // docs/product/schedule.md, т. 2: the schedule needs no right of its own; who sees only their own groups has "Моят график".
+  it('gives "Моят график" to who sees only their own groups, and "График" to the others', () => {
+    const access = (scope: string, abilities: string[] = []) => ({ role: 'instructor', scope, abilities, groups: [], activities: [] });
+    expect(ownScheduleOnly({ role: 'instructor', access: access('own', ['enrollment.view_own', 'view']) })).toBe(true);
+    // "Вижда целия график" as an added right, or chosen groups, show colleagues' sessions too.
+    expect(ownScheduleOnly({ role: 'instructor', access: access('own', ['schedule.view_all']) })).toBe(false);
+    expect(ownScheduleOnly({ role: 'instructor', access: access('groups') })).toBe(false);
+    expect(ownScheduleOnly({ role: 'organization_owner', access: { ...access('all'), role: 'organization_owner' } })).toBe(false);
+    expect(ownScheduleOnly({ role: 'viewer', access: { ...access('groups'), role: 'viewer' } })).toBe(false);
+    // Without the rights read, the role decides.
+    expect(ownScheduleOnly({ role: 'instructor' })).toBe(true);
+    expect(ownScheduleOnly({ role: 'coordinator' })).toBe(false);
+    // Same page, same place in the menu.
+    const item = (ownSchedule: boolean) => dashboardNavigation('/dashboard/schedule', ['view'], { ownSchedule }).flatMap((group) => group.items).find((entry) => entry.id === 'schedule');
+    expect(item(true)).toMatchObject({ label: 'Моят график', href: '/dashboard/schedule', isActive: true });
+    expect(item(false)).toMatchObject({ label: 'График', href: '/dashboard/schedule', isActive: true });
   });
 
   it('shows "Такси, отсъствия и отказ" only with the right to see them', () => {
@@ -65,6 +84,7 @@ describe('dashboard navigation', () => {
     expect(active('/dashboard/settings/payment-terms')).toEqual(['Такси, отсъствия и отказ']);
     expect(active('/dashboard/team')).toEqual(['Екип']);
     expect(active('/dashboard/team/member-1')).toEqual(['Екип']);
+    expect(active('/dashboard/schedule')).toEqual(['График']);
   });
 
   it('starts expanded on desktop, compact on tablet and leaves mobile to the drawer', () => {

@@ -298,7 +298,12 @@ export function EnrollmentsPage() {
   const canChangeApproval = organization.permissions.includes('catalog.manage');
   const canSeeContacts = organization.permissions.includes('enrollment.contacts');
   // One "Подробности" panel at a time; closing it gives the focus back to the button that opened it.
-  const [details, setDetails] = useState<DetailsTarget>();
+  // The eye next to a child in "График" (docs/product/schedule.md, т. 4) opens the group's list with the child's
+  // "Подробности" on top, for those who see the enrollments (`?enrollment=`).
+  const [details, setDetails] = useState<DetailsTarget | undefined>(() => {
+    const id = canView ? searchParams.get('enrollment') : null;
+    return id ? { kind: 'enrollment', id } : undefined;
+  });
   const detailsOpener = useRef<HTMLElement | null>(null);
   const openDetails = useCallback((target: DetailsTarget, opener: HTMLElement) => {
     detailsOpener.current = opener;
@@ -306,8 +311,9 @@ export function EnrollmentsPage() {
   }, []);
   const closeDetails = useCallback(() => {
     setDetails(undefined);
-    requestAnimationFrame(() => detailsOpener.current?.focus());
-  }, []);
+    // Opened from a link, the panel gives the focus to the group it came with.
+    requestAnimationFrame(() => (detailsOpener.current ?? document.getElementById(`group-${searchParams.get('group')}`))?.focus());
+  }, [searchParams]);
   const [openGroup, setOpenGroup] = useState<string | undefined>(() => searchParams.get('group') ?? undefined);
   // Opened from "Какво ви чака": once the groups are loaded, bring that group into view and focus it.
   const linkedGroup = useRef(searchParams.get('group'));
