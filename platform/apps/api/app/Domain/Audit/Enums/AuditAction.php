@@ -32,6 +32,8 @@ enum AuditAction: string
     case CatalogAssignmentAdded = 'catalog.assignment_added';
     case CatalogAssignmentEnded = 'catalog.assignment_ended';
     case CatalogAssignmentRemoved = 'catalog.assignment_removed';
+    // "Махни от страницата" (docs/product/teacher-content.md, т. 5.6): the activity and its new version, never the path.
+    case CatalogGalleryPhotoRemoved = 'catalog.gallery_photo_removed';
     case TeamMemberAdded = 'team.member_added';
     case TeamMemberUpdated = 'team.member_updated';
     case TeamMemberArchived = 'team.member_archived';

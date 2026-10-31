@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Domain\Catalog\Actions\CatalogMediaStore;
 use App\Domain\Catalog\Actions\CreateActivityDraft;
+use App\Domain\Catalog\Actions\RemoveGalleryPhoto;
 use App\Domain\Catalog\Actions\UpdateActivityDraft;
 use App\Domain\Catalog\Enums\EnrollmentMode;
 use App\Domain\Catalog\Enums\PriceUnit;
@@ -67,6 +68,22 @@ final class ActivityController extends Controller
         $validated = $this->validated($request, $organization, true);
         $this->validateImages($validated, $media, $record->id);
         $updated = $action->handle($request->user(), $record, $validated['version'], $validated);
+
+        return response()->json(['activity' => $this->present($updated, $organization, $this->seesTerms($request, $organization))]);
+    }
+
+    /** "Махни от страницата" — a photo out of the gallery of a published activity (docs/product/teacher-content.md, т. 5.6). */
+    public function removeGalleryPhoto(Request $request, TenantContext $context, string $activity, RemoveGalleryPhoto $action): JsonResponse
+    {
+        $organization = $this->organization($context);
+        Gate::forUser($request->user())->authorize('catalog.manage', $organization);
+        $record = Activity::query()->findOrFail($activity);
+        $validated = $request->validate([
+            'version' => ['required', 'integer', 'min:1'],
+            'path' => ['required', 'string', 'max:255'],
+        ]);
+        $updated = $action->handle($request->user(), $record, $validated['version'], $validated['path'])
+            ->load('offerings.priceOptions', 'offerings.paymentTermsChoices');
 
         return response()->json(['activity' => $this->present($updated, $organization, $this->seesTerms($request, $organization))]);
     }
