@@ -10,6 +10,10 @@ updates:
   - package-ecosystem: npm
     directory: /platform
     schedule: { interval: weekly, day: monday, time: "07:00", timezone: Europe/Sofia }
+    ignore:
+      # Keep TypeScript 7 out until the supported Next.js version accepts it.
+      - dependency-name: typescript
+        versions: ["7.x"]
     groups:
       js-minor-and-patch: { update-types: [minor, patch] }
     open-pull-requests-limit: 3
@@ -21,5 +25,13 @@ updates:
   - package-ecosystem: docker
     directories: [/platform/apps/api, /platform/apps/web]
     schedule: { interval: weekly, day: monday, time: "07:00", timezone: Europe/Sofia }
+    ignore:
+      # Docker uses Bundler ranges. Preserve PHP 8.4 patch updates.
+      - dependency-name: php
+        versions: [">= 8.5"]
+      # Follow the project's even-major Node policy. Extend before Node 41:
+      # version ranges cannot express odd/even major numbers.
+      - dependency-name: node
+        versions: ["~> 25.0", "~> 27.0", "~> 29.0", "~> 31.0", "~> 33.0", "~> 35.0", "~> 37.0", "~> 39.0"]
     groups:
       base-images: { patterns: ["*"] }
