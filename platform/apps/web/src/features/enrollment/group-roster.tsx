@@ -8,7 +8,7 @@ import {
 import { ApprovalSetting } from './approval-setting';
 import { ChangePanel } from './change-panel';
 import { DetailsName } from './child-details';
-import { ContactReveal } from './contact-reveal';
+import { ContactReveal, REVEAL_NOTE } from './contact-reveal';
 import { addDays, dateText, needsGroupPlace, placesText, type RosterNote, rosterNotes, scopeLabels, shortDay, sofiaDay } from './presentation';
 import styles from './enrollments.module.css';
 
@@ -115,6 +115,10 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
         </div>
       ) : null}
       <h5 className={styles.subTitle}>Записани деца ({roster.enrollments.length})</h5>
+      {/* Once above the children, not under each one. */}
+      {roster.enrollments.some((item) => item.can_reveal_contact) ? (
+        <p className={styles.small}>С „Покажи телефона“ на реда на детето виждате контакта на родителя. {REVEAL_NOTE}</p>
+      ) : null}
       {roster.enrollments.length === 0 ? <p className={styles.muted}>Все още няма записани деца.</p> : shown.length === 0 ? <p className={styles.muted}>Няма дете с това име в групата.</p> : (
         <ul className={styles.rows}>
           {shown.map((item) => (
@@ -288,7 +292,7 @@ function RosterRow({ onActivity, organizationId, roster, enrollment, today, canM
         {/* A teacher with "Вижда телефона и имейла" added: the contact only on request, never in the list itself. */}
         {enrollment.can_reveal_contact ? (
           <ContactReveal organizationId={organizationId} target={{ kind: 'enrollment', id: enrollment.enrollment_id ?? enrollment.id }} from="roster"
-            childName={name} hasPhone hasEmail />
+            childName={name} hasPhone hasEmail showNote={false} />
         ) : null}
         {confirm ? (
           <div className={styles.confirm}>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { type DetailsTarget, EnrollmentApiError, revealContact, type RevealedContact } from './api';
 import { revealErrorText } from './presentation';
 import styles from './enrollments.module.css';
@@ -38,18 +38,35 @@ type Props = {
   childName: string;
   hasPhone: boolean;
   hasEmail: boolean;
+  /** The list of a group says it once, above the children, not under each one. */
+  showNote?: boolean;
 };
+
+/** The words for a reveal being recorded (the glossary). */
+export const REVEAL_NOTE = 'Ще остане отбелязано, че сте видели телефона.';
 
 /**
  * "Покажи телефона" (docs/product/team-rights.md, т. 6, 10): for everyone but the owner the phone and the e-mail come
  * only after the button, and every reveal is recorded. The answer stays in this component's memory only — never in
  * the browser's storage, the address or a log — and is gone when the panel or the row closes.
  */
-export function ContactReveal({ organizationId, target, from, childName, hasPhone, hasEmail }: Props) {
+export function ContactReveal({ organizationId, target, from, childName, hasPhone, hasEmail, showNote = true }: Props) {
   const hint = useId();
+  const shown = useRef<HTMLDivElement>(null);
+  const failed = useRef<HTMLParagraphElement>(null);
   const [contact, setContact] = useState<RevealedContact>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ text: string; final: boolean }>();
+
+  // The button is gone once the contact is shown: the focus goes to the contact, so it is not lost (WCAG 2.4.3).
+  useEffect(() => {
+    if (contact) shown.current?.focus();
+  }, [contact]);
+
+  // A refusal that takes the button's place takes its focus too.
+  useEffect(() => {
+    if (error?.final) failed.current?.focus();
+  }, [error]);
 
   async function reveal() {
     setBusy(true);
@@ -65,30 +82,32 @@ export function ContactReveal({ organizationId, target, from, childName, hasPhon
     }
   }
 
-  if (contact) {
-    return (
-      <div className={styles.reveal}>
-        <ContactFacts contact={contact} childName={childName} />
-        <p className={styles.small}>Показването се записва.</p>
-      </div>
-    );
-  }
-
   return (
-    <div className={styles.reveal}>
-      {hasPhone ? null : <p className={styles.muted}>Родителят още не е добавил телефон.</p>}
-      {error ? <p className={styles.error} role="alert">{error.text}</p> : null}
-      {(hasPhone || hasEmail) && !error?.final ? (
-        <>
-          <div className={styles.actions}>
-            <button type="button" className={styles.secondary} disabled={busy} aria-busy={busy} aria-describedby={hint} onClick={reveal}>
-              {busy ? 'Показване…' : hasPhone ? 'Покажи телефона' : 'Покажи имейла'}
-              <span className={styles.srOnly}> на родителя на {childName}</span>
-            </button>
-          </div>
-          <p id={hint} className={styles.small}>Показването се записва.</p>
-        </>
-      ) : null}
-    </div>
+    <>
+      {/* Stays in the page from the start, so the change is announced (WCAG 4.1.3). */}
+      <p className={styles.srOnly} role="status">{contact ? (contact.phone ? 'Телефонът е показан.' : 'Имейлът е показан.') : ''}</p>
+      {contact ? (
+        <div ref={shown} tabIndex={-1} className={styles.reveal} role="group" aria-label={`Контакт на родителя на ${childName}`}>
+          <ContactFacts contact={contact} childName={childName} />
+          {showNote ? <p className={styles.small}>{REVEAL_NOTE}</p> : null}
+        </div>
+      ) : (
+        <div className={styles.reveal}>
+          {hasPhone ? null : <p className={styles.muted}>Родителят още не е добавил телефон.</p>}
+          {error ? <p ref={failed} tabIndex={-1} className={styles.error} role="alert">{error.text}</p> : null}
+          {(hasPhone || hasEmail) && !error?.final ? (
+            <>
+              <div className={styles.actions}>
+                <button type="button" className={styles.secondary} disabled={busy} aria-busy={busy} aria-describedby={showNote ? hint : undefined} onClick={reveal}>
+                  {busy ? 'Показване…' : hasPhone ? 'Покажи телефона' : 'Покажи имейла'}
+                  <span className={styles.srOnly}> на родителя на {childName}</span>
+                </button>
+              </div>
+              {showNote ? <p id={hint} className={styles.small}>{REVEAL_NOTE}</p> : null}
+            </>
+          ) : null}
+        </div>
+      )}
+    </>
   );
 }

@@ -272,4 +272,6 @@ ol.list { padding-left: var(--space-6); list-style: decimal; }
 /* "Покажи телефона": the contact only on request (docs/product/team-rights.md, т. 6). */
 .reveal { display: grid; gap: var(--space-2); justify-items: start; margin-top: var(--space-1); }
 .reveal .facts, .reveal .actions { justify-self: stretch; }
+.reveal:focus, .reveal .error:focus { outline: none; }
+.reveal:focus-visible, .reveal .error:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .reveals { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }

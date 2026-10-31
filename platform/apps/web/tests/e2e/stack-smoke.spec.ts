@@ -224,7 +224,10 @@ test('the administrator sees a parent\'s phone only after "Покажи теле
     await details.getByRole('button', { name: /^Покажи телефона/ }).click();
     await slow(details.getByRole('link', { name: /^Обади се/ })).toHaveAttribute('href', 'tel:+359880000002');
     await expect(details.getByRole('link', { name: /^Пиши/ })).toHaveAttribute('href', 'mailto:parent@demo.progressive.local');
-    await expect(details.getByText('Показването се записва.')).toBeVisible();
+    // The focus goes to the contact shown, and the change is announced.
+    await expect(details.getByRole('group', { name: 'Контакт на родителя на Ния Демова' })).toBeFocused();
+    await expect(details.getByRole('status').filter({ hasText: 'Телефонът е показан.' })).toHaveCount(1);
+    await expect(details.getByText('Ще остане отбелязано, че сте видели телефона.')).toBeVisible();
     // Kept only in the page: nothing in the browser's storage.
     expect(await adminPage.evaluate(() => JSON.stringify({ ...window.localStorage, ...window.sessionStorage }))).not.toContain('359880000002');
   } finally {
