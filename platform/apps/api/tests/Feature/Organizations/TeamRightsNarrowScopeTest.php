@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Organizations;
 
+use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Organizations\Models\StaffGrant;
 use App\Domain\Organizations\Models\StaffScopeGroup;
@@ -47,6 +48,15 @@ class TeamRightsNarrowScopeTest extends TestCase
         $outside = $this->inTenant($f['organization'], fn (): EnrollmentApplication => $this->rightsApplication(
             $f['owner'], $f['owner']->children()->create(['first_name' => 'Дани', 'last_name' => 'Колев'])->id, $f['thursday']->id, $f['price']->id, 'waitlisted',
         ));
+        // A child enrolled in another group.
+        $this->inTenant($f['organization'], function () use ($f): void {
+            $childId = $f['owner']->children()->create(['first_name' => 'Ана', 'last_name' => 'Колева'])->id;
+            $application = $this->rightsApplication($f['owner'], $childId, $f['thursday']->id, $f['price']->id, 'approved');
+            Enrollment::query()->create([
+                'application_id' => $application->id, 'child_id' => $childId, 'group_id' => $f['thursday']->id,
+                'price_option_id' => $f['price']->id, 'scope' => 'full_period', 'status' => 'active', 'starts_on' => '2026-11-05',
+            ]);
+        });
         $viewer = $this->memberOf($f['organization'], 'viewer');
         $person = $this->personFor($f['organization'], $viewer);
         $this->inTenant($f['organization'], function () use ($f, $person): void {
@@ -92,6 +102,8 @@ class TeamRightsNarrowScopeTest extends TestCase
         $this->assertSame([$f['tuesday']->id], array_column($this->getJson('/api/v1/enrollment/groups')->assertOk()->json('groups'), 'id'));
         $waiting = $this->getJson('/api/v1/enrollment/applications?status=waitlisted')->assertOk()->json('applications');
         $this->assertSame([$f['tuesday']->id], array_values(array_unique(array_column(array_column($waiting, 'group'), 'id'))));
+        // The search of the schedule's filter finds the children enrolled in the group, not Ана in "Четвъртък".
+        $this->assertSame(['Ани Иванова'], array_column($this->getJson('/api/v1/enrollment/children?q='.urlencode('Ан'))->assertOk()->json('children'), 'name'));
         $this->assertSame([$person->id], array_column($this->getJson('/api/v1/team')->assertOk()->json('members'), 'id'));
         $this->assertSame([], $this->getJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/transfer-options")->assertOk()->json('groups'));
         // Outside the group: refused.
@@ -144,6 +156,8 @@ class TeamRightsNarrowScopeTest extends TestCase
             'POST api/v1/team/members/{member}/role' => ["{$member}/role", [], 403],
             'POST api/v1/team/members/{member}/invitation' => ["{$member}/invitation", [], 403],
             'GET api/v1/enrollment/applications' => ['/api/v1/enrollment/applications', [], 200],
+            // Only the children of the group (asserted below).
+            'GET api/v1/enrollment/children' => ['/api/v1/enrollment/children?q='.urlencode('Ани'), [], 200],
             'GET api/v1/enrollment/groups' => ['/api/v1/enrollment/groups', [], 200],
             'GET api/v1/enrollment/groups/{group}/roster' => ["/api/v1/enrollment/groups/{$tuesday}/roster", [], 200],
             'GET api/v1/enrollment/enrollments/{enrollment}/transfer-options' => ["{$enrollment}/transfer-options", [], 200],

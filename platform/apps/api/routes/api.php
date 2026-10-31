@@ -94,8 +94,9 @@ Route::prefix('v1')->group(function (): void {
             Route::prefix('enrollment')->middleware('tenant')->group(function (): void {
                 Route::middleware('organization.access:operational.read')->group(function (): void {
                     Route::get('/applications', [StaffEnrollmentController::class, 'applications']);
-                    // The enrolled children by name, for the filter "Дете" of the schedule (docs/product/schedule.md, т. 3.5).
-                    Route::get('/children', [StaffEnrollmentController::class, 'children'])->middleware('throttle:60,1');
+                    // The enrolled children by name, for the filter "Дете" of the schedule (docs/product/schedule.md, т. 3.5);
+                    // its own counter, not shared with the schedule and the details.
+                    Route::get('/children', [StaffEnrollmentController::class, 'children'])->middleware('throttle:60,1,child-search');
                     Route::get('/groups', [StaffEnrollmentController::class, 'groups']);
                     Route::get('/groups/{group}/roster', [StaffEnrollmentController::class, 'roster'])->whereUuid('group');
                     Route::get('/enrollments/{enrollment}/transfer-options', [StaffEnrollmentChangeController::class, 'transferOptions'])->whereUuid('enrollment');

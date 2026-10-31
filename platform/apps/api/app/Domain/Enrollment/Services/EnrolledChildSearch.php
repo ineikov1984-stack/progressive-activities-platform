@@ -11,8 +11,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * The children enrolled in some groups, by name — the choices of the filter "Дете" in the schedule
  * (docs/product/schedule.md, т. 3.5). Enrolled means an enrollment that is active, paused or ended, not cancelled and
- * not only an application, that holds today or ended in the last 90 days: for the period its last day, for a trial or
- * a single visit the day of the visit. The `children` table has no RLS: the children are found only through the
+ * not only an application, that holds today, begins later or ended no more than 90 days ago: for the period its last
+ * day, for a trial or a single visit the day of the visit. The `children` table has no RLS: the children are found only through the
  * organization's enrollments (the tenant scope of `Enrollment` and the RLS of `enrollments`), and only in the groups
  * given — never where else a child goes. Name and class only: never the groups, contacts, health or money.
  */

@@ -28,6 +28,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Presenters\StaffEnrollmentPresenter;
 use App\Http\Presenters\TeacherRosterPresenter;
 use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -65,7 +66,7 @@ final class StaffEnrollmentController extends Controller
             'status' => ['sometimes', Rule::in(['submitted', 'waitlisted'])],
             'activity_id' => ['sometimes', 'uuid'],
             'group_id' => ['sometimes', 'uuid'],
-            'q' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'q' => ['sometimes', 'nullable', 'string', 'max:100', self::readableText()],
         ]);
         $status = $validated['status'] ?? 'submitted';
         $contacts = $contactGroups !== [];
@@ -113,7 +114,7 @@ final class StaffEnrollmentController extends Controller
         $user = $this->requireRight($request, 'enrollment.view');
         $hint = 'Напишете поне 2 букви от името.';
         $validated = $request->validate(
-            ['q' => ['required', 'string', 'min:2', 'max:80']],
+            ['q' => ['required', 'string', 'min:2', 'max:80', self::readableText()]],
             ['q.required' => $hint, 'q.string' => $hint, 'q.min' => $hint, 'q.max' => 'Напишете до 80 знака.'],
         );
 
@@ -170,6 +171,19 @@ final class StaffEnrollmentController extends Controller
             ->where(fn ($query) => $query->whereNull('ends_on')->orWhereDate('ends_on', '>=', $today))
             ->when($groupIds !== null, fn ($query) => $query->whereIn('group_id', $groupIds ?? []))
             ->selectRaw('group_id, count(*) as aggregate')->groupBy('group_id')->pluck('aggregate', 'group_id');
+    }
+
+    /**
+     * A search text that is not UTF-8 is refused before the database: PostgreSQL would fail on it, and the error with the
+     * text would stay in the log.
+     */
+    private static function readableText(): Closure
+    {
+        return function (string $attribute, mixed $value, Closure $fail): void {
+            if (is_string($value) && ! mb_check_encoding($value, 'UTF-8')) {
+                $fail('Търсенето има знаци, които не могат да се прочетат.');
+            }
+        };
     }
 
     /** Case-insensitive search for Cyrillic names needs ILIKE on PostgreSQL; SQLite (tests) has only LIKE. */

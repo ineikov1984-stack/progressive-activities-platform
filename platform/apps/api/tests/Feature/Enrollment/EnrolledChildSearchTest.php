@@ -73,6 +73,10 @@ class EnrolledChildSearchTest extends TestCase
         $this->getJson(self::SEARCH.urlencode(str_repeat('а', 81)))->assertUnprocessable()->assertJsonValidationErrors('q')
             ->assertJsonPath('errors.q.0', 'Напишете до 80 знака.');
         $this->getJson(self::SEARCH.urlencode(str_repeat('а', 80)))->assertOk()->assertJsonPath('children', []);
+        // A text that is not UTF-8 is refused before the database (PostgreSQL would fail on it, with the text in the log).
+        $this->getJson('/api/v1/enrollment/children?q=%FF%FF')->assertUnprocessable()->assertJsonValidationErrors('q')
+            ->assertJsonPath('errors.q.0', 'Търсенето има знаци, които не могат да се прочетат.');
+        $this->getJson(self::SEARCH.urlencode('Ани').'%C3')->assertUnprocessable()->assertJsonValidationErrors('q');
         // Two letters are enough; "%" and "_" are letters, not wildcards.
         $this->assertSame(['Ани Иванова'], $this->names('Ан'));
         $this->assertSame([], $this->names('%%'));
@@ -180,6 +184,53 @@ class EnrolledChildSearchTest extends TestCase
         $this->signInTo($other['owner'], $other['organization']);
         $this->assertSame(['Зара Чуждова'], $this->names('Зара'));
         $this->assertSame([$other['enrollment']->child_id], array_column($this->getJson(self::SEARCH.urlencode('Ани'))->assertOk()->json('children'), 'id'));
+    }
+
+    #[TestGroup('tenant-isolation')]
+    public function test_a_child_enrolled_elsewhere_is_not_found_here_through_an_application_or_a_cancelled_enrollment(): void
+    {
+        $f = $this->rightsFixture();
+        $other = $this->rightsFixture();
+        // One child of one parent in both organizations: the children table is shared and has no RLS.
+        $parent = User::factory()->create(['name' => 'Невена Стоева']);
+        $child = $parent->children()->create(['first_name' => 'Яна', 'last_name' => 'Стоева', 'class_label' => '1 клас']);
+        $this->inTenant($other['organization'], function () use ($other, $parent, $child): void {
+            $application = $this->rightsApplication($parent, $child->id, $other['tuesday']->id, $other['price']->id, 'approved');
+            Enrollment::query()->create([
+                'application_id' => $application->id, 'child_id' => $child->id, 'group_id' => $other['tuesday']->id,
+                'price_option_id' => $other['price']->id, 'scope' => 'full_period', 'status' => 'active', 'starts_on' => '2026-10-20',
+            ]);
+        });
+        // Here only an application, and an enrollment that was cancelled.
+        $this->inTenant($f['organization'], function () use ($f, $parent, $child): void {
+            $this->rightsApplication($parent, $child->id, $f['tuesday']->id, $f['price']->id, 'submitted');
+            $application = $this->rightsApplication($parent, $child->id, $f['thursday']->id, $f['price']->id, 'approved');
+            Enrollment::query()->create([
+                'application_id' => $application->id, 'child_id' => $child->id, 'group_id' => $f['thursday']->id,
+                'price_option_id' => $f['price']->id, 'scope' => 'full_period', 'status' => 'cancelled', 'starts_on' => '2026-11-05',
+            ]);
+        });
+
+        $this->signInTo($f['owner'], $f['organization']);
+        $this->assertSame([], $this->names('Яна'));
+
+        $this->signInTo($other['owner'], $other['organization'])->getJson(self::SEARCH.urlencode('Яна'))->assertOk()
+            ->assertJsonPath('children', [['id' => $child->id, 'name' => 'Яна Стоева', 'class' => '1 клас']]);
+    }
+
+    public function test_the_search_counts_its_own_60_a_minute(): void
+    {
+        $f = $this->rightsFixture();
+        $viewer = $this->memberOf($f['organization'], 'viewer');
+        $this->personFor($f['organization'], $viewer);
+        $this->signInTo($viewer, $f['organization']);
+
+        foreach (range(1, 60) as $ignored) {
+            $this->getJson(self::SEARCH.urlencode('Ани'))->assertOk();
+        }
+        $this->getJson(self::SEARCH.urlencode('Ани'))->assertTooManyRequests();
+        // The details, with 60 a minute too, keep their own counter.
+        $this->getJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}")->assertOk();
     }
 
     public function test_at_most_20_children_by_name(): void
