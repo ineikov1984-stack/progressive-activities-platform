@@ -218,7 +218,7 @@ describe('the list filters', () => {
 
   it('says when a person last signed in by calendar days in Sofia, without grammatical gender', () => {
     const at = new Date('2026-10-31T21:30:00Z'); // 23:30 in Sofia
-    expect(lastLoginText(null, at)).toBe('още няма вход');
+    expect(lastLoginText(null, at)).toBe('още няма записан вход');
     expect(lastLoginText('2026-10-31T05:00:00Z', at)).toBe('последен вход днес');
     // 23:00 UTC on 30 October is already 31 October in Sofia.
     expect(lastLoginText('2026-10-30T23:00:00Z', at)).toBe('последен вход днес');
@@ -230,7 +230,10 @@ describe('the list filters', () => {
     const at = new Date('2026-10-31T12:14:00Z');
     expect(activityLine({ last_login_at: '2026-10-31T12:09:00Z', last_seen_at: '2026-10-31T12:09:00Z' }, at))
       .toBe('Последен вход: 31 октомври 2026 г. в 14:09 · Последна активност: преди 5 минути');
-    expect(activityLine({ last_login_at: null, last_seen_at: null }, at)).toBe('Още няма вход.');
+    expect(activityLine({ last_login_at: null, last_seen_at: null }, at)).toBe('Още няма записан вход.');
+    // Signed in before the sign-ins were recorded: the activity is still said.
+    expect(activityLine({ last_login_at: null, last_seen_at: '2026-10-31T12:09:00Z' }, at)).toBe('Още няма записан вход · Последна активност: преди 5 минути');
+    expect(activityLine({ last_login_at: '2026-10-31T12:09:00Z', last_seen_at: null }, at)).toBe('Последен вход: 31 октомври 2026 г. в 14:09.');
     expect(activityLine({}, at)).toBeNull();
   });
 

@@ -339,21 +339,24 @@ export function agoText(moment: string, now: Date): string {
 }
 
 /**
- * Under "Има достъп" in the list: "последен вход днес", "последен вход преди 2 дни", "още няма вход". With nouns, so
- * there is no grammatical gender.
+ * Under "Има достъп" in the list: "последен вход днес", "последен вход преди 2 дни". With nouns, so there is no
+ * grammatical gender. Someone with access has signed in before; "още няма записан вход" until the first sign-in that
+ * is recorded.
  */
 export function lastLoginText(lastLogin: string | null | undefined, now: Date): string {
-  if (!lastLogin) return 'още няма вход';
+  if (!lastLogin) return 'още няма записан вход';
   const days = -daysUntil(lastLogin, now);
   return `последен вход ${days <= 0 ? 'днес' : daysAgoText(days)}`;
 }
 
 const momentFormat = new Intl.DateTimeFormat('bg-BG', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Sofia' });
 
-/** In the profile: "Последен вход: 31 октомври 2026 г. в 14:09 · Последна активност: преди 5 минути". */
+/**
+ * In the profile: "Последен вход: 31 октомври 2026 г. в 14:09 · Последна активност: преди 5 минути". The activity is
+ * shown also before a sign-in is recorded.
+ */
 export function activityLine(member: Pick<TeamMember, 'last_login_at' | 'last_seen_at'>, now: Date): string | null {
   if (member.last_login_at === undefined) return null;
-  if (!member.last_login_at) return 'Още няма вход.';
-  const seen = member.last_seen_at ? agoText(member.last_seen_at, now) : 'още няма';
-  return `Последен вход: ${momentFormat.format(new Date(member.last_login_at))} · Последна активност: ${seen}`;
+  const login = member.last_login_at ? `Последен вход: ${momentFormat.format(new Date(member.last_login_at))}` : 'Още няма записан вход';
+  return member.last_seen_at ? `${login} · Последна активност: ${agoText(member.last_seen_at, now)}` : `${login}.`;
 }

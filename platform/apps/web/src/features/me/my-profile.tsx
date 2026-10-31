@@ -195,6 +195,9 @@ function SecurityCard() {
       </div>
       {error ? <p className={styles.error} role="alert">{error}</p> : null}
       <p className={styles.muted}>Смяна на парола — скоро.</p>
+      {/* Nothing is followed in secret (AGENTS.md): who sees it, in plain words. Only the owner and the administrators
+          manage the team — that right is never added to anyone else. */}
+      <p className={styles.small}>Собственикът и администраторите виждат кога сте влизали и работили в системата за последно.</p>
     </section>
   );
 }
