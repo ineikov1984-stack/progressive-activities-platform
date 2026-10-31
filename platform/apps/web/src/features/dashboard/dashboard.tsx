@@ -1,11 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AuthenticationRequiredError,
-  createInvitation,
   type DashboardAuditEvent,
   type DashboardInvitation,
   loadWorkspaceOverview,
@@ -15,23 +14,8 @@ import { type ActivityDraft, loadCatalogWorkspace } from '@/features/catalog/adm
 import { buildTasks, type FreedPlace, freedPlaces, greeting, plural, type Task } from './tasks';
 import { loadApplications, loadStaffGroups } from '@/features/enrollment/api';
 import { OrganizationStatusCard } from '@/features/organizations/application/status-card';
+import { roleLabel } from '@/features/team/presentation';
 import styles from './home.module.css';
-
-const roleLabels: Record<string, string> = {
-  platform_admin: 'Платформен администратор',
-  organization_owner: 'Собственик',
-  organization_admin: 'Администратор',
-  coordinator: 'Координатор',
-  instructor: 'Преподавател / треньор',
-  finance: 'Финанси',
-  viewer: 'Само преглед',
-};
-
-const invitationStatusLabels: Record<string, string> = {
-  pending: 'Очаква приемане',
-  accepted: 'Приета',
-  expired: 'Изтекла',
-};
 
 const auditActionLabels: Record<string, string> = {
   'identity.login_succeeded': 'Вход в системата',
@@ -72,9 +56,17 @@ const auditActionLabels: Record<string, string> = {
   'enrollment.reopened': 'Отменено прекратяване на записване',
   'payment_terms.created': 'Създадени правила за такси, отсъствия и отказ',
   'payment_terms.updated': 'Променени правила за такси, отсъствия и отказ',
+  'team.member_added': 'Добавен човек в екипа',
+  'team.member_updated': 'Променени данни на човек от екипа',
+  'team.member_archived': 'Архивиран човек от екипа',
+  'team.role_changed': 'Сменена роля в екипа',
+  'team.invitation_sent': 'Изпратена покана за вход',
+  'team.invitation_accepted': 'Приета покана за вход',
+  'team.profile_linked': 'Свързан профил на преподавател',
+  'catalog.assignment_added': 'Назначение в група',
+  'catalog.assignment_ended': 'Приключено назначение в група',
+  'catalog.assignment_removed': 'Махнато назначение в група',
 };
-
-const visibleInvitations = 5;
 
 const taskIconPaths: Record<Task['tone'], string[]> = {
   action: ['M4 20h4L19 9l-4-4L4 16v4z', 'M13.5 6.5l4 4'],
@@ -93,17 +85,16 @@ export function Dashboard() {
   const [pendingApplications, setPendingApplications] = useState(0);
   const [freed, setFreed] = useState<FreedPlace[]>([]);
   const canManageEnrollments = organization.permissions.includes('enrollment.manage');
+  const canInvite = organization.permissions.includes('invite');
+  const canSeeTeam = organization.permissions.includes('team.view');
   const [invitations, setInvitations] = useState<DashboardInvitation[]>();
   const [auditEvents, setAuditEvents] = useState<DashboardAuditEvent[]>();
   const [loadError, setLoadError] = useState<string>();
-  const [formError, setFormError] = useState<string>();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [oneTimeToken, setOneTimeToken] = useState<string>();
 
   useEffect(() => {
     let active = true;
     Promise.all([
-      loadWorkspaceOverview(organization.id),
+      loadWorkspaceOverview(organization.id, canInvite),
       loadCatalogWorkspace(organization.id).then((workspace) => workspace.activities).catch(() => [] as ActivityDraft[]),
       // Roles without access to enrollments simply see no such task.
       loadApplications(organization.id).then((page) => page.total).catch(() => 0),
@@ -124,26 +115,7 @@ export function Dashboard() {
       else setLoadError('Част от таблото не се зареди. Опитайте да презаредите страницата.');
     });
     return () => { active = false; };
-  }, [organization.id, router, canManageEnrollments]);
-
-  async function handleInvitation(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const invitationForm = event.currentTarget;
-    const form = new FormData(invitationForm);
-    setFormError(undefined);
-    setOneTimeToken(undefined);
-    setIsSubmitting(true);
-    try {
-      const result = await createInvitation(organization.id, String(form.get('email') ?? ''), String(form.get('role') ?? 'instructor'));
-      setInvitations((current) => [result.invitation, ...(current ?? [])]);
-      setOneTimeToken(result.token);
-      invitationForm.reset();
-    } catch (reason) {
-      setFormError(reason instanceof Error ? reason.message : 'Поканата не беше изпратена.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
+  }, [organization.id, router, canManageEnrollments, canInvite]);
 
   const isLoaded = activities !== undefined && invitations !== undefined;
   const tasks = isLoaded ? buildTasks(activities, invitations, pendingApplications, freed) : [];
@@ -156,7 +128,7 @@ export function Dashboard() {
         <div className={styles.heading}>
           <p className={styles.eyebrow}>{greeting(new Date())}, {firstName}</p>
           <h1>{organization.name}</h1>
-          <p className={styles.muted}>{roleLabels[organization.role] ?? 'Член на екипа'}{activities ? ` · ${plural(published, 'публикувана дейност', 'публикувани дейности')}` : ''}</p>
+          <p className={styles.muted}>{roleLabel(organization.role)}{activities ? ` · ${plural(published, 'публикувана дейност', 'публикувани дейности')}` : ''}</p>
         </div>
         <Link className={styles.primary} href="/dashboard/activities?new=1">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
@@ -194,53 +166,9 @@ export function Dashboard() {
           <Link href="/dashboard/activities" className={styles.shortcut}><strong>Дейности</strong><span>{activities ? plural(activities.length, 'дейност', 'дейности') : '…'}</span></Link>
           <Link href="/dashboard/open-days" className={styles.shortcut}><strong>Отворени врати</strong><span>Кампании и пробни занимания</span></Link>
           <Link href={`/o/${organization.slug}`} className={styles.shortcut}><strong>Публичен профил</strong><span>Как ви виждат родителите</span></Link>
+          {/* "Покани колега" moved to "Екип" (docs/product/team.md, т. 10): people, their groups and invitations. */}
+          {canSeeTeam ? <Link href="/dashboard/team" className={styles.shortcut}><strong>Екип</strong><span>Хора, групи и покани за вход</span></Link> : null}
         </div>
-      </section>
-
-      <section id="team" aria-labelledby="team-title" className={styles.twoColumns}>
-        <article className={styles.panel}>
-          <h2 id="team-title">Покани колега</h2>
-          <form className={styles.form} onSubmit={handleInvitation}>
-            <label htmlFor="invitation-email">Имейл</label>
-            <input id="invitation-email" name="email" type="email" autoComplete="email" required />
-            <label htmlFor="invitation-role">Роля</label>
-            <select id="invitation-role" name="role" defaultValue="instructor">
-              <option value="organization_admin">Администратор</option>
-              <option value="coordinator">Координатор</option>
-              <option value="instructor">Преподавател / треньор</option>
-              <option value="finance">Финанси</option>
-              <option value="viewer">Само преглед</option>
-            </select>
-            <button type="submit" disabled={isSubmitting} aria-busy={isSubmitting}>{isSubmitting ? 'Изпращане…' : 'Изпрати покана'}</button>
-          </form>
-          {oneTimeToken ? (
-            <div className={styles.notice} role="status">
-              <strong>Поканата е създадена</strong>
-              <p>Кодът за приемане е показан само в тестовата среда. В реална работа колегата ще го получи по имейл.</p>
-              <code>{oneTimeToken}</code>
-            </div>
-          ) : null}
-          {formError ? <p className={styles.error} role="alert">{formError}</p> : null}
-        </article>
-
-        <article className={styles.panel}>
-          <h2>Екип и покани</h2>
-          {invitations === undefined ? <span className={styles.skeleton} /> : invitations.length === 0 ? (
-            <p className={styles.muted}>Все още не сте поканили колеги.</p>
-          ) : (
-            <ul className={styles.list}>
-              {invitations.slice(0, visibleInvitations).map((invitation) => (
-                <li key={invitation.id}>
-                  <span className={styles.listMain}><strong>{invitation.email}</strong><span>{roleLabels[invitation.role] ?? 'Член на екипа'}</span></span>
-                  <span className={`${styles.badge} ${styles[`badge_${invitation.status}`] ?? ''}`}>{invitationStatusLabels[invitation.status] ?? 'Неизвестен статус'}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {invitations && invitations.length > visibleInvitations
-            ? <p className={styles.muted}>и още {plural(invitations.length - visibleInvitations, 'покана', 'покани')}</p>
-            : null}
-        </article>
       </section>
 
       <section aria-labelledby="audit-title" className={styles.panel}>

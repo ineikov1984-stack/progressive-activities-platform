@@ -45,28 +45,6 @@ export class AuthenticationRequiredError extends Error {}
 
 type JsonRecord = Record<string, unknown>;
 
-function readCookie(name: string): string | undefined {
-  if (typeof document === 'undefined') {
-    return undefined;
-  }
-
-  const prefix = `${name}=`;
-  const cookie = document.cookie.split('; ').find((item) => item.startsWith(prefix));
-
-  return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : undefined;
-}
-
-async function ensureCsrfToken(): Promise<string | undefined> {
-  const existingToken = readCookie('XSRF-TOKEN');
-  if (existingToken) {
-    return existingToken;
-  }
-
-  await fetch('/backend/sanctum/csrf-cookie', { credentials: 'include' });
-
-  return readCookie('XSRF-TOKEN');
-}
-
 async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...options,
@@ -128,31 +106,17 @@ export async function loadDashboard(): Promise<DashboardData> {
   }
 }
 
-export async function createInvitation(organizationId: string, email: string, role: string): Promise<{
-  invitation: DashboardInvitation;
-  token: string;
-}> {
-  const csrfToken = await ensureCsrfToken();
-
-  return requestJson('/backend/api/v1/invitations', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Organization-Id': organizationId,
-      ...(csrfToken ? { 'X-XSRF-TOKEN': csrfToken } : {}),
-    },
-    body: JSON.stringify({ email, role }),
-  });
-}
-
 /**
  * The parts of the home screen that the frame does not already hold.
  * User and organization come from DashboardContext, so they are not fetched twice.
  */
-export async function loadWorkspaceOverview(organizationId: string): Promise<Pick<DashboardData, 'invitations' | 'auditEvents'>> {
+export async function loadWorkspaceOverview(organizationId: string, withInvitations = true): Promise<Pick<DashboardData, 'invitations' | 'auditEvents'>> {
   const headers = { 'X-Organization-Id': organizationId };
   const [{ invitations }, { events: auditEvents }] = await Promise.all([
-    requestJson<{ invitations: DashboardInvitation[] }>('/backend/api/v1/invitations', { headers }),
+    // Only those who invite see the invitations; for the other roles the list is empty, not an error.
+    withInvitations
+      ? requestJson<{ invitations: DashboardInvitation[] }>('/backend/api/v1/invitations', { headers })
+      : Promise.resolve({ invitations: [] as DashboardInvitation[] }),
     requestJson<{ events: DashboardAuditEvent[] }>('/backend/api/v1/audit-events', { headers }),
   ]);
   return { invitations, auditEvents };

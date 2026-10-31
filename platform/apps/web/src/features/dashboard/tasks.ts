@@ -55,14 +55,15 @@ export function buildTasks(activities: ActivityDraft[], invitations: DashboardIn
       href: `/dashboard/activities/${closest.activity.id}`,
     });
   }
+  // "Неприети покани" (docs/product/team.md, т. 10): the people are in "Екип", where an invitation is sent again.
   const pending = invitations.filter((invitation) => invitation.status === 'pending');
   if (pending.length > 0) {
     tasks.push({
       id: 'invitations',
       tone: 'limited',
-      title: `${plural(pending.length, 'покана очаква', 'покани очакват')} приемане`,
-      detail: 'Напомнете на колегите да проверят имейла си',
-      href: '/dashboard#team',
+      title: plural(pending.length, 'неприета покана', 'неприети покани'),
+      detail: 'Напомнете на колегите да проверят имейла си или изпратете поканата пак',
+      href: '/dashboard/team?state=invited',
     });
   }
   if (activities.length === 0) {

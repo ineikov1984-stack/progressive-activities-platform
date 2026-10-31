@@ -162,6 +162,49 @@ class TeamInvitationsTest extends TestCase
         $this->assertSame([false, true], $sent->pluck('resent')->sort()->values()->all());
     }
 
+    public function test_the_team_shows_a_waiting_invitation_without_its_links(): void
+    {
+        Mail::fake();
+        [$owner, $organization] = $this->team();
+        $coordinator = $this->member($organization, 'coordinator', 'Координатор');
+        $person = $this->person($organization, 'petar@example.test');
+        $this->withHeader('X-Organization-Id', $organization->id);
+        $this->assertNull($this->listed($this->actingAs($owner)->getJson('/api/v1/team')->assertOk(), $person)['invitation']);
+
+        $sent = $this->invite($owner, $person)->assertCreated();
+        $copy = $this->tokenOf($sent);
+        $mailed = $this->mailedToken('petar@example.test');
+        $waiting = ['status' => 'pending', 'expires_at' => $sent->json('invitation.expires_at')];
+        $list = $this->actingAs($owner)->getJson('/api/v1/team')->assertOk();
+        $this->assertSame($waiting, $this->listed($list, $person)['invitation']);
+        $this->actingAs($owner)->getJson('/api/v1/team/members/'.$person->id)->assertOk()->assertJsonPath('member.invitation', $waiting);
+        // Who manages the team and who only sees it get the state and the end, never a link, a token or the address.
+        $seen = $this->actingAs($coordinator)->getJson('/api/v1/team')->assertOk();
+        $this->assertSame($waiting, $this->listed($seen, $person)['invitation']);
+        foreach ([$list, $seen] as $response) {
+            foreach ([$copy, $mailed, hash('sha256', $copy), hash('sha256', $mailed), '/invite'] as $secret) {
+                $this->assertStringNotContainsString($secret, (string) $response->getContent());
+            }
+        }
+        $this->assertStringNotContainsString('petar', (string) $seen->getContent());
+
+        // An expired one asks to be sent again; the newest of several is the one shown.
+        DB::table('invitations')->update(['expires_at' => now()->subMinute()]);
+        $this->assertSame('expired', $this->listed($this->actingAs($owner)->getJson('/api/v1/team'), $person)['invitation']['status']);
+        $again = $this->tokenOf($this->invite($owner, $person)->assertCreated());
+        $this->assertSame(2, DB::table('invitations')->where('staff_member_id', $person->id)->count());
+        $this->assertSame('pending', $this->listed($this->actingAs($owner)->getJson('/api/v1/team'), $person)['invitation']['status']);
+
+        // Accepted: the person logs in and nothing waits.
+        $this->flushHeaders();
+        $this->actingAs(User::factory()->create(['email' => 'petar@example.test']))
+            ->postJson('/api/v1/invitations/join', ['token' => $again])->assertOk();
+        $this->withHeader('X-Organization-Id', $organization->id);
+        $row = $this->listed($this->actingAs($owner)->getJson('/api/v1/team')->assertOk(), $person);
+        $this->assertSame('login', $row['state']);
+        $this->assertNull($row['invitation']);
+    }
+
     public function test_an_old_invitation_for_the_address_is_taken_over_and_another_persons_refuses(): void
     {
         Mail::fake();
@@ -237,18 +280,28 @@ class TeamInvitationsTest extends TestCase
         $this->app['auth']->forgetGuards();
         User::factory()->create(['email' => 'petar@example.test']);
 
-        foreach ([$copy, $mailed] as $token) {
+        foreach (['copy' => $copy, 'email' => $mailed] as $link => $token) {
             $page = $this->lookup($token)->assertOk()
                 ->assertJsonPath('invitation.organization_name', 'Школа')
                 ->assertJsonPath('invitation.role', 'instructor')
                 ->assertJsonPath('invitation.role_label', 'Преподавател')
                 ->assertJsonPath('invitation.status', 'pending')
-                // Whether an address has a profile is not told: the page offers both and relies on the 409.
-                ->assertJsonMissingPath('invitation.has_account')
-                ->assertJsonMissingPath('invitation.email');
-            $this->assertStringNotContainsString('petar', (string) $page->getContent());
+                // Which link was opened, so the page offers a login (copy) or a new profile (e-mail).
+                ->assertJsonPath('invitation.link', $link)
+                // Whether an address has a profile is not told: the page relies on the 409.
+                ->assertJsonMissingPath('invitation.has_account');
             $this->assertStringNotContainsString(hash('sha256', $token), (string) $page->getContent());
         }
+        // The inviter's link can be passed to anyone: no address. The e-mail's link was delivered to it: its address.
+        $copied = $this->lookup($copy)->assertJsonMissingPath('invitation.email');
+        $this->assertStringNotContainsString('petar', (string) $copied->getContent());
+        $this->lookup($mailed)->assertJsonPath('invitation.email', 'petar@example.test');
+        // The old form's one token was shown to the inviter: it counts as a copied link.
+        $this->withHeader('X-Organization-Id', $organization->id);
+        $old = $this->actingAs($owner)->postJson('/api/v1/invitations', ['email' => 'maria@example.test', 'role' => 'viewer'])->assertCreated()->json('token');
+        $this->flushHeaders();
+        $this->app['auth']->forgetGuards();
+        $this->lookup($old)->assertOk()->assertJsonPath('invitation.link', 'copy')->assertJsonMissingPath('invitation.email');
 
         DB::table('invitations')->update(['expires_at' => now()->subMinute()]);
         $this->lookup($copy)->assertOk()->assertJsonPath('invitation.status', 'expired');
@@ -595,6 +648,20 @@ class TeamInvitationsTest extends TestCase
     private function invite(User $actor, StaffMember $person, array $body = ['role' => 'instructor']): TestResponse
     {
         return $this->actingAs($actor)->postJson('/api/v1/team/members/'.$person->id.'/invitation', $body);
+    }
+
+    /**
+     * The person's row in a team list.
+     *
+     * @return array<string, mixed>
+     */
+    private function listed(TestResponse $response, StaffMember $person): array
+    {
+        $row = collect($response->json('members'))->firstWhere('id', $person->id);
+        $this->assertIsArray($row);
+        $this->assertArrayHasKey('invitation', $row);
+
+        return $row;
     }
 
     /** The token of the inviter's link for copying. */

@@ -57,7 +57,7 @@ const navigationGroups: Array<Omit<DashboardNavGroup, 'items'> & { items: Naviga
     label: 'Организация',
     items: [
       { id: 'locations', label: 'Места', icon: 'locations', isAvailable: false },
-      { id: 'team', label: 'Екип', icon: 'team', href: '/dashboard#team', isAvailable: true },
+      { id: 'team', label: 'Екип', icon: 'team', href: '/dashboard/team', isAvailable: true, requires: 'team.view' },
       { id: 'media', label: 'Медия', icon: 'media', isAvailable: false },
       // Only "Такси, отсъствия и отказ" (the payment terms) so far; the other settings join it later.
       { id: 'settings', label: 'Такси, отсъствия и отказ', icon: 'settings', href: '/dashboard/settings/payment-terms', isAvailable: true },
@@ -66,7 +66,7 @@ const navigationGroups: Array<Omit<DashboardNavGroup, 'items'> & { items: Naviga
 ];
 
 function isActivePath(pathname: string, href?: string): boolean {
-  // A link to a section of another page (`/dashboard#team`) is never the current page.
+  // A link to a section of another page (`/dashboard#…`) is never the current page.
   if (!href || href.includes('#')) return false;
   if (href === '/dashboard') return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);

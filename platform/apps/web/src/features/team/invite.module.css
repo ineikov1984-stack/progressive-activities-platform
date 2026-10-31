@@ -1,0 +1,41 @@
+/* "/invite" (docs/product/team.md, т. 7.4): one card in the middle of a plain page, outside the dashboard. */
+.page { display: grid; justify-items: center; align-content: start; gap: var(--space-6); max-width: none; min-height: 100dvh; margin: 0; box-sizing: border-box; padding: var(--space-8) var(--space-4) var(--space-12); background: var(--surface-page); }
+.brand { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--control-height); color: var(--ink); font-weight: 700; text-decoration: none; }
+.mark { display: grid; width: 34px; height: 34px; place-items: center; border-radius: var(--radius-sm); color: var(--ink-inverse); background: var(--action); font-size: 13px; font-weight: 700; }
+.card { display: grid; gap: var(--space-4); width: 100%; max-width: 30rem; box-sizing: border-box; padding: var(--space-6) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-card); }
+.kicker { margin: 0; color: var(--ink-muted); font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.card h1 { margin: 0; color: var(--ink); font-size: 24px; font-weight: 700; line-height: 30px; overflow-wrap: anywhere; }
+.card h1:focus { outline: none; }
+.card h1:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.card p { margin: 0; }
+.text { color: var(--ink-body); font-size: 15px; line-height: 22px; }
+.facts { display: grid; gap: var(--space-1); margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-sunken); color: var(--ink-body); font-size: 15px; line-height: 22px; }
+.facts strong { color: var(--ink); }
+.form { display: grid; gap: var(--space-3); }
+.field { display: grid; gap: var(--space-1); }
+.field label { color: var(--ink); font-size: 14px; font-weight: 600; }
+.input { width: 100%; min-height: var(--control-height); box-sizing: border-box; padding: 0 var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-sm); color: var(--ink); background: var(--surface); font: inherit; font-size: 16px; }
+.input[aria-invalid="true"] { border: 2px solid var(--status-full); }
+.readOnly { color: var(--ink-body); background: var(--surface-sunken); border-color: var(--border); }
+.hint { margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 18px; }
+.fieldError { margin: 0; color: var(--status-full); font-size: 14px; font-weight: 600; }
+.fieldError::before { content: "! "; }
+.error, .notice { margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); color: var(--ink); font-size: 15px; line-height: 22px; }
+.error { background: var(--status-full-soft); font-weight: 600; }
+.notice { background: var(--status-info-soft); }
+.primary, .secondary { display: flex; align-items: center; justify-content: center; width: 100%; box-sizing: border-box; padding: 0 var(--space-4); border: 1.5px solid transparent; border-radius: var(--radius-md); font: inherit; font-size: 16px; font-weight: 600; text-align: center; text-decoration: none; cursor: pointer; }
+.primary { min-height: 52px; color: var(--ink-inverse); background: var(--action); }
+.primary:hover { background: var(--action-hover); }
+.secondary { min-height: 48px; color: var(--ink); background: var(--surface); border-color: var(--ink); }
+.secondary:hover { background: var(--surface-sunken); }
+.primary:disabled, .secondary:disabled { opacity: .6; cursor: not-allowed; }
+.switchLine { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); color: var(--ink-body); font-size: 15px; }
+.linkButton { min-height: var(--control-height); padding: 0; border: 0; color: var(--ink); background: transparent; font: inherit; font-size: 15px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.linkButton:hover { color: var(--action-hover); }
+.skeleton { display: block; height: 1.25rem; border-radius: var(--radius-sm); background: var(--surface-sunken); }
+.skeletonTall { height: 9rem; }
+
+@media (min-width: 560px) {
+  .page { padding-top: var(--space-12); }
+  .card { padding: var(--space-6); }
+}

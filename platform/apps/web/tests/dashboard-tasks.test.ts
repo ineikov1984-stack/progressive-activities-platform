@@ -27,7 +27,7 @@ describe('dashboard tasks', () => {
     expect(tasks.map((task) => task.id)).toEqual(['drafts', 'invitations']);
     expect(tasks[0]).toMatchObject({ title: '2 чернови не са довършени', href: '/dashboard/activities/b' });
     expect(tasks[0].detail).toContain('„Шахмат“');
-    expect(tasks[1].title).toBe('2 покани очакват приемане');
+    expect(tasks[1]).toMatchObject({ title: '2 неприети покани', href: '/dashboard/team?state=invited' });
   });
 
   it('stays quiet when nothing waits for the user', () => {

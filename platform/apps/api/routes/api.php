@@ -35,7 +35,7 @@ Route::prefix('v1')->group(function (): void {
     Route::get('/public/organizations/{organizationSlug}/open-days/{campaignSlug}', [PublicCatalogController::class, 'openDay']);
     Route::get('/public/organizations/{organizationSlug}/media/{filename}', [PublicCatalogController::class, 'media'])
         ->where('filename', '[0-9a-f-]{36}\\.(?:jpg|png|webp)');
-    // An invitation, before any login (docs/product/team.md, т. 7.4): the token in the body, never in the path; never the e-mail.
+    // An invitation, before any login (docs/product/team.md, т. 7.4): the token in the body, never in the path; the e-mail only for the e-mail's link.
     Route::post('/invitations/lookup', [InvitationAcceptanceController::class, 'lookup'])->middleware('throttle:30,1');
 
     Route::middleware('web')->group(function (): void {

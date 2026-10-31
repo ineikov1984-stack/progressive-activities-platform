@@ -85,17 +85,71 @@ test('sign in leads to the home screen with tasks', async () => {
   await expect(page.getByText(/catalog\.|tenant|organization_id/)).toHaveCount(0);
 });
 
-test('an owner invites a colleague from the home screen', async () => {
-  // Wait until the team list has loaded, so it cannot replace the new invitation afterwards.
-  await page.goto('/dashboard');
-  await slow(page.getByText(/Очаква приемане|Приета|Изтекла|Все още не сте поканили колеги/).first()).toBeVisible();
-  const email = `teacher-e2e+${Date.now()}@example.test`;
-  await slow(page.getByLabel('Имейл')).toBeVisible();
-  await page.getByLabel('Имейл').fill(email);
-  await page.getByLabel('Роля').selectOption('instructor');
-  await page.getByRole('button', { name: 'Изпрати покана' }).click();
-  await slow(page.getByRole('status')).toContainText('Поканата е създадена');
-  await expect(page.getByText(email)).toBeVisible();
+test('the owner adds a teacher without a login, then invites them by e-mail and sees the link to copy', async ({ browser, baseURL }) => {
+  // A synthetic person; in CI the e-mail goes to the log (MAIL_MAILER=log).
+  const stamp = Date.now().toString(36);
+  const name = `Тест Учител ${stamp}`;
+  const email = `teacher-e2e+${stamp}@example.test`;
+  await page.goto('/dashboard/team');
+  await slow(page.getByRole('heading', { level: 1, name: 'Екип' })).toBeVisible();
+  await page.getByRole('button', { name: '+ Добави човек' }).click();
+  const panel = page.getByRole('dialog', { name: 'Добави човек в екипа' });
+  await panel.getByLabel('Име и фамилия').fill(name);
+  await panel.getByLabel('Телефон').fill('0888 123 456');
+  await expect(panel.getByRole('radio', { name: /^Преподавател или треньор/ })).toBeChecked();
+  await expect(panel.getByRole('switch', { name: /Покани да влиза/ })).not.toBeChecked();
+  await Promise.all([
+    page.waitForURL(/\/dashboard\/team\/[0-9a-f-]{36}\?tab=groups&added=1$/),
+    panel.getByRole('button', { name: 'Добави човека' }).click(),
+  ]);
+  await slow(page.getByRole('heading', { level: 1, name })).toBeVisible();
+  await expect(page.getByText('Само профил, без вход').first()).toBeVisible();
+  // Right after adding, the form for the first group opens by itself.
+  await slow(page.getByRole('region', { name: 'Групи' }).getByLabel('Група', { exact: true })).toBeVisible();
+
+  // The invitation waits folded on one line until it is opened.
+  const invitation = page.getByRole('region', { name: 'Покана за вход' });
+  const fold = invitation.getByRole('button', { name: /Не влиза в системата.*Покани да влиза/ });
+  await expect(fold).toHaveAttribute('aria-expanded', 'false');
+  await fold.click();
+  await invitation.getByLabel('Роля').selectOption('instructor');
+  await invitation.getByLabel('Имейл').fill(email);
+  await invitation.getByRole('button', { name: 'Изпрати поканата', exact: true }).click();
+  await slow(invitation.getByText(`Изпратихме покана на ${email}.`)).toBeVisible();
+  // The form folds away; sending again is a second step that says the old links stop working.
+  await expect(invitation.getByLabel('Имейл')).toHaveCount(0);
+  await expect(invitation.getByRole('button', { name: 'Изпрати поканата пак' })).toBeVisible();
+  await expect(invitation.getByText('Старото писмо и старата връзка спират да важат.')).toBeVisible();
+  // The link for copying is only for someone who already logs in: it waits folded.
+  await invitation.getByText('Колегата вече влиза в системата?').click();
+  const link = invitation.getByLabel('Връзка за копиране');
+  await expect(link).toHaveValue(/\/invite#[A-Za-z0-9]{64}$/);
+  const href = await link.inputValue();
+  await expect(invitation.getByRole('button', { name: 'Копирай връзката' })).toBeVisible();
+
+  // The list shows that the invitation waits, never its link.
+  await page.goto('/dashboard/team');
+  const row = page.getByRole('row').filter({ hasText: name });
+  await slow(row.getByText(/^Поканен · изтича /)).toBeVisible();
+  await expect(row.getByRole('link', { name: 'Изпрати поканата пак' })).toBeVisible();
+  await expect(page.getByText('/invite#')).toHaveCount(0);
+
+  // Someone without a session opens the copied link: the organization and the role, a login and no new profile
+  // (only the e-mail's link makes one); the token leaves the address.
+  const guest = await browser.newContext({ baseURL });
+  try {
+    const visitor = await guest.newPage();
+    await visitor.goto(`/invite${new URL(href).hash}`);
+    await slow(visitor.getByRole('heading', { level: 1, name: 'Покана за екипа на Progressive Academy Demo' })).toBeVisible();
+    await expect(visitor.getByText('Роля: Преподавател')).toBeVisible();
+    await expect(visitor.getByText('Тази връзка е за човек, който вече влиза в системата.', { exact: false })).toBeVisible();
+    await expect(visitor.getByRole('button', { name: 'Влез и приеми' })).toBeVisible();
+    await expect(visitor.getByRole('button', { name: 'Създай профил и приеми' })).toHaveCount(0);
+    await expect(visitor.getByText(email)).toHaveCount(0);
+    await expect.poll(() => visitor.evaluate(() => window.location.hash)).toBe('');
+  } finally {
+    await guest.close();
+  }
 });
 
 test('the session survives navigation, reloads and many API calls', async () => {

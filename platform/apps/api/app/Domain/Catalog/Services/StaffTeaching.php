@@ -34,10 +34,11 @@ final readonly class StaffTeaching
     }
 
     /**
-     * The groups of each profile: current and later assignments, or all of them with the ended ones.
+     * The groups of each profile: current and later assignments, or all of them with the ended ones. `version` is the
+     * assignment's, which ending it asks for.
      *
      * @param  list<string>  $profileIds
-     * @return array<string, list<array{group_id: string, label: string, role: string, starts_on: string|null, ends_on: string|null}>>
+     * @return array<string, list<array{group_id: string, label: string, role: string, starts_on: string|null, ends_on: string|null, version: int}>>
      */
     public function assignments(array $profileIds, bool $withEnded = false): array
     {
@@ -57,6 +58,7 @@ final readonly class StaffTeaching
             ->get([
                 'activity_group_instructors.instructor_profile_id', 'activity_group_instructors.group_id',
                 'activity_group_instructors.role', 'activity_group_instructors.starts_on', 'activity_group_instructors.ends_on',
+                'activity_group_instructors.version',
                 'activities.title', 'activity_groups.name',
             ]);
         $day = fn (mixed $date): ?string => $date === null || $date === '' ? null : substr((string) $date, 0, 10);
@@ -68,6 +70,7 @@ final readonly class StaffTeaching
                 'role' => (string) $row->role,
                 'starts_on' => $day($row->starts_on),
                 'ends_on' => $day($row->ends_on),
+                'version' => (int) ($row->version ?? 1),
             ];
         }
 
