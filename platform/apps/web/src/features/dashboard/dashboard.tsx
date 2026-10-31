@@ -94,7 +94,7 @@ export function Dashboard() {
   useEffect(() => {
     let active = true;
     Promise.all([
-      loadWorkspaceOverview(organization.id, canInvite),
+      loadWorkspaceOverview(organization.id, canInvite, canSeeTeam),
       loadCatalogWorkspace(organization.id).then((workspace) => workspace.activities).catch(() => [] as ActivityDraft[]),
       // Roles without access to enrollments simply see no such task.
       loadApplications(organization.id).then((page) => page.total).catch(() => 0),
@@ -115,7 +115,7 @@ export function Dashboard() {
       else setLoadError('Част от таблото не се зареди. Опитайте да презаредите страницата.');
     });
     return () => { active = false; };
-  }, [organization.id, router, canManageEnrollments, canInvite]);
+  }, [organization.id, router, canManageEnrollments, canInvite, canSeeTeam]);
 
   const isLoaded = activities !== undefined && invitations !== undefined;
   const tasks = isLoaded ? buildTasks(activities, invitations, pendingApplications, freed) : [];
@@ -171,21 +171,24 @@ export function Dashboard() {
         </div>
       </section>
 
-      <section aria-labelledby="audit-title" className={styles.panel}>
-        <h2 id="audit-title">Последни действия</h2>
-        {auditEvents === undefined ? <span className={styles.skeleton} /> : auditEvents.length === 0 ? (
-          <p className={styles.muted}>Все още няма записани действия.</p>
-        ) : (
-          <ul className={styles.list}>
-            {auditEvents.slice(0, 8).map((event) => (
-              <li key={event.id}>
-                <span className={styles.listMain}><strong>{auditActionLabels[event.action] ?? 'Действие в системата'}</strong></span>
-                <time className={styles.muted} dateTime={event.created_at}>{new Intl.DateTimeFormat('bg-BG', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Sofia' }).format(new Date(event.created_at))}</time>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {/* Only the roles that see the team get the last actions; a teacher has no such panel. */}
+      {canSeeTeam ? (
+        <section aria-labelledby="audit-title" className={styles.panel}>
+          <h2 id="audit-title">Последни действия</h2>
+          {auditEvents === undefined ? <span className={styles.skeleton} /> : auditEvents.length === 0 ? (
+            <p className={styles.muted}>Все още няма записани действия.</p>
+          ) : (
+            <ul className={styles.list}>
+              {auditEvents.slice(0, 8).map((event) => (
+                <li key={event.id}>
+                  <span className={styles.listMain}><strong>{auditActionLabels[event.action] ?? 'Действие в системата'}</strong></span>
+                  <time className={styles.muted} dateTime={event.created_at}>{new Intl.DateTimeFormat('bg-BG', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Sofia' }).format(new Date(event.created_at))}</time>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }
