@@ -50,7 +50,8 @@ Superpowers потокът с briefs, reports и review diff-ове е само 
 | Кога | Какво | Време | Кой пуска |
 |---|---|---|---|
 | При всеки commit | тестовете за засегнатата област + lint + typecheck | < 2 мин | агентът |
-| При всеки PR | пълен API suite, web unit, build, браузърни тестове със синтетични данни, e2e „вход → табло → дейности“ срещу истинско API и база (`playwright.stack.config.ts`; локално изисква и `db:seed --class='Database\Seeders\E2eForeignTenantSeeder'`), audit на зависимости, търсене на тайни | автоматично | CI |
+| При всеки PR с код или настройки | пълен API suite, web unit, build, браузърни тестове със синтетични данни, e2e „вход → табло → дейности“ срещу истинско API и база (`playwright.stack.config.ts`; локално изисква и `db:seed --class='Database\Seeders\E2eForeignTenantSeeder'`), audit на зависимости, търсене на тайни | автоматично | CI |
+| При PR/push само с `docs/**`, `outputs/**` и `*.md` | `changes` (тестове на разликите + docs:check) и `secrets`; четирите тежки проверки се отчитат като пропуснати, без да изчезват от защитата на `main` | цел: < 2 мин | CI |
 | Веднъж седмично или в края на вертикален поток | пълен e2e, tenant isolation suite, достъпност (axe), визуална проверка на 390/768/1440 px, security review, обновяване на зависимости | ~1 сесия | Claude (проверки и поправки) + ревюъри; Codex — втори поглед |
 | Преди пилот / release | restore тест, натоварване, security checklist, MFA | отделен план | и двамата + собственик |
 
