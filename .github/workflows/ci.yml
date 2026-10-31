@@ -5,11 +5,36 @@ on:
   push:
     branches: [main]
 
+# PR updates replace their old run. Every main push gets its own group, including pending runs.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test change detection
+        run: node --test .github/scripts/ci-changes.test.mjs
+      - name: Check documentation
+        run: node platform/scripts/check-docs.mjs
+      - name: Classify the full change
+        id: diff
+        run: node .github/scripts/ci-changes.mjs
+
   api:
+    needs: changes
+    # A failed classifier must never suppress a required check.
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code != 'false') }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -111,6 +136,9 @@ jobs:
           exit $status
 
   web:
+    needs: changes
+    # A failed classifier must never suppress a required check.
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code != 'false') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -158,8 +186,17 @@ jobs:
       # run locally against the Docker stack (see docs/process/WORKFLOW.md).
       - name: Browser tests (synthetic fixtures)
         run: pnpm --filter @progressive/web exec playwright test --config=playwright.isolated.config.ts --reporter=github,line
+      # Keep failures in the lightweight job visible through an existing required check.
+      - name: Require successful change detection
+        if: ${{ !cancelled() && needs.changes.result != 'success' }}
+        run: |
+          echo "::error::The change detection or documentation check failed. See the changes job."
+          exit 1
 
   e2e-stack:
+    needs: changes
+    # A failed classifier must never suppress a required check.
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code != 'false') }}
     name: e2e (real API + database)
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -259,6 +296,9 @@ jobs:
           path: platform/apps/web/test-results/
           retention-days: 7
   docker:
+    needs: changes
+    # A failed classifier must never suppress a required check.
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code != 'false') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
