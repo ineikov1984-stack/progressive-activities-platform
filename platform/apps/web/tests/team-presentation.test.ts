@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { GroupAssignment, TeamMember } from '../src/features/team/api';
 import {
-  accessAction, assignmentPhase, changeableRoles, daysText, expiresText, firstErrorField, groupLink, groupsByActivity, groupsMeta, groupSummary,
+  accessAction, activityLine, agoText, assignmentPhase, changeableRoles, daysText, expiresText, firstErrorField, groupLink, groupsByActivity, groupsMeta, groupSummary,
   groupTags, guestModeFor, historyItem, historyText, invitableRoles, invitationFold, matchesFilters, memberRole, memberStatus, noGroupsText,
-  parseStateFilter, periodText, roleLabel, stateFilterLabels, teamErrorMessage, tokenFromHash, welcomeText,
+  foundText, lastLoginText, parseStateFilter, periodText, roleLabel, rolesFilterText, stateFilterLabels, teamErrorMessage, tokenFromHash, welcomeText,
 } from '../src/features/team/presentation';
 
 // 10:00 in Sofia on 1 November 2026 (EET, UTC+2).
@@ -176,13 +176,62 @@ describe('the list filters', () => {
   ];
   const ids = (filters: Parameters<typeof matchesFilters>[1]) => people.filter((person) => matchesFilters(person, filters, now)).map((person) => person.id);
 
-  it('searches by name in any case and filters by role (the invitation\'s too) and access', () => {
-    expect(ids({ search: 'иван', role: '', state: '' })).toEqual(['a', 'b']);
-    expect(ids({ search: '', role: 'instructor', state: '' })).toEqual(['a', 'c']);
-    expect(ids({ search: '', role: 'finance', state: '' })).toEqual(['b']);
-    expect(ids({ search: '', role: '', state: 'invited' })).toEqual(['b']);
-    expect(ids({ search: '', role: '', state: 'profile_only' })).toEqual(['c']);
-    expect(ids({ search: '', role: '', state: 'login' })).toEqual(['a']);
+  it('searches by name in any case and filters by roles (the invitation\'s too) and access', () => {
+    expect(ids({ search: 'иван', roles: [], state: '' })).toEqual(['a', 'b']);
+    expect(ids({ search: '', roles: ['instructor'], state: '' })).toEqual(['a', 'c']);
+    expect(ids({ search: '', roles: ['finance'], state: '' })).toEqual(['b']);
+    // Several roles: anyone with one of them.
+    expect(ids({ search: '', roles: ['finance', 'instructor'], state: '' })).toEqual(['a', 'b', 'c']);
+    expect(ids({ search: 'иван', roles: ['finance', 'coordinator'], state: '' })).toEqual(['b']);
+    expect(ids({ search: '', roles: [], state: 'invited' })).toEqual(['b']);
+    expect(ids({ search: '', roles: [], state: 'profile_only' })).toEqual(['c']);
+    expect(ids({ search: '', roles: [], state: 'login' })).toEqual(['a']);
+  });
+
+  it('names the role filter and the count', () => {
+    expect(rolesFilterText([])).toBe('Всички роли');
+    expect(rolesFilterText(['instructor'])).toBe('Преподавател');
+    expect(rolesFilterText(['instructor', 'viewer'])).toBe('2 роли');
+    expect(foundText(0)).toBe('Намерени: 0');
+    expect(foundText(12)).toBe('Намерени: 12');
+  });
+
+  it('says in Bulgarian how long ago, with the right plural', () => {
+    const at = new Date('2026-10-31T12:09:00Z'); // 14:09 in Sofia
+    const ago = (minutes: number) => new Date(at.getTime() - minutes * 60_000).toISOString();
+    expect(agoText(ago(0), at)).toBe('току-що');
+    expect(agoText(ago(1), at)).toBe('преди 1 минута');
+    expect(agoText(ago(5), at)).toBe('преди 5 минути');
+    expect(agoText(ago(60), at)).toBe('преди 1 час');
+    expect(agoText(ago(3 * 60), at)).toBe('преди 3 часа');
+    expect(agoText('2026-10-30T08:00:00Z', at)).toBe('вчера');
+    expect(agoText('2026-10-29T08:00:00Z', at)).toBe('преди 2 дни');
+    expect(agoText('2026-10-24T08:00:00Z', at)).toBe('преди 1 седмица');
+    expect(agoText('2026-10-10T08:00:00Z', at)).toBe('преди 3 седмици');
+    expect(agoText('2026-09-30T08:00:00Z', at)).toBe('преди 1 месец');
+    expect(agoText('2026-07-01T08:00:00Z', at)).toBe('преди 4 месеца');
+    expect(agoText('2025-10-30T08:00:00Z', at)).toBe('преди 1 година');
+    expect(agoText('2023-10-01T08:00:00Z', at)).toBe('преди 3 години');
+    // A clock a little ahead is still "току-що".
+    expect(agoText('2026-10-31T12:10:00Z', at)).toBe('току-що');
+  });
+
+  it('says when a person last signed in by calendar days in Sofia, without grammatical gender', () => {
+    const at = new Date('2026-10-31T21:30:00Z'); // 23:30 in Sofia
+    expect(lastLoginText(null, at)).toBe('още няма вход');
+    expect(lastLoginText('2026-10-31T05:00:00Z', at)).toBe('последен вход днес');
+    // 23:00 UTC on 30 October is already 31 October in Sofia.
+    expect(lastLoginText('2026-10-30T23:00:00Z', at)).toBe('последен вход днес');
+    expect(lastLoginText('2026-10-30T10:00:00Z', at)).toBe('последен вход вчера');
+    expect(lastLoginText('2026-10-29T10:00:00Z', at)).toBe('последен вход преди 2 дни');
+  });
+
+  it('writes the last sign-in and activity in the profile, only when the list carries them', () => {
+    const at = new Date('2026-10-31T12:14:00Z');
+    expect(activityLine({ last_login_at: '2026-10-31T12:09:00Z', last_seen_at: '2026-10-31T12:09:00Z' }, at))
+      .toBe('Последен вход: 31 октомври 2026 г. в 14:09 · Последна активност: преди 5 минути');
+    expect(activityLine({ last_login_at: null, last_seen_at: null }, at)).toBe('Още няма вход.');
+    expect(activityLine({}, at)).toBeNull();
   });
 
   it('reads the access filter from a link and ignores anything else', () => {

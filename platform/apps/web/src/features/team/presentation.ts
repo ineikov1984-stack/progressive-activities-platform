@@ -248,7 +248,8 @@ export function teamErrorMessage(status: number, body: ErrorBody): string {
 
 /** The filters of the list ("Достъп"); "В архива" loads another list from the server. */
 export type StateFilter = '' | 'login' | 'invited' | 'profile_only' | 'archived';
-export type TeamFilters = { search: string; role: '' | TeamRole; state: StateFilter };
+/** `roles`: none — all roles; several — anyone with one of them. */
+export type TeamFilters = { search: string; roles: TeamRole[]; state: StateFilter };
 
 export const stateFilterLabels: Record<Exclude<StateFilter, ''>, string> = {
   login: 'Има достъп',
@@ -264,7 +265,10 @@ export function parseStateFilter(value: string | null): StateFilter {
 export function matchesFilters(member: TeamMember, filters: TeamFilters, now: Date): boolean {
   const search = filters.search.trim().toLocaleLowerCase('bg-BG');
   if (search && !member.full_name.toLocaleLowerCase('bg-BG').includes(search)) return false;
-  if (filters.role && memberRole(member) !== filters.role) return false;
+  if (filters.roles.length > 0) {
+    const role = memberRole(member);
+    if (role === null || !filters.roles.includes(role)) return false;
+  }
   const status = memberStatus(member, now).key;
   if (filters.state === 'invited') return status === 'invited' || status === 'invitation_expired';
   if (filters.state === 'login' || filters.state === 'profile_only' || filters.state === 'archived') return status === filters.state;
@@ -300,4 +304,56 @@ export function focusVisible(ids: string[]): void {
 /** "Иван Петров" → "ИП". */
 export function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toLocaleUpperCase('bg-BG') || '?';
+}
+
+/** The button of the role filter: "Всички роли", the one role, or "2 роли". */
+export function rolesFilterText(roles: TeamRole[]): string {
+  if (roles.length === 0) return 'Всички роли';
+  if (roles.length === 1) return roleLabels[roles[0]];
+  return `${roles.length} роли`;
+}
+
+/** "Намерени: 3" above the list; it follows the search and the filters. */
+export const foundText = (count: number) => `Намерени: ${count}`;
+
+/* When a person last signed in and was active (DECISIONS 31.10.2026 „Екип — последен вход и филтър по роли“). */
+
+const counted = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+
+/** "вчера", "преди 2 дни", "преди 3 седмици", "преди 2 месеца", "преди 1 година" — from whole calendar days in Sofia. */
+function daysAgoText(days: number): string {
+  if (days <= 1) return 'вчера';
+  if (days < 7) return `преди ${counted(days, 'ден', 'дни')}`;
+  if (days < 30) return `преди ${counted(Math.floor(days / 7), 'седмица', 'седмици')}`;
+  if (days < 365) return `преди ${counted(Math.floor(days / 30), 'месец', 'месеца')}`;
+  return `преди ${counted(Math.floor(days / 365), 'година', 'години')}`;
+}
+
+/** "Последна активност": "току-що", "преди 5 минути", "преди 3 часа", then by days. */
+export function agoText(moment: string, now: Date): string {
+  const minutes = Math.floor((now.getTime() - Date.parse(moment)) / 60_000);
+  if (minutes < 1) return 'току-що';
+  if (minutes < 60) return `преди ${counted(minutes, 'минута', 'минути')}`;
+  if (minutes < 24 * 60) return `преди ${counted(Math.floor(minutes / 60), 'час', 'часа')}`;
+  return daysAgoText(-daysUntil(moment, now));
+}
+
+/**
+ * Under "Има достъп" in the list: "последен вход днес", "последен вход преди 2 дни", "още няма вход". With nouns, so
+ * there is no grammatical gender.
+ */
+export function lastLoginText(lastLogin: string | null | undefined, now: Date): string {
+  if (!lastLogin) return 'още няма вход';
+  const days = -daysUntil(lastLogin, now);
+  return `последен вход ${days <= 0 ? 'днес' : daysAgoText(days)}`;
+}
+
+const momentFormat = new Intl.DateTimeFormat('bg-BG', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Sofia' });
+
+/** In the profile: "Последен вход: 31 октомври 2026 г. в 14:09 · Последна активност: преди 5 минути". */
+export function activityLine(member: Pick<TeamMember, 'last_login_at' | 'last_seen_at'>, now: Date): string | null {
+  if (member.last_login_at === undefined) return null;
+  if (!member.last_login_at) return 'Още няма вход.';
+  const seen = member.last_seen_at ? agoText(member.last_seen_at, now) : 'още няма';
+  return `Последен вход: ${momentFormat.format(new Date(member.last_login_at))} · Последна активност: ${seen}`;
 }
