@@ -24,7 +24,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| `composer setup` — миграции с ролята-собственик | Codex | `codex/setup-migration-owner` | `platform/apps/api/composer.json` (горещ); `docs/process/WORKBOARD.md` | В работа — точната команда от т. 1, без промяна на зависимостите |
+| `composer setup` — миграции с ролята-собственик | Codex | `codex/setup-migration-owner` | `platform/apps/api/composer.json` (горещ); `docs/process/WORKBOARD.md` | Поправено; composer validate и docs:check минават; composer.lock е непроменен; следва CI и merge от собственика |
 
 ## Опашка (по приоритет)
 
