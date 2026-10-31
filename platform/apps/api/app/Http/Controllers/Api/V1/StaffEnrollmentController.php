@@ -18,6 +18,7 @@ use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Enrollment\Models\EnrollmentPause;
 use App\Domain\Enrollment\Models\EnrollmentSessionException;
+use App\Domain\Enrollment\Services\EnrolledChildSearch;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
 use App\Domain\Enrollment\Services\EnrollmentChain;
 use App\Domain\Identity\Models\User;
@@ -99,6 +100,25 @@ final class StaffEnrollmentController extends Controller
             'total' => $total,
             'has_more' => $total > $applications->count(),
             'facets' => $this->facets($status, $visible),
+        ]);
+    }
+
+    /**
+     * The enrolled children by name, for the filter "Дете" of the schedule (docs/product/schedule.md, т. 3.5): only in
+     * the groups where the user sees enrollments — the same groups as that filter — so the identifier found is the one
+     * `GET /schedule?child=` takes. The name and the class only; nothing is written to the audit log.
+     */
+    public function children(Request $request, EnrolledChildSearch $search): JsonResponse
+    {
+        $user = $this->requireRight($request, 'enrollment.view');
+        $hint = 'Напишете поне 2 букви от името.';
+        $validated = $request->validate(
+            ['q' => ['required', 'string', 'min:2', 'max:80']],
+            ['q.required' => $hint, 'q.string' => $hint, 'q.min' => $hint, 'q.max' => 'Напишете до 80 знака.'],
+        );
+
+        return response()->json([
+            'children' => $search->find((string) $validated['q'], $this->scope->groups($user, 'enrollment.view')),
         ]);
     }
 
