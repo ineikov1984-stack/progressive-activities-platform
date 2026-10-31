@@ -36,6 +36,7 @@ final readonly class ApplyScheduleChange
 {
     public function __construct(
         private ScheduleChangePlanner $planner,
+        private PreviewScheduleChange $preview,
         private ScheduleChangeEffects $effects,
         private TeacherRecipients $teachers,
         private AuditRecorder $audit,
@@ -76,40 +77,60 @@ final readonly class ApplyScheduleChange
             DB::statement("SET LOCAL lock_timeout = '{$timeout}ms'");
         }
         $found = $this->planner->found($request);
-        $groupIds = ScheduleChangePlanner::groupIds($found);
+        $groupIds = $this->planner->groupsToLock($request, $found);
         Group::query()->whereKey($groupIds)->orderBy('id')->lockForUpdate()->get(['id']);
         $replay = $this->replay($actor, $idempotencyKey, $hash);
         if ($replay !== null) {
             return ['status' => 200, 'body' => $replay];
         }
         $this->planner->assertFound($request, $found);
-        $this->effects->lock($request->sessionIds(), $groupIds);
+        $sessionIds = array_values(array_unique([...$request->sessionIds(), ...array_map('strval', $found->modelKeys())]));
+        $this->effects->lock($sessionIds, $groupIds);
         // The sessions last; the time is taken once they are held, so a session that began while this change waited is
         // "already started" (422), and the history, the letters and the answer all have this moment.
-        Session::query()->whereKey($request->sessionIds())->orderBy('id')->lockForUpdate()->get(['id']);
+        Session::query()->whereKey($sessionIds)->orderBy('id')->lockForUpdate()->get(['id']);
         $now = CarbonImmutable::now();
-        $planned = $this->planner->plan($request, true, $now);
+        $selection = null;
+        if ($request->action === 'holiday') {
+            $selection = $this->planner->found($request);
+            $this->planner->assertDays($request);
+            if (! $this->planner->holidayMatches($request, $now, $selection)) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'Заниманията в тези дни са променени — прегледайте отново.',
+                    'preview' => $this->preview->handle($request, true),
+                ], 409));
+            }
+        }
+        $planned = $this->planner->plan($request, true, $now, false, $selection);
         $effects = $this->effects->assess(array_map(
-            fn (PlannedSessionChange $change): array => ['before' => $change->before, 'after' => $change->after], $planned,
-        ), $now);
+            fn (PlannedSessionChange $change): array => ['before' => $change->before, 'after' => $change->after, 'effect' => $change->effect()], $planned,
+        ), $now, $request->notifyParents);
         $confirmed = $this->assertConfirmed($request, [...$this->planner->warnings($planned), ...$effects->warnings]);
 
         $changeId = (string) Str::uuid7();
         $organizationId = $this->context->organizationId();
         $letters = $this->teachers->letters($planned);
-        foreach ($planned as $change) {
-            Session::query()->whereKey($change->sessionId())->update([
-                'status' => $change->after->status,
-                'starts_at' => $change->after->starts_at->utc(),
-                'ends_at' => $change->after->ends_at->utc(),
-                'original_starts_at' => $change->after->original_starts_at?->utc(),
-                'location_id' => $change->after->location_id,
-                // The latest reason, for the panel (т. 3.3).
-                'change_reason' => $request->reason,
-                'version' => $change->after->version,
+        $ids = array_map(fn (PlannedSessionChange $change): string => $change->sessionId(), $planned);
+        if (in_array($request->action, ['cancel', 'holiday', 'change_location'], true)) {
+            Session::query()->whereKey($ids)->update([
+                ...($request->action === 'change_location' ? ['location_id' => $request->locationId] : ['status' => 'cancelled']),
+                'change_reason' => $request->reason, 'version' => DB::raw('version + 1'),
             ]);
-            if ($change->syncTeachers !== null) {
-                $change->before->instructors()->sync($change->syncTeachers);
+        } else {
+            foreach ($planned as $change) {
+                if (! $change->before->exists) {
+                    $change->after->change_reason = $request->reason;
+                    $change->after->save();
+                } else {
+                    Session::query()->whereKey($change->sessionId())->update([
+                        'status' => $change->after->status, 'starts_at' => $change->after->starts_at->utc(), 'ends_at' => $change->after->ends_at->utc(),
+                        'original_starts_at' => $change->after->original_starts_at?->utc(), 'location_id' => $change->after->location_id,
+                        'change_reason' => $request->reason, 'version' => $change->after->version,
+                    ]);
+                }
+                if ($change->syncTeachers !== null) {
+                    $change->after->instructors()->sync($change->syncTeachers);
+                }
             }
         }
 
@@ -139,7 +160,7 @@ final readonly class ApplyScheduleChange
             'reason' => $request->reason,
             'reason_to_parents' => $request->reasonToParents,
             'notify_parents' => $request->notifyParents,
-            'criteria' => null,
+            'criteria' => $request->action === 'holiday' ? ['days' => $request->days, 'locations' => $request->locations, 'activities' => $request->activities] : null,
             'session_count' => count($planned),
             'idempotency_key' => $idempotencyKey,
             'request_hash' => $hash,
@@ -152,13 +173,13 @@ final readonly class ApplyScheduleChange
             'organization_id' => $organizationId,
             'schedule_change_id' => $changeId,
             'session_id' => $change->sessionId(),
-            'from_status' => $change->before->status,
+            'from_status' => $change->before->exists ? $change->before->status : null,
             'to_status' => $change->after->status,
-            'from_starts_at' => $change->before->starts_at->utc(),
-            'from_ends_at' => $change->before->ends_at->utc(),
+            'from_starts_at' => $change->before->exists ? $change->before->starts_at->utc() : null,
+            'from_ends_at' => $change->before->exists ? $change->before->ends_at->utc() : null,
             'to_starts_at' => $change->after->starts_at->utc(),
             'to_ends_at' => $change->after->ends_at->utc(),
-            'from_location_id' => $change->before->location_id === null ? null : (string) $change->before->location_id,
+            'from_location_id' => ! $change->before->exists || $change->before->location_id === null ? null : (string) $change->before->location_id,
             'to_location_id' => $change->after->location_id === null ? null : (string) $change->after->location_id,
             'confirmed_overlaps' => json_encode($confirmed[$change->sessionId()] ?? [], JSON_THROW_ON_ERROR),
             'created_at' => $now,
@@ -180,9 +201,9 @@ final readonly class ApplyScheduleChange
             'reason_to_parents' => $request->reasonToParents,
             ...($single === null ? [] : [
                 'session_id' => $single->sessionId(),
-                'from_starts_at' => $single->before->starts_at->utc()->toIso8601String(),
+                'from_starts_at' => $single->before->exists ? $single->before->starts_at->utc()->toIso8601String() : null,
                 'to_starts_at' => $single->after->starts_at->utc()->toIso8601String(),
-                'from_location_id' => $single->before->location_id,
+                'from_location_id' => $single->before->exists ? $single->before->location_id : null,
                 'to_location_id' => $single->after->location_id,
             ]),
             'visits_cancelled' => $effects->count('visit_cancelled'),

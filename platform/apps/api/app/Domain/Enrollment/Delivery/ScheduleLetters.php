@@ -119,7 +119,7 @@ final class ScheduleLetters
             $enrollment = $enrollment instanceof Enrollment ? $enrollment : null;
             $holds = match ($effect) {
                 'cancelled' => $enrollment !== null && $this->wouldCome($enrollment, $session),
-                'moved', 'moved_skip_dropped' => $enrollment !== null
+                'moved', 'moved_skip_dropped', 'location_changed', 'added' => $enrollment !== null
                     ? ($enrollment->scope->value === 'full_period' || $enrollment->status === EnrollmentStatus::Active)
                         && $this->applicability->appliesTo($enrollment, $session)
                     : in_array($application->status->value, ['submitted', 'waitlisted'], true) && $session->status === 'scheduled',
@@ -178,7 +178,7 @@ final class ScheduleLetters
                             ? 'Новият ден не ви е удобен? Свържете се с екипа по телефона — отказът е без такса.'
                             : 'Новият ден не ви е удобен? Отговорете на този имейл — отказът е без такса.';
                     }
-                    $place = self::place($session, $change->action === 'move');
+                    $place = self::place($session, in_array($change->action, ['move', 'change_location', 'add'], true));
                     if ($place !== null) {
                         $facts[] = self::fact('Място', $place['text'], $context['webUrl'], $place['hint']);
                         $button ??= $place['url'] === null ? null : ['label' => 'Как да стигнете', 'url' => $place['url']];
@@ -191,12 +191,21 @@ final class ScheduleLetters
                         $facts[] = self::fact($several ? "Следващо занимание на {$child}" : 'Следващо занимание', self::sessionText($next), $context['webUrl']);
                     }
                     break;
+                case 'location_changed':
+                    $paragraphs[] = "Заниманието на {$child} ".self::in($title).' '.self::in($moment).', е с ново място.';
+                    $place = self::place($session, true);
+                    if ($place !== null) {
+                        $facts[] = self::fact('Място', $place['text'], $context['webUrl'], $place['hint']);
+                        $button ??= $place['url'] === null ? null : ['label' => 'Как да стигнете', 'url' => $place['url']];
+                    }
+                    break;
+                case 'added':
                 case 'restored':
                     $what = $session->extra ? 'Допълнителното занимание' : 'Заниманието';
                     $paragraphs[] = "{$what} ".self::in($title).' '.self::in($moment).($this->heard($change, $session, $line['enrollment'], $parentId)
                         ? ", няма да бъде отменено. Очакваме {$child}." : ", ще се проведе. Очакваме {$child}.");
                     $facts[] = self::fact('Занимание', self::sessionText($session), $context['webUrl']);
-                    $place = self::place($session, $change->action === 'move');
+                    $place = self::place($session, in_array($change->action, ['move', 'change_location', 'add'], true));
                     if ($place !== null) {
                         $facts[] = self::fact('Място', $place['text'], $context['webUrl'], $place['hint']);
                         $button ??= $place['url'] === null ? null : ['label' => 'Как да стигнете', 'url' => $place['url']];
@@ -302,12 +311,14 @@ final class ScheduleLetters
                 $old = $this->before($change, $session);
                 $paragraphs[] = "Заниманието {$title} се мести от ".self::moment($old).' на '.self::moment($session).'.';
                 $facts[] = self::fact('Преди', self::sessionText($old), $context['webUrl']);
+            } elseif ($line['effect'] === 'location_changed') {
+                $paragraphs[] = "Заниманието {$title} ".self::in(self::moment($session)).', е с ново място.';
             } else {
-                $paragraphs[] = "Заниманието {$title} ".self::in(self::moment($session))
+                $paragraphs[] = ($line['effect'] === 'added' ? 'Допълнителното занимание ' : 'Заниманието ')."{$title} ".self::in(self::moment($session))
                 .($line['effect'] === 'cancelled' ? ', няма да се проведе.' : ', ще се проведе.');
             }
             $facts[] = self::fact('Занимание', self::sessionText($session), $context['webUrl']);
-            $place = self::place($session, $change->action === 'move');
+            $place = self::place($session, in_array($change->action, ['move', 'change_location', 'add'], true));
             if ($place !== null) {
                 $facts[] = self::fact('Място', $place['text'], $context['webUrl']);
             }
@@ -321,7 +332,7 @@ final class ScheduleLetters
         $title = self::title($first['session']->group);
         $subject = count($lines) > 1 ? 'Промени във вашите занимания: '.count($lines)
             : "Вашето занимание {$title} на ".self::day($first['session']).match ($first['effect']) {
-                'cancelled' => ' е отменено', 'moved' => ' се мести', default => ' ще се проведе'
+                'cancelled' => ' е отменено', 'moved' => ' се мести', 'location_changed' => ' е с ново място', default => ' ще се проведе'
             };
         $reason = $change->reason_to_parents ? trim((string) $change->reason) : '';
 
@@ -356,6 +367,8 @@ final class ScheduleLetters
         $trial = $first['application']->scope->value === 'trial';
 
         return match ($first['effect']) {
+            'location_changed' => "Ново място за заниманието по {$activity} на {$day}",
+            'added' => "Допълнително занимание по {$activity}: ".self::moment($session),
             'moved', 'moved_skip_dropped', 'moved_not_attending' => "Заниманието по {$activity} на {$day} се мести",
             'visit_cancelled' => ($trial ? 'Пробното занимание' : 'Еднократното посещение')." на {$child} на {$day} ".($back ? 'е отменено — изберете ден' : 'се отменя — изберете друг ден'),
             'application_rejected' => 'Заявката за '.($trial ? 'пробно занимание' : 'еднократно посещение')." на {$child} на {$day} — изберете друг ден",

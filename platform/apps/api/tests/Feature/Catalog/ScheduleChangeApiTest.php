@@ -115,7 +115,7 @@ class ScheduleChangeApiTest extends TestCase
 
         $preview(['action' => 'unknown'])->assertUnprocessable()->assertJsonPath('errors.action.0', 'Изберете действие.');
         $preview(['sessions' => []])->assertUnprocessable()->assertJsonPath('errors.sessions.0', 'Изберете от 1 до 300 занимания.');
-        $preview(['sessions' => [['id' => $f['session']->id, 'version' => 1], ['id' => (string) Str::uuid(), 'version' => 1]]])
+        $preview(['action' => 'restore', 'sessions' => [['id' => $f['session']->id, 'version' => 1], ['id' => (string) Str::uuid(), 'version' => 1]]])
             ->assertUnprocessable()->assertJsonPath('errors.sessions.0', 'Изберете едно занимание.');
         $preview(['sessions' => [['id' => 'nope', 'version' => 1]]])->assertUnprocessable()
             ->assertJsonValidationErrors(['sessions.0.id' => 'Заниманието не е намерено.']);

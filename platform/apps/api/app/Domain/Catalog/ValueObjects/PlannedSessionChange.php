@@ -21,6 +21,7 @@ final readonly class PlannedSessionChange
         public ?array $syncTeachers,
         public array $teachersBefore,
         public array $teachersAfter,
+        public ?string $kind = null,
     ) {}
 
     public function sessionId(): string
@@ -31,6 +32,13 @@ final readonly class PlannedSessionChange
     /** What the letters call the change of this session. */
     public function effect(): string
     {
+        if (! $this->before->exists) {
+            return 'added';
+        }
+        if ($this->kind !== null) {
+            return $this->kind;
+        }
+
         return $this->after->status === 'cancelled' ? 'cancelled' : ($this->before->status === 'cancelled' ? 'restored' : 'moved');
     }
 }
