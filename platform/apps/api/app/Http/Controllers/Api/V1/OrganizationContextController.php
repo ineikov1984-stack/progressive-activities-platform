@@ -11,6 +11,7 @@ use App\Domain\Organizations\Models\OrganizationMembership;
 use App\Domain\Organizations\Services\StaffRights;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -67,6 +68,8 @@ class OrganizationContextController extends Controller
     /**
      * The selected organization and what the user has in it (docs/product/team-rights.md, т. 9): the role, the rights
      * with the added ones, and the scope — for the menu and the buttons. `GET /organizations` keeps the role's rights.
+     * `grants` are the user's own added rights with their last day, for "Какво можете" in "Моят профил" — read only,
+     * never anyone else's.
      */
     public function current(Request $request, TenantContext $context, StaffRights $rights): JsonResponse
     {
@@ -83,6 +86,12 @@ class OrganizationContextController extends Controller
             'abilities' => $abilities,
             'groups' => $access->groupIds,
             'activities' => $access->activityIds,
+            'grants' => array_map(fn (string $ability, array $grant): array => [
+                'ability' => $ability,
+                // The end is kept as the start of the next day in Sofia; the screen says the last day.
+                'expires_on' => $grant['expires_at'] === null ? null
+                    : CarbonImmutable::parse($grant['expires_at'])->setTimezone('Europe/Sofia')->subDay()->toDateString(),
+            ], array_keys($access->grants), array_values($access->grants)),
         ]]);
     }
 

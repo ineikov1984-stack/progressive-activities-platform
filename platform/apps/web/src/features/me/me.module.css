@@ -1,0 +1,79 @@
+/* "Моят профил": mobile first; two columns when the page has room (a container, as "Екип"). */
+.page { display: grid; gap: var(--space-4); max-width: var(--content-max); box-sizing: border-box; padding: var(--space-8) clamp(1rem, 3vw, 2.5rem) var(--space-12); container: me / inline-size; }
+.page h1 { margin: 0; color: var(--ink); font-size: clamp(28px, 4vw, 36px); font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; }
+/* On a phone the four cards are one column in the order of the mockup: details, groups, rights, security. */
+.columns { display: grid; gap: var(--space-4); align-items: start; }
+.column { display: contents; }
+.details { order: 1; }
+.groups { order: 2; }
+.rights { order: 3; }
+.security { order: 4; }
+
+.card { display: grid; gap: var(--space-3); min-width: 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.card h2 { margin: 0; color: var(--ink); font-size: 18px; font-weight: 700; line-height: 24px; overflow-wrap: anywhere; }
+.card h3 { margin: 0; color: var(--ink); font-size: 15px; font-weight: 700; }
+.card p { margin: 0; }
+.cardHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); }
+.stack { display: grid; gap: var(--space-2); }
+.muted { margin: 0; color: var(--ink-muted); font-size: 14px; line-height: 20px; }
+.small { margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 18px; }
+.strong { color: var(--ink); font-weight: 650; }
+.badge { display: inline-flex; align-items: center; min-height: 24px; padding: 0 10px; border-radius: var(--radius-pill); color: var(--ink-body); background: var(--surface-sunken); font-size: 13px; font-weight: 600; }
+
+.person { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.personText { display: grid; flex: 1 1 10rem; gap: 2px; min-width: 0; }
+.avatar { display: grid; flex: none; width: 56px; height: 56px; place-items: center; border-radius: 50%; color: var(--ink); background: var(--status-info-soft); font-size: 18px; font-weight: 700; }
+.facts { display: grid; gap: 0; margin: 0; }
+.facts > div { display: grid; grid-template-columns: 6rem minmax(0, 1fr); gap: var(--space-3); padding: var(--space-2) 0; border-top: 1px solid var(--border); }
+.facts > div:first-child { border-top: 0; }
+.facts dt { color: var(--ink-muted); font-size: 14px; }
+.facts dd { margin: 0; color: var(--ink); font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+
+.form { display: grid; gap: var(--space-3); }
+.field { display: grid; gap: var(--space-1); min-width: 0; }
+.field > label { color: var(--ink); font-size: 14px; font-weight: 600; line-height: 20px; }
+.input { width: 100%; min-height: var(--control-height); box-sizing: border-box; padding: 0 var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-sm); color: var(--ink); background: var(--surface); font: inherit; font-size: 16px; }
+.input[aria-invalid="true"] { border: 2px solid var(--status-full); }
+.fieldError { margin: 0; color: var(--status-full); font-size: 14px; font-weight: 600; line-height: 20px; }
+.fieldError::before { content: "! "; }
+
+.primary, .secondary { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--control-height); box-sizing: border-box; padding: 0 var(--space-4); border: 1px solid transparent; border-radius: var(--radius-md); font: inherit; font-size: 15px; font-weight: 600; text-decoration: none; cursor: pointer; }
+.primary { padding: 0 var(--space-6); color: var(--ink-inverse); background: var(--action); }
+.primary:hover { background: var(--action-hover); }
+.secondary { color: var(--ink); background: var(--surface); border-color: var(--border-control); }
+.secondary:hover { background: var(--surface-sunken); }
+.primary:disabled, .secondary:disabled { opacity: .6; cursor: not-allowed; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+
+.ok, .error { margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); color: var(--ink); font-size: 15px; font-weight: 600; line-height: 22px; }
+.ok { background: var(--status-available-soft); }
+.error { background: var(--status-full-soft); }
+.ok:focus { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.activity { display: grid; gap: var(--space-1); }
+.groupList { display: grid; margin: 0; padding: 0; list-style: none; }
+.group { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px var(--space-3); align-items: center; padding: var(--space-2) 0; border-top: 1px solid var(--border); }
+.groupName { min-width: 0; color: var(--ink); font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+/* The group opens its children: a target as tall as a button. */
+.groupLink { display: inline-flex; align-items: center; min-height: var(--control-height); color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.groupLink:hover { color: var(--action-hover); }
+.groupDetail { grid-column: 1 / -1; color: var(--ink-muted); font-size: 13px; line-height: 18px; }
+/* The part in words; the colour only adds to it. */
+.part { justify-self: end; padding: 0 var(--space-2); border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; line-height: 22px; white-space: nowrap; }
+.part_lead { color: var(--ink-body); }
+.part_assistant { color: var(--ink); background: var(--surface-sunken); }
+.part_substitute { color: var(--status-limited); background: var(--status-limited-soft); }
+.later { padding: var(--space-2) var(--space-3); border: 1px dashed var(--border-control); border-radius: var(--radius-md); color: var(--ink-body); font-size: 14px; line-height: 20px; }
+
+.skeleton { display: block; min-height: 5rem; border-radius: var(--radius-md); background: linear-gradient(90deg, var(--surface-sunken) 0%, var(--surface) 50%, var(--surface-sunken) 100%); background-size: 200% 100%; animation: shimmer 1.4s ease-in-out infinite; }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+
+@container me (min-width: 560px) {
+  .card { padding: var(--space-4) var(--space-6); }
+}
+
+@container me (min-width: 880px) {
+  .columns { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+  .column { display: grid; gap: var(--space-4); align-content: start; min-width: 0; }
+}

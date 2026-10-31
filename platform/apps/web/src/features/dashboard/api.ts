@@ -2,6 +2,8 @@ export type DashboardUser = {
   id: string;
   name: string;
   email: string;
+  /** The user's own phone, "+359…"; changed in "Моят профил". */
+  phone?: string | null;
 };
 
 export type DashboardOrganization = {
@@ -16,7 +18,11 @@ export type DashboardOrganization = {
 };
 
 /** What the user has in the organization (docs/product/team-rights.md, т. 9): the rights with the added ones and the scope. */
-export type OrganizationAccess = { role: string | null; scope: string; abilities: string[]; groups: string[]; activities: string[] };
+export type OrganizationAccess = {
+  role: string | null; scope: string; abilities: string[]; groups: string[]; activities: string[];
+  /** The user's own added rights with their last day ("Какво можете" in "Моят профил"). */
+  grants?: { ability: string; expires_on: string | null }[];
+};
 
 export type DashboardInvitation = {
   id: string;

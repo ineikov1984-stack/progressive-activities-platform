@@ -235,6 +235,37 @@ test('the administrator sees a parent\'s phone only after "Покажи теле
   }
 });
 
+test('a person of the team opens "Моят профил" and changes the phone; the owner sees it in "Екип"', async ({ browser, baseURL }) => {
+  // The seeded demo administrator stands in for any person of the team: the profile is the same for every role.
+  const digits = String(Date.now()).slice(-6);
+  const typed = `0887 ${digits.slice(0, 3)} ${digits.slice(3)}`;
+  const admin = await browser.newContext({ baseURL });
+  try {
+    const adminPage = await admin.newPage();
+    await adminPage.goto('/login');
+    await adminPage.getByLabel('Имейл').fill(demo.adminEmail);
+    await adminPage.getByLabel('Парола').fill(demo.password);
+    await Promise.all([adminPage.waitForURL(/\/dashboard$/), adminPage.getByRole('button', { name: 'Вход' }).click()]);
+    // The circle with the initials at the top right opens "Моят профил".
+    await adminPage.getByRole('button', { name: /^Моят профил и изход/ }).click();
+    await Promise.all([adminPage.waitForURL(/\/dashboard\/me$/), adminPage.getByRole('link', { name: 'Моят профил', exact: true }).click()]);
+    await slow(adminPage.getByRole('heading', { level: 1, name: 'Моят профил' })).toBeVisible();
+    await expect(adminPage.getByText('Имейлът сменя собственикът на организацията.', { exact: false })).toBeVisible();
+    await expect(adminPage.getByRole('heading', { name: 'Какво можете' })).toBeVisible();
+    await adminPage.getByRole('button', { name: /^Промени/ }).click();
+    await adminPage.getByLabel('Телефон').fill(typed);
+    await adminPage.getByRole('button', { name: 'Запази', exact: true }).click();
+    await slow(adminPage.getByText('Данните са запазени. Екипът вижда новия телефон.')).toBeVisible();
+    await expect(adminPage.getByText(typed, { exact: true })).toBeVisible();
+  } finally {
+    await admin.close();
+  }
+  // The owner's "Екип" shows the new phone of the person.
+  await page.goto('/dashboard/team');
+  const row = page.getByRole('row').filter({ hasText: 'Демо администратор' });
+  await slow(row.getByText(`+359887${digits}`)).toBeVisible();
+});
+
 test('the session survives navigation, reloads and many API calls', async () => {
   for (const path of ['/dashboard/activities', '/dashboard', '/dashboard/open-days', '/dashboard/activities']) {
     await page.goto(path);

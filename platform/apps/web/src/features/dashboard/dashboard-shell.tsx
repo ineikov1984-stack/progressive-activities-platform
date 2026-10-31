@@ -11,6 +11,7 @@ import {
   type DashboardUser,
   withAccess,
 } from './api';
+import { AccountMenu, LeaveButton, ProfileCard } from './account-menu';
 import { DashboardContext } from './dashboard-context';
 import {
   dashboardNavigation,
@@ -118,26 +119,29 @@ export function DashboardShell({ children }: DashboardShellProps) {
     </div>;
   }
 
-  const contextValue = { user, organization, organizations };
+  // "Моят профил" saves the name and the phone; the frame shows them at once.
+  const contextValue = { user, organization, organizations, updateUser: setUser };
 
   return <DashboardContext.Provider value={contextValue}>
     <div data-admin-shell className={`${styles.shell} ${isCollapsed ? styles.collapsed : ''} ${isMobileOpen ? styles.mobileOpen : ''}`}>
       <button className={styles.backdrop} type="button" aria-label="Затвори менюто" onClick={() => setIsMobileOpen(false)} />
       <aside className={styles.sidebar}>
         <div className={styles.brand}><span className={styles.mark}>PA</span><span className={styles.brandText}><strong>Progressive</strong><small>Activities</small></span><button className={styles.mobileClose} type="button" aria-label="Затвори менюто" onClick={() => setIsMobileOpen(false)}><DashboardIcon name="close" /></button></div>
+        <ProfileCard user={user} organization={organization} onOpen={() => setIsMobileOpen(false)} />
         <nav className={styles.navigation} aria-label="Административна навигация">
           {groups.map((group) => <div className={styles.navGroup} key={group.id}>
             <p className={styles.groupLabel}>{group.label}</p>
             {group.items.map((item) => <Link className={`${styles.navItem} ${item.isActive ? styles.active : ''}`} data-label={item.label} href={item.href ?? '/dashboard'} key={item.id} aria-current={item.isActive ? 'page' : undefined} onClick={() => setIsMobileOpen(false)}><DashboardIcon name={item.icon} /><span>{item.label}</span></Link>)}
           </div>)}
         </nav>
+        <div className={styles.mobileLeave}><LeaveButton /></div>
         <button className={styles.collapseButton} type="button" onClick={toggleCollapsed} aria-label={isCollapsed ? 'Разгъни менюто' : 'Свий менюто'}><DashboardIcon name={isCollapsed ? 'chevron-right' : 'chevron-left'} /><span>{isCollapsed ? 'Разгъни менюто' : 'Свий менюто'}</span></button>
       </aside>
       <section className={styles.workspace}>
         <header className={styles.topbar}>
           <button className={styles.mobileMenu} type="button" aria-label="Отвори менюто" onClick={() => setIsMobileOpen(true)}><DashboardIcon name="menu" /></button>
           <div className={styles.organization}><span className={styles.organizationIcon} aria-hidden="true">{initials(organization.name)}</span><span><small>Организация</small><strong>{organization.name}</strong></span></div>
-          <div className={styles.topActions}><Link className={styles.publicLink} href={`/o/${organization.slug}`}><DashboardIcon name="eye" />Публичен профил</Link><button className={styles.notification} type="button" aria-label="Известия"><DashboardIcon name="bell" /></button><span className={styles.avatar} aria-label={user.name}>{initials(user.name)}</span></div>
+          <div className={styles.topActions}><Link className={styles.publicLink} href={`/o/${organization.slug}`}><DashboardIcon name="eye" />Публичен профил</Link><button className={styles.notification} type="button" aria-label="Известия"><DashboardIcon name="bell" /></button><AccountMenu user={user} organization={organization} /></div>
         </header>
         <div className={styles.content}>{children}</div>
       </section>

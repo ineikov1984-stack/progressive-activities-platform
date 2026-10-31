@@ -7,10 +7,12 @@ use App\Domain\Audit\Enums\AuditAction;
 use App\Domain\Audit\ValueObjects\AuditableReference;
 use App\Domain\Identity\Models\User;
 use App\Domain\Identity\Support\PhoneNumber;
+use App\Domain\Organizations\Actions\UpdateOwnStaffContact;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
@@ -70,7 +72,13 @@ class AuthController extends Controller
      * The signed-in person's own name and phone (docs/product/enrollment-contacts-and-emails.md, т. 5).
      * The phone is kept in E.164; the audit records only that it changed.
      */
-    public function updateContact(Request $request, AuditRecorder $auditRecorder): JsonResponse
+    /**
+     * The user's own name and phone (docs/product/enrollment-contacts-and-emails.md, т. 5): a parent's, and in "Моят
+     * профил" a person of a team's — then also their record of the team in the active organization (the
+     * `X-Organization-Id` header, otherwise the one selected in the session; `UpdateOwnStaffContact`). A header naming an
+     * organization the user is not an active member of is 404 and nothing changes.
+     */
+    public function updateContact(Request $request, AuditRecorder $auditRecorder, UpdateOwnStaffContact $team): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
@@ -91,15 +99,27 @@ class AuthController extends Controller
             }
             $changes['phone'] = $phone;
         }
-        $user->fill($changes);
-        $changed = array_keys($user->getDirty());
-        $user->save();
-        if ($changed !== []) {
-            // Which fields changed, never their values.
-            $auditRecorder->record(AuditAction::IdentityContactUpdated, new AuditableReference('user', $user->id), ['fields' => $changed]);
-        }
+        $header = $request->header('X-Organization-Id');
+        $organizationId = is_string($header) && $header !== '' ? $header : $request->session()->get('active_organization_id');
 
-        return response()->json(['user' => $this->presentUser($user)]);
+        return DB::transaction(function () use ($user, $changes, $header, $organizationId, $auditRecorder, $team): JsonResponse {
+            $member = is_string($organizationId) && $organizationId !== '' && $team->isMember($user, $organizationId);
+            // Another organization's is never reached: as for every tenant, it is not found (AGENTS.md).
+            abort_if(! $member && is_string($header) && $header !== '', 404, 'Организацията не е намерена.');
+
+            $user->fill($changes);
+            $changed = array_keys($user->getDirty());
+            $user->save();
+            if ($changed !== []) {
+                // Which fields changed, never their values.
+                $auditRecorder->record(AuditAction::IdentityContactUpdated, new AuditableReference('user', $user->id), ['fields' => $changed]);
+            }
+            if ($member) {
+                $team->handle($user, $organizationId, $changes);
+            }
+
+            return response()->json(['user' => $this->presentUser($user)]);
+        });
     }
 
     /**
