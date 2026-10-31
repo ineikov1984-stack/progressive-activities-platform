@@ -26,7 +26,7 @@ class OrganizationContextController extends Controller
             'organization_id' => ['required', 'uuid'],
         ]);
 
-        return DB::transaction(function () use ($request, $validated, $context, $auditRecorder, $activity): JsonResponse {
+        $response = DB::transaction(function () use ($request, $validated, $context, $auditRecorder): JsonResponse {
             $userId = (string) $request->user()->getAuthIdentifier();
 
             if (DB::getDriverName() === 'pgsql') {
@@ -58,16 +58,20 @@ class OrganizationContextController extends Controller
                     AuditAction::OrganizationContextSelected,
                     new AuditableReference('organization', $organization->id),
                 );
-                // "Последен вход" in this organization; the audit above left it selected for RLS.
-                /** @var User $user */
-                $user = $request->user();
-                $activity->selected($user, (string) $organization->id);
             } finally {
                 $context->clear();
             }
 
             return response()->json(['organization' => $this->present($organization)]);
         });
+        // "Последен вход" in the organization, after the selection is committed and in a transaction of its own.
+        if ($response->isSuccessful()) {
+            /** @var User $user */
+            $user = $request->user();
+            $activity->selected($user, (string) $validated['organization_id']);
+        }
+
+        return $response;
     }
 
     /**

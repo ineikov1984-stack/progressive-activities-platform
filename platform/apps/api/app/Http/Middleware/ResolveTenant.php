@@ -15,6 +15,9 @@ use Symfony\Component\HttpFoundation\Response;
 
 class ResolveTenant
 {
+    /** The membership whose "Последна активност" is due, kept on the request for `terminate`. */
+    private const SEEN = 'tenant.membership_seen';
+
     public function __construct(
         private readonly TenantContext $context,
         private readonly StaffRights $rights,
@@ -63,8 +66,10 @@ class ResolveTenant
                 if (DB::getDriverName() === 'pgsql') {
                     DB::select("SELECT set_config('app.current_organization_id', ?, true)", [$organizationId]);
                 }
-                // "Последна активност", at most once in five minutes (with the organization selected, as RLS requires).
-                $this->activity->seen((string) $membership->getKey(), $membership->last_seen_at);
+                // "Последна активност" is written after the response, in a transaction of its own (`terminate`).
+                if ($this->activity->isDue($membership->last_seen_at)) {
+                    $request->attributes->set(self::SEEN, ['organization' => $organizationId, 'membership' => (string) $membership->getKey()]);
+                }
 
                 // The rights of the request's user are read once for the request (docs/product/team-rights.md, т. 4.5).
                 return $this->rights->remembering(fn (): Response => $next($request));
@@ -72,5 +77,17 @@ class ResolveTenant
                 $this->context->clear();
             }
         });
+    }
+
+    /**
+     * After the response: "Последна активност" of the membership the request checked, at most once in five minutes —
+     * outside the request's transaction, so the membership row is never held while a request runs.
+     */
+    public function terminate(Request $request, Response $response): void
+    {
+        $seen = $request->attributes->get(self::SEEN);
+        if (is_array($seen) && is_string($seen['organization'] ?? null) && is_string($seen['membership'] ?? null)) {
+            $this->activity->seen($seen['organization'], $seen['membership']);
+        }
     }
 }

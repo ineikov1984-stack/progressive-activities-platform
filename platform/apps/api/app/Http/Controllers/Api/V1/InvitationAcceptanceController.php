@@ -9,6 +9,7 @@ use App\Domain\Organizations\Models\Invitation;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
 use App\Domain\Organizations\Services\InvitationTokens;
+use App\Domain\Organizations\Services\MembershipActivity;
 use App\Http\Controllers\Controller;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
@@ -66,7 +67,7 @@ class InvitationAcceptanceController extends Controller
      * A new profile for the invitation's address, logged in, then the invitation accepted — only from the e-mail's
      * link, which proves the address (DECISIONS 31.10.2026); the inviter's link for copying does not.
      */
-    public function register(Request $request, InvitationTokens $tokens, RegisterUser $register, AcceptTeamInvitation $accept): JsonResponse
+    public function register(Request $request, InvitationTokens $tokens, RegisterUser $register, AcceptTeamInvitation $accept, MembershipActivity $activity): JsonResponse
     {
         if (Auth::guard('web')->check()) {
             return response()->json(['message' => 'Вече сте влезли. Приемете поканата с профила си или излезте.'], Response::HTTP_CONFLICT);
@@ -118,6 +119,8 @@ class InvitationAcceptanceController extends Controller
         Auth::guard('web')->login($result['user']);
         $request->session()->regenerate();
         $request->session()->put('active_organization_id', $result['organization']->id);
+        // The new profile has just signed in: "Последен вход" in its team (outside the transaction above).
+        $activity->signedIn($result['user']);
 
         return response()->json($this->accepted($result['organization'], $result['membership']), Response::HTTP_CREATED);
     }
