@@ -24,7 +24,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Dependabot — допустими версии (т. 2) | Codex | `codex/dependabot-version-policy` | `.github/dependabot.yml`; `docs/process/WORKBOARD.md` | В работа — Node с четен основен номер, PHP до 8.4, без TypeScript 7 |
+| Dependabot — допустими версии (т. 2) | Codex | `codex/dependabot-version-policy` | `.github/dependabot.yml`; `docs/process/WORKBOARD.md` | Правилата са готови; YAML, Docker/npm диапазоните и docs:check минават; Node 25–39 с нечетен номер са изключени (разширяване преди 41); следва CI и merge |
 
 ## Опашка (по приоритет)
 
