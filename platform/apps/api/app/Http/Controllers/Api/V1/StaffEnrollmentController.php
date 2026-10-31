@@ -18,6 +18,7 @@ use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Enrollment\Models\EnrollmentPause;
 use App\Domain\Enrollment\Models\EnrollmentSessionException;
+use App\Domain\Enrollment\Services\ChildCard;
 use App\Domain\Enrollment\Services\EnrolledChildSearch;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
 use App\Domain\Enrollment\Services\EnrollmentChain;
@@ -35,6 +36,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /**
@@ -121,6 +123,35 @@ final class StaffEnrollmentController extends Controller
         return response()->json([
             'children' => $search->find((string) $validated['q'], $this->scope->groups($user, 'enrollment.view')),
         ]);
+    }
+
+    /**
+     * The card of a child in the schedule (docs/product/schedule.md, т. 4.1): only through the child's enrollments in the
+     * groups where the user sees the children — the rule of the session's panel (`AccessScope::scheduleChildren`):
+     * "enrollment.view" in the group or one's own group. Without such an enrollment — another organization's child, a
+     * child elsewhere or no right at all — 404, never 403, so that nothing tells the child exists. For each group what the
+     * user may do there: show the parent's phone ("contacts.view"), skip a session and pause ("enrollment.enroll", as the
+     * routes `skipped-sessions` and `pauses`). No contacts, money or health; nothing is written to the audit log.
+     */
+    public function child(Request $request, string $child, ChildCard $cards): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $card = $cards->find(Str::lower($child), $this->scope->scheduleChildren($user));
+        if ($card === null) {
+            abort(404, 'Детето не е намерено.');
+        }
+        $groups = [];
+        foreach ($card['groups'] as $group) {
+            $enrols = $this->scope->allows($user, 'enrollment.enroll', $group['group_id']);
+            $groups[] = [...$group, 'abilities' => [
+                'contacts' => $this->scope->allows($user, 'contacts.view', $group['group_id']),
+                'skip' => $enrols,
+                'pause' => $enrols,
+            ]];
+        }
+
+        return response()->json([...$card, 'groups' => $groups]);
     }
 
     /**

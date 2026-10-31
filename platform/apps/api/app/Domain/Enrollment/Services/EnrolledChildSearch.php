@@ -6,6 +6,8 @@ use App\Domain\Enrollment\Enums\EnrollmentScope;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Child;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -37,20 +39,14 @@ final readonly class EnrolledChildSearch
         if ($text === '' || $groupIds === []) {
             return [];
         }
-        $since = CarbonImmutable::now(self::TIMEZONE)->subDays(self::RECENT_DAYS)->toDateString();
         // "%" and "_" are letters of the text, not wildcards.
         $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $text).'%';
         // Case-insensitive search for Cyrillic names needs ILIKE on PostgreSQL; SQLite (tests) has only LIKE.
         $operator = DB::getDriverName() === 'pgsql' ? 'ilike' : 'like';
 
         $children = Child::query()
-            ->whereHas('enrollments', function ($enrollment) use ($groupIds, $since): void {
-                $enrollment->whereIn('status', [EnrollmentStatus::Active->value, EnrollmentStatus::Paused->value, EnrollmentStatus::Ended->value])
-                    ->where(fn ($recent) => $recent
-                        ->where(fn ($period) => $period->where('scope', EnrollmentScope::FullPeriod->value)
-                            ->where(fn ($open) => $open->whereNull('ends_on')->orWhereDate('ends_on', '>=', $since)))
-                        ->orWhere(fn ($visit) => $visit->whereIn('scope', [EnrollmentScope::Trial->value, EnrollmentScope::Single->value])
-                            ->whereDate('starts_on', '>=', $since)));
+            ->whereHas('enrollments', function ($enrollment) use ($groupIds): void {
+                self::enrolled($enrollment);
                 if ($groupIds !== null) {
                     $enrollment->whereIn('group_id', $groupIds);
                 }
@@ -72,5 +68,27 @@ final readonly class EnrolledChildSearch
         }
 
         return $rows;
+    }
+
+    /**
+     * The enrollments that make a child enrolled here: active, paused or ended — not cancelled and not only an
+     * application — that hold today, begin later or ended no more than 90 days ago; for the period its last day, for a
+     * trial or a single visit the day of the visit. The card of a child (docs/product/schedule.md, т. 4.1) is seen by the
+     * same rule, so a child found here always has one. The query of the enrollments is narrowed in place.
+     *
+     * @template TModel of Model
+     *
+     * @param  Builder<TModel>  $enrollments
+     */
+    public static function enrolled(Builder $enrollments): void
+    {
+        $since = CarbonImmutable::now(self::TIMEZONE)->subDays(self::RECENT_DAYS)->toDateString();
+
+        $enrollments->whereIn('status', [EnrollmentStatus::Active->value, EnrollmentStatus::Paused->value, EnrollmentStatus::Ended->value])
+            ->where(fn ($recent) => $recent
+                ->where(fn ($period) => $period->where('scope', EnrollmentScope::FullPeriod->value)
+                    ->where(fn ($open) => $open->whereNull('ends_on')->orWhereDate('ends_on', '>=', $since)))
+                ->orWhere(fn ($visit) => $visit->whereIn('scope', [EnrollmentScope::Trial->value, EnrollmentScope::Single->value])
+                    ->whereDate('starts_on', '>=', $since)));
     }
 }

@@ -19,9 +19,9 @@ final readonly class SessionRoster
     public function __construct(private SessionApplicability $applicability) {}
 
     /**
-     * The children of the session, by name.
+     * The children of the session, by name; `child_id` opens the card of the child (docs/product/schedule.md, т. 4.1).
      *
-     * @return list<array{enrollment_id: string, name: string, class: string|null, state: string, scope: string}>
+     * @return list<array{enrollment_id: string, child_id: string, name: string, class: string|null, state: string, scope: string}>
      */
     public function children(Session $session): array
     {
@@ -37,6 +37,7 @@ final readonly class SessionRoster
             $child = $enrollment->child;
             $rows[] = [
                 'enrollment_id' => (string) $enrollment->id,
+                'child_id' => (string) $enrollment->child_id,
                 'name' => $child === null ? '' : trim($child->first_name.' '.$child->last_name),
                 'class' => $child?->class_label,
                 'state' => $state,
