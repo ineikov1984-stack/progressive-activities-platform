@@ -2,6 +2,7 @@
 
 namespace App\Domain\Catalog\Services;
 
+use App\Domain\Catalog\Models\Session;
 use App\Domain\Catalog\ValueObjects\ScheduleScope;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Enums\AbilityKind;
@@ -100,7 +101,8 @@ final readonly class AccessScope
      * - otherwise every session of the person's groups (`TeachingScope`: an assignment that holds now or later, the lead
      *   of the offering) and, with the scope "groups", of the selected groups and of the groups of the selected
      *   activities. The groups that are the person's today (`activeGroupsFor`) are among the person's groups;
-     * - a group where the person only stands in: only the sessions they are on, never the whole group.
+     * - a group where the person only stands in: only the sessions they are on that keep it theirs — ended no earlier
+     *   than yesterday, cancelled ones too (т. 6.4) — never the whole group.
      */
     public function scheduleGroups(User $user): ScheduleScope
     {
@@ -131,9 +133,9 @@ final readonly class AccessScope
     }
 
     /**
-     * The groups whose children the panel of a session shows (docs/product/schedule.md, т. 2, 6.2): with
-     * "enrollment.view" in the group, or in one's own group — an assignment or the lead of the offering; where the person
-     * only stands in, from the day of the session to the end of the next day (`activeGroupsFor`). Null — every group.
+     * The groups where the panel of every session shows the children (docs/product/schedule.md, т. 2, 6.2): with
+     * "enrollment.view" in the group, or in one's own group — an assignment or the lead of the offering. Never a group
+     * where the person only stands in: there it is decided session by session (`scheduleChildrenAt`). Null — every group.
      *
      * @return list<string>|null
      */
@@ -150,10 +152,26 @@ final readonly class AccessScope
             $this->teaching->bases($this->teaching->profilesFor($user)),
             fn (string $basis): bool => $basis !== 'substitute',
         ));
-        $groups = array_values(array_unique([...$viewing, ...$own, ...$this->teaching->activeGroupsFor($user)]));
+        $groups = array_values(array_unique([...$viewing, ...$own]));
         sort($groups);
 
         return $groups;
+    }
+
+    /**
+     * Whether the panel of this session shows its children: in the groups of `scheduleChildren`; where the person only
+     * stands in, at their own session from the start of its day to the end of the next day (Sofia) — the rule of
+     * `activeGroupsFor`, so a substitution later on shows no children yet and an old one none any more.
+     */
+    public function scheduleChildrenAt(User $user, ScheduleScope $schedule, Session $session): bool
+    {
+        $groups = $this->scheduleChildren($user);
+        $groupId = (string) $session->group_id;
+        if ($groups === null || in_array($groupId, $groups, true)) {
+            return true;
+        }
+
+        return in_array((string) $session->id, $schedule->sessionIds, true) && TeachingScope::standsInNow($session->starts_at);
     }
 
     /**

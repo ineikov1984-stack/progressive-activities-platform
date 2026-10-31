@@ -81,6 +81,7 @@ final class ScheduleController extends Controller
             $board['dictionary'],
             $this->capacity->takenForSessions(new Collection($sessions)),
             $this->capacity->waitingForGroups($groupIds),
+            // Where the person only stands in, the panel decides by the session (`scheduleChildrenAt`).
             $this->scope->scheduleChildren($user),
             $this->scope->allowsEverywhere($user, 'schedule.manage'),
         ));
@@ -91,14 +92,14 @@ final class ScheduleController extends Controller
     {
         /** @var User $user */
         $user = $request->user();
-        $panel = $this->reader->panel($this->scope->scheduleGroups($user), Str::lower($session));
+        $visible = $this->scope->scheduleGroups($user);
+        $panel = $this->reader->panel($visible, Str::lower($session));
         if ($panel === null) {
             abort(404, 'Заниманието не е намерено.');
         }
         $record = $panel['session'];
         $groupId = (string) $record->group_id;
-        $childrenGroups = $this->scope->scheduleChildren($user);
-        $children = $childrenGroups === null || in_array($groupId, $childrenGroups, true) ? $this->roster->children($record) : null;
+        $children = $this->scope->scheduleChildrenAt($user, $visible, $record) ? $this->roster->children($record) : null;
 
         return response()->json(SchedulePresenter::panel(
             $panel,

@@ -117,7 +117,7 @@ Route::prefix('v1')->group(function (): void {
                 });
             });
             // "График" (docs/product/schedule.md, т. 6): the sessions of the person's scope and the panel of one; read only, no audit.
-            Route::prefix('schedule')->middleware(['tenant', 'organization.access:operational.read'])->group(function (): void {
+            Route::prefix('schedule')->middleware(['tenant', 'organization.access:operational.read', 'throttle:120,1'])->group(function (): void {
                 Route::get('/', [ScheduleController::class, 'index']);
                 Route::get('/sessions/{session}', [ScheduleController::class, 'show'])->whereUuid('session');
             });

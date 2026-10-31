@@ -91,8 +91,8 @@ final readonly class TeachingScope
             ->where('activity_sessions.organization_id', $organizationId)
             ->whereIn('activity_session_instructors.instructor_profile_id', $profiles)
             ->where('activity_sessions.status', 'scheduled')
-            ->where('activity_sessions.starts_at', '>=', $now->subDay()->startOfDay()->utc())
-            ->where('activity_sessions.starts_at', '<', $now->addDay()->startOfDay()->utc())
+            ->where('activity_sessions.starts_at', '>=', self::standingInFrom())
+            ->where('activity_sessions.starts_at', '<', self::standingInUntil())
             ->pluck('activity_sessions.group_id');
 
         $groups = [];
@@ -124,7 +124,9 @@ final readonly class TeachingScope
     }
 
     /**
-     * The sessions of these groups that the profiles are on, whatever their day and state.
+     * The sessions of these groups that the profiles are on and that keep a group theirs (b): ended no earlier than the
+     * start of yesterday (Sofia) — the cancelled ones too, so that the schedule says they are cancelled
+     * (docs/product/schedule.md, т. 6.4).
      *
      * @param  list<string>  $profiles
      * @param  list<string>  $groupIds
@@ -143,8 +145,36 @@ final readonly class TeachingScope
             ->where('activity_sessions.organization_id', $organizationId)
             ->whereIn('activity_session_instructors.instructor_profile_id', $profiles)
             ->whereIn('activity_sessions.group_id', $groupIds)
+            ->where('activity_sessions.ends_at', '>=', self::keptSince())
             ->distinct()->orderBy('activity_sessions.id')
             ->pluck('activity_sessions.id')->map(fn (mixed $id): string => (string) $id)->all());
+    }
+
+    /**
+     * A substitution holds now for a session that starts yesterday or today (Sofia): from the start of the session's day
+     * to the end of the next day — the rule of `activeGroupsFor`, also for the children of the schedule.
+     */
+    public static function standsInNow(CarbonImmutable $startsAt): bool
+    {
+        return $startsAt->gte(self::standingInFrom()) && $startsAt->lt(self::standingInUntil());
+    }
+
+    /** The start of yesterday in Sofia: a session that ended since keeps its group the substitute's (b). */
+    private static function keptSince(): CarbonImmutable
+    {
+        return CarbonImmutable::now(self::TIMEZONE)->subDay()->startOfDay()->utc();
+    }
+
+    /** The first start of a session a substitution holds for now: the start of yesterday in Sofia. */
+    private static function standingInFrom(): CarbonImmutable
+    {
+        return CarbonImmutable::now(self::TIMEZONE)->subDay()->startOfDay()->utc();
+    }
+
+    /** The end of what a substitution holds for now: the start of tomorrow in Sofia. */
+    private static function standingInUntil(): CarbonImmutable
+    {
+        return CarbonImmutable::now(self::TIMEZONE)->addDay()->startOfDay()->utc();
     }
 
     /**
@@ -259,7 +289,7 @@ final readonly class TeachingScope
         }
 
         // (b) A session the person is on that ended no earlier than the start of yesterday.
-        $since = $now->subDay()->startOfDay()->utc();
+        $since = self::keptSince();
         $sessions = DB::table('activity_session_instructors')
             ->join('activity_sessions', 'activity_sessions.id', '=', 'activity_session_instructors.session_id')
             ->where('activity_session_instructors.organization_id', $organizationId)

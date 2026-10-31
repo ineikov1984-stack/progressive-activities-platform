@@ -35,11 +35,6 @@ final readonly class ScheduleScope
         return ! $this->all && $this->groupIds === [] && $this->sessionIds === [];
     }
 
-    public function covers(string $groupId, string $sessionId): bool
-    {
-        return $this->coversGroup($groupId) || in_array($sessionId, $this->sessionIds, true);
-    }
-
     /** Every session of the group is seen: its places, its teachers and its lead belong to what the person may know. */
     public function coversGroup(string $groupId): bool
     {

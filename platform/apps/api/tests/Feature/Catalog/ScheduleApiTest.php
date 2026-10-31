@@ -327,6 +327,80 @@ class ScheduleApiTest extends TestCase
         $this->getJson("/api/v1/schedule/sessions/{$other->id}")->assertNotFound();
     }
 
+    public function test_a_stand_in_sees_their_sessions_since_yesterday_and_the_children_on_the_day_and_the_next(): void
+    {
+        $f = $this->rightsFixture();
+        [$teacher, $person] = $this->teacherIn($f);
+        $profile = $this->profileOf($f['organization'], $person);
+        $daniel = $this->enrol($f, $f['thursday'], 'Дани Колев', 'full_period', null, 'active', '2026-09-01');
+        $old = $this->inTenant($f['organization'], fn (): Session => $f['thursday']->sessions()->create([
+            'starts_at' => '2026-10-01T14:00:00Z', 'ends_at' => '2026-10-01T15:00:00Z', 'status' => 'scheduled',
+        ]));
+        $twelfth = $this->sessionOf($f, $f['thursday'], '2026-11-12');
+        $nineteenth = $this->sessionOf($f, $f['thursday'], '2026-11-19');
+        $cancelled = $this->sessionOf($f, $f['thursday'], '2026-11-26');
+        $this->inTenant($f['organization'], function () use ($profile, $old, $twelfth, $nineteenth, $cancelled): void {
+            // The teacher stands in on 1 October and again from 12 November; the last of these is cancelled.
+            foreach ([$old, $twelfth, $nineteenth, $cancelled] as $session) {
+                $session->forceFill(['instructors_source' => 'manual'])->save();
+                $session->instructors()->attach($profile->id, ['role' => 'lead']);
+            }
+            Session::query()->whereKey($cancelled->id)->update(['status' => 'cancelled']);
+        });
+        // Thursday 12 November, 10:00 in Sofia.
+        $this->travelTo('2026-11-12 08:00:00');
+        $this->signInTo($teacher, $f['organization']);
+
+        // 1 October is long gone: neither the session nor its children (docs/product/schedule.md, т. 6.4).
+        $this->assertSame([], $this->sessionIds('/api/v1/schedule?from=2026-09-28&to=2026-11-08'));
+        $this->getJson("/api/v1/schedule/sessions/{$old->id}")->assertNotFound();
+        $this->assertSame([$twelfth->id, $nineteenth->id, $cancelled->id], $this->sessionIds(self::NOVEMBER));
+        $this->getJson(self::NOVEMBER)->assertJsonPath("abilities.{$f['thursday']->id}", ['children' => false, 'manage' => false]);
+        // Today the children; a substitution later on, not yet.
+        $this->getJson("/api/v1/schedule/sessions/{$twelfth->id}")->assertOk()
+            ->assertJsonPath('session.children.0.enrollment_id', $daniel->id)->assertJsonPath('abilities.children', true);
+        $this->getJson("/api/v1/schedule/sessions/{$nineteenth->id}")->assertOk()
+            ->assertJsonMissingPath('session.children')->assertJsonPath('abilities.children', false);
+        $this->getJson("/api/v1/schedule/sessions/{$cancelled->id}")->assertOk()
+            ->assertJsonPath('session.status', 'cancelled')->assertJsonMissingPath('session.children');
+
+        // Friday 13 November, 23:59 in Sofia: the session was yesterday.
+        $this->travelTo('2026-11-13 21:59:00');
+        $this->getJson("/api/v1/schedule/sessions/{$twelfth->id}")->assertOk()->assertJsonCount(1, 'session.children');
+        // Saturday 14 November, 00:01 in Sofia: the day before yesterday — out of the schedule.
+        $this->travelTo('2026-11-13 22:01:00');
+        $this->getJson("/api/v1/schedule/sessions/{$twelfth->id}")->assertNotFound();
+        $this->assertSame([$nineteenth->id, $cancelled->id], $this->sessionIds(self::NOVEMBER));
+    }
+
+    public function test_an_added_right_that_has_expired_no_longer_shows_the_whole_schedule(): void
+    {
+        $f = $this->rightsFixture();
+        [$teacher, $person] = $this->teacherIn($f);
+        $this->inTenant($f['organization'], fn () => StaffGrant::query()->create([
+            'staff_member_id' => $person->id, 'ability' => 'schedule.view_all', 'granted_by' => $f['owner']->id,
+            'granted_at' => now()->subDays(10), 'expires_at' => now()->subDay(),
+        ]));
+
+        $this->signInTo($teacher, $f['organization'])->getJson(self::NOVEMBER)->assertOk()
+            ->assertJsonCount(0, 'sessions')->assertJsonPath('groups', [])->assertJsonPath('activities', []);
+        $this->getJson("/api/v1/schedule/sessions/{$f['session']->id}")->assertNotFound();
+    }
+
+    public function test_an_archived_person_sees_nothing(): void
+    {
+        $f = $this->rightsFixture();
+        $viewer = $this->memberOf($f['organization'], 'viewer');
+        $person = $this->personFor($f['organization'], $viewer);
+        $this->signInTo($viewer, $f['organization'])->getJson(self::NOVEMBER)->assertOk()->assertJsonCount(12, 'sessions');
+
+        // The archive stops the login (docs/product/team.md, т. 6).
+        $this->signInTo($f['owner'], $f['organization'])->postJson("/api/v1/team/members/{$person->id}/archive", ['version' => 1])->assertOk();
+
+        $this->signInTo($viewer, $f['organization'])->getJson(self::NOVEMBER)->assertNotFound();
+        $this->getJson("/api/v1/schedule/sessions/{$f['session']->id}")->assertNotFound();
+    }
+
     public function test_the_child_filter_goes_only_through_the_groups_where_the_person_sees_enrollments(): void
     {
         $f = $this->rightsFixture();
