@@ -82,18 +82,17 @@ export function NoTeamAccess() {
   );
 }
 
-/** The group's name; a link to its children in "Записвания" for those who see the enrollments. */
-export function GroupName({ assignment, linked }: { assignment: GroupAssignment; linked: boolean }) {
-  if (!linked) return <>{assignment.group}</>;
+/** The group's name, a link to the group's schedule. */
+export function GroupName({ assignment }: { assignment: GroupAssignment }) {
   const link = groupLink(assignment);
   return <Link className={styles.groupLink} href={link.href} aria-label={link.label}>{assignment.group}</Link>;
 }
 
 /**
  * "Шахмат: Група 1, Група 2 · 3.–4. клас [помощник]" — one line per activity; only "помощник" and a coming start are
- * marked. Each group opens its children in "Записвания" when `linked`.
+ * marked. Each group opens its schedule.
  */
-export function ActivityLines({ groups, today, linked }: { groups: GroupAssignment[]; today: string; linked: boolean }) {
+export function ActivityLines({ groups, today }: { groups: GroupAssignment[]; today: string }) {
   return (
     <ul className={styles.activityLines}>
       {groupsByActivity(groups).map((item) => (
@@ -101,7 +100,7 @@ export function ActivityLines({ groups, today, linked }: { groups: GroupAssignme
           <span className={styles.activityName}>{item.activity}:</span>{' '}
           {item.groups.map((group, index) => (
             <Fragment key={group.group_id}>
-              {index > 0 ? ', ' : ''}<GroupName assignment={group} linked={linked} />
+              {index > 0 ? ', ' : ''}<GroupName assignment={group} />
               {groupTags(group, today).map((tag) => <span key={tag} className={styles.tag}>{tag}</span>)}
             </Fragment>
           ))}
@@ -120,10 +119,10 @@ function Chevron({ open }: { open: boolean }) {
 }
 
 /** Variant Б: up to two groups are shown; from three on, a button with the count and the activities opens them. */
-function GroupsCell({ member, today, linked }: { member: TeamMember; today: string; linked: boolean }) {
+function GroupsCell({ member, today }: { member: TeamMember; today: string }) {
   const [open, setOpen] = useState(false);
   if (member.groups.length === 0) return <span className={styles.none}>{noGroupsText(member)}</span>;
-  if (member.groups.length <= GROUPS_SHOWN) return <ActivityLines groups={member.groups} today={today} linked={linked} />;
+  if (member.groups.length <= GROUPS_SHOWN) return <ActivityLines groups={member.groups} today={today} />;
   const summary = groupSummary(member.groups);
   const id = `groups-${member.id}`;
   return (
@@ -133,12 +132,12 @@ function GroupsCell({ member, today, linked }: { member: TeamMember; today: stri
         {summary.chips.map((chip) => <span key={chip} className={styles.chip}>{chip}</span>)}
         <Chevron open={open} />
       </button>
-      {open ? <div id={id} className={styles.groupsOpen}><ActivityLines groups={member.groups} today={today} linked={linked} /></div> : null}
+      {open ? <div id={id} className={styles.groupsOpen}><ActivityLines groups={member.groups} today={today} /></div> : null}
     </>
   );
 }
 
-function MemberRow({ member, canManage, linked, now, today }: { member: TeamMember; canManage: boolean; linked: boolean; now: Date; today: string }) {
+function MemberRow({ member, canManage, now, today }: { member: TeamMember; canManage: boolean; now: Date; today: string }) {
   const status = memberStatus(member, now);
   const role = memberRole(member);
   const action = accessAction(member, canManage, now);
@@ -151,7 +150,7 @@ function MemberRow({ member, canManage, linked, now, today }: { member: TeamMemb
         </div>
       </td>
       <td className={styles.cellRole}>{role ? roleLabel(role) : <span className={styles.none}>Няма роля</span>}</td>
-      <td><GroupsCell member={member} today={today} linked={linked} /></td>
+      <td><GroupsCell member={member} today={today} /></td>
       <td className={styles.cellAccess}>
         <div className={styles.accessCell}>
           <span className={styles.stack}>
@@ -177,8 +176,6 @@ export function TeamPage() {
   const searchParams = useSearchParams();
   const canView = organization.permissions.includes('team.view');
   const canManage = organization.permissions.includes('team.manage');
-  // The groups open their children in "Записвания" for those who see the enrollments.
-  const canOpenGroups = organization.permissions.includes('enrollment.view');
   const [filters, setFilters] = useState<TeamFilters>(() => ({ ...noFilters, state: parseStateFilter(searchParams.get('state')) }));
   const archived = filters.state === 'archived';
   const [attempt, setAttempt] = useState(0);
@@ -262,7 +259,7 @@ export function TeamPage() {
                 <div className={styles.tableWrap}>
                   <table className={styles.table}>
                     <thead><tr><th scope="col">Име</th><th scope="col">Роля</th><th scope="col">Групи</th><th scope="col">Достъп</th></tr></thead>
-                    <tbody>{shown.map((member) => <MemberRow key={member.id} member={member} canManage={list.can_manage} linked={canOpenGroups} now={now} today={today} />)}</tbody>
+                    <tbody>{shown.map((member) => <MemberRow key={member.id} member={member} canManage={list.can_manage} now={now} today={today} />)}</tbody>
                   </table>
                 </div>
                 {archived ? null : (

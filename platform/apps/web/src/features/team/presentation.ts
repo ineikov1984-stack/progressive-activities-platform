@@ -166,14 +166,15 @@ export function groupsByActivity(groups: GroupAssignment[]): ActivityGroups[] {
 }
 
 /**
- * A group in "Екип" opens the children of that group in "Записвания" (DECISIONS 31.10.2026 „Права — роля плюс
- * допълнителни права“); with the schedule it will open the group's schedule instead. The visible text is the group's
- * name; the link's name says what opens, and holds that visible text.
+ * A group in "Екип" opens the group's schedule (DECISIONS 31.10.2026 „Права — роля плюс допълнителни права“: first the
+ * children in "Записвания", then the schedule; docs/product/schedule.md, т. 1). Everyone sees the schedule of their
+ * scope, so the link is there for all who see the team. The visible text is the group's name; the link's name says
+ * what opens, and holds that visible text.
  */
 export function groupLink(assignment: Pick<GroupAssignment, 'group_id' | 'activity' | 'group'>): { href: string; label: string } {
   return {
-    href: `/dashboard/enrollments?view=groups&group=${encodeURIComponent(assignment.group_id)}`,
-    label: `Децата в ${assignment.activity} · ${assignment.group}`,
+    href: `/dashboard/schedule?group=${encodeURIComponent(assignment.group_id)}`,
+    label: `Графикът на ${assignment.activity} · ${assignment.group}`,
   };
 }
 
