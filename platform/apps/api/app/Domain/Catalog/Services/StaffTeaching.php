@@ -80,6 +80,78 @@ final readonly class StaffTeaching
         return $result;
     }
 
+    /**
+     * The people of the team who lead or assist one of the groups now or later — the team as someone with a narrower
+     * scope sees it (docs/product/team-rights.md, т. 9).
+     *
+     * @param  list<string>  $groupIds
+     * @return list<string>
+     */
+    public function peopleIn(array $groupIds): array
+    {
+        if ($groupIds === []) {
+            return [];
+        }
+        $organizationId = $this->context->organizationId();
+        $today = CarbonImmutable::now('Europe/Sofia')->toDateString();
+
+        return array_values(DB::table('activity_group_instructors')
+            ->join('instructor_profiles', 'instructor_profiles.id', '=', 'activity_group_instructors.instructor_profile_id')
+            ->where('activity_group_instructors.organization_id', $organizationId)
+            ->where('instructor_profiles.organization_id', $organizationId)
+            ->whereIn('activity_group_instructors.group_id', $groupIds)
+            ->whereNotNull('instructor_profiles.staff_member_id')
+            ->where(fn ($open) => $open->whereNull('activity_group_instructors.ends_on')->orWhere('activity_group_instructors.ends_on', '>=', $today))
+            ->distinct()->orderBy('instructor_profiles.staff_member_id')
+            ->pluck('instructor_profiles.staff_member_id')->map(fn (mixed $id): string => (string) $id)->all());
+    }
+
+    /**
+     * The names of groups for the screen, "Дейност · Група".
+     *
+     * @param  list<string>  $groupIds
+     * @return array<string, string> group => label
+     */
+    public function groupLabels(array $groupIds): array
+    {
+        if ($groupIds === []) {
+            return [];
+        }
+
+        $labels = [];
+        foreach (DB::table('activity_groups')
+            ->join('offerings', 'offerings.id', '=', 'activity_groups.offering_id')
+            ->join('activities', 'activities.id', '=', 'offerings.activity_id')
+            ->where('activity_groups.organization_id', $this->context->organizationId())
+            ->whereIn('activity_groups.id', $groupIds)
+            ->get(['activity_groups.id', 'activity_groups.name', 'activities.title']) as $row) {
+            $labels[(string) $row->id] = $row->title.' · '.$row->name;
+        }
+
+        return $labels;
+    }
+
+    /**
+     * The titles of activities for the screen.
+     *
+     * @param  list<string>  $activityIds
+     * @return array<string, string> activity => title
+     */
+    public function activityTitles(array $activityIds): array
+    {
+        if ($activityIds === []) {
+            return [];
+        }
+
+        $titles = [];
+        foreach (DB::table('activities')->where('organization_id', $this->context->organizationId())->whereIn('id', $activityIds)
+            ->get(['id', 'title']) as $row) {
+            $titles[(string) $row->id] = (string) $row->title;
+        }
+
+        return $titles;
+    }
+
     /** Why the person with this profile cannot be archived yet, in words for the screen; null when nothing stops it. */
     public function archiveBlocker(string $profileId): ?string
     {

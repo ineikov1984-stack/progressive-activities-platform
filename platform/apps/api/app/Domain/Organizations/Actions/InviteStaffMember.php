@@ -34,6 +34,7 @@ final readonly class InviteStaffMember
     public function __construct(
         private TenantContext $context,
         private TeamRoles $roles,
+        private ReconcileStaffAccess $access,
         private AuditRecorder $audit,
         private TeamInvitationSender $sender,
     ) {}
@@ -107,6 +108,8 @@ final readonly class InviteStaffMember
                 $invitation->forceFill($values)->save();
             }
 
+            // Sent again with another role: the rights follow it (docs/product/team-rights.md, т. 4.6); the same role changes nothing.
+            $this->access->handle($actor, $member, $role);
             $this->audit->record(AuditAction::TeamInvitationSent, new AuditableReference('staff_member', $member->id), [
                 'invitation_id' => $invitation->id, 'role' => $role->value, 'resent' => ! $created,
             ]);

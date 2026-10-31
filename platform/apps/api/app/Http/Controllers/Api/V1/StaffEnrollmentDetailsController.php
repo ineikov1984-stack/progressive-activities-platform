@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Domain\Audit\AuditRecorder;
 use App\Domain\Audit\Enums\AuditAction;
+use App\Domain\Audit\Models\AuditEvent;
 use App\Domain\Audit\ValueObjects\AuditableReference;
 use App\Domain\Catalog\Models\Session;
+use App\Domain\Catalog\Services\AccessScope;
 use App\Domain\Enrollment\Enums\EnrollmentApplicationStatus;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Child;
@@ -19,26 +21,30 @@ use App\Domain\Enrollment\Services\ContactWindow;
 use App\Domain\Enrollment\Services\EnrollmentChain;
 use App\Domain\Enrollment\Services\SessionApplicability;
 use App\Domain\Identity\Models\User;
-use App\Domain\Identity\Support\PhoneNumber;
-use App\Domain\Organizations\Models\Organization;
+use App\Domain\Organizations\Enums\OrganizationRole;
 use App\Domain\Organizations\Models\OrganizationMembership;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
+use App\Http\Presenters\ParentContactPresenter;
 use App\Http\Presenters\StaffEnrollmentPresenter;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
 
 /**
  * The "Подробности" panel: everything about a child in this organization, from one application or
  * enrollment (docs/product/enrollment-contacts-and-emails.md, т. 9.1). Rights are checked before
  * anything is loaded; another organization's records are 404 (tenant scope and RLS).
  *
- * - contacts, the parent's note, age and school: only with contacts.view, contacts and note
- *   only inside the window (т. 3.1), each time with an audit entry that holds identifiers only;
- * - history (who, when, what the parent was told; internal notes): only with enrollment.enroll;
- * - "При нас": the child's other groups and open applications here, for everyone who sees enrollments.
+ * - a record of a group outside the user's scope is 403 (docs/product/team-rights.md, т. 9);
+ * - contacts, the parent's note, age and school: only with contacts.view in the group, contacts and note
+ *   only inside the window (т. 3.1), each time with an audit entry that holds identifiers only; the phone
+ *   and the e-mail are shown at once to the owner only — everyone else gets them hidden and shows them with
+ *   "Покажи телефона" (`StaffEnrollmentContactController`, team-rights т. 6);
+ * - history (who, when, what the parent was told; internal notes): only with enrollment.enroll in the group;
+ *   whom the contact was shown to — only for those who manage the team;
+ * - "При нас": the child's other groups and open applications here, in the groups the user sees.
  */
 final class StaffEnrollmentDetailsController extends Controller
 {
@@ -50,14 +56,16 @@ final class StaffEnrollmentDetailsController extends Controller
         private readonly SessionApplicability $sessions,
         private readonly AuditRecorder $audit,
         private readonly EnrollmentChain $chain,
+        private readonly AccessScope $scope,
     ) {}
 
     public function application(Request $request, string $application): JsonResponse
     {
-        $access = $this->access($request);
+        $user = $this->viewer($request);
         $record = EnrollmentApplication::query()
             ->with(['child', 'group.offering.activity', 'session', 'enrollment'])
             ->findOrFail($application);
+        $access = $this->access($user, $record->group_id);
         $contact = $access['contacts'] && $this->window->application($record);
         $enrollmentId = $record->status === EnrollmentApplicationStatus::Approved ? $record->enrollment?->id : null;
 
@@ -68,9 +76,10 @@ final class StaffEnrollmentDetailsController extends Controller
                 'queue_position' => $this->queuePosition($record),
                 'enrollment_id' => $enrollmentId,
             ],
-            ...$this->childAndParent($record, $access['contacts'], $contact),
-            'records' => $this->records($record->child_id, $record->id, $enrollmentId),
+            ...$this->childAndParent($record, $access['contacts'], $contact, null, $access['owner']),
+            'records' => $this->records($record->child_id, $record->id, $enrollmentId, $access['visible']),
             'history' => $access['manage'] ? $this->history([$record->id], $enrollmentId === null ? [] : [$enrollmentId], $contact) : null,
+            'contact_reveals' => $access['team'] ? $this->reveals(['enrollment_application' => [$record->id], 'enrollment' => $enrollmentId === null ? [] : [$enrollmentId]]) : null,
         ];
         if ($contact) {
             $this->recordView($request, 'enrollment_application', $record->id);
@@ -81,7 +90,7 @@ final class StaffEnrollmentDetailsController extends Controller
 
     public function enrollment(Request $request, string $enrollment): JsonResponse
     {
-        $access = $this->access($request);
+        $user = $this->viewer($request);
         $record = Enrollment::query()
             ->with([
                 'child', 'group.offering.activity', 'application', 'session', 'transferredFrom.group',
@@ -90,15 +99,17 @@ final class StaffEnrollmentDetailsController extends Controller
                 'transferredTo' => fn ($query) => $query->where('status', '!=', EnrollmentStatus::Cancelled->value)->with('group'),
             ])
             ->findOrFail($enrollment);
+        $access = $this->access($user, $record->group_id);
         $application = $record->application;
         $contact = $access['contacts'] && $this->window->enrollment($record);
 
         $body = [
             'kind' => 'enrollment',
             'enrollment' => $this->presentEnrollment($record, $access['manage']),
-            ...$this->childAndParent($application, $access['contacts'], $contact, $record->child),
-            'records' => $this->records($record->child_id, $record->application_id, $record->id),
+            ...$this->childAndParent($application, $access['contacts'], $contact, $record->child, $access['owner']),
+            'records' => $this->records($record->child_id, $record->application_id, $record->id, $access['visible']),
             'history' => $access['manage'] ? $this->history([$record->application_id], [$record->id], $contact) : null,
+            'contact_reveals' => $access['team'] ? $this->reveals(['enrollment' => [$record->id], 'enrollment_application' => [$record->application_id]]) : null,
         ];
         if ($contact) {
             $this->recordView($request, 'enrollment', $record->id);
@@ -109,11 +120,12 @@ final class StaffEnrollmentDetailsController extends Controller
 
     /**
      * Who the parent is and how to reach them. The parent's account is read only through a record
-     * this organization can see.
+     * this organization can see. The owner sees the phone and the e-mail at once; everyone else who sees
+     * contacts gets them hidden — "hidden", with the name and whether they exist (team-rights т. 6).
      *
      * @return array{child: array<string, mixed>, contact_status: string, contact: array<string, mixed>|null, parent_note: string|null, parent_note_at: string|null}
      */
-    private function childAndParent(?EnrollmentApplication $application, bool $contacts, bool $inWindow, ?Child $child = null): array
+    private function childAndParent(?EnrollmentApplication $application, bool $contacts, bool $inWindow, ?Child $child, bool $owner): array
     {
         $child ??= $application?->child;
         $presented = StaffEnrollmentPresenter::child($child);
@@ -124,15 +136,17 @@ final class StaffEnrollmentDetailsController extends Controller
 
         return [
             'child' => $presented,
-            'contact_status' => ! $contacts ? 'not_allowed' : ($inWindow ? 'shown' : 'outside_window'),
-            'contact' => $parent === null ? null : [
-                'source' => 'account',
-                'name' => $parent->name,
-                'phone' => $parent->phone,
-                'phone_display' => $parent->phone === null ? null : PhoneNumber::display($parent->phone),
-                'email' => $parent->email,
-                'email_verified' => $parent->hasVerifiedEmail(),
-            ],
+            'contact_status' => match (true) {
+                ! $contacts => 'not_allowed',
+                ! $inWindow => 'outside_window',
+                $owner => 'shown',
+                default => 'hidden',
+            },
+            'contact' => match (true) {
+                $parent === null => null,
+                $owner => ParentContactPresenter::full($parent),
+                default => ParentContactPresenter::hidden($parent),
+            },
             'parent_note' => $inWindow ? $application?->parent_note : null,
             // Written when the parent applied.
             'parent_note_at' => $inWindow && $application?->parent_note !== null ? $application->created_at?->toIso8601String() : null,
@@ -202,15 +216,17 @@ final class StaffEnrollmentDetailsController extends Controller
      * "При нас": the child's other enrollments (current, ahead, ended up to 90 days ago) and open
      * applications in this organization. Tenant scope and RLS keep other organizations out.
      *
+     * @param  list<string>|null  $visible  the groups the user sees; null — all
      * @return list<array<string, mixed>>
      */
-    private function records(string $childId, ?string $exceptApplication, ?string $exceptEnrollment): array
+    private function records(string $childId, ?string $exceptApplication, ?string $exceptEnrollment, ?array $visible): array
     {
         // Current, ahead or ended up to 90 days ago — the same rule as the contacts' window, so a visit
         // ends with its session (a child has few enrollments; the rule is applied after loading).
         // Cancelled ones too, inside the window (owner's decision of 30.10.2026) — except a move made before
         // the start, where the child simply continues in the new group.
         $enrollments = Enrollment::query()->where('child_id', $childId)
+            ->when($visible !== null, fn ($query) => $query->whereIn('group_id', $visible ?? []))
             ->when($exceptEnrollment, fn ($query, string $id) => $query->whereKeyNot($id))
             ->where(fn ($query) => $query->where('status', '!=', EnrollmentStatus::Cancelled->value)
                 ->orWhereNotExists(fn ($moved) => $moved->selectRaw('1')->from('enrollments as moved')->whereColumn('moved.transferred_from_id', 'enrollments.id')))
@@ -224,6 +240,7 @@ final class StaffEnrollmentDetailsController extends Controller
             ->filter(fn (Enrollment $enrollment): bool => $this->window->enrollment($enrollment))
             ->values();
         $applications = EnrollmentApplication::query()->where('child_id', $childId)
+            ->when($visible !== null, fn ($query) => $query->whereIn('group_id', $visible ?? []))
             ->when($exceptApplication, fn ($query, string $id) => $query->whereKeyNot($id))
             ->whereIn('status', [EnrollmentApplicationStatus::Submitted->value, EnrollmentApplicationStatus::Waitlisted->value])
             ->with(['group.offering.activity', 'session'])
@@ -395,19 +412,59 @@ final class StaffEnrollmentDetailsController extends Controller
     }
 
     /**
-     * Rights before any record is read: viewing enrollments is required; contacts and history are extra.
+     * Who saw the parent's contact after "Покажи телефона", newest first — for those who manage the team.
      *
-     * @return array{contacts: bool, manage: bool}
+     * @param  array<string, list<string>>  $subjects  type => ids
+     * @return list<array{by: string|null, at: string, from: string|null}>
      */
-    private function access(Request $request): array
+    private function reveals(array $subjects): array
     {
-        $organization = Organization::query()->findOrFail($this->context->organizationId());
-        $gate = Gate::forUser($request->user());
-        $gate->authorize('enrollment.view', $organization);
+        $events = AuditEvent::query()->where('organization_id', $this->context->organizationId())
+            ->where('action', AuditAction::EnrollmentContactRevealed->value)
+            ->where(function ($query) use ($subjects): void {
+                foreach ($subjects as $type => $ids) {
+                    $query->orWhere(fn ($subject) => $subject->where('subject_type', $type)->whereIn('subject_id', $ids === [] ? [''] : $ids));
+                }
+            })
+            ->latest('created_at')->limit(self::HISTORY_LIMIT)->get(['actor_id', 'metadata', 'created_at']);
+        $names = User::query()->whereKey($events->pluck('actor_id')->filter()->unique()->values()->all())->pluck('name', 'id');
+
+        return $events->map(fn (AuditEvent $event): array => [
+            'by' => $event->actor_id === null ? null : ($names[$event->actor_id] ?? null),
+            'at' => $event->created_at->toIso8601String(),
+            'from' => is_string($event->metadata['from'] ?? null) ? $event->metadata['from'] : null,
+        ])->values()->all();
+    }
+
+    /** Viewing enrollments somewhere is required before any record is read — otherwise 403, as the Gate refuses. */
+    private function viewer(Request $request): User
+    {
+        /** @var User $user */
+        $user = $request->user();
+        if (! $this->scope->access($user)->has('enrollment.view')) {
+            throw new AuthorizationException;
+        }
+
+        return $user;
+    }
+
+    /**
+     * The rights in the record's group (docs/product/team-rights.md, т. 4.4, 6): seeing it is required; contacts,
+     * history and the owner's direct view are extra.
+     *
+     * @return array{contacts: bool, manage: bool, owner: bool, team: bool, visible: list<string>|null}
+     */
+    private function access(User $user, string $groupId): array
+    {
+        abort_unless($this->scope->allows($user, 'enrollment.view', $groupId), 403, 'Нямате достъп до тази група.');
+        $access = $this->scope->access($user);
 
         return [
-            'contacts' => $gate->allows('contacts.view', $organization),
-            'manage' => $gate->allows('enrollment.enroll', $organization),
+            'contacts' => $this->scope->allows($user, 'contacts.view', $groupId),
+            'manage' => $this->scope->allows($user, 'enrollment.enroll', $groupId),
+            'owner' => $access->role === OrganizationRole::OrganizationOwner,
+            'team' => $access->allowsAcrossOrganization('team.manage'),
+            'visible' => $this->scope->groups($user, 'enrollment.view'),
         ];
     }
 }

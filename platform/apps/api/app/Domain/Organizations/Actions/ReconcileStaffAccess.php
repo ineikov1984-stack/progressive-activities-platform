@@ -53,15 +53,16 @@ final readonly class ReconcileStaffAccess
     }
 
     /**
-     * In the caller's transaction, after its locks (organization → person → membership).
+     * In the caller's transaction, after its locks (organization → person → membership). Accepting an invitation does
+     * not guard finance: the role is the inviter's, already brought in line when it was given.
      *
      * @return array{revoke: list<array{id: string, ability: string, reason: string}>, clear_scope: bool, remove_groups: list<string>, clear_template: bool, loses_finance: bool}
      */
-    public function handle(User $actor, StaffMember $member, ?OrganizationRole $role): array
+    public function handle(User $actor, StaffMember $member, ?OrganizationRole $role, bool $guardFinance = true): array
     {
         abort_unless($member->getAttribute('organization_id') === $this->context->organizationId(), 404);
         ['plan' => $plan, 'grants' => $grants, 'groups' => $groups] = $this->compute($member, $role);
-        if ($role !== null && $plan['loses_finance']
+        if ($guardFinance && $role !== null && $plan['loses_finance']
             && $this->roles->actorRole($actor, Organization::query()->findOrFail($this->context->organizationId())) !== OrganizationRole::OrganizationOwner) {
             throw new AuthorizationException('Това би отнело достъпа до финансите — може само собственикът.');
         }

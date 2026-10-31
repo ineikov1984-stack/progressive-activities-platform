@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\V1\ParentEnrollmentController;
 use App\Http\Controllers\Api\V1\PaymentTermsController;
 use App\Http\Controllers\Api\V1\PublicCatalogController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentChangeController;
+use App\Http\Controllers\Api\V1\StaffEnrollmentContactController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentDetailsController;
 use App\Http\Controllers\Api\V1\TeachingController;
@@ -76,6 +77,8 @@ Route::prefix('v1')->group(function (): void {
                 Route::middleware('organization.access:operational.read')->group(function (): void {
                     Route::get('/', [TeamController::class, 'index']);
                     Route::get('/members/{member}', [TeamController::class, 'show'])->whereUuid('member');
+                    // The card "Права" (docs/product/team-rights.md, т. 9).
+                    Route::get('/members/{member}/access', [TeamController::class, 'access'])->whereUuid('member');
                 });
                 Route::middleware('organization.access:operational.write')->group(function (): void {
                     Route::post('/members', [TeamController::class, 'store']);
@@ -84,6 +87,7 @@ Route::prefix('v1')->group(function (): void {
                     Route::post('/members/{member}/instructor-profile', [TeamController::class, 'linkProfile'])->whereUuid('member');
                     Route::post('/members/{member}/role', [TeamController::class, 'changeRole'])->whereUuid('member');
                     Route::post('/members/{member}/invitation', [TeamController::class, 'invite'])->whereUuid('member')->middleware('throttle:20,1');
+                    Route::put('/members/{member}/access', [TeamController::class, 'saveAccess'])->whereUuid('member')->middleware('throttle:30,1');
                 });
             });
             Route::prefix('enrollment')->middleware('tenant')->group(function (): void {
@@ -95,6 +99,9 @@ Route::prefix('v1')->group(function (): void {
                     // The "Подробности" panel; contacts inside (docs/product/enrollment-contacts-and-emails.md, т. 8).
                     Route::get('/applications/{application}', [StaffEnrollmentDetailsController::class, 'application'])->whereUuid('application')->middleware('throttle:60,1');
                     Route::get('/enrollments/{enrollment}', [StaffEnrollmentDetailsController::class, 'enrollment'])->whereUuid('enrollment')->middleware('throttle:60,1');
+                    // "Покажи телефона": a POST, written down, never cached; its own limit per hour and day (docs/product/team-rights.md, т. 6).
+                    Route::post('/applications/{application}/contact/reveal', [StaffEnrollmentContactController::class, 'application'])->whereUuid('application')->middleware('throttle:60,1');
+                    Route::post('/enrollments/{enrollment}/contact/reveal', [StaffEnrollmentContactController::class, 'enrollment'])->whereUuid('enrollment')->middleware('throttle:60,1');
                 });
                 Route::middleware('organization.access:operational.write')->group(function (): void {
                     Route::post('/applications/{application}/review', [StaffEnrollmentController::class, 'review'])->whereUuid('application');

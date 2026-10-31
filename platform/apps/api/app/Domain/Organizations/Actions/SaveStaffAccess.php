@@ -174,25 +174,64 @@ final readonly class SaveStaffAccess
     /** The guards on whose card it is (т. 4.1, 5); the person's role, from the membership or the invitation. */
     private function assertMayChange(User $actor, StaffMember $member, Organization $organization): OrganizationRole
     {
+        $refusal = $this->refusal($actor, $member, $organization);
+        if ($refusal !== null) {
+            throw $refusal['status'] === 403
+                ? new AuthorizationException($refusal['message'])
+                : ValidationException::withMessages(['member' => $refusal['message']]);
+        }
+
+        return $this->roles->personRole($organization, $member) ?? throw new \LogicException('A card without a role.');
+    }
+
+    /**
+     * Why the actor may not change the person's card, the same words as the refusal of a save — null when they may.
+     * For the card itself too: `editable` and its reason (т. 9).
+     *
+     * @return array{status: int, message: string}|null
+     */
+    public function refusal(User $actor, StaffMember $member, Organization $organization): ?array
+    {
+        $actorRole = $this->roles->actorRole($actor, $organization);
+        $refuse = fn (int $status, string $message): array => ['status' => $status, 'message' => $message];
+        if ($actorRole !== OrganizationRole::OrganizationOwner && $actorRole !== OrganizationRole::OrganizationAdmin) {
+            return $refuse(403, 'Правата дават собственикът и администраторът.');
+        }
         if ($member->archived_at !== null) {
-            throw ValidationException::withMessages(['member' => 'Човекът е в архива.']);
+            return $refuse(422, 'Човекът е в архива.');
         }
         if ($member->user_id !== null && $member->user_id === $actor->id) {
-            throw ValidationException::withMessages(['member' => 'Не можете да променяте собствените си права.']);
+            return $refuse(422, 'Не можете да променяте собствените си права.');
         }
         $role = $this->roles->personRole($organization, $member);
         if ($role === null) {
-            throw ValidationException::withMessages(['member' => 'Първо изпратете покана — правата важат за човек с достъп.']);
+            return $refuse(422, 'Първо изпратете покана — правата важат за човек с достъп.');
         }
         if ($role === OrganizationRole::OrganizationOwner) {
-            throw ValidationException::withMessages(['member' => 'Собственикът има всички права.']);
+            return $refuse(422, 'Собственикът има всички права.');
         }
-        $actorRole = $this->roles->actorRole($actor, $organization);
         if (! $role->isTeam() || ($actorRole !== OrganizationRole::OrganizationOwner && ! in_array($role, TeamRoles::ADMINISTRATOR_GIVES, true))) {
-            throw new AuthorizationException('Нямате право да променяте правата на този човек.');
+            return $refuse(403, 'Нямате право да променяте правата на този човек.');
         }
 
-        return $role;
+        return null;
+    }
+
+    /**
+     * The rights the actor may add to a person with the role: grantable, not given by the role, and the actor's own to
+     * give — finance only for the owner, once it is on. Whether the scope allows them the card shows by itself.
+     *
+     * @return list<string>
+     */
+    public function grantable(User $actor, OrganizationRole $role, Organization $organization): array
+    {
+        $owner = $this->roles->actorRole($actor, $organization) === OrganizationRole::OrganizationOwner;
+        $giver = $this->rights->for($actor);
+        $gives = array_map(TeamAbilities::canonical(...), $role->abilities());
+
+        return array_values(array_filter(TeamAbilities::GRANTABLE, fn (string $ability): bool => ! in_array($ability, $gives, true)
+            && $this->mayGive($owner, $giver, $ability)
+            && (! TeamAbilities::isFinance($ability) || TeamAbilities::financeEnabled())));
     }
 
     private function scope(OrganizationRole $role, mixed $value): StaffScope

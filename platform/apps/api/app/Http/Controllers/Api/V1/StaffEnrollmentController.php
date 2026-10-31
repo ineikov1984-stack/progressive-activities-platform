@@ -8,6 +8,7 @@ use App\Domain\Audit\ValueObjects\AuditableReference;
 use App\Domain\Catalog\Enums\ActivityStatus;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\Session;
+use App\Domain\Catalog\Services\AccessScope;
 use App\Domain\Catalog\Services\TeachingScope;
 use App\Domain\Enrollment\Actions\ReviewEnrollmentApplication;
 use App\Domain\Enrollment\Enums\EnrollmentApplicationStatus;
@@ -26,6 +27,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Presenters\StaffEnrollmentPresenter;
 use App\Http\Presenters\TeacherRosterPresenter;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -43,11 +45,21 @@ final class StaffEnrollmentController extends Controller
 {
     private const PAGE_SIZE = 200;
 
-    public function __construct(private readonly TenantContext $context, private readonly EnrollmentChain $chain) {}
+    public function __construct(
+        private readonly TenantContext $context,
+        private readonly EnrollmentChain $chain,
+        private readonly AccessScope $scope,
+    ) {}
 
+    /**
+     * The applications in the groups the user sees (docs/product/team-rights.md, т. 9): with a narrower scope only
+     * those; the parent's name and the search by it only in the groups where the user sees contacts.
+     */
     public function applications(Request $request): JsonResponse
     {
-        $this->authorizeAbility($request, 'enrollment.view');
+        $user = $this->requireRight($request, 'enrollment.view');
+        $visible = $this->scope->groups($user, 'enrollment.view');
+        $contactGroups = $this->scope->groups($user, 'contacts.view');
         $validated = $request->validate([
             'status' => ['sometimes', Rule::in(['submitted', 'waitlisted'])],
             'activity_id' => ['sometimes', 'uuid'],
@@ -55,11 +67,13 @@ final class StaffEnrollmentController extends Controller
             'q' => ['sometimes', 'nullable', 'string', 'max:100'],
         ]);
         $status = $validated['status'] ?? 'submitted';
-        $contacts = $this->allows($request, 'contacts.view');
+        $contacts = $contactGroups !== [];
+        $seesContacts = fn (EnrollmentApplication $application): bool => $contactGroups === null || in_array($application->group_id, $contactGroups, true);
         $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], trim((string) ($validated['q'] ?? ''))).'%';
         $like = fn (string $column): string => "{$column} ".$this->likeOperator()." ? escape '!'";
 
         $query = EnrollmentApplication::query()->where('status', $status)
+            ->when($visible !== null, fn ($query) => $query->whereIn('group_id', $visible ?? []))
             ->when($validated['group_id'] ?? null, fn ($query, string $groupId) => $query->where('group_id', $groupId))
             ->when($validated['activity_id'] ?? null, fn ($query, string $activityId) => $query
                 ->whereHas('group.offering', fn ($offering) => $offering->where('activity_id', $activityId)))
@@ -67,7 +81,9 @@ final class StaffEnrollmentController extends Controller
             // would tell which child belongs to which parent.
             ->when(trim((string) ($validated['q'] ?? '')) !== '', fn ($query) => $query->where(fn ($either) => $either
                 ->whereHas('child', fn ($child) => $child->whereRaw($like("(first_name || ' ' || coalesce(last_name, ''))"), [$pattern]))
-                ->when($contacts, fn ($or) => $or->orWhereHas('parent', fn ($parent) => $parent->whereRaw($like('name'), [$pattern])))));
+                ->when($contacts, fn ($or) => $or->orWhere(fn ($byParent) => $byParent
+                    ->whereHas('parent', fn ($parent) => $parent->whereRaw($like('name'), [$pattern]))
+                    ->when($contactGroups !== null, fn ($inGroups) => $inGroups->whereIn('group_id', $contactGroups ?? []))))));
         $total = (clone $query)->count();
         // Oldest first: the team works through the queue in the order parents applied.
         $applications = $query->with(['child', 'group.offering.activity', 'session', ...($contacts ? ['parent'] : [])])
@@ -79,10 +95,10 @@ final class StaffEnrollmentController extends Controller
         $taken = $this->placesTakenByGroup($applications->pluck('group_id')->unique()->values()->all());
 
         return response()->json([
-            'applications' => $applications->map(fn (EnrollmentApplication $application): array => StaffEnrollmentPresenter::application($application, (int) ($taken[$application->group_id] ?? 0), $contacts))->all(),
+            'applications' => $applications->map(fn (EnrollmentApplication $application): array => StaffEnrollmentPresenter::application($application, (int) ($taken[$application->group_id] ?? 0), $seesContacts($application)))->all(),
             'total' => $total,
             'has_more' => $total > $applications->count(),
-            'facets' => $this->facets($status),
+            'facets' => $this->facets($status, $visible),
         ]);
     }
 
@@ -90,11 +106,13 @@ final class StaffEnrollmentController extends Controller
      * Activities and groups that have applications with this status, with counts — the choices
      * for the filters (two queries, whatever filter is applied).
      *
+     * @param  list<string>|null  $visible  the groups the user sees; null — all
      * @return array{activities: list<array{id: string, title: string|null, count: int}>, groups: list<array{id: string, name: string, activity_id: string|null, count: int}>}
      */
-    private function facets(string $status): array
+    private function facets(string $status, ?array $visible): array
     {
         $counts = EnrollmentApplication::query()->where('status', $status)
+            ->when($visible !== null, fn ($query) => $query->whereIn('group_id', $visible ?? []))
             ->selectRaw('group_id, count(*) as aggregate')->groupBy('group_id')->pluck('aggregate', 'group_id');
         $groups = Group::query()->with('offering.activity')->whereKey($counts->keys()->all())->get()
             ->sortBy(fn (Group $group): string => ($group->offering->activity->title ?? '').'|'.$group->name)->values();
@@ -142,7 +160,7 @@ final class StaffEnrollmentController extends Controller
 
     public function review(Request $request, string $application, ReviewEnrollmentApplication $review, AuditRecorder $audit): JsonResponse
     {
-        $this->authorizeAbility($request, 'enrollment.enroll');
+        $user = $this->requireRight($request, 'enrollment.enroll');
         $validated = $request->validate([
             'decision' => ['required', Rule::in(['approve', 'waitlist', 'reject'])],
             'version' => ['required', 'integer', 'min:1'],
@@ -150,6 +168,7 @@ final class StaffEnrollmentController extends Controller
             'internal_note' => ['sometimes', 'nullable', 'string', 'max:2000'],
         ]);
         $record = EnrollmentApplication::query()->findOrFail($application);
+        $this->requireGroup($user, 'enrollment.enroll', $record->group_id);
 
         $reviewed = $review->handle(
             $request->user(),
@@ -175,15 +194,15 @@ final class StaffEnrollmentController extends Controller
      */
     public function groups(Request $request, TeachingScope $teaching): JsonResponse
     {
-        $own = $this->ownGroupsOnly($request, $teaching);
+        [$visible, $teacher] = $this->visibleGroups($request, $teaching);
         $groups = Group::query()->with(['offering.activity', 'offering.location', 'location'])->where('status', '!=', 'archived')
             ->whereHas('offering.activity', fn ($query) => $query->where('status', '!=', ActivityStatus::Archived->value))
-            ->when($own !== null, fn ($query) => $query->whereKey($own ?? []))
+            ->when($visible !== null, fn ($query) => $query->whereKey($visible ?? []))
             ->get()
             ->sortBy(fn (Group $group): string => ($group->offering->activity->title ?? '').'|'.$group->name)
             ->values();
-        $taken = $this->placesTakenByGroup($own);
-        if ($own !== null) {
+        $taken = $this->placesTakenByGroup($visible);
+        if ($teacher) {
             return response()->json([
                 'groups' => $groups->map(fn (Group $group): array => TeacherRosterPresenter::group($group, (int) ($taken[$group->id] ?? 0)))->all(),
             ]);
@@ -216,11 +235,12 @@ final class StaffEnrollmentController extends Controller
      */
     public function updateApproval(Request $request, string $group, AuditRecorder $audit): JsonResponse
     {
-        $this->authorizeAbility($request, 'enrollment.enroll');
+        $user = $this->requireRight($request, 'enrollment.enroll');
         $validated = $request->validate([
             'enrollment_approval_mode' => ['required', Rule::in(['manual', 'automatic'])],
         ], ['required' => 'Изберете как се одобряват заявките.', 'in' => 'Изберете как се одобряват заявките.']);
         $record = Group::query()->findOrFail($group);
+        $this->requireGroup($user, 'enrollment.enroll', $record->id);
         $record->forceFill(['enrollment_approval_mode' => $validated['enrollment_approval_mode']])->save();
         // Identifiers and the new mode only.
         $audit->record(AuditAction::EnrollmentGroupApprovalChanged, new AuditableReference('activity_group', $record->id), [
@@ -236,30 +256,35 @@ final class StaffEnrollmentController extends Controller
      */
     public function roster(Request $request, string $group, EnrollmentCapacity $capacity, TeachingScope $teaching): JsonResponse
     {
-        $all = $this->allows($request, 'enrollment.view');
-        if (! $all) {
+        /** @var User $user */
+        $user = $request->user();
+        $viewer = $this->scope->access($user)->has('enrollment.view');
+        if (! $viewer) {
             $this->authorizeAbility($request, 'enrollment.view_own');
         }
         $record = Group::query()->with('offering.activity')->findOrFail($group);
         $timezone = $record->schedule_pattern['timezone'] ?? 'Europe/Sofia';
         $today = CarbonImmutable::now($timezone)->toDateString();
-        if (! $all) {
-            /** @var User $user */
-            $user = $request->user();
-            abort_unless($teaching->includes($user, $record->id), 403, 'Нямате достъп до тази група.');
+        // The team's roster in the groups of the user's scope (docs/product/team-rights.md, т. 9); otherwise the
+        // teacher's, of a group they teach.
+        if (! $viewer || ! $this->scope->allows($user, 'enrollment.view', $record->id)) {
+            abort_unless($this->allows($request, 'enrollment.view_own') && $teaching->includes($user, $record->id), 403, 'Нямате достъп до тази група.');
 
-            return response()->json(TeacherRosterPresenter::roster($record, $this->rosterEnrollments($record, $today, false), $today));
+            // With "sees the phone" added in the group, each row offers to show the parent's contact (т. 6).
+            return response()->json(TeacherRosterPresenter::roster(
+                $record, $this->rosterEnrollments($record, $today, false), $today, $this->scope->allows($user, 'contacts.view', $record->id),
+            ));
         }
 
         $enrollments = $this->rosterEnrollments($record, $today, true);
-        $contacts = $this->allows($request, 'contacts.view');
+        $contacts = $this->scope->allows($user, 'contacts.view', $record->id);
         $waiting = EnrollmentApplication::query()
             ->where('group_id', $record->id)
             ->where('status', EnrollmentApplicationStatus::Waitlisted->value)
             ->with(['child', ...($contacts ? ['parent'] : [])])
             ->oldest()
             ->get();
-        $canManage = $this->allows($request, 'enrollment.enroll');
+        $canManage = $this->scope->allows($user, 'enrollment.enroll', $record->id);
 
         return response()->json([
             'group' => [
@@ -347,20 +372,39 @@ final class StaffEnrollmentController extends Controller
     }
 
     /**
-     * Null — every group (enrollment.view, as before); otherwise only the user's own groups (enrollment.view_own). Neither → 403.
+     * The groups the user sees: with "enrollment.view" those of the scope (null — every group, as before); otherwise
+     * only the user's own groups for the teacher (enrollment.view_own). Neither → 403.
      *
-     * @return list<string>|null
+     * @return array{list<string>|null, bool} the groups, and whether the teacher's list is shown
      */
-    private function ownGroupsOnly(Request $request, TeachingScope $teaching): ?array
+    private function visibleGroups(Request $request, TeachingScope $teaching): array
     {
-        if ($this->allows($request, 'enrollment.view')) {
-            return null;
-        }
-        $this->authorizeAbility($request, 'enrollment.view_own');
         /** @var User $user */
         $user = $request->user();
+        if ($this->scope->access($user)->has('enrollment.view')) {
+            return [$this->scope->groups($user, 'enrollment.view'), false];
+        }
+        $this->authorizeAbility($request, 'enrollment.view_own');
 
-        return $teaching->groupsFor($user);
+        return [$teaching->groupsFor($user), true];
+    }
+
+    /** The user has the right somewhere — otherwise 403 before anything is read, as the Gate refuses. */
+    private function requireRight(Request $request, string $ability): User
+    {
+        /** @var User $user */
+        $user = $request->user();
+        if (! $this->scope->access($user)->has($ability)) {
+            throw new AuthorizationException;
+        }
+
+        return $user;
+    }
+
+    /** The right holds in the record's group — the scope (docs/product/team-rights.md, т. 4.4). */
+    private function requireGroup(User $user, string $ability, string $groupId): void
+    {
+        abort_unless($this->scope->allows($user, $ability, $groupId), 403, 'Нямате достъп до тази група.');
     }
 
     private function authorizeAbility(Request $request, string $ability): void

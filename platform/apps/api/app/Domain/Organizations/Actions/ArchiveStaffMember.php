@@ -28,6 +28,7 @@ final readonly class ArchiveStaffMember
         private TenantContext $context,
         private StaffTeaching $teaching,
         private TeamRoles $roles,
+        private ReconcileStaffAccess $access,
         private AuditRecorder $audit,
     ) {}
 
@@ -64,6 +65,8 @@ final readonly class ArchiveStaffMember
             $this->audit->record(AuditAction::TeamMemberArchived, new AuditableReference('staff_member', $member->id), [
                 'login_stopped' => $membership !== null,
             ]);
+            // Leaving: every added right and selected group goes (docs/product/team-rights.md, т. 4.6).
+            $this->access->handle($actor, $member, null);
 
             return $member;
         });
