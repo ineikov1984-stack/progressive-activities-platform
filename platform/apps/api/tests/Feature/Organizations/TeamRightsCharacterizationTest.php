@@ -20,7 +20,7 @@ use Tests\TestCase;
  * nothing changes on the way. A new route of an organization fails this test until it is added here. The approved
  * changes since: the contacts (PR 2, т. 6) and the owner's decision of 31.10.2026 — the teacher has no catalog, the
  * payment terms are read by the owner, the administrator, the coordinator and the accountant, and the approval of a
- * group is a setting of the catalog.
+ * group is a setting of the catalog. New since: the schedule (docs/product/schedule.md).
  */
 #[TestGroup('authorization')]
 class TeamRightsCharacterizationTest extends TestCase
@@ -148,6 +148,42 @@ class TeamRightsCharacterizationTest extends TestCase
         }
     }
 
+    /**
+     * "График" (docs/product/schedule.md, т. 2): the roles of the whole organization see every session, the teacher the
+     * group they lead; the children of it every role — through "enrollment.view" or as their own group; the reason for a
+     * change and the changes only with "schedule.manage"; the search by a child only with "enrollment.view".
+     */
+    #[DataProvider('roles')]
+    public function test_the_schedule_shows_each_role_the_sessions_of_its_scope(string $role): void
+    {
+        $f = $this->rightsFixture();
+        $actor = $this->memberOf($f['organization'], $role);
+        if ($role !== 'platform_admin') {
+            $person = $this->personFor($f['organization'], $actor, teaches: $role === 'instructor');
+            if ($role === 'instructor') {
+                $profile = $this->profileOf($f['organization'], $person);
+                $this->inTenant($f['organization'], fn () => $f['tuesday']->assignments()->attach($profile->id, ['role' => 'lead', 'version' => 1]));
+            }
+        }
+        $manage = in_array($role, self::CATALOG_MANAGE, true);
+
+        $this->signInTo($actor, $f['organization'])->getJson('/api/v1/schedule?from=2026-11-02&to=2026-11-29')->assertOk()
+            ->assertJsonCount($role === 'instructor' ? 4 : 12, 'sessions')
+            ->assertJsonPath("abilities.{$f['tuesday']->id}", ['children' => true, 'manage' => $manage]);
+        $panel = $this->getJson("/api/v1/schedule/sessions/{$f['session']->id}")->assertOk()->assertJsonCount(2, 'session.children');
+        if ($manage) {
+            $panel->assertJsonPath('session.change_reason', null);
+        } else {
+            $panel->assertJsonMissingPath('session.change_reason');
+        }
+        $byChild = $this->getJson("/api/v1/schedule?from=2026-11-02&to=2026-11-29&child={$f['enrollment']->child_id}");
+        if (in_array($role, self::ENROLLMENT_VIEW, true)) {
+            $byChild->assertOk()->assertJsonCount(4, 'sessions');
+        } else {
+            $byChild->assertForbidden();
+        }
+    }
+
     #[DataProvider('roles')]
     public function test_the_organizations_list_still_gives_each_role_its_rights_from_before(string $role): void
     {
@@ -239,6 +275,11 @@ class TeamRightsCharacterizationTest extends TestCase
             'POST api/v1/enrollment/enrollments/{enrollment}/reopen' => ['POST', "{$enrollment}/reopen", [], self::ENROLLMENT_MANAGE, 422],
             'POST api/v1/enrollment/enrollments/{enrollment}/skipped-sessions' => ['POST', "{$enrollment}/skipped-sessions", [], self::ENROLLMENT_MANAGE, 422],
             'DELETE api/v1/enrollment/enrollments/{enrollment}/skipped-sessions/{session}' => ['DELETE', "{$enrollment}/skipped-sessions/{$f['session']->id}", [], self::ENROLLMENT_MANAGE, 422],
+
+            // New with "График" (docs/product/schedule.md, т. 2, 6): every role sees the schedule of its scope — the teacher
+            // the group they lead, which holds this session.
+            'GET api/v1/schedule' => ['GET', '/api/v1/schedule?from=2026-11-02&to=2026-11-29', [], self::ALL, 200],
+            'GET api/v1/schedule/sessions/{session}' => ['GET', "/api/v1/schedule/sessions/{$f['session']->id}", [], self::ALL, 200],
 
             'GET api/v1/payment-terms' => ['GET', '/api/v1/payment-terms', [], self::TERMS_VIEW, 200],
             'POST api/v1/payment-terms' => ['POST', '/api/v1/payment-terms', [], self::TERMS_MANAGE, 422],

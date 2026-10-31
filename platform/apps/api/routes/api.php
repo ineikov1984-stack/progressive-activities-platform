@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\ParentChildController;
 use App\Http\Controllers\Api\V1\ParentEnrollmentController;
 use App\Http\Controllers\Api\V1\PaymentTermsController;
 use App\Http\Controllers\Api\V1\PublicCatalogController;
+use App\Http\Controllers\Api\V1\ScheduleController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentChangeController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentContactController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentController;
@@ -114,6 +115,11 @@ Route::prefix('v1')->group(function (): void {
                     Route::post('/enrollments/{enrollment}/skipped-sessions', [StaffEnrollmentChangeController::class, 'skipSession'])->whereUuid('enrollment');
                     Route::delete('/enrollments/{enrollment}/skipped-sessions/{session}', [StaffEnrollmentChangeController::class, 'restoreSession'])->whereUuid(['enrollment', 'session']);
                 });
+            });
+            // "График" (docs/product/schedule.md, т. 6): the sessions of the person's scope and the panel of one; read only, no audit.
+            Route::prefix('schedule')->middleware(['tenant', 'organization.access:operational.read', 'throttle:120,1'])->group(function (): void {
+                Route::get('/', [ScheduleController::class, 'index']);
+                Route::get('/sessions/{session}', [ScheduleController::class, 'show'])->whereUuid('session');
             });
             // Sets of payment terms (docs/product/payment-policies.md, т. 7.1): the team reads, owner and administrator change.
             Route::prefix('payment-terms')->middleware('tenant')->group(function (): void {

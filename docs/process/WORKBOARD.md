@@ -24,7 +24,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| График — спецификация (`docs/product/schedule.md`) | Claude | `claude/schedule-spec` | `docs/product/schedule.md`, `DECISIONS.md`, `WORKBOARD.md` | PR #90: ревю на архитект — поправено → merge → PR 1 (API, горещ: `routes/api.php`) |
+| График — PR 1: API (`docs/product/schedule.md`, т. 2, 5, 6) — строга | Claude | `claude/schedule-api` | горещ: `platform/apps/api/routes/api.php`; API: `AccessScope` (`scheduleGroups`, `scheduleChildren`), `TeachingScope` (`bases`, `sessionsOf`), нови `ScheduleScope`, `ScheduleReader`, `SessionRoles`, `EnrollmentCapacity` (`takenForSessions`, `waitingForGroups`), `SessionApplicability::candidates`, нов `SessionRoster`, `ScheduleController`, `SchedulePresenter`; тестове `ScheduleApiTest`, `SessionRolesTest`, `TeamRightsCharacterizationTest` | код и тестове (TDD) → ревю по сигурност на PR-а → CI → merge |
 
 ## Опашка (по приоритет)
 
@@ -70,6 +70,7 @@
 
 ## Наскоро завършено
 
+- 31.10.2026 — PR #90: спецификация „График“ (`docs/product/schedule.md`) след ревю на архитект; „Учителят обогатява“ PR 1b и PR 2 — отложени; задачи за Codex (Claude).
 - 31.10.2026 — PR #89: всяка снимка на каталога се пази без данните от телефона (EXIF, GPS, XMP, IPTC, ICC), граница 24 MP за JPEG и 16 MP за PNG и WebP, `catalog:sanitize-media` за старите, „Махни от страницата“ за снимка от галерията; ревю по сигурност (Claude).
 - 31.10.2026 — PR #88: `gd` и `exif` в образа на API, проверка на паметта в `docker` job-а (Claude).
 - 31.10.2026 — PR #87: екип — последен вход и активност (само за управляващите екипа), „Намерени: N“, филтър по няколко роли; записът на активността — след отговора, в отделна транзакция; ревю по сигурност (Claude).

@@ -11,6 +11,7 @@ use App\Domain\Enrollment\Models\EnrollmentPause;
 use App\Domain\Enrollment\Models\EnrollmentSessionException;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Collection as SupportCollection;
 
 /**
  * Which sessions count for an enrollment. Enrollment and pause dates are calendar days in the
@@ -85,7 +86,55 @@ final class SessionApplicability
         );
     }
 
-    /** The group's time zone; enrollment dates are calendar days there. */
+    /**
+     * The enrollments that may count for these sessions, with what appliesTo() reads already loaded — one query for
+     * them and one for each relation, whatever the number of sessions (docs/product/schedule.md, т. 5): of the sessions'
+     * groups and not cancelled; for the period only those around the sessions' days, trials and single visits only for
+     * one of the sessions; their skipped sessions among these and their pauses not cancelled around those days. The
+     * narrowing never changes what appliesTo() says for these sessions. Optionally one child's only.
+     *
+     * @param  SupportCollection<int, Session>  $sessions
+     * @return Collection<int, Enrollment>
+     */
+    public function candidates(SupportCollection $sessions, ?string $childId = null): Collection
+    {
+        $sessionIds = [];
+        $groupIds = [];
+        $earliest = null;
+        $latest = null;
+        foreach ($sessions as $session) {
+            $sessionIds[] = (string) $session->id;
+            $groupIds[(string) $session->group_id] = true;
+            $earliest = $earliest === null || $session->starts_at->lt($earliest) ? $session->starts_at : $earliest;
+            $latest = $latest === null || $session->starts_at->gt($latest) ? $session->starts_at : $latest;
+        }
+        if ($earliest === null) {
+            return new Collection;
+        }
+        // A day either side: the days of an enrollment are the group's, not UTC's.
+        $first = $earliest->utc()->subDay()->toDateString();
+        $last = $latest->utc()->addDay()->toDateString();
+
+        return Enrollment::query()
+            ->whereIn('group_id', array_keys($groupIds))
+            ->whereIn('status', [EnrollmentStatus::Active->value, EnrollmentStatus::Paused->value, EnrollmentStatus::Ended->value])
+            ->when($childId !== null, fn ($query) => $query->where('child_id', $childId))
+            ->where(fn ($query) => $query
+                ->where(fn ($period) => $period->where('scope', EnrollmentScope::FullPeriod->value)
+                    ->whereDate('starts_on', '<=', $last)
+                    ->where(fn ($open) => $open->whereNull('ends_on')->orWhereDate('ends_on', '>=', $first)))
+                ->orWhere(fn ($visit) => $visit->whereIn('scope', [EnrollmentScope::Trial->value, EnrollmentScope::Single->value])
+                    ->whereIn('session_id', $sessionIds)))
+            ->with([
+                'group',
+                'sessionExceptions' => fn ($query) => $query->where('kind', 'excluded')->whereIn('session_id', $sessionIds),
+                'pauses' => fn ($query) => $query->whereNull('cancelled_at')
+                    ->whereDate('starts_on', '<=', $last)->whereDate('ends_on', '>=', $first),
+            ])
+            ->orderBy('id')
+            ->get();
+    }
+
     /**
      * The local day of the group's first session that has not started, on or after a day — where a new
      * enrollment for the period begins (decision of 30.10.2026): ending it before that day is a cancellation,
@@ -103,6 +152,7 @@ final class SessionApplicability
         return $session?->starts_at->setTimezone($timezone)->toDateString();
     }
 
+    /** The group's time zone; enrollment dates are calendar days there. */
     public static function timezone(Enrollment $enrollment): string
     {
         $timezone = $enrollment->group?->schedule_pattern['timezone'] ?? null;

@@ -2,6 +2,8 @@
 
 namespace App\Domain\Catalog\Services;
 
+use App\Domain\Catalog\Models\Session;
+use App\Domain\Catalog\ValueObjects\ScheduleScope;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Enums\AbilityKind;
 use App\Domain\Organizations\Enums\StaffScope;
@@ -90,6 +92,86 @@ final readonly class AccessScope
         sort($groups);
 
         return $groups;
+    }
+
+    /**
+     * The sessions of the schedule the person sees (docs/product/schedule.md, т. 2). Seeing the schedule of one's scope
+     * is a right of its own without a key — "catalog.view" is no condition, it is a right for the whole organization:
+     * - the scope "all", or "schedule.view_all": every session;
+     * - otherwise every session of the person's groups (`TeachingScope`: an assignment that holds now or later, the lead
+     *   of the offering) and, with the scope "groups", of the selected groups and of the groups of the selected
+     *   activities. The groups that are the person's today (`activeGroupsFor`) are among the person's groups;
+     * - a group where the person only stands in: only the sessions they are on that keep it theirs — ended no earlier
+     *   than yesterday, cancelled ones too (т. 6.4) — never the whole group.
+     */
+    public function scheduleGroups(User $user): ScheduleScope
+    {
+        $access = $this->rights->for($user);
+        if ($access->role === null) {
+            return ScheduleScope::nothing();
+        }
+        if ($access->scope === StaffScope::All || $access->has('schedule.view_all')) {
+            return ScheduleScope::everything();
+        }
+
+        $groups = $access->scope === StaffScope::Groups ? [...$access->groupIds, ...$this->groupsOf($access->activityIds)] : [];
+        $standIn = [];
+        $profiles = $this->teaching->profilesFor($user);
+        foreach ($this->teaching->bases($profiles) as $groupId => $basis) {
+            if ($basis === 'substitute') {
+                $standIn[] = $groupId;
+            } else {
+                $groups[] = $groupId;
+            }
+        }
+        $groups = array_values(array_unique($groups));
+        sort($groups);
+        $standIn = array_values(array_diff($standIn, $groups));
+        sort($standIn);
+
+        return new ScheduleScope(false, $groups, $standIn, $this->teaching->sessionsOf($profiles, $standIn));
+    }
+
+    /**
+     * The groups where the panel of every session shows the children (docs/product/schedule.md, т. 2, 6.2): with
+     * "enrollment.view" in the group, or in one's own group — an assignment or the lead of the offering. Never a group
+     * where the person only stands in: there it is decided session by session (`scheduleChildrenAt`). Null — every group.
+     *
+     * @return list<string>|null
+     */
+    public function scheduleChildren(User $user): ?array
+    {
+        if ($this->rights->for($user)->role === null) {
+            return [];
+        }
+        $viewing = $this->groups($user, 'enrollment.view');
+        if ($viewing === null) {
+            return null;
+        }
+        $own = array_keys(array_filter(
+            $this->teaching->bases($this->teaching->profilesFor($user)),
+            fn (string $basis): bool => $basis !== 'substitute',
+        ));
+        $groups = array_values(array_unique([...$viewing, ...$own]));
+        sort($groups);
+
+        return $groups;
+    }
+
+    /**
+     * Whether the panel of this session shows its children: in the groups of `scheduleChildren`; where the person only
+     * stands in, at their own session from the start of its day to the end of the next day (Sofia) — the rule of
+     * `activeGroupsFor`, so a substitution later on shows no children yet and an old one none any more.
+     */
+    public function scheduleChildrenAt(User $user, ScheduleScope $schedule, Session $session): bool
+    {
+        $groups = $this->scheduleChildren($user);
+        $groupId = (string) $session->group_id;
+        if ($groups === null || in_array($groupId, $groups, true)) {
+            return true;
+        }
+
+        return in_array((string) $session->id, $schedule->sessionIds, true) && TeachingScope::standsInNow($session->starts_at);
     }
 
     /**

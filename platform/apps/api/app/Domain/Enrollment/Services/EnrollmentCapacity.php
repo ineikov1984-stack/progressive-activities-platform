@@ -5,9 +5,11 @@ namespace App\Domain\Enrollment\Services;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Catalog\Models\VisitOffer;
+use App\Domain\Enrollment\Enums\EnrollmentApplicationStatus;
 use App\Domain\Enrollment\Enums\EnrollmentScope;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Enrollment;
+use App\Domain\Enrollment\Models\EnrollmentApplication;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -135,6 +137,58 @@ final class EnrollmentCapacity
             ->whereIn('status', [EnrollmentStatus::Active, EnrollmentStatus::Paused, EnrollmentStatus::Ended])
             ->where(fn ($query) => $query->whereNull('ends_on')->orWhereDate('ends_on', '>=', $date))
             ->count();
+    }
+
+    /**
+     * Places taken at each session — the same rule as remainingForSession(): the enrollments of the group that attend
+     * it (`SessionApplicability::appliesTo`), so trials and single visits for it count and children on a pause or
+     * skipping it do not; a cancelled session takes none. From a constant number of queries for the whole period
+     * (docs/product/schedule.md, т. 5). Read-only, no locks.
+     *
+     * @param  Collection<int, Session>  $sessions
+     * @return array<string, int> session => places taken
+     */
+    public function takenForSessions(Collection $sessions): array
+    {
+        $byGroup = [];
+        foreach ($this->applicability->candidates($sessions) as $enrollment) {
+            $byGroup[(string) $enrollment->group_id][] = $enrollment;
+        }
+        $taken = [];
+        foreach ($sessions as $session) {
+            $count = 0;
+            foreach ($byGroup[(string) $session->group_id] ?? [] as $enrollment) {
+                if ($this->applicability->appliesTo($enrollment, $session)) {
+                    $count++;
+                }
+            }
+            $taken[(string) $session->id] = $count;
+        }
+
+        return $taken;
+    }
+
+    /**
+     * The children waiting for a place in each group — not those waiting for one session (a visit), one grouped query
+     * (docs/product/schedule.md, т. 5).
+     *
+     * @param  list<string>  $groupIds
+     * @return array<string, int> group => children waiting
+     */
+    public function waitingForGroups(array $groupIds): array
+    {
+        if ($groupIds === []) {
+            return [];
+        }
+        $waiting = [];
+        foreach (EnrollmentApplication::query()->where('status', EnrollmentApplicationStatus::Waitlisted->value)
+            ->whereNull('session_id')->whereIn('group_id', $groupIds)
+            ->selectRaw('group_id, count(*) as aggregate')->groupBy('group_id')
+            ->pluck('aggregate', 'group_id') as $groupId => $count) {
+            $waiting[(string) $groupId] = (int) $count;
+        }
+
+        return $waiting;
     }
 
     /** True when more children attend the session than it has places (e.g. after a pause ends early). */
