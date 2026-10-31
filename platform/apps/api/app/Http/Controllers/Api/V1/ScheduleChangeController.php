@@ -18,12 +18,12 @@ use Illuminate\Validation\ValidationException;
  * Changes of the schedule (docs/product/schedule-changes.md, т. 7): the preview and the change, from one body. Only a
  * person of the team with "schedule.manage" for the whole organization — the platform operator has the right by role
  * but does not change the schedule (decision 8); an added right with a narrower scope gives nothing. The right is
- * checked first, so that without it nobody learns whether a session exists (т. 7.4). This stage: "Премести", "Отмени" and "Възстанови" of one session.
+ * checked first, so that without it nobody learns whether a session exists (т. 7.4). Single and bulk changes use the same two routes.
  */
 final class ScheduleChangeController extends Controller
 {
-    /** The actions of this stage. */
-    private const ACTIONS = ['move', 'cancel', 'restore'];
+    /** The actions supported by the shared preview/apply routes. */
+    private const ACTIONS = ['move', 'cancel', 'restore', 'change_location', 'holiday', 'add'];
 
     /** The warnings that are confirmed by their key (т. 4.8). */
     private const WARNINGS = ['instructor', 'shared_location', 'exclusive_location', 'overbooked', 'no_lead'];
@@ -71,19 +71,31 @@ final class ScheduleChangeController extends Controller
         $sessions = 'Изберете от 1 до 300 занимания.';
         $reason = 'Напишете причина (до 2000 знака).';
         $warning = 'Има ново предупреждение. Прегледайте го и потвърдете отново.';
+        $inputAction = $request->input('action');
+        $action = is_string($inputAction) ? $inputAction : '';
+        $single = in_array($action, ['move', 'restore'], true);
+        $needsSessions = $action !== 'add' && ($action !== 'holiday' || ! $request->is('*/preview'));
         $validated = $request->validate([
             'action' => ['required', 'string', Rule::in(self::ACTIONS)],
-            'sessions' => ['required', 'array', 'min:1', 'max:1'],
+            'sessions' => [$needsSessions ? 'required' : 'sometimes', 'array', 'min:1', $single ? 'max:1' : 'max:300'],
             'sessions.*' => ['required', 'array'],
-            'sessions.*.id' => ['required', 'uuid'],
+            'sessions.*.id' => ['required', 'uuid', 'distinct:ignore_case'],
             'sessions.*.version' => ['required', 'integer', 'min:1'],
-            'date' => ['required_if:action,move', 'date_format:Y-m-d'],
-            'from' => ['required_if:action,move', 'date_format:H:i'],
-            'to' => ['required_if:action,move', 'date_format:H:i', 'after:from'],
-            'location_id' => ['sometimes', 'nullable', 'uuid'],
+            'date' => ['required_if:action,move,add', 'date_format:Y-m-d'],
+            'from' => ['required_if:action,move,add', 'date_format:H:i'],
+            'to' => ['required_if:action,move,add', 'date_format:H:i', 'after:from'],
+            'location_id' => [Rule::requiredIf($action === 'change_location' && ! $request->exists('location_id')), 'nullable', 'uuid'],
+            'group_id' => ['required_if:action,add', 'uuid'],
+            'days' => ['required_if:action,holiday', 'array', 'min:1', 'max:31'],
+            'days.*' => ['required', 'date_format:Y-m-d', 'distinct'],
+            'locations' => ['sometimes', 'array', 'max:300'],
+            'locations.*' => ['required', 'uuid', 'distinct:ignore_case'],
+            'activities' => ['sometimes', 'array', 'max:300'],
+            'activities.*' => ['required', 'uuid', 'distinct:ignore_case'],
+            'notify_parents' => ['sometimes', 'boolean'],
             'reason' => ['nullable', 'string', 'max:2000'],
             'reason_to_parents' => ['sometimes', 'boolean'],
-            'confirmed_warnings' => ['sometimes', 'array', 'max:50'],
+            'confirmed_warnings' => ['sometimes', 'array', 'max:90000'],
             'confirmed_warnings.*' => ['required', 'array'],
             'confirmed_warnings.*.type' => ['required', 'string', Rule::in(self::WARNINGS)],
             'confirmed_warnings.*.session_id' => ['required', 'uuid'],
@@ -97,8 +109,14 @@ final class ScheduleChangeController extends Controller
             'sessions.required' => $sessions,
             'sessions.array' => $sessions,
             'sessions.min' => $sessions,
-            // Many sessions at once come with the next step; "Премести" and "Възстанови" are always for one (т. 7.1).
-            'sessions.max' => 'Изберете едно занимание.',
+            // "Премести" and "Възстанови" are for one; bulk actions accept at most 300 (т. 7.1).
+            'sessions.max' => $single ? 'Изберете едно занимание.' : $sessions,
+            'group_id.*' => 'Заниманието не е намерено.',
+            'days.*' => 'Изберете от 1 до 31 дни от днес до една година напред.',
+            'days.*.*' => 'Изберете от 1 до 31 дни от днес до една година напред.',
+            'locations.*' => 'Мястото не е намерено.',
+            'activities.*' => 'Дейността не е намерена.',
+            'notify_parents.*' => 'Изберете дали да изпратим писмо на родителите.',
             'sessions.*.*' => 'Заниманието не е намерено.',
             'reason.*' => $reason,
             'reason_to_parents.boolean' => 'Изберете дали причината отива при родителите.',
@@ -109,11 +127,11 @@ final class ScheduleChangeController extends Controller
         $text = is_string($validated['reason'] ?? null) ? trim($validated['reason']) : '';
         $action = (string) $validated['action'];
         // A reason is required to cancel, and is for the office; to restore it may be left out (т. 4.1).
-        if ($text === '' && in_array($action, ['move', 'cancel'], true)) {
+        if ($text === '' && in_array($action, ['move', 'cancel', 'holiday', 'change_location'], true)) {
             throw ValidationException::withMessages(['reason' => $reason]);
         }
         $list = [];
-        foreach ((array) $validated['sessions'] as $session) {
+        foreach ((array) ($validated['sessions'] ?? []) as $session) {
             $list[] = ['id' => Str::lower((string) $session['id']), 'version' => (int) $session['version']];
         }
         $confirmed = [];
@@ -130,15 +148,19 @@ final class ScheduleChangeController extends Controller
             action: $action,
             sessions: $list,
             reason: $text === '' ? null : $text,
-            reasonToParents: $request->boolean('reason_to_parents', $action === 'move'),
+            reasonToParents: $action === 'holiday' || $request->boolean('reason_to_parents', $action === 'move'),
             // A change of one session always goes to the families (decision of 29.10.2026 and decision 4).
-            notifyParents: true,
+            notifyParents: in_array($action, ['move', 'cancel', 'restore'], true) || $request->boolean('notify_parents', true),
             confirmedWarnings: $confirmed,
-            date: $action === 'move' ? $validated['date'] : null,
-            from: $action === 'move' ? $validated['from'] : null,
-            to: $action === 'move' ? $validated['to'] : null,
-            locationProvided: $action === 'move' && array_key_exists('location_id', $validated),
-            locationId: $action === 'move' && is_string($validated['location_id'] ?? null) ? Str::lower($validated['location_id']) : null,
+            date: in_array($action, ['move', 'add'], true) ? $validated['date'] : null,
+            from: in_array($action, ['move', 'add'], true) ? $validated['from'] : null,
+            to: in_array($action, ['move', 'add'], true) ? $validated['to'] : null,
+            locationProvided: in_array($action, ['move', 'add', 'change_location'], true) && array_key_exists('location_id', $validated),
+            locationId: in_array($action, ['move', 'add', 'change_location'], true) && is_string($validated['location_id'] ?? null) ? Str::lower($validated['location_id']) : null,
+            groupId: $action === 'add' ? Str::lower($validated['group_id']) : null,
+            days: $action === 'holiday' ? array_values($validated['days']) : [],
+            locations: $action === 'holiday' ? array_map(Str::lower(...), $validated['locations'] ?? []) : [],
+            activities: $action === 'holiday' ? array_map(Str::lower(...), $validated['activities'] ?? []) : [],
         );
     }
 }

@@ -4,6 +4,7 @@ namespace Tests\Feature\Catalog;
 
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\InstructorProfile;
+use App\Domain\Catalog\Models\Session;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Enrollment\Models\EnrollmentSessionException;
@@ -140,6 +141,49 @@ class ScheduleChangeApplicationRoleTest extends TestCase
             $this->assertSame(1, DB::table('session_changes')->where('schedule_change_id', $first->json('change.id'))->count());
             DB::select("SELECT set_config('app.current_organization_id', '', true)");
             $this->assertSame(0, DB::table('session_changes')->where('schedule_change_id', $first->json('change.id'))->count());
+        } finally {
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
+            $context->clear();
+            DB::setDefaultConnection($original);
+        }
+    }
+
+    #[TestGroup('tenant-isolation')]
+    public function test_bulk_cancellation_and_addition_are_written_under_the_application_role(): void
+    {
+        try {
+            DB::connection('pgsql_admin')->getPdo();
+        } catch (Throwable) {
+            $this->markTestSkipped('PostgreSQL is required for bulk schedule changes under the application role.');
+        }
+        Artisan::call('migrate', ['--database' => 'pgsql_admin', '--force' => true]);
+        $this->withoutMiddleware(PreventRequestForgery::class);
+        $original = DB::getDefaultConnection();
+        DB::setDefaultConnection('pgsql_admin');
+        $context = app(TenantContext::class);
+        DB::beginTransaction();
+        try {
+            $f = $this->changeFixture($context);
+            $session = Session::query()->findOrFail($f['session']);
+            $second = $session->group->sessions()->create(['starts_at' => $session->starts_at->addWeek(), 'ends_at' => $session->ends_at->addWeek(), 'status' => 'scheduled']);
+            $context->clear();
+            DB::statement('SET LOCAL ROLE progressive_app');
+            $this->actingAs($f['owner'])->withHeader('X-Organization-Id', $f['organization'])->withHeader('Idempotency-Key', 'bulk-app-role')
+                ->postJson('/api/v1/schedule/changes', ['action' => 'cancel', 'reason' => 'Ремонт.', 'sessions' => [
+                    ['id' => $f['session'], 'version' => 1], ['id' => $second->id, 'version' => 1],
+                ]])->assertCreated()->assertJsonCount(2, 'change.sessions');
+            $result = $this->withHeader('Idempotency-Key', 'add-app-role')->postJson('/api/v1/schedule/changes', [
+                'action' => 'add', 'group_id' => $session->group_id, 'date' => CarbonImmutable::now('Europe/Sofia')->addDays(10)->toDateString(),
+                'from' => '17:00', 'to' => '18:00',
+            ])->assertCreated();
+            DB::select("SELECT set_config('app.current_organization_id', ?, true)", [$f['organization']]);
+            $added = DB::table('activity_sessions')->where('id', $result->json('change.sessions.0.id'))->first();
+            $this->assertTrue((bool) $added->extra);
+            $history = DB::table('session_changes')->where('session_id', $added->id)->first();
+            $this->assertNull($history->from_status);
+            $this->assertSame('scheduled', $history->to_status);
         } finally {
             if (DB::transactionLevel() > 0) {
                 DB::rollBack();

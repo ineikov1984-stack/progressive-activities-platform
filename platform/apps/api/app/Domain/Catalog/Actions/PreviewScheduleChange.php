@@ -23,14 +23,14 @@ final readonly class PreviewScheduleChange
     ) {}
 
     /** @return array<string, mixed> */
-    public function handle(ScheduleChangeRequest $request): array
+    public function handle(ScheduleChangeRequest $request, bool $allowEmpty = false): array
     {
         $now = CarbonImmutable::now();
         $this->planner->assertFound($request, $this->planner->found($request));
-        $planned = $this->planner->plan($request, false, $now);
+        $planned = $this->planner->plan($request, false, $now, $allowEmpty || $request->action === 'change_location');
         $effects = $this->effects->assess(array_map(
-            fn (PlannedSessionChange $change): array => ['before' => $change->before, 'after' => $change->after], $planned,
-        ), $now);
+            fn (PlannedSessionChange $change): array => ['before' => $change->before, 'after' => $change->after, 'effect' => $change->effect()], $planned,
+        ), $now, $request->notifyParents);
         $letters = $this->teachers->letters($planned);
         $single = count($planned) === 1 ? $planned[0] : null;
 
@@ -50,7 +50,7 @@ final readonly class PreviewScheduleChange
                 'families' => $effects->sessions[$change->sessionId()]['families'] ?? 0,
             ], $planned),
             // One session that cannot be changed is refused, not left out: these are for many sessions at once (т. 4.5, 4.6).
-            'skipped' => ['started' => 0, 'cancelled' => 0, 'same_location' => 0],
+            'skipped' => $this->planner->skipped($request, $now),
             'totals' => [
                 'sessions' => count($planned),
                 'groups' => count(array_unique(array_map(fn (PlannedSessionChange $change): string => (string) $change->before->group_id, $planned))),

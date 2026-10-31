@@ -10,6 +10,9 @@ namespace App\Domain\Catalog\ValueObjects;
  */
 final readonly class ScheduleChangeRequest
 {
+    /** @var array<string, true> */
+    private array $confirmedKeys;
+
     /**
      * @param  list<array{id: string, version: int}>  $sessions
      * @param  list<array{type: string, session_id: string, other_session_id: string|null}>  $confirmedWarnings
@@ -26,7 +29,17 @@ final readonly class ScheduleChangeRequest
         public ?string $to = null,
         public bool $locationProvided = false,
         public ?string $locationId = null,
-    ) {}
+        public ?string $groupId = null,
+        /** @var list<string> */
+        public array $days = [],
+        /** @var list<string> */
+        public array $locations = [],
+        /** @var list<string> */
+        public array $activities = [],
+    ) {
+        $this->confirmedKeys = array_fill_keys(array_map(
+            fn (array $key): string => $key['type'].':'.$key['session_id'].':'.($key['other_session_id'] ?? ''), $confirmedWarnings), true);
+    }
 
     /** @return list<string> */
     public function sessionIds(): array
@@ -53,14 +66,7 @@ final readonly class ScheduleChangeRequest
      */
     public function confirms(array $warning): bool
     {
-        foreach ($this->confirmedWarnings as $confirmed) {
-            if ($confirmed['type'] === $warning['type'] && $confirmed['session_id'] === $warning['session_id']
-                && $confirmed['other_session_id'] === $warning['other_session_id']) {
-                return true;
-            }
-        }
-
-        return false;
+        return isset($this->confirmedKeys[$warning['type'].':'.$warning['session_id'].':'.($warning['other_session_id'] ?? '')]);
     }
 
     /**
@@ -75,6 +81,12 @@ final readonly class ScheduleChangeRequest
         usort($warnings, fn (array $a, array $b): int => [$a['type'], $a['session_id'], (string) $a['other_session_id']]
             <=> [$b['type'], $b['session_id'], (string) $b['other_session_id']]);
 
+        $criteria = ['days' => $this->days, 'locations' => $this->locations, 'activities' => $this->activities];
+        foreach ($criteria as &$values) {
+            sort($values);
+        }
+        unset($values);
+
         return hash('sha256', json_encode(self::sorted([
             'action' => $this->action,
             'confirmed_warnings' => $warnings,
@@ -84,6 +96,8 @@ final readonly class ScheduleChangeRequest
             'sessions' => $sessions,
             'date' => $this->date, 'from' => $this->from, 'to' => $this->to,
             'location_provided' => $this->locationProvided, 'location_id' => $this->locationId,
+            ...($this->action === 'add' ? ['group_id' => $this->groupId] : []),
+            ...($this->action === 'holiday' ? ['criteria' => $criteria] : []),
         ]), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
     }
 

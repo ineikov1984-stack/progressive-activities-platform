@@ -59,9 +59,9 @@ final class ScheduleChangeEffects
     }
 
     /**
-     * @param  list<array{before: Session, after: Session}>  $changes  each session as it is and as it will be
+     * @param  list<array{before: Session, after: Session, effect?: string}>  $changes  each session as it is and as it will be
      */
-    public function assess(array $changes, CarbonImmutable $now): ScheduleEffects
+    public function assess(array $changes, CarbonImmutable $now, bool $notifyParents = true): ScheduleEffects
     {
         if ($changes === []) {
             return ScheduleEffects::none();
@@ -94,10 +94,11 @@ final class ScheduleChangeEffects
                 fn (Enrollment $enrollment): bool => ($enrollment->scope === EnrollmentScope::FullPeriod || $enrollment->status === EnrollmentStatus::Active)
                     && $this->applicability->appliesTo($enrollment, $change['before'])));
         }
-        $starts = $this->newStarts($notStarted, $changes, $now);
+        $recalculate = array_values(array_filter($changes, fn (array $change): bool => ($change['effect'] ?? '') !== 'location_changed'));
+        $starts = $recalculate === [] ? [] : $this->newStarts($notStarted, $recalculate, $now);
         $moved = [];
         foreach ($changes as $change) {
-            if ($change['before']->status === 'scheduled' && $change['after']->status === 'scheduled') {
+            if (($change['effect'] ?? 'moved') === 'moved' && $change['before']->status === 'scheduled' && $change['after']->status === 'scheduled') {
                 $moved[(string) $change['after']->id] = $change['after'];
             }
         }
@@ -131,16 +132,22 @@ final class ScheduleChangeEffects
 
         $cancelled = [];
         $restored = [];
+        $added = [];
+        $locations = [];
         foreach ($changes as $change) {
             $id = (string) $change['before']->id;
-            if ($change['before']->status === 'scheduled' && $change['after']->status === 'cancelled') {
+            if (($change['effect'] ?? '') === 'added') {
+                $added[] = $id;
+            } elseif (($change['effect'] ?? '') === 'location_changed') {
+                $locations[] = $id;
+            } elseif ($change['before']->status === 'scheduled' && $change['after']->status === 'cancelled') {
                 $cancelled[] = $id;
             } elseif ($change['before']->status === 'cancelled' && $change['after']->status === 'scheduled') {
                 $restored[] = $id;
             }
         }
         // The visit applications still waiting for a cancelled session are refused (т. 5.6).
-        $waiting = array_values(EnrollmentApplication::query()->whereIn('session_id', [...$cancelled, ...array_keys($moved)])
+        $waiting = array_values(EnrollmentApplication::query()->whereIn('session_id', [...$cancelled, ...array_keys($moved), ...$locations])
             ->whereIn('status', [EnrollmentApplicationStatus::Submitted->value, EnrollmentApplicationStatus::Waitlisted->value])
             ->orderBy('id')->get(['id', 'parent_user_id', 'child_id', 'session_id', 'status'])->all());
         [$freedVisits, $freedApplications] = $this->freedByCancellation($restored);
@@ -181,6 +188,18 @@ final class ScheduleChangeEffects
             foreach ($freedApplications as $application) {
                 if ((string) $application->session_id === $sessionId) {
                     $items[] = self::item((string) $application->parent_user_id, $sessionId, 'visit_day_free_again', null, (string) $application->id, (string) $application->child_id);
+                }
+            }
+        }
+        foreach (['added' => $added, 'location_changed' => $locations] as $effect => $ids) {
+            foreach ($ids as $sessionId) {
+                foreach ($after[$sessionId] as $enrollment) {
+                    $items[] = self::item($parentOf($enrollment), $sessionId, $effect, (string) $enrollment->id, null, (string) $enrollment->child_id);
+                }
+                foreach ($waiting as $application) {
+                    if ((string) $application->session_id === $sessionId) {
+                        $items[] = self::item((string) $application->parent_user_id, $sessionId, $effect, null, (string) $application->id, (string) $application->child_id);
+                    }
                 }
             }
         }
@@ -234,7 +253,7 @@ final class ScheduleChangeEffects
                 'visits' => count(array_filter($coming, fn (Enrollment $enrollment): bool => $enrollment->scope !== EnrollmentScope::FullPeriod)),
                 'families' => count(array_unique(array_column(array_filter($items, fn (array $told): bool => $told['session_id'] === $sessionId), 'parent_user_id'))),
             ];
-            $warning = $this->overbooked($change['after'], count($after[$sessionId]));
+            $warning = in_array($sessionId, [...array_keys($moved), ...$restored], true) ? $this->overbooked($change['after'], count($after[$sessionId])) : null;
             if ($warning !== null) {
                 $warnings[] = $warning;
             }
@@ -255,7 +274,7 @@ final class ScheduleChangeEffects
         }
 
         return new ScheduleEffects($items, $sessions, $starts, $statuses, $applicationStatuses, $confirmed, $warnings,
-            count(array_unique($children)), $droppedSkips, $visitStarts);
+            count(array_unique($children)), $droppedSkips, $visitStarts, $notifyParents);
     }
 
     /**
@@ -290,7 +309,7 @@ final class ScheduleChangeEffects
                 $metadata['skip_dropped'] = true;
             }
             $applicationId = $item['application_id'];
-            if (in_array($item['effect'], ['cancelled', 'restored', 'moved', 'moved_skip_dropped', 'moved_not_attending'], true) && $enrollmentId !== null) {
+            if (in_array($item['effect'], ['cancelled', 'restored', 'added', 'moved', 'moved_skip_dropped', 'moved_not_attending'], true) && $enrollmentId !== null) {
                 $status = $effects->statuses[$enrollmentId] ?? EnrollmentStatus::Active->value;
                 $start = $effects->starts[$enrollmentId] ?? $effects->visitStarts[$enrollmentId] ?? null;
                 if ($start !== null) {
@@ -298,7 +317,7 @@ final class ScheduleChangeEffects
                     $withStart[$enrollmentId] = true;
                 }
                 $transitions[] = $row(null, $enrollmentId, $status, $status, $reasonForParents ?? ($item['effect'] === 'cancelled'
-                    ? 'Заниманието е отменено от организацията.' : ($item['effect'] === 'restored' ? 'Заниманието отново е в графика.' : 'Заниманието е преместено от организацията.')), $metadata);
+                    ? 'Заниманието е отменено от организацията.' : (in_array($item['effect'], ['restored', 'added'], true) ? 'Заниманието отново е в графика.' : 'Заниманието е преместено от организацията.')), $metadata);
                 $touched[] = $enrollmentId;
             } elseif ($item['effect'] === 'moved' && $applicationId !== null) {
                 $status = $effects->applicationStatuses[$applicationId];
@@ -340,20 +359,20 @@ final class ScheduleChangeEffects
         if ($visits !== []) {
             Enrollment::query()->whereKey($visits)->update(['status' => EnrollmentStatus::Cancelled->value]);
         }
-        $byDay = [];
+        $startsById = [];
         foreach ([...$effects->starts, ...$effects->visitStarts] as $enrollmentId => $start) {
-            $byDay[$start['to']][] = $enrollmentId;
+            $startsById[$enrollmentId] = $start['to'];
         }
-        foreach ($byDay as $day => $enrollmentIds) {
-            Enrollment::query()->whereKey($enrollmentIds)->update(['starts_on' => $day]);
-        }
+        $this->updateValues('enrollments', 'starts_on', $startsById);
+        $refusals = [];
         foreach ($refused as $sessionId => $applicationIds) {
-            EnrollmentApplication::query()->whereKey($applicationIds)->update([
-                'status' => EnrollmentApplicationStatus::Rejected->value,
-                'public_reason' => self::refusal($days[$sessionId] ?? null, $reasonForParents),
-                'version' => DB::raw('version + 1'),
-            ]);
+            foreach ($applicationIds as $id) {
+                $refusals[$id] = self::refusal($days[$sessionId] ?? null, $reasonForParents);
+            }
         }
+        $this->updateValues('enrollment_applications', 'public_reason', $refusals, [
+            'status' => EnrollmentApplicationStatus::Rejected->value, 'version' => DB::raw('version + 1'),
+        ]);
         if ($transitions !== []) {
             DB::table('enrollment_transitions')->insert($transitions);
         }
@@ -365,7 +384,7 @@ final class ScheduleChangeEffects
             'occurred_at' => $now, 'attempts' => 0, 'created_at' => $now, 'updated_at' => $now,
         ];
         $byFamily = [];
-        foreach ($effects->items as $item) {
+        foreach ($effects->letterItems() as $item) {
             $byFamily[$item['parent_user_id']][] = [
                 'session_id' => $item['session_id'], 'enrollment_id' => $item['enrollment_id'],
                 'application_id' => $item['application_id'], 'effect' => $item['effect'],
@@ -380,6 +399,31 @@ final class ScheduleChangeEffects
         if ($events !== []) {
             DB::table('enrollment_events')->insert($events);
         }
+    }
+
+    /**
+     * One update for all rows, including different new start days/reasons. Values are quoted by the driver; table and
+     * column names are internal constants. The explicit organization predicate also protects this query without RLS.
+     *
+     * @param  array<string, string>  $values
+     * @param  array<string, mixed>  $extra
+     */
+    private function updateValues(string $table, string $column, array $values, array $extra = []): void
+    {
+        if ($values === []) {
+            return;
+        }
+        $pdo = DB::connection()->getPdo();
+        $case = 'CASE id';
+        foreach ($values as $id => $value) {
+            $case .= ' WHEN '.$pdo->quote($id).' THEN '.$pdo->quote($value);
+        }
+        $case .= ' END';
+        if ($column === 'starts_on' && DB::getDriverName() === 'pgsql') {
+            $case = '('.$case.')::date';
+        }
+        DB::table($table)->where('organization_id', $this->context->organizationId())->whereIn('id', array_keys($values))
+            ->update([$column => DB::raw($case), ...$extra]);
     }
 
     /** @return Item */
@@ -428,7 +472,7 @@ final class ScheduleChangeEffects
      * after the last day.
      *
      * @param  list<Enrollment>  $enrollments
-     * @param  list<array{before: Session, after: Session}>  $changes
+     * @param  list<array{before: Session, after: Session, effect?: string}>  $changes
      * @return array<string, array{from: string, to: string}>
      */
     private function newStarts(array $enrollments, array $changes, CarbonImmutable $now): array

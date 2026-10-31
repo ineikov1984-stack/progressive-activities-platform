@@ -34,6 +34,7 @@ final readonly class ScheduleEffects
         public array $droppedSkips = [],
         /** @var array<string, array{from: string, to: string}> visit => new local day */
         public array $visitStarts = [],
+        public bool $notifyParents = true,
     ) {}
 
     public static function none(): self
@@ -41,10 +42,17 @@ final readonly class ScheduleEffects
         return new self([], [], [], [], [], [], [], 0);
     }
 
+    /** @return list<Item> Only invitations still go when ordinary notifications are switched off. */
+    public function letterItems(): array
+    {
+        return $this->notifyParents ? $this->items : array_values(array_filter($this->items,
+            fn (array $item): bool => in_array($item['effect'], ['visit_cancelled', 'application_rejected'], true)));
+    }
+
     /** @return list<string> the families told, by parent */
     public function families(): array
     {
-        $families = array_values(array_unique(array_column($this->items, 'parent_user_id')));
+        $families = array_values(array_unique(array_column($this->letterItems(), 'parent_user_id')));
         sort($families);
 
         return $families;
