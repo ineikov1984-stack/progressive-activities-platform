@@ -32,6 +32,15 @@ final readonly class CatalogPolicy
         return $this->allows($user, $organization, 'enrollment.view');
     }
 
+    /**
+     * Only the groups the user teaches, and in them only the children's names, classes, dates, pauses and skipped
+     * sessions (docs/product/team.md, т. 8); which groups — `TeachingScope`.
+     */
+    public function viewOwnEnrollments(User $user, Organization $organization): bool
+    {
+        return $this->allows($user, $organization, 'enrollment.view_own');
+    }
+
     public function manageEnrollments(User $user, Organization $organization): bool
     {
         return $this->allows($user, $organization, 'enrollment.manage');

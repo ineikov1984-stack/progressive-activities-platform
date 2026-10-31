@@ -38,6 +38,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('catalog.manage', [CatalogPolicy::class, 'manage']);
         Gate::define('catalog.publish', [CatalogPolicy::class, 'publish']);
         Gate::define('enrollment.view', [CatalogPolicy::class, 'viewEnrollments']);
+        Gate::define('enrollment.view_own', [CatalogPolicy::class, 'viewOwnEnrollments']);
         Gate::define('enrollment.manage', [CatalogPolicy::class, 'manageEnrollments']);
         Gate::define('enrollment.contacts', [CatalogPolicy::class, 'viewEnrollmentContacts']);
 

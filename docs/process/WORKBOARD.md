@@ -18,6 +18,7 @@
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
 | Екип и назначения — етап 1 (`docs/product/team.md`), PR 2б: покана, писмо, приемане, роли | Claude | `claude/team-invite-accept` | Organizations (покани, роли), Identity (регистрация по покана); **миграции**, `routes/api.php`, `routes/console.php` | след ревю по сигурност → поправки → CI |
+| Екип и назначения — етап 1, PR 3: учителят вижда своите групи (Б2в) | Claude | `claude/teacher-own-groups` | Catalog (TeachingScope), Enrollment (групи, списък), `routes/api.php` | код и тестове → CI → ревю по сигурност |
 
 ## Опашка (по приоритет)
 
