@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\AuditEventController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CatalogMediaController;
 use App\Http\Controllers\Api\V1\InstructorProfileController;
+use App\Http\Controllers\Api\V1\InvitationAcceptanceController;
 use App\Http\Controllers\Api\V1\InvitationController;
 use App\Http\Controllers\Api\V1\LocationController;
 use App\Http\Controllers\Api\V1\OpenDayCampaignController;
@@ -33,9 +34,13 @@ Route::prefix('v1')->group(function (): void {
     Route::get('/public/organizations/{organizationSlug}/open-days/{campaignSlug}', [PublicCatalogController::class, 'openDay']);
     Route::get('/public/organizations/{organizationSlug}/media/{filename}', [PublicCatalogController::class, 'media'])
         ->where('filename', '[0-9a-f-]{36}\\.(?:jpg|png|webp)');
+    // An invitation, before any login (docs/product/team.md, т. 7.4): the token in the body, never in the path; never the e-mail.
+    Route::post('/invitations/lookup', [InvitationAcceptanceController::class, 'lookup'])->middleware('throttle:30,1');
 
     Route::middleware('web')->group(function (): void {
         Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
+        // A new profile from the invitation's e-mail: the same session and CSRF as the login.
+        Route::post('/invitations/register', [InvitationAcceptanceController::class, 'register'])->middleware('throttle:10,1');
 
         Route::middleware('auth:sanctum')->group(function (): void {
             Route::post('/auth/logout', [AuthController::class, 'logout']);
@@ -60,6 +65,8 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/invitations', [InvitationController::class, 'store'])->middleware('tenant');
             Route::get('/invitations', [InvitationController::class, 'index'])->middleware('tenant');
             Route::post('/invitations/accept', [InvitationController::class, 'accept']);
+            // The organization comes from the invitation, not from the session (docs/product/team.md, т. 7.4).
+            Route::post('/invitations/join', [InvitationAcceptanceController::class, 'join'])->middleware('throttle:30,1');
             Route::get('/audit-events', [AuditEventController::class, 'index'])->middleware('tenant');
             // The team: people with or without a login (docs/product/team.md, т. 9).
             Route::prefix('team')->middleware('tenant')->group(function (): void {
@@ -72,6 +79,8 @@ Route::prefix('v1')->group(function (): void {
                     Route::patch('/members/{member}', [TeamController::class, 'update'])->whereUuid('member');
                     Route::post('/members/{member}/archive', [TeamController::class, 'archive'])->whereUuid('member');
                     Route::post('/members/{member}/instructor-profile', [TeamController::class, 'linkProfile'])->whereUuid('member');
+                    Route::post('/members/{member}/role', [TeamController::class, 'changeRole'])->whereUuid('member');
+                    Route::post('/members/{member}/invitation', [TeamController::class, 'invite'])->whereUuid('member')->middleware('throttle:20,1');
                 });
             });
             Route::prefix('enrollment')->middleware('tenant')->group(function (): void {

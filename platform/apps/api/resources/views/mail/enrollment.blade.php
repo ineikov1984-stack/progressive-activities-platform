@@ -1,4 +1,4 @@
-{{-- One layout for every enrollment email; the words come from MailContent. Email-safe: tables and inline styles. --}}
+{{-- One layout for every enrollment email and the team invitation; the words come from MailContent. Email-safe: tables and inline styles. --}}
 {{-- "17:30–18:30" never breaks at the dash on a phone: a word joiner (U+2060) after a dash between digits.
      One @php block: Blade cannot mix @php(...) with @php … @endphp in one template. --}}
 @php

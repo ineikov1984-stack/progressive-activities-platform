@@ -17,10 +17,13 @@ class StaffMembersMigrationTest extends TestCase
 {
     use RefreshDatabase;
 
+    /** Only this step goes back and forth, whatever migrations came after it. */
+    private const MIGRATION = 'database/migrations/2026_10_30_000800_create_staff_members_and_group_assignments.php';
+
     public function test_existing_members_and_teacher_profiles_get_a_person_and_the_step_reverses(): void
     {
         // The migrator keeps the migration it has loaded; requiring the file again would declare its class twice.
-        Artisan::call('migrate:rollback', ['--step' => 1, '--force' => true]);
+        Artisan::call('migrate:rollback', ['--path' => self::MIGRATION, '--force' => true]);
         $this->assertFalse(Schema::hasTable('staff_members'));
 
         $now = now();
@@ -67,7 +70,7 @@ class StaffMembersMigrationTest extends TestCase
             ['group_id' => $group, 'instructor_profile_id' => $unlinked, 'organization_id' => $organization, 'starts_on' => null, 'ends_on' => '2020-01-31', 'created_at' => $now, 'updated_at' => $now],
             ['group_id' => $group, 'instructor_profile_id' => $later, 'organization_id' => $organization, 'starts_on' => '2999-01-01', 'ends_on' => null, 'created_at' => $now, 'updated_at' => $now],
         ]);
-        Artisan::call('migrate:rollback', ['--step' => 1, '--force' => true]);
+        Artisan::call('migrate:rollback', ['--path' => self::MIGRATION, '--force' => true]);
         $this->assertSame([$linked], DB::table('activity_group_instructors')->where('group_id', $group)->pluck('instructor_profile_id')->all());
         $this->assertFalse(Schema::hasColumn('activity_sessions', 'instructors_source'));
         Artisan::call('migrate', ['--force' => true]);

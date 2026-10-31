@@ -7,6 +7,8 @@ use App\Domain\Catalog\Actions\LinkInstructorProfile;
 use App\Domain\Catalog\Services\StaffTeaching;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Actions\ArchiveStaffMember;
+use App\Domain\Organizations\Actions\ChangeStaffRole;
+use App\Domain\Organizations\Actions\InviteStaffMember;
 use App\Domain\Organizations\Actions\SaveStaffMember;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
@@ -102,6 +104,42 @@ class TeamController extends Controller
         $link->handle($actor, $record, $validated['instructor_profile_id'] ?? null);
 
         return response()->json(['member' => $this->present(collect([$record->refresh()]), true)[0]]);
+    }
+
+    /**
+     * Invites the person to log in, or sends the invitation again with new links (т. 7). The link for copying is shown
+     * only here and only joins an existing profile; the e-mail carries another token, the one that may make a profile.
+     */
+    public function invite(Request $request, InviteStaffMember $invite, string $member): JsonResponse
+    {
+        /** @var User $actor */
+        $actor = $request->user();
+        Gate::forUser($actor)->authorize('manageTeam', $this->organization());
+        $result = $invite->handle($actor, StaffMember::query()->findOrFail($member), $request->all());
+        $invitation = $result['invitation'];
+
+        return response()->json([
+            'invitation' => [
+                'id' => $invitation->id,
+                'staff_member_id' => $invitation->staff_member_id,
+                'email' => $invitation->email,
+                'role' => $invitation->role->value,
+                'status' => $invitation->status(),
+                'expires_at' => $invitation->expires_at->toIso8601String(),
+            ],
+            'link' => $result['link'],
+        ], $result['created'] ? Response::HTTP_CREATED : Response::HTTP_OK);
+    }
+
+    /** The role of a person who logs in (т. 4). */
+    public function changeRole(Request $request, ChangeStaffRole $change, string $member): JsonResponse
+    {
+        /** @var User $actor */
+        $actor = $request->user();
+        Gate::forUser($actor)->authorize('manageTeam', $this->organization());
+        $record = $change->handle($actor, StaffMember::query()->findOrFail($member), $request->all());
+
+        return response()->json(['member' => $this->present(collect([$record]), true)[0]]);
     }
 
     /**
