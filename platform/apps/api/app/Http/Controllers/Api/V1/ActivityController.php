@@ -26,9 +26,11 @@ final class ActivityController extends Controller
         $organization = $this->organization($context);
         Gate::forUser($request->user())->authorize('catalog.view', $organization);
 
+        $terms = $this->seesTerms($request, $organization);
+
         return response()->json([
             'activities' => Activity::query()->with('offerings.priceOptions', 'offerings.paymentTermsChoices')->latest()->get()
-                ->map(fn (Activity $activity): array => $this->present($activity, $organization))->all(),
+                ->map(fn (Activity $activity): array => $this->present($activity, $organization, $terms))->all(),
         ]);
     }
 
@@ -40,7 +42,7 @@ final class ActivityController extends Controller
         $this->validateImages($validated, $media);
         $activity = $action->handle($request->user(), $organization, $validated);
 
-        return response()->json(['activity' => $this->present($activity, $organization)], Response::HTTP_CREATED);
+        return response()->json(['activity' => $this->present($activity, $organization, $this->seesTerms($request, $organization))], Response::HTTP_CREATED);
     }
 
     public function show(Request $request, TenantContext $context, string $activity): JsonResponse
@@ -49,7 +51,7 @@ final class ActivityController extends Controller
         Gate::forUser($request->user())->authorize('catalog.view', $organization);
         $record = Activity::query()->with('offerings.priceOptions', 'offerings.paymentTermsChoices')->findOrFail($activity);
 
-        return response()->json(['activity' => $this->present($record, $organization)]);
+        return response()->json(['activity' => $this->present($record, $organization, $this->seesTerms($request, $organization))]);
     }
 
     public function update(
@@ -66,7 +68,7 @@ final class ActivityController extends Controller
         $this->validateImages($validated, $media, $record->id);
         $updated = $action->handle($request->user(), $record, $validated['version'], $validated);
 
-        return response()->json(['activity' => $this->present($updated, $organization)]);
+        return response()->json(['activity' => $this->present($updated, $organization, $this->seesTerms($request, $organization))]);
     }
 
     /** @return array<string, mixed> */
@@ -149,8 +151,14 @@ final class ActivityController extends Controller
         return Organization::query()->findOrFail($context->organizationId());
     }
 
+    /** Which sets of "Такси, отсъствия и отказ" the activity uses — only for those who read them (DECISIONS 31.10.2026). */
+    private function seesTerms(Request $request, Organization $organization): bool
+    {
+        return Gate::forUser($request->user())->allows('viewPaymentTerms', $organization);
+    }
+
     /** @return array<string, mixed> */
-    private function present(Activity $activity, Organization $organization): array
+    private function present(Activity $activity, Organization $organization, bool $withTerms): array
     {
         /** @var Offering|null $offering */
         $offering = $activity->offerings->sortBy('created_at')->first();
@@ -187,8 +195,9 @@ final class ActivityController extends Controller
                 // Shown when the activity has no address of its own; parents' questions and emails go there.
                 'organization_contact_email' => $organization->public_contact_email,
                 'enrollment_instructions' => $offering->enrollment_instructions,
-                // The set chosen for each way of paying; a missing one uses the organization's terms.
-                'payment_terms' => (object) $offering->paymentTermsByKind(),
+                // The set chosen for each way of paying; a missing one uses the organization's terms. Null for those
+                // who do not read the terms (they never save the activity: changing it brings the reading along).
+                'payment_terms' => $withTerms ? (object) $offering->paymentTermsByKind() : null,
                 'price_options' => $offering->priceOptions->whereNull('group_id')->values()->map(fn ($price) => [
                     'id' => $price->id,
                     'enrollment_mode' => $price->enrollment_mode,

@@ -36,6 +36,8 @@ export type TeamList = { members: TeamMember[]; can_manage: boolean };
 export type HistoryEntry = {
   action: string; at: string; by: string | null;
   abilities?: string[]; reason?: string | null; from?: string | null; to?: string | null;
+  /** For a group added to the rights or taken from them: a group or a whole activity, never which one. */
+  target?: 'group' | 'activity' | string;
 };
 /** `history` comes only for those who manage the team. */
 export type MemberDetails = { member: TeamMember; history?: HistoryEntry[] };

@@ -66,6 +66,35 @@ class TeacherMenuRightsTest extends TestCase
         $this->assertContains('terms.view', $accountant);
     }
 
+    /** The catalog does not carry the terms to those who do not read them: neither the rules of a visit nor the chosen sets. */
+    public function test_the_catalog_gives_the_payment_terms_only_to_those_who_read_them(): void
+    {
+        $f = $this->rightsFixture();
+        $offer = "/api/v1/catalog/visit-offers/{$f['offer']->id}";
+        $activity = "/api/v1/catalog/activities/{$f['activity']->id}";
+        // A teacher who places teachers in the groups reads the catalog, but not the terms.
+        [$assigner, $person] = $this->teacherOf($f);
+        $this->inTenant($f['organization'], function () use ($f, $person): void {
+            $person->forceFill(['access_scope' => 'all'])->save();
+            $this->grant($f, $person, 'team.assign');
+        });
+
+        foreach ([$this->memberOf($f['organization'], 'viewer'), $assigner] as $reader) {
+            $this->signInTo($reader, $f['organization']);
+            $this->getJson('/api/v1/payment-terms')->assertForbidden();
+            $this->getJson('/api/v1/catalog/visit-offers')->assertOk()->assertJsonPath('visit_offers.0.payment_terms', null);
+            $this->getJson($offer)->assertOk()->assertJsonPath('visit_offer.payment_terms', null)->assertJsonPath('visit_offer.title', 'Пробно занимание');
+            $this->getJson('/api/v1/catalog/activities')->assertOk()->assertJsonPath('activities.0.offering.payment_terms', null);
+            $this->getJson($activity)->assertOk()->assertJsonPath('activity.offering.payment_terms', null)->assertJsonPath('activity.title', 'Шах');
+        }
+
+        foreach (['organization_owner', 'coordinator'] as $role) {
+            $this->signInTo($this->memberOf($f['organization'], $role), $f['organization']);
+            $this->getJson($offer)->assertOk()->assertJsonPath('visit_offer.payment_terms.billing_kind', 'visit');
+            $this->assertNotNull($this->getJson($activity)->assertOk()->json('activity.offering.payment_terms'));
+        }
+    }
+
     public function test_an_added_right_that_needs_the_catalog_brings_it_and_the_payment_terms(): void
     {
         $f = $this->rightsFixture();
@@ -126,10 +155,11 @@ class TeacherMenuRightsTest extends TestCase
         [, $person] = $this->teacherOf($f);
         $path = "/api/v1/team/members/{$person->id}";
 
+        $groups = [['group_id' => $f['tuesday']->id], ['activity_id' => $f['painting']->id]];
         $this->signInTo($f['owner'], $f['organization'])->putJson("{$path}/access", [
-            'scope' => null, 'grants' => [['ability' => 'contacts.message'], ['ability' => 'enrollment.enroll']], 'version' => 1,
+            'scope' => 'groups', 'groups' => $groups, 'grants' => [['ability' => 'contacts.message'], ['ability' => 'enrollment.enroll']], 'version' => 1,
         ])->assertOk();
-        $this->signInTo($f['owner'], $f['organization'])->putJson("{$path}/access", ['scope' => null, 'grants' => [], 'version' => 2])->assertOk();
+        $this->signInTo($f['owner'], $f['organization'])->putJson("{$path}/access", ['scope' => 'groups', 'groups' => $groups, 'grants' => [], 'version' => 2])->assertOk();
         $this->signInTo($f['owner'], $f['organization'])->postJson("{$path}/role", ['role' => 'coordinator', 'version' => 3])->assertOk();
 
         $history = $this->signInTo($f['owner'], $f['organization'])->getJson($path)->assertOk()->json('history');
@@ -147,10 +177,12 @@ class TeacherMenuRightsTest extends TestCase
         $role = $by('team.role_changed');
         $this->assertCount(1, $role);
         $this->assertSame(['instructor', 'coordinator'], [$role[0]['from'], $role[0]['to']]);
+        // A group and a whole activity, each by its kind only.
+        $this->assertEqualsCanonicalizing(['group', 'activity'], array_column($by('team.access_group_added'), 'target'));
 
         // Keys only: no identifiers of the records behind, no contacts.
         $text = (string) json_encode($history, JSON_UNESCAPED_UNICODE);
-        foreach (['grant_id', 'membership_id', 'expires_at', '@example', 'phone'] as $hidden) {
+        foreach (['grant_id', 'membership_id', 'scope_group_id', 'group_id', 'activity_id', 'expires_at', '@example', 'phone'] as $hidden) {
             $this->assertStringNotContainsString($hidden, $text);
         }
         // The history is only for those who manage the team.

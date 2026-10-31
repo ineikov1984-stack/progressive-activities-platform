@@ -566,9 +566,15 @@ export function memberHistoryItem(entry: HistoryEntry): { what: string; who: str
       what: entry.from && entry.to ? `Смяна на ролята: ${roleLabel(entry.from)} → ${roleLabel(entry.to)}` : 'Смяна на ролята',
       who,
     };
+    case 'team.access_group_added': return {
+      what: entry.target === 'group' ? 'Добавена група към правата' : entry.target === 'activity' ? 'Добавена цяла дейност към правата' : 'Промяна в групите на правата',
+      who,
+    };
+    case 'team.access_group_removed': return {
+      what: entry.target === 'group' ? 'Махната група от правата' : entry.target === 'activity' ? 'Махната цяла дейност от правата' : 'Промяна в групите на правата',
+      who,
+    };
     case 'team.access_scope_changed':
-    case 'team.access_group_added':
-    case 'team.access_group_removed':
     case 'team.access_template_changed':
       return { what: rightsHistoryText({ ...entry, group_label: null, reason: entry.reason ?? undefined }), who };
     default: return historyItem(entry);

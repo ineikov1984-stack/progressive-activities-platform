@@ -339,13 +339,21 @@ class TeamController extends Controller
                 'by' => $actor === null ? null : ($names[$actor] ?? null),
                 ...array_intersect_key($metadata, array_flip($details)),
             ];
+            // A group or a whole activity added to the scope or taken from it: the kind only, never which one.
+            if (in_array($action, [AuditAction::TeamAccessGroupAdded->value, AuditAction::TeamAccessGroupRemoved->value], true)) {
+                $entry['target'] = is_string($metadata['group_id'] ?? null) ? 'group' : 'activity';
+            }
             $ability = $metadata['ability'] ?? null;
             if (! in_array($action, self::GRANT_ACTIONS, true) || ! is_string($ability)) {
                 $entries[] = $entry;
 
                 continue;
             }
-            $key = implode('|', [$action, (string) $event->getAttribute('correlation_id'), (string) $actor, (string) ($metadata['reason'] ?? '')]);
+            // One save: the same request, the same second, the same person — never two saves that share a request id.
+            $key = implode('|', [
+                $action, (string) $event->getAttribute('correlation_id'), $event->created_at?->format('Y-m-d H:i:s') ?? '',
+                (string) $actor, (string) ($metadata['reason'] ?? ''),
+            ]);
             if (! isset($together[$key])) {
                 $together[$key] = count($entries);
                 $entries[] = $entry;

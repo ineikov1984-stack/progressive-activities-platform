@@ -6,25 +6,32 @@ import { freeName, optionSummary, organizationTerms, otherOptions, type TermsSum
 import { Icon, icons } from './ui';
 import styles from './wizard.module.css';
 
-export type TermsWorkspace = { workspace?: PaymentTermsWorkspace; failed: boolean; retry: () => void; added: (set: PaymentTermsSet) => void };
+/** `refused`: the terms are not for this person (403) — the reason in words, and no retry. */
+export type TermsWorkspace = { workspace?: PaymentTermsWorkspace; failed: boolean; refused?: string; retry: () => void; added: (set: PaymentTermsSet) => void };
 
 /** The organization's "Такси, отсъствия и отказ", loaded once for step 6. */
 export function useTermsWorkspace(organizationId: string): TermsWorkspace {
   const [workspace, setWorkspace] = useState<PaymentTermsWorkspace>();
   const [failed, setFailed] = useState(false);
+  const [refused, setRefused] = useState<string>();
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let current = true;
     loadPaymentTerms(organizationId)
       .then((loaded) => { if (current) setWorkspace(loaded); })
-      .catch(() => { if (current) setFailed(true); });
+      .catch((reason: unknown) => {
+        if (!current) return;
+        if (reason instanceof PaymentTermsApiError && reason.status === 403) setRefused(reason.message);
+        else setFailed(true);
+      });
     return () => { current = false; };
   }, [organizationId, attempt]);
 
   return {
     workspace,
     failed,
+    refused,
     retry: () => { setFailed(false); setAttempt((value) => value + 1); },
     added: (set) => setWorkspace((loaded) => loaded ? { ...loaded, payment_terms: [...loaded.payment_terms, set] } : loaded),
   };
@@ -61,6 +68,7 @@ export function PriceTerms({ id, organizationId, terms, kind, chosenId, sharedWi
   const [message, setMessage] = useState('');
   const { workspace } = terms;
 
+  if (terms.refused) return <div className={styles.priceTerms}><p className={styles.fieldError}>{terms.refused}</p></div>;
   if (terms.failed) {
     return (
       <div className={styles.priceTerms}>

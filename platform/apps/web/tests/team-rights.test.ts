@@ -250,6 +250,12 @@ describe('team rights', () => {
     expect(memberHistoryItem(entry('team.access_grant_revoked', { abilities: ['attendance.mark'], reason: 'expired' })).what).toBe('Изтече: Отбелязва присъствия');
     expect(memberHistoryItem(entry('team.role_changed', { from: 'instructor', to: 'coordinator' })).what).toBe('Смяна на ролята: Преподавател → Координатор');
     expect(memberHistoryItem(entry('team.access_scope_changed', { from: null, to: 'groups' })).what).toBe('За кои групи: Избрани групи');
+    // A group or a whole activity, as the API says — never a whole activity for a group.
+    expect(memberHistoryItem(entry('team.access_group_added', { target: 'group' })).what).toBe('Добавена група към правата');
+    expect(memberHistoryItem(entry('team.access_group_added', { target: 'activity' })).what).toBe('Добавена цяла дейност към правата');
+    expect(memberHistoryItem(entry('team.access_group_removed', { target: 'group' })).what).toBe('Махната група от правата');
+    expect(memberHistoryItem(entry('team.access_group_removed', { target: 'activity' })).what).toBe('Махната цяла дейност от правата');
+    expect(memberHistoryItem(entry('team.access_group_added')).what).toBe('Промяна в групите на правата');
     // Older entries and the other actions as before.
     expect(memberHistoryItem(entry('team.role_changed')).what).toBe('Смяна на ролята');
     expect(memberHistoryItem(entry('team.access_grant_added')).what).toBe('Дадено: право');
