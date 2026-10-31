@@ -94,7 +94,12 @@ class TeamMembersTest extends TestCase
 
         $this->actingAs($owner)->postJson('/api/v1/team/members/'.$person->id.'/archive', ['version' => 1])
             ->assertUnprocessable()->assertJsonPath('errors.member.0', 'Първо приключете назначението в „Шахмат · Вторник“.');
+        // The profile gives each assignment its version, which ending it asks for.
+        $this->actingAs($owner)->getJson('/api/v1/team/members/'.$person->id)->assertOk()
+            ->assertJsonPath('member.groups.0.group_id', $group)->assertJsonPath('member.groups.0.version', 1);
         $this->actingAs($owner)->postJson('/api/v1/catalog/groups/'.$group.'/assignments/'.$profile.'/end', ['ends_on' => '2026-10-31', 'version' => 1])->assertOk();
+        $this->actingAs($owner)->getJson('/api/v1/team/members/'.$person->id)->assertOk()
+            ->assertJsonPath('member.groups.0.ends_on', '2026-10-31')->assertJsonPath('member.groups.0.version', 2);
         $this->actingAs($owner)->postJson('/api/v1/team/members/'.$person->id.'/archive', ['version' => 1])
             ->assertOk()->assertJsonPath('member.state', 'archived');
         $this->assertDatabaseHas('organization_memberships', ['user_id' => $teacher->id, 'status' => 'suspended']);

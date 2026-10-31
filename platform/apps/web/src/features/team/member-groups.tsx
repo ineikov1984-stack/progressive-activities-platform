@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { type FormEvent, useState } from 'react';
 import { loadStaffGroups, type StaffGroup } from '@/features/enrollment/api';
 import { shortDay, sofiaDay } from '@/features/enrollment/presentation';
-import { assignGroup, createTeacherProfile, endAssignment, type GroupAssignment, loadActivityAssignments, type TeamMember } from './api';
+import { assignGroup, createTeacherProfile, endAssignment, type GroupAssignment, TeamApiError, type TeamMember } from './api';
 import { assignmentPhase, assignmentRole, focusLater, periodText } from './presentation';
 import styles from './team.module.css';
 
@@ -127,7 +127,7 @@ function AddForm({ groups, taken, busy, onAdd, onCancel }: {
 
 /**
  * "Групи" in the profile (docs/product/team.md, т. 5, 10): lead or assistant, from a day to a day; works in published
- * groups too. Ending needs the assignment's version, which the activity's groups carry.
+ * groups too. Ending sends the assignment's version from the profile; a stale one gets 409.
  */
 export function MemberGroups({ organizationId, member, canAssign, canManage, onChanged }: Props) {
   const [today] = useState(() => sofiaDay(new Date()));
@@ -182,17 +182,14 @@ export function MemberGroups({ organizationId, member, canAssign, canManage, onC
     if (!profileId) return;
     setBusy(true); setError('');
     try {
-      const group = (await organizationGroups()).find((item) => item.id === assignment.group_id);
-      if (!group?.activity_id) throw new Error('Не намерихме групата. Ако е архивирана, приключете назначението от дейността.');
-      const current = (await loadActivityAssignments(organizationId, group.activity_id))
-        .find((item) => item.id === assignment.group_id)?.assignments.find((item) => item.instructor_profile_id === profileId);
-      if (!current) throw new Error('Назначението вече не е в групата. Заредете профила отново.');
-      await endAssignment(organizationId, assignment.group_id, profileId, endsOn, current.version);
+      await endAssignment(organizationId, assignment.group_id, profileId, endsOn, assignment.version);
       setNotice(`Назначението в „${assignment.label}“ приключва на ${shortDay(endsOn)}.`);
       setEnding(undefined);
       onChanged();
     } catch (reason) {
       setError(message(reason, 'Назначението не беше приключено.'));
+      // Changed meanwhile: the profile is loaded again, so the next try has the new version.
+      if (reason instanceof TeamApiError && reason.status === 409) onChanged();
     } finally {
       setBusy(false);
     }

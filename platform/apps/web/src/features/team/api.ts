@@ -2,8 +2,11 @@ import { teamErrorMessage, type ErrorBody } from './presentation';
 
 /** The page "Екип" (docs/product/team.md, т. 9, 10): people with or without a login, their roles and groups. */
 export type MemberState = 'login' | 'profile_only' | 'archived';
-/** A group the person leads or assists; in the list only current and coming ones, in the profile the ended ones too. */
-export type GroupAssignment = { group_id: string; label: string; role: 'lead' | 'assistant' | string; starts_on: string | null; ends_on: string | null };
+/**
+ * A group the person leads or assists; in the list only current and coming ones, in the profile the ended ones too.
+ * `version` is the assignment's: ending it asks for it.
+ */
+export type GroupAssignment = { group_id: string; label: string; role: 'lead' | 'assistant' | string; starts_on: string | null; ends_on: string | null; version: number };
 /** The latest invitation that is not accepted yet: its state and end only, never the link. */
 export type MemberInvitation = { status: 'pending' | 'expired' | string; expires_at: string };
 export type TeamMember = {
@@ -32,12 +35,6 @@ export type SentInvitation = {
   invitation: { id: string; staff_member_id: string | null; email: string; role: string; status: string; expires_at: string };
   /** The inviter's link for copying: it joins only an existing profile; shown once. */
   link: string;
-};
-/** A group with its teachers, as the catalog gives it: the version of each assignment ends it. */
-export type GroupWithAssignments = {
-  id: string;
-  name: string;
-  assignments: { instructor_profile_id: string; role: string; starts_on: string | null; ends_on: string | null; version: number }[];
 };
 export type NewAssignment = { instructor_profile_id: string; role: 'lead' | 'assistant'; starts_on?: string | null; ends_on?: string | null };
 
@@ -127,12 +124,6 @@ export function inviteMember(organizationId: string, memberId: string, role: str
   return request<SentInvitation>(`/team/members/${encodeURIComponent(memberId)}/invitation`, {
     ...staff(organizationId), method: 'POST', body: email ? { role, email } : { role },
   });
-}
-
-/** The groups of one activity with who leads and assists each (catalog.view). */
-export function loadActivityAssignments(organizationId: string, activityId: string): Promise<GroupWithAssignments[]> {
-  return request<{ groups: GroupWithAssignments[] }>(`/catalog/activities/${encodeURIComponent(activityId)}/groups`, staff(organizationId))
-    .then((result) => result.groups);
 }
 
 export function assignGroup(organizationId: string, groupId: string, assignment: NewAssignment): Promise<void> {

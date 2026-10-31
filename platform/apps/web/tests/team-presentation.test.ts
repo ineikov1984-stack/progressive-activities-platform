@@ -102,8 +102,8 @@ describe('groups', () => {
   const today = '2026-11-01';
 
   it('writes an assignment with its role and period', () => {
-    expect(assignmentText({ group_id: 'g1', label: 'Шахмат · Група 1', role: 'lead', starts_on: null, ends_on: null })).toBe('Шахмат · Група 1 — водещ');
-    expect(assignmentText({ group_id: 'g2', label: 'Шахмат · Група 2', role: 'assistant', starts_on: '2026-12-01', ends_on: null }))
+    expect(assignmentText({ group_id: 'g1', label: 'Шахмат · Група 1', role: 'lead', starts_on: null, ends_on: null, version: 1 })).toBe('Шахмат · Група 1 — водещ');
+    expect(assignmentText({ group_id: 'g2', label: 'Шахмат · Група 2', role: 'assistant', starts_on: '2026-12-01', ends_on: null, version: 2 }))
       .toBe('Шахмат · Група 2 — помощник · от 1 декември');
     expect(periodText({ starts_on: '2026-09-01', ends_on: '2026-11-30' })).toBe('от 1 септември до 30 ноември');
   });
