@@ -14,8 +14,9 @@
 .button:hover, .iconButton:hover { background: var(--surface-sunken); }
 .iconButton svg, .button svg { flex: none; }
 
-.views { display: inline-flex; border: 1px solid var(--border-control); border-radius: var(--radius-md); overflow: hidden; }
-.views button { min-height: var(--control-height); padding: 0 var(--space-4); border: 0; border-right: 1px solid var(--border); color: var(--ink); background: var(--surface); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+.switches { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); max-width: 100%; }
+.views { display: inline-flex; max-width: 100%; border: 1px solid var(--border-control); border-radius: var(--radius-md); overflow: hidden; }
+.views button { min-height: var(--control-height); padding: 0 var(--space-3); white-space: nowrap; border: 0; border-right: 1px solid var(--border); color: var(--ink); background: var(--surface); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
 .views button:last-child { border-right: 0; }
 .views button:hover { background: var(--surface-sunken); }
 .views button[aria-pressed="true"] { color: var(--ink-inverse); background: var(--ink); }
@@ -61,15 +62,22 @@
 .legend li { display: inline-flex; align-items: center; gap: var(--space-2); }
 .swatch { width: 14px; height: 14px; box-sizing: border-box; border: 1px solid var(--cat-strong); border-left-width: 4px; border-radius: 3px; background: var(--cat); }
 
-/* The week as a calendar (т. 3.1); on a narrow screen it scrolls inside, the page does not. */
+/* The week (т. 3.1) and the day (т. 3.3) by hours. The grid scrolls inside — heads on top, hours on the left — so the
+   page keeps its header and never scrolls sideways; it opens at today and now (UX review). */
 .week { display: grid; gap: var(--space-3); min-width: 0; }
-.weekScroll { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); overflow-x: auto; overscroll-behavior-x: contain; }
-/* A day is at least 8rem wide, so four sessions at once are still at least 24 px wide each (WCAG 2.2, 2.5.8). */
-.weekGrid { --hour: calc(var(--space-20) + var(--space-2)); --gutter: calc(var(--space-12) + var(--space-1)); display: grid; grid-template-columns: var(--gutter) repeat(7, minmax(8rem, 1fr)); min-width: calc(var(--gutter) + 7 * 8rem); padding: var(--space-3) var(--space-3) var(--space-4) 0; }
-.dayHead { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 32px; padding-bottom: var(--space-2); color: var(--ink-muted); font-size: 13px; text-align: center; }
+.weekScroll { min-width: 0; max-height: max(26rem, calc(100dvh - 17rem)); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); overflow: auto; overscroll-behavior: contain; }
+/* A day is at least 8rem wide, two side by side at least 4rem each; a place or a person in "Ден" at least 10rem. */
+.weekGrid { --hour: calc(var(--space-20) + var(--space-2)); --gutter: calc(var(--space-12) + var(--space-1)); --min-column: 8rem; display: grid; grid-template-columns: var(--gutter) repeat(var(--columns), minmax(var(--min-column), 1fr)); min-width: calc(var(--gutter) + var(--columns) * var(--min-column)); padding: 0 var(--space-3) var(--space-4) 0; }
+.gridDay { --min-column: 10rem; }
+.weekScroll:focus-visible { outline-offset: 2px; }
+/* The heads stay on top and the hours on the left while the grid scrolls. */
+.corner, .dayHead { position: sticky; top: 0; z-index: 3; background: var(--surface); }
+.corner { left: 0; z-index: 4; }
+.hours { position: sticky; left: 0; z-index: 2; height: calc(var(--rows) * var(--hour)); background: var(--surface); }
+.dayHead { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 32px; padding: var(--space-3) 0 var(--space-2); color: var(--ink-muted); font-size: 13px; text-align: center; }
 .dayHead strong { color: var(--ink); font-size: 15px; }
+.gridDay .dayHead { padding-inline: var(--space-1); color: var(--ink); font-size: 14px; font-weight: 600; line-height: 18px; overflow-wrap: anywhere; }
 .today { display: inline-flex; align-items: center; gap: var(--space-1); padding: 2px var(--space-2); border-radius: var(--radius-pill); color: var(--ink-inverse); background: var(--ink); font-size: 13px; font-weight: 600; }
-.hours { position: relative; height: calc(var(--rows) * var(--hour)); }
 .hours span { position: absolute; top: calc(var(--at) * var(--hour)); right: var(--space-2); transform: translateY(-50%); color: var(--ink-muted); font-size: 12px; line-height: 16px; }
 .hours span:first-child { transform: none; }
 .column { position: relative; height: calc(var(--rows) * var(--hour)); border-left: 1px solid var(--border); background-image: linear-gradient(var(--border) 1px, transparent 1px); background-size: 100% var(--hour); }
@@ -77,37 +85,96 @@
 .nowLine { position: absolute; z-index: 0; top: calc(var(--top) * var(--hour) / 60); left: 0; right: 0; height: 2px; background: var(--action); pointer-events: none; }
 .nowLine::before { content: ""; position: absolute; top: -4px; left: -5px; width: 10px; height: 10px; border-radius: 50%; background: var(--action); }
 
-.event, .more { position: absolute; z-index: 1; top: calc(var(--top) * var(--hour) / 60 + 1px); left: calc(var(--lane) * 100% / var(--lanes) + 1px); width: calc(100% / var(--lanes) - 2px); height: max(var(--control-height), calc(var(--length) * var(--hour) / 60 - 2px)); box-sizing: border-box; margin: 0; border-radius: var(--radius-sm); font: inherit; text-align: left; cursor: pointer; container: event / inline-size; }
-.event { display: block; padding: var(--space-1); border: 1px solid var(--border); border-left: 4px solid var(--cat-strong); color: var(--ink); background: var(--cat, var(--surface)); font-size: 12px; line-height: 15px; overflow: hidden; }
-.eventBody { display: flex; flex-direction: column; gap: 1px; min-width: 0; max-height: 100%; }
+.event, .more { position: absolute; z-index: 1; top: calc(var(--top) * var(--hour) / 60 + 1px); left: calc(var(--lane) * 100% / var(--lanes) + 1px); width: calc(100% / var(--lanes) - 2px); height: max(var(--control-height), calc(var(--length) * var(--hour) / 60 - 2px)); box-sizing: border-box; margin: 0; border-radius: var(--radius-sm); font: inherit; text-align: left; cursor: pointer; }
+/* The lines that do not fit a block's height are hidden whole (`useFittedLines`, UX review); the bar is under them. */
+.event { display: block; padding: var(--space-1) var(--space-1) calc(var(--space-1) + 3px); border: 1px solid var(--border); border-left: 4px solid var(--cat-strong); color: var(--ink); background: var(--cat, var(--surface)); font-size: 12px; line-height: 15px; overflow: hidden; container: event / inline-size; }
 .event:hover { box-shadow: var(--shadow-card); }
 .event:focus-visible, .more:focus-visible { z-index: 4; outline-offset: 1px; }
-.event strong { font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
-.event span { overflow-wrap: anywhere; }
-.eventPlace { color: var(--ink-body); }
-.more { display: grid; place-items: center; padding: var(--space-1); border: 1px dashed var(--border-control); color: var(--ink); background: var(--surface-sunken); font-size: 13px; font-weight: 700; line-height: 16px; text-align: center; }
+.lines { display: block; }
+.lines > span { display: block; overflow-wrap: break-word; hyphens: auto; }
+.lines > [hidden] { display: none; }
+.lineFirst strong { margin-right: var(--space-1); font-weight: 700; white-space: nowrap; }
+.lineFirst .mark { display: inline-block; vertical-align: 1px; }
+.lineMain { font-weight: 700; }
+@container event (max-width: 100px) { .lines { font-size: 11px; } }
+.blockBar { position: absolute; right: 0; bottom: 0; left: 0; height: 3px; border-radius: 0; }
+.more { display: grid; place-content: center; padding: var(--space-1); border: 1px dashed var(--border-control); color: var(--ink); background: var(--surface-sunken); font-size: 13px; font-weight: 700; line-height: 16px; text-align: center; }
 .more:hover { background: var(--surface); }
-/* "Сега" and "Отменено" in words; the colour only adds to them. */
+.moreHint { display: block; font-size: 11px; font-weight: 600; line-height: 14px; text-decoration: underline; text-underline-offset: 2px; }
+/* "Сега" and "Отменено" in words, on the first line; the colour only adds to them. */
 .isNow { box-shadow: inset 0 0 0 2px var(--ink); }
 .isCancelled { border-left-color: var(--border-control); color: var(--ink-muted); background: var(--surface-sunken); }
-.isCancelled strong, .struck { text-decoration: line-through; }
-.mark { justify-self: start; align-self: flex-start; padding: 0 var(--space-1); border-radius: var(--radius-pill); font-size: 11px; font-weight: 700; line-height: 16px; text-decoration: none; }
+.isCancelled .lines > span:not(.lineFirst), .struck { text-decoration: line-through; }
+.mark { justify-self: start; align-self: flex-start; padding: 0 var(--space-1); border-radius: var(--radius-pill); font-size: 11px; font-weight: 700; line-height: 14px; text-decoration: none; white-space: nowrap; }
 .mark_now { color: var(--ink-inverse); background: var(--ink); }
 .mark_cancelled { color: var(--ink); background: var(--surface); border: 1px solid var(--border-control); }
 .mark_later { color: var(--ink-body); background: var(--surface-sunken); }
 .mark_moved { color: var(--status-limited); background: var(--status-limited-soft); }
-/* Two at once: a smaller letter. Three or four: the activity's name along the block; the time, group and place stay for
-   screen readers (the hours are on the left). */
-@container event (max-width: 100px) { .eventBody, .eventBody strong { font-size: 11px; line-height: 14px; hyphens: auto; } }
-@container event (max-width: 40px) {
-  .eventBody { flex-direction: row; writing-mode: vertical-rl; }
-  .eventTime, .eventGroup, .eventPlace { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .eventBody .mark { padding: var(--space-1) 0; }
+
+/* How full the group is: a thin bar — the status tokens, soft under strong — and always the words next to it. */
+.fillBar { display: block; height: 4px; border-radius: var(--radius-pill); background: var(--fill-soft); overflow: hidden; }
+.fillBar > span { display: block; width: calc(var(--fill) * 1%); height: 100%; background: var(--fill-strong); }
+.fill_empty, .fill_low { --fill-soft: var(--status-available-soft); --fill-strong: var(--status-available); }
+.fill_almost { --fill-soft: var(--status-limited-soft); --fill-strong: var(--status-limited); }
+.fill_full { --fill-soft: var(--status-full-soft); --fill-strong: var(--status-full); }
+.factsBox { display: grid; justify-items: start; gap: var(--space-2); }
+.fillFact { display: grid; gap: var(--space-1); min-width: 12rem; color: var(--ink); font-size: 14px; font-weight: 600; line-height: 20px; }
+.fillFact .fillBar { height: 6px; }
+.cardFill { display: grid; gap: var(--space-1); width: 100%; }
+
+/* The quick look on a computer: beside its block, never on touch screens (решение на собственика, 31.10.2026). */
+.preview { position: fixed; z-index: 30; top: 0; left: 0; display: grid; gap: 2px; width: 18rem; max-width: calc(100vw - 2 * var(--space-2)); box-sizing: border-box; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--ink-body); background: var(--surface); box-shadow: var(--shadow-raised); visibility: hidden; }
+.previewTitle { color: var(--ink); font-size: 15px; line-height: 20px; }
+.preview .factsBox { margin-top: var(--space-2); }
+.previewList { display: grid; gap: var(--space-2); margin: var(--space-1) 0 0; padding: 0; list-style: none; color: var(--ink); font-size: 14px; line-height: 18px; }
+.previewList li { display: grid; }
+@media (hover: none) { .preview { display: none; } }
+
+/* The month (т. 3.2): six weeks; up to three lines in a day when there is room, the number of sessions on a phone. */
+.month { display: grid; gap: var(--space-3); min-width: 0; }
+.monthTable { width: 100%; border: 1px solid var(--border); border-radius: var(--radius-lg); border-collapse: separate; border-spacing: 0; background: var(--surface); table-layout: fixed; overflow: hidden; }
+.monthTable th { padding: var(--space-2); border-bottom: 1px solid var(--border); color: var(--ink-muted); background: var(--surface-sunken); font-size: 12px; font-weight: 600; text-align: left; }
+.monthTable td { padding: 0; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); vertical-align: top; }
+.monthTable td:last-child { border-right: 0; }
+.monthTable tr:last-child td { border-bottom: 0; }
+.monthDay { display: flex; flex-direction: column; gap: 3px; width: 100%; min-height: 7rem; box-sizing: border-box; padding: var(--space-1) var(--space-1) var(--space-2); border: 0; color: var(--ink); background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.monthDay:hover { background: var(--surface-sunken); }
+.monthDay:focus-visible, .monthPick:focus-visible { outline-offset: -3px; }
+.monthNumber { align-self: flex-start; min-width: 1.5rem; padding: 0 var(--space-1); border-radius: var(--radius-pill); color: var(--ink); font-size: 13px; font-weight: 700; line-height: 22px; text-align: center; }
+/* A line: the session, shortened when it must; how full stays — "8/10" when it fits, "Пълна" and "Няма записани" always. */
+.monthLine { position: relative; display: flex; align-items: baseline; gap: var(--space-1); min-width: 0; padding: 1px var(--space-1) 3px; border-left: 3px solid var(--cat-strong); border-radius: 4px; color: var(--ink); background: var(--cat, var(--surface-sunken)); font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; container: monthline / inline-size; }
+.monthText { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.monthFill { flex: none; font-weight: 600; }
+.monthFillWord, .monthCancelWord { flex: none; font-weight: 700; }
+.monthBar { position: absolute; right: 0; bottom: 0; left: 0; height: 2px; border-radius: 0; }
+@container monthline (max-width: 150px) { .monthFill { display: none; } }
+.monthCancelled { color: var(--ink-muted); background: var(--surface-sunken); }
+.monthCancelled .monthText { text-decoration: line-through; }
+.monthMore { padding: 0 var(--space-1); color: var(--ink); font-size: 12px; font-weight: 700; line-height: 16px; }
+/* The other month's days: paler, still AA. */
+.monthOut { background: var(--surface-sunken); }
+.monthOut .monthNumber { color: var(--ink-muted); font-weight: 600; }
+.monthToday .monthDay .monthNumber { color: var(--ink-inverse); background: var(--ink); }
+.monthLine { --cat-strong: var(--border-control); }
+@supports (color: oklch(from white l c h)) {
+  .monthLine { --cat-strong: oklch(from var(--cat, var(--surface-sunken)) calc(l - 0.38) calc(c * 6) h); }
 }
+.monthWide { display: none; }
+.monthCompact { display: grid; gap: var(--space-4); }
+.monthPick { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 100%; min-height: calc(var(--control-height) + var(--space-1)); box-sizing: border-box; padding: var(--space-1) 0; border: 0; color: var(--ink); background: transparent; font: inherit; cursor: pointer; }
+.monthPick .monthNumber { padding: 0; line-height: 18px; }
+.monthCount { min-width: 1.25rem; padding: 0 var(--space-1); border-radius: var(--radius-pill); color: var(--ink); background: var(--status-info-soft); font-size: 11px; font-weight: 700; line-height: 16px; text-align: center; }
+.monthToday .monthPick { box-shadow: inset 0 0 0 2px var(--ink); }
+.monthPick[aria-pressed="true"] { color: var(--ink-inverse); background: var(--ink); }
+.monthPick[aria-pressed="true"] .monthNumber { color: var(--ink-inverse); }
+.monthPick[aria-pressed="true"] .monthCount { color: var(--ink); background: var(--surface); }
+.monthPick[aria-pressed="true"]:focus-visible { outline-color: var(--focus-on-dark); }
 
 /* The cards by day (т. 3.4): one column on a phone, several days side by side when there is room. */
 .cards { display: grid; gap: var(--space-6); }
 .cardDay { display: grid; align-content: start; gap: var(--space-3); min-width: 0; }
+/* A weekday without sessions shows only when Monday to Friday stand in a row. */
+.cardDayEmpty { display: none; }
 .dayTitle { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); margin: 0; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--ink); background: var(--surface); font-size: 16px; font-weight: 700; line-height: 22px; }
 .dayTitle span { color: var(--ink-muted); font-size: 14px; font-weight: 400; }
 .dayTitleToday { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
@@ -150,8 +217,6 @@
 .back:hover { text-decoration: underline; text-underline-offset: 3px; }
 .activityChip { display: inline-flex; align-items: center; min-height: 24px; padding: 0 var(--space-2); border-left: 4px solid var(--cat-strong); border-radius: var(--radius-sm); color: var(--ink); background: var(--cat, var(--surface-sunken)); font-size: 13px; font-weight: 700; }
 .drawerBody { display: grid; align-content: start; gap: var(--space-4); padding: var(--space-4) var(--space-6) var(--space-8); overflow-y: auto; overscroll-behavior: contain; }
-.facts { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.facts li { padding: var(--space-1) var(--space-3); border-radius: var(--radius-pill); color: var(--ink); background: var(--surface-sunken); font-size: 14px; font-weight: 600; line-height: 20px; }
 .reason { margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); color: var(--ink); background: var(--status-limited-soft); font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
 .section { display: grid; gap: var(--space-2); }
 .section h3 { margin: 0; color: var(--ink); font-size: 16px; font-weight: 700; }
@@ -170,12 +235,21 @@
 @container schedule (min-width: 560px) {
   .filterBar { display: flex; }
   .filtersButton { display: none; }
+  .views button { padding: 0 var(--space-4); }
 }
+/* The wide month from about 860 px of room; under it the compact one with the chosen day (UX review). */
 @container schedule (min-width: 860px) {
+  .monthWide { display: table; }
+  .monthCompact { display: none; }
   .cards { grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--space-4); }
 }
 @media (max-width: 559px) {
   .drawer { width: 100vw; border-left: 0; }
   .drawerHead { padding-left: var(--space-4); }
   .drawerBody { padding-inline: var(--space-4); }
+}
+/* Cards on a wide screen: Monday to Friday in a row, each in its column; Saturday and Sunday after them (UX review). */
+@container schedule (min-width: 1000px) {
+  .cards { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .cardDayEmpty { display: grid; }
 }

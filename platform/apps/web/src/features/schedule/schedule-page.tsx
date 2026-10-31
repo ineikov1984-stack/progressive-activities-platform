@@ -6,12 +6,14 @@ import { useDashboardContext } from '../dashboard/dashboard-context';
 import { ownScheduleOnly } from '../dashboard/navigation';
 import { loadSchedule, ScheduleApiError, type ScheduleBoard, type ScheduleSession } from './api';
 import {
-  addDays, defaultView, type FilterKey, filterChips, filterKeys, filterOptions, hasFilters, noFilters, parseScheduleAddress, parseStoredView, periodLabel,
-  type ScheduleAddress, scheduleAddress, scheduleNames, scheduleQuery, type ScheduleView, scheduleViews, scheduleViewStorageKey, sofiaDay,
-  toggleFilter, weekOf,
+  dayColumnChoices, defaultView, emptyText, type FilterKey, filterChips, filterKeys, filterOptions, hasFilters, noFilters, parseScheduleAddress,
+  parseStoredView, periodOf, type ScheduleAddress, scheduleAddress, scheduleNames, scheduleQuery, type ScheduleView, scheduleViewStorageKey, sofiaDay,
+  stepDay, stepsOf, toggleFilter, viewsFor,
 } from './presentation';
 import { ScheduleFilterBar } from './schedule-filters';
-import { CardsView, ScheduleSkeleton, WeekView } from './schedule-views';
+import { MonthView } from './month-view';
+import { CardsView, DayView, ScheduleSkeleton, WeekView } from './schedule-views';
+import { SchedulePreview, usePreview } from './session-preview';
 import { type PanelTarget, SchedulePanel } from './session-panel';
 import { NextIcon, PreviousIcon } from './icons';
 import styles from './schedule.module.css';
@@ -21,7 +23,7 @@ const emptyBoard: ScheduleBoard = { sessions: [], activities: [], groups: [], lo
 const ownFilterKeys: FilterKey[] = ['activity', 'group', 'location'];
 
 /** The view the person chose before, in this browser; without one — by the width of the screen. */
-function rememberedView(userId: string): ScheduleView {
+function rememberedView(userId: string, own: boolean): ScheduleView {
   if (typeof window === 'undefined') return 'week';
   let stored: string | null = null;
   try {
@@ -29,13 +31,14 @@ function rememberedView(userId: string): ScheduleView {
   } catch {
     stored = null;
   }
-  return parseStoredView(stored) ?? defaultView(window.innerWidth);
+  return parseStoredView(stored, own) ?? defaultView(window.innerWidth);
 }
 
 /**
- * "График" and, for a teacher, "Моят график" (docs/product/schedule.md, т. 2–4): the week as a calendar or as cards,
- * the filters and the panel of a session. The view, the day and the filters are in the address, so "Назад" works and
- * a link can be sent to a colleague; the hours are by Sofia.
+ * "График" and, for a teacher, "Моят график" (docs/product/schedule.md, т. 2–4): the month, the week as a calendar,
+ * the day by places or by people, and the cards ("Моят график" — the week and the cards), the filters and the panel of
+ * a session. The view, the day, the columns of the day and the filters are in the address, so "Назад" works and a link
+ * can be sent to a colleague; the hours are by Sofia.
  */
 export function SchedulePage() {
   const router = useRouter();
@@ -53,11 +56,12 @@ export function SchedulePage() {
     return () => window.clearInterval(timer);
   }, []);
   const today = sofiaDay(now);
-  const [remembered, setRemembered] = useState<ScheduleView>(() => rememberedView(user.id));
+  const [remembered, setRemembered] = useState<ScheduleView>(() => rememberedView(user.id, own));
   const view = address.view ?? remembered;
   const day = address.date ?? today;
-  const week = useMemo(() => weekOf(day), [day]);
-  const query = scheduleQuery(week, address.filters);
+  const period = useMemo(() => periodOf(view, day), [view, day]);
+  const steps = stepsOf(view);
+  const query = scheduleQuery(period, address.filters);
 
   const [attempt, setAttempt] = useState(0);
   const key = `${organization.id}?${query}#${attempt}`;
@@ -84,10 +88,16 @@ export function SchedulePage() {
   const board = current?.board;
   const names = useMemo(() => scheduleNames(dictionary ?? emptyBoard), [dictionary]);
 
+  // The quick look on a computer; it goes when the view, the period or the filters change.
+  const preview = usePreview();
+  const closePreview = preview.handlers.close;
   const go = useCallback((next: Partial<ScheduleAddress>) => {
-    const target: ScheduleAddress = { view, date: day, filters: address.filters, ...next };
+    closePreview();
+    const target: ScheduleAddress = { view, date: day, by: address.by, filters: address.filters, ...next };
+    // "По треньори" holds within the day; any way into the day from another view is "Ден по зали" (т. 3.2, 3.3).
+    if (target.view !== 'day') target.by = 'rooms';
     window.history.pushState(null, '', `${window.location.pathname}${scheduleAddress(target)}`);
-  }, [view, day, address.filters]);
+  }, [view, day, address.by, address.filters, closePreview]);
 
   function chooseView(next: ScheduleView) {
     setRemembered(next);
@@ -114,6 +124,11 @@ export function SchedulePage() {
     setPanel(undefined);
     requestAnimationFrame(() => opener.current?.focus());
   }, []);
+  // "+N още" in the week: the day by places (т. 3.1); "Моят график" has no day view, so the panel lists them.
+  const weekMore = useCallback((sessions: ScheduleSession[], element: HTMLElement, moreDay: string) => {
+    if (own) openMore(sessions, element);
+    else go({ view: 'day', date: moreDay });
+  }, [own, openMore, go]);
 
   const keys = own ? ownFilterKeys : filterKeys;
   const filtered = hasFilters(address.filters);
@@ -128,18 +143,26 @@ export function SchedulePage() {
       </div>
     );
   } else if (!board) {
-    body = <><span className="sr-only" role="status">Зареждане на графика…</span><ScheduleSkeleton view={view} /></>;
+    body = <><span className="sr-only" role="status">Зареждане на графика…</span><ScheduleSkeleton cards={view === 'cards'} /></>;
   } else if (board.sessions.length === 0) {
     body = (
       <div className={styles.empty}>
-        <p role="status">Няма занимания в тази седмица.</p>
+        <p role="status">{emptyText(view, filtered)}</p>
         {filtered ? <button type="button" className={styles.button} onClick={clearFilters}>Изчисти филтрите</button> : null}
       </div>
     );
+  } else if (view === 'month') {
+    body = <MonthView day={day} sessions={board.sessions} activities={board.activities} names={names} today={today} now={now} onOpen={openSession}
+      onDay={(chosen) => go({ view: 'day', date: chosen })} onPick={(chosen) => go({ date: chosen })} preview={preview.handlers} />;
+  } else if (view === 'day') {
+    // A new day or columns open the grid anew at today's session (the key).
+    body = <DayView key={`${query}|${address.by}`} day={day} by={address.by} sessions={board.sessions} dictionary={board} names={names} today={today} now={now}
+      onOpen={openSession} onMore={openMore} preview={preview.handlers} />;
   } else if (view === 'week') {
-    body = <WeekView week={week} sessions={board.sessions} activities={board.activities} names={names} today={today} now={now} onOpen={openSession} onMore={openMore} />;
+    body = <WeekView key={query} week={period} sessions={board.sessions} activities={board.activities} names={names} today={today} now={now} onOpen={openSession}
+      onMore={weekMore} moreOpensDay={!own} preview={preview.handlers} />;
   } else {
-    body = <CardsView week={week} sessions={board.sessions} names={names} today={today} now={now} onOpen={openSession} />;
+    body = <CardsView week={period} sessions={board.sessions} names={names} today={today} now={now} onOpen={openSession} />;
   }
 
   return (
@@ -149,15 +172,24 @@ export function SchedulePage() {
           <h1>{own ? 'Моят график' : 'График'}</h1>
           <div className={styles.period}>
             <button type="button" className={styles.button} onClick={() => go({ date: today })}>Днес</button>
-            <button type="button" className={styles.iconButton} aria-label="Предишна седмица" onClick={() => go({ date: addDays(week.from, -7) })}><PreviousIcon /></button>
-            <button type="button" className={styles.iconButton} aria-label="Следваща седмица" onClick={() => go({ date: addDays(week.from, 7) })}><NextIcon /></button>
-            <p className={styles.periodLabel} aria-live="polite">{periodLabel(week.from, week.to)}</p>
+            <button type="button" className={styles.iconButton} aria-label={steps.previous} onClick={() => go({ date: stepDay(view, day, -1) })}><PreviousIcon /></button>
+            <button type="button" className={styles.iconButton} aria-label={steps.next} onClick={() => go({ date: stepDay(view, day, 1) })}><NextIcon /></button>
+            <p className={styles.periodLabel} aria-live="polite">{period.label}</p>
           </div>
         </div>
-        <div className={styles.views} role="group" aria-label="Изглед">
-          {scheduleViews.map((item) => (
-            <button key={item.id} type="button" aria-pressed={view === item.id} onClick={() => chooseView(item.id)}>{item.label}</button>
-          ))}
+        <div className={styles.switches}>
+          {view === 'day' ? (
+            <div className={styles.views} role="group" aria-label="Колони">
+              {dayColumnChoices.map((item) => (
+                <button key={item.id} type="button" aria-pressed={address.by === item.id} onClick={() => go({ by: item.id })}>{item.label}</button>
+              ))}
+            </div>
+          ) : null}
+          <div className={styles.views} role="group" aria-label="Изглед">
+            {viewsFor(own).map((item) => (
+              <button key={item.id} type="button" aria-pressed={view === item.id} onClick={() => chooseView(item.id)}>{item.label}</button>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -167,6 +199,7 @@ export function SchedulePage() {
 
       {body}
 
+      {preview.shown && !panel ? <SchedulePreview shown={preview.shown} names={names} now={now} onEnter={preview.keep} onLeave={preview.hide} /> : null}
       {panel ? <SchedulePanel organizationId={organization.id} target={panel} names={names} now={now} withDetails={withDetails} onClose={closePanel} /> : null}
     </div>
   );
