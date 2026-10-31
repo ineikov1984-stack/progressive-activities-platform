@@ -21,8 +21,8 @@ class LocalDemoSeederTest extends TestCase
         Artisan::call('db:seed', ['--class' => LocalDemoSeeder::class, '--force' => true]);
         Artisan::call('db:seed', ['--class' => LocalDemoSeeder::class, '--force' => true]);
 
-        // The owner and one synthetic parent with a child, an application with a note and an enrollment.
-        $this->assertDatabaseCount('users', 2);
+        // The owner, an administrator and one synthetic parent with a child, an application with a note and an enrollment.
+        $this->assertDatabaseCount('users', 3);
         $this->assertDatabaseHas('users', ['email' => 'parent@demo.progressive.local', 'phone' => '+359880000002']);
         $this->assertDatabaseCount('children', 1);
         $this->assertDatabaseCount('enrollment_applications', 2);
@@ -32,7 +32,9 @@ class LocalDemoSeederTest extends TestCase
         $this->assertDatabaseCount('enrollment_events', 3);
         $this->assertSame(0, DB::table('enrollment_events')->whereNull('expanded_at')->count());
         $this->assertDatabaseCount('organizations', 2);
-        $this->assertDatabaseCount('organization_memberships', 2);
+        $this->assertDatabaseCount('organization_memberships', 3);
+        $this->assertDatabaseHas('organization_memberships', ['organization_id' => '00000000-0000-4000-8000-000000000101', 'role' => 'organization_admin', 'status' => 'active']);
+        $this->assertSame(1, DB::table('staff_members')->where('email', 'admin@demo.progressive.local')->count());
         $this->assertDatabaseCount('organization_catalog_profiles', 1);
         $this->assertDatabaseCount('activities', 1);
         $this->assertDatabaseCount('offerings', 1);

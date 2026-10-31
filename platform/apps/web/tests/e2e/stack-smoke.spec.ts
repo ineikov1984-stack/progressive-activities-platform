@@ -13,7 +13,13 @@ const demo = {
   groupId: '00000000-0000-4000-8000-000000000206',
   groupName: 'Група 1 · 1.–2. клас',
   monthlyPriceId: '00000000-0000-4000-8000-000000000208',
+  // LocalDemoSeeder: the second group, where the synthetic child "Ния Демова" is enrolled.
+  groupTwoId: '00000000-0000-4000-8000-000000000207',
+  // LocalDemoSeeder: a demo administrator with the same local password.
+  adminEmail: 'admin@demo.progressive.local',
 };
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // E2eForeignTenantSeeder: an organization the demo owner does not belong to.
 const foreign = {
@@ -153,6 +159,76 @@ test('the owner adds a teacher without a login, then invites them by e-mail and 
     await expect.poll(() => visitor.evaluate(() => window.location.hash)).toBe('');
   } finally {
     await guest.close();
+  }
+});
+
+test('the owner adds a viewer with "Записва деца" in a selected group, together with the invitation', async () => {
+  const stamp = Date.now().toString(36);
+  const name = `Тест Партньор ${stamp}`;
+  const email = `partner-e2e+${stamp}@example.test`;
+  await page.goto('/dashboard/team');
+  await slow(page.getByRole('heading', { level: 1, name: 'Екип' })).toBeVisible();
+  await page.getByRole('button', { name: '+ Добави в екипа' }).click();
+  const panel = page.getByRole('dialog', { name: 'Добави в екипа' });
+  await panel.getByLabel('Име и фамилия').fill(name);
+  await panel.getByLabel('Телефон', { exact: true }).fill('0888 123 457');
+  await panel.getByRole('radio', { name: /^Само преглед/ }).check();
+  await panel.getByRole('textbox', { name: 'Имейл' }).fill(email);
+  // What the person will be able to do changes with the role and the additions.
+  await expect(panel.getByText('Със „Само преглед“', { exact: true })).toBeVisible();
+  await expect(panel.getByText('само гледа, без да променя', { exact: true })).toBeVisible();
+  await panel.getByText('Допълнителни права (по избор)').click();
+  await panel.getByRole('radio', { name: /^Избрани групи/ }).check();
+  const group = panel.getByRole('group', { name: 'Шахмат' }).getByRole('checkbox', { name: new RegExp(`^${escapeRegExp(demo.groupName)}`) });
+  await slow(group).toBeVisible();
+  await group.check();
+  await panel.getByText('Деца и записвания').click();
+  await panel.getByRole('checkbox', { name: 'Записва деца', exact: true }).check();
+  await expect(panel.getByText('записва деца в тази група', { exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: 'Добави и изпрати покана' }).click();
+  // The heading names the panel: now it is the person's name.
+  const done = page.getByRole('dialog', { name: `${name} е в екипа` });
+  await slow(done.getByText(`Изпратихме покана на ${email}.`)).toBeVisible();
+
+  // The profile sums the rights up; the card opens on its own page.
+  await done.getByRole('link', { name: 'Към профила' }).click();
+  const rights = page.getByRole('region', { name: 'Права' });
+  await slow(rights.getByText('Само преглед + 1 право')).toBeVisible();
+  await rights.getByRole('link', { name: 'Промени правата' }).click();
+  await slow(page.getByRole('heading', { level: 1, name: `Права на ${name}` })).toBeVisible();
+  await expect(page.getByRole('radio', { name: /^Избрани групи/ })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Записва деца', exact: true })).toBeChecked();
+  await expect(page.getByText(new RegExp(`Шахмат — ${escapeRegExp(demo.groupName)}`))).toBeVisible();
+  await expect(page.getByText(/има избрани групи, а финансите са за цялата организация/)).toBeVisible();
+  await expect(page.getByText(/enrollment\.|contacts\.|catalog\.|tenant/)).toHaveCount(0);
+});
+
+test('the administrator sees a parent\'s phone only after "Покажи телефона"', async ({ browser, baseURL }) => {
+  // A context of its own: the administrator signs in once, with the demo password.
+  const admin = await browser.newContext({ baseURL });
+  try {
+    const adminPage = await admin.newPage();
+    await adminPage.goto('/login');
+    await adminPage.getByLabel('Имейл').fill(demo.adminEmail);
+    await adminPage.getByLabel('Парола').fill(demo.password);
+    await Promise.all([adminPage.waitForURL(/\/dashboard$/), adminPage.getByRole('button', { name: 'Вход' }).click()]);
+    await adminPage.goto(`/dashboard/enrollments?view=groups&group=${demo.groupTwoId}`);
+    const row = adminPage.getByRole('listitem').filter({ has: adminPage.getByText('Ния Демова', { exact: true }) }).last();
+    await slow(row).toBeVisible();
+    await row.getByRole('button', { name: /^Ния Демова/ }).click();
+    const details = adminPage.getByRole('dialog');
+    await slow(details.getByRole('heading', { name: 'Родител' })).toBeVisible();
+    await expect(details.getByText('Мария Демо')).toBeVisible();
+    // Hidden until asked for: no number and no "Обади се".
+    await expect(details.getByRole('link', { name: /^Обади се/ })).toHaveCount(0);
+    await details.getByRole('button', { name: /^Покажи телефона/ }).click();
+    await slow(details.getByRole('link', { name: /^Обади се/ })).toHaveAttribute('href', 'tel:+359880000002');
+    await expect(details.getByRole('link', { name: /^Пиши/ })).toHaveAttribute('href', 'mailto:parent@demo.progressive.local');
+    await expect(details.getByText('Показването се записва.')).toBeVisible();
+    // Kept only in the page: nothing in the browser's storage.
+    expect(await adminPage.evaluate(() => JSON.stringify({ ...window.localStorage, ...window.sessionStorage }))).not.toContain('359880000002');
+  } finally {
+    await admin.close();
   }
 });
 

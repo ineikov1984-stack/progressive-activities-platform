@@ -42,6 +42,14 @@ class LocalDemoSeeder extends Seeder
 
     private const DEMO_ENROLLMENT_ID = '00000000-0000-4000-8000-000000000404';
 
+    /**
+     * A second sign-in of the team, with the demo password: an administrator, who sees a parent's phone only after
+     * "Покажи телефона" (docs/product/team-rights.md, т. 6) — for the local and e2e checks.
+     */
+    private const DEMO_ADMIN_EMAIL = 'admin@demo.progressive.local';
+
+    private const DEMO_ADMIN_STAFF_ID = '00000000-0000-4000-8000-000000000110';
+
     public function run(): void
     {
         if (! app()->environment(['local', 'testing'])) {
@@ -98,6 +106,7 @@ class LocalDemoSeeder extends Seeder
 
             $this->seedCatalog();
             $this->seedDemoFamily($user->id);
+            $this->seedDemoAdministrator($password);
 
             if (DB::getDriverName() === 'pgsql') {
                 DB::select("SELECT set_config('app.current_organization_id', ?, true)", [self::OPERATOR_ORGANIZATION_ID]);
@@ -123,6 +132,35 @@ class LocalDemoSeeder extends Seeder
                 ],
             );
         });
+    }
+
+    private function seedDemoAdministrator(string $password): void
+    {
+        $now = now();
+        $admin = User::query()->updateOrCreate(
+            ['email' => self::DEMO_ADMIN_EMAIL],
+            [
+                'name' => 'Демо администратор',
+                'phone' => '+359880000003',
+                'password' => Hash::make($password),
+                'email_verified_at' => $now,
+                'locale' => 'bg',
+                'timezone' => 'Europe/Sofia',
+                'is_active' => true,
+            ],
+        );
+        OrganizationMembership::query()->withoutGlobalScopes()->updateOrCreate(
+            ['organization_id' => self::ORGANIZATION_ID, 'user_id' => $admin->id],
+            ['role' => 'organization_admin', 'status' => 'active'],
+        );
+        // The person in "Екип"; created once.
+        if (! DB::table('staff_members')->where('organization_id', self::ORGANIZATION_ID)->where('user_id', $admin->id)->exists()) {
+            DB::table('staff_members')->insert([
+                'id' => self::DEMO_ADMIN_STAFF_ID, 'organization_id' => self::ORGANIZATION_ID, 'full_name' => $admin->name,
+                'phone' => $admin->phone, 'email' => $admin->email, 'user_id' => $admin->id, 'version' => 1,
+                'created_at' => $now, 'updated_at' => $now,
+            ]);
+        }
     }
 
     private function seedCatalog(): void
