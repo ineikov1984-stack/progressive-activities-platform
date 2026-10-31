@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Цена според присъствията</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#173F5F}a:hover{color:#0F2A40}
+.step{display:flex;gap:10px;align-items:center;padding:8px 12px;border-radius:10px;font-size:15px;color:#344054}
+.dot{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;border:1.5px solid #808D99;font-size:13px;font-weight:600;flex:none}
+.card{display:flex;flex-direction:column;gap:14px;padding:22px;border:1px solid #E2E6EA;border-radius:16px;background:#FFFFFF}
+.label{font-size:14px;line-height:20px;font-weight:600;color:#173F5F}
+.input{display:flex;align-items:center;justify-content:space-between;height:44px;box-sizing:border-box;padding:0 12px;border:1px solid #808D99;border-radius:8px;font-size:16px;color:#173F5F;background:#FFFFFF}
+.hint{margin:0;font-size:14px;line-height:20px;color:#5B6878}
+.lines{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:14px;line-height:20px;color:#344054}
+.lines strong{color:#173F5F}
+</style>
+</head>
+<body>
+<div style="width: 1280px; height: 820px; box-sizing: border-box; display: flex; gap: 40px; padding: 32px 40px; background: #F6F4EF; font-family: 'Onest', ui-sans-serif, system-ui, sans-serif; color: #344054;">
+  <nav aria-label="Стъпки на дейността" style="width: 240px; flex: none; display: flex; flex-direction: column; gap: 2px;">
+    <div class="step"><span class="dot">1</span>Основна информация</div>
+    <div class="step"><span class="dot">2</span>Аудитория</div>
+    <div class="step"><span class="dot">3</span>Представяне и ползи</div>
+    <div class="step"><span class="dot">4</span>Снимки и галерия</div>
+    <div class="step"><span class="dot">5</span>Места и преподаватели</div>
+    <div class="step" style="background: #FFFFFF; color: #173F5F; font-weight: 600;"><span class="dot" style="border-color: #B8561A; background: #B8561A; color: #FFFFFF;">6</span>Цени и записване</div>
+    <div class="step"><span class="dot">7</span>Групи и график</div>
+    <div class="step"><span class="dot">8</span>Специални посещения</div>
+    <div class="step"><span class="dot">9</span>Преглед и публикуване</div>
+  </nav>
+
+  <main style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: .08em; color: #5B6878;">ШАХМАТ · СТЪПКА 6 ОТ 9</div>
+      <h1 style="margin: 0; font-size: 28px; line-height: 34px; color: #173F5F;">Цени и записване</h1>
+    </div>
+
+    <section class="card" aria-label="Цена според присъствията">
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;"><span class="label">Начин на записване</span><span class="input">Според присъствията ▾</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px;"><span class="label">Цена</span><span class="input">15,00 €</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px;"><span class="label">За</span><span class="input">за присъствие</span></div>
+      </div>
+      <p class="hint">Родителят плаща всеки месец само за заниманията, на които детето е дошло. Броят идва от присъствията, които отбелязва учителят.</p>
+      <p style="margin: 0; padding: 12px 14px; border-radius: 12px; background: #F2F4F5; font-size: 15px; line-height: 21px; color: #173F5F;">Родителите виждат: <strong>15,00 € за присъствие · плаща се за месеца</strong></p>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 12px; background: #F2F4F5;">
+        <span class="label">Такси, отсъствия и отказ</span>
+        <span class="input" style="background: #FFFFFF;">Условията на организацията — Стандартни ▾</span>
+        <ul class="lines">
+          <li><strong>Предупредено отсъствие:</strong> поне 24 часа преди — не плащате; между 12 и 24 часа — половината; по-малко от 12 часа — цялата сума.</li>
+          <li><strong>Неявяване:</strong> ако детето не дойде, без да сте предупредили, плащате цялата сума.</li>
+        </ul>
+        <p class="hint">Същите правила като за пробното и еднократното посещение. Сменят се тук или в „Такси, отсъствия и отказ“.</p>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="example" style="gap: 10px;">
+      <h2 id="example" style="margin: 0; font-size: 18px; color: #173F5F;">Пример за ноември</h2>
+      <ul class="lines">
+        <li>Дария дойде на <strong>4</strong> занимания и предупреди 2 дни по-рано за 1 → <strong>4 × 15,00 € = 60,00 €</strong></li>
+        <li>Калоян дойде на <strong>3</strong>, предупреди за 1 и не дойде без предупреждение на 1 → <strong>(3 + 1) × 15,00 € = 60,00 €</strong></li>
+        <li>Заниманието на 11 ноември е отменено от организацията — не се плаща от никого.</li>
+      </ul>
+      <p class="hint">Примерът е само илюстрация. Сумите за месеца ще се показват, когато добавим сметките.</p>
+    </section>
+  </main>
+</div>
+</body>
+</html>

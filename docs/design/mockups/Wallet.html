@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Портфейл на семейството</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#173F5F}a:hover{color:#0F2A40}
+.meta{margin:0;font-size:14px;line-height:20px;color:#5B6878}
+.act{display:flex;align-items:center;justify-content:center;min-height:48px;padding:0 10px;border:1.5px solid #173F5F;border-radius:12px;background:#FFFFFF;font:inherit;font-size:15px;font-weight:600;color:#173F5F;text-align:center}
+.mv{display:grid;grid-template-columns:72px 1fr 90px 80px;gap:10px;align-items:baseline;padding:10px 0;border-bottom:1px solid #E2E6EA;font-size:14px;line-height:20px}
+.plus{color:#1F5A41;font-weight:700;text-align:right}
+.minus{color:#8A3E10;font-weight:700;text-align:right}
+.bal{text-align:right;color:#5B6878}
+</style>
+</head>
+<body>
+<div style="width: 560px; height: 900px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; padding: 24px; background: #F6F4EF; font-family: 'Onest', ui-sans-serif, system-ui, sans-serif; color: #344054;">
+  <section aria-labelledby="wallet" style="display: flex; flex-direction: column; gap: 14px; padding: 22px; border-radius: 18px; background: #FFFFFF; border: 1px solid #E2E6EA;">
+    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;">
+      <div>
+        <h2 id="wallet" style="margin: 0; font-size: 22px; color: #173F5F;">Портфейл · семейство Петкови</h2>
+        <p class="meta">Общ за Калоян и Ива. Използва се при плащане, когато го изберете.</p>
+      </div>
+      <a href="ChildPanel.html" aria-label="Затвори" style="display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #E2E6EA; border-radius: 12px; text-decoration: none;">✕</a>
+    </div>
+    <div style="display: flex; align-items: baseline; gap: 10px; padding: 14px; border-radius: 12px; background: #E3F1EA;">
+      <span style="font-size: 15px; color: #1F5A41;">Наличност</span>
+      <strong style="font-size: 26px; color: #1F5A41;">10,00 € кредит</strong>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;">
+      <button type="button" class="act">Зареди</button>
+      <button type="button" class="act">Върни в брой</button>
+      <button type="button" class="act">Нулирай</button>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; border: 1.5px solid #173F5F;">
+      <strong style="font-size: 15px; color: #173F5F;">Нулирай портфейла</strong>
+      <p class="meta">10,00 € ще станат 0. Прави го само собственикът или администраторът.</p>
+      <label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: #173F5F;">Причина (задължителна)
+        <textarea style="min-height: 60px; box-sizing: border-box; padding: 10px 12px; border: 1px solid #808D99; border-radius: 10px; font: inherit; font-size: 15px; font-weight: 400; color: #173F5F; resize: none;">Родителят се отказа от остатъка при напускане.</textarea>
+      </label>
+      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px;">
+        <button type="button" class="act">Назад</button>
+        <button type="button" style="min-height: 48px; border: 0; border-radius: 12px; background: #173F5F; color: #FFFFFF; font: inherit; font-size: 15px; font-weight: 600;">Да, нулирай 10,00 €</button>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="moves" style="display: flex; flex-direction: column; padding: 18px 22px; border-radius: 18px; background: #FFFFFF; border: 1px solid #E2E6EA;">
+    <h3 id="moves" style="margin: 0 0 4px; font-size: 16px; color: #173F5F;">Движения</h3>
+    <div class="mv" style="font-size: 12px; color: #5B6878; padding-top: 4px;"><span>Дата</span><span>Какво</span><span style="text-align: right;">Сума</span><span style="text-align: right;">Остават</span></div>
+    <div class="mv"><span>15 окт.</span><span>Взети за Балет, септември (Ива) · Елена Маркова</span><span class="minus">− 20,00 €</span><span class="bal">10,00 €</span></div>
+    <div class="mv"><span>12 окт.</span><span>Зареден в брой · квитанция № 0049 · Елена Маркова</span><span class="plus">+ 20,00 €</span><span class="bal">30,00 €</span></div>
+    <div class="mv" style="border-bottom: 0;"><span>30 септ.</span><span>Надплатено по банка · остава в портфейла</span><span class="plus">+ 10,00 €</span><span class="bal">10,00 €</span></div>
+  </section>
+</div>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Екип — профил и възнаграждение</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#173F5F}a:hover{color:#0F2A40}
+.nav{display:flex;align-items:center;gap:10px;min-height:40px;padding:0 12px;border-radius:10px;font-size:14px;color:#D5DEE7;text-decoration:none}
+.nav-on{background:#24527A;color:#FFFFFF;font-weight:600}
+.meta{margin:0;font-size:14px;line-height:20px;color:#5B6878}
+.tab{display:flex;align-items:center;min-height:44px;padding:0 14px;font-size:15px;font-weight:600;color:#5B6878;text-decoration:none;border-bottom:3px solid transparent}
+.tab-on{color:#173F5F;border-bottom-color:#B8561A}
+.card{display:flex;flex-direction:column;gap:12px;padding:18px 20px;border:1px solid #E2E6EA;border-radius:16px;background:#FFFFFF}
+.cap{margin:0;font-size:16px;font-weight:700;color:#173F5F}
+.in{display:flex;align-items:center;justify-content:space-between;height:44px;box-sizing:border-box;padding:0 12px;border:1px solid #808D99;border-radius:10px;font-size:15px;color:#173F5F;background:#FFFFFF}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{padding:8px 10px;text-align:left;font-size:12px;font-weight:600;color:#5B6878;border-bottom:1px solid #E2E6EA}
+td{padding:10px;border-bottom:1px solid #E2E6EA;line-height:20px;vertical-align:top}
+.sum{display:flex;justify-content:space-between;gap:12px;font-size:14px;line-height:20px;padding:6px 0;border-bottom:1px solid #E2E6EA}
+</style>
+</head>
+<body>
+<div style="width: 1280px; height: 1080px; box-sizing: border-box; display: flex; background: #F6F4EF; font-family: 'Onest', ui-sans-serif, system-ui, sans-serif; color: #344054;">
+  <nav aria-label="Основно меню" style="width: 220px; flex: none; display: flex; flex-direction: column; gap: 4px; padding: 20px 12px; background: #173F5F;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 8px 16px;">
+      <span aria-hidden="true" style="display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: #B8561A; color: #FFFFFF; font-weight: 700; font-size: 13px;">PA</span>
+      <strong style="color: #FFFFFF; font-size: 15px;">Progressive</strong>
+    </div>
+    <span style="padding: 8px 12px 4px; font-size: 11px; letter-spacing: .08em; color: #AFC0D0;">УПРАВЛЕНИЕ</span>
+    <a class="nav" href="#">Начало</a>
+    <a class="nav" href="ScheduleWeek.html">График</a>
+    <a class="nav" href="Admin.html">Присъствия</a>
+    <a class="nav" href="#">Дейности</a>
+    <a class="nav" href="#">Записвания</a>
+    <a class="nav" href="ChildPanel.html">Деца и родители</a>
+    <a class="nav" href="Payment.html">Плащания</a>
+    <span style="padding: 12px 12px 4px; font-size: 11px; letter-spacing: .08em; color: #AFC0D0;">ОРГАНИЗАЦИЯ</span>
+    <a class="nav nav-on" href="TeamList.html" aria-current="page">Екип</a>
+    <a class="nav" href="#">Такси, отсъствия и отказ</a>
+  </nav>
+
+  <main style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 28px 32px;">
+    <a href="TeamList.html" style="font-size: 15px; font-weight: 600; text-decoration: none;">← Екип</a>
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <span aria-hidden="true" style="display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: #DDF0E6; color: #1F5A41; font-size: 18px; font-weight: 700;">ПС</span>
+      <div>
+        <h1 style="margin: 0; font-size: 26px; color: #173F5F;">Петър Стоянов</h1>
+        <p class="meta">Треньор · на хонорар · влиза в системата · 0888 000 444</p>
+      </div>
+    </div>
+    <nav aria-label="Раздели на профила" style="display: flex; gap: 4px; border-bottom: 1px solid #E2E6EA;">
+      <a class="tab" href="#">Данни</a>
+      <a class="tab" href="#">Групи</a>
+      <a class="tab" href="#">Права</a>
+      <a class="tab tab-on" href="#" aria-current="page">Възнаграждение</a>
+      <a class="tab" href="#">Замествания</a>
+      <a class="tab" href="#">История</a>
+    </nav>
+
+    <div style="display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; align-items: start;">
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <section class="card" aria-labelledby="base">
+          <h2 id="base" class="cap">Основно правило</h2>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: #173F5F;">Как се смята<span class="in">Процент от платените такси ▾</span></label>
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: #173F5F;">Процент<span class="in">20 %</span></label>
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: #173F5F;">Най-малко за месец (по избор)<span class="in">300,00 €</span></label>
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: #173F5F;">Важи от<span class="in">1 септември 2026</span></label>
+          </div>
+          <p style="margin: 0; padding: 10px 12px; border-radius: 10px; background: #F2F4F5; font-size: 14px; line-height: 20px;">Пример: платени такси в групата 1 000 € → <strong>200 €</strong>. Ако се съберат по-малко от 1 500 €, получава най-малко 300 €.</p>
+          <p class="meta" style="font-size: 13px;">Другите начини: месечна сума · на занимание (час) · на присъстващо дете · комбинирано.</p>
+        </section>
+
+        <section class="card" aria-labelledby="per">
+          <h2 id="per" class="cap">По групи</h2>
+          <table>
+            <thead><tr><th scope="col">Група</th><th scope="col">Роля</th><th scope="col">Възнаграждение</th><th scope="col">От</th></tr></thead>
+            <tbody>
+              <tr><td>Футбол · Група 1</td><td>водещ</td><td>Основното: 20 % от платените такси</td><td>1 септ.</td></tr>
+              <tr><td>Футбол · Група 2</td><td>водещ</td><td><strong>Собствено:</strong> 12 € на занимание + 1 € на присъстващо дете</td><td>1 ноем.</td></tr>
+              <tr><td>Футбол · Група 3</td><td>замества 25 ноем.</td><td>15 € за заниманието</td><td>25 ноем.</td></tr>
+            </tbody>
+          </table>
+          <a href="#" style="font-size: 15px; font-weight: 600;">+ Друго възнаграждение за група</a>
+        </section>
+
+        <section class="card" aria-labelledby="extra">
+          <h2 id="extra" class="cap">Бонуси и удръжки</h2>
+          <div class="sum"><span>Турнир на 14 ноември · добави Мария Колева</span><strong style="color: #1F5A41;">+ 50,00 €</strong></div>
+          <a href="#" style="font-size: 15px; font-weight: 600;">+ Добави бонус или удръжка (с причина)</a>
+        </section>
+      </div>
+
+      <aside class="card" aria-labelledby="month">
+        <h2 id="month" class="cap">Ноември до днес</h2>
+        <div class="sum"><span>Футбол · Гр. 1 · платени такси 1 400 € × 20 %</span><strong>280,00 €</strong></div>
+        <div class="sum"><span>Футбол · Гр. 2 · 8 занимания × 12 €</span><strong>96,00 €</strong></div>
+        <div class="sum"><span>Футбол · Гр. 2 · 92 присъствия × 1 €</span><strong>92,00 €</strong></div>
+        <div class="sum"><span>Бонус — турнир</span><strong>50,00 €</strong></div>
+        <div style="display: flex; justify-content: space-between; padding-top: 6px; font-size: 18px;"><span style="font-weight: 600;">Общо</span><strong style="color: #173F5F;">518,00 €</strong></div>
+        <p class="meta">Оценка. Окончателно е, когато приключите месеца — след като всички присъствия са отбелязани.</p>
+        <p style="margin: 0; padding: 10px 12px; border-radius: 10px; background: #FFF9F4; border: 1px solid #E8B48F; font-size: 14px; color: #8A3E10;">! 1 занимание без присъствия (18 ноем., Гр. 1)</p>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+          <button type="button" disabled style="min-height: 44px; border: 0; border-radius: 10px; background: #173F5F; color: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; opacity: .5;">Приключи месеца</button>
+          <button type="button" style="min-height: 44px; border: 1.5px solid #173F5F; border-radius: 10px; background: #FFFFFF; color: #173F5F; font: inherit; font-size: 14px; font-weight: 600;">Изтегли в Excel</button>
+        </div>
+        <p class="meta" style="font-size: 13px;">Петър вижда тази разбивка за себе си. Не вижда кой родител колко е платил, приходите на организацията и възнагражденията на другите.</p>
+      </aside>
+    </div>
+  </main>
+</div>
+</body>
+</html>

@@ -6,7 +6,7 @@
 
 От 29.10.2026 Claude е основен изпълнител; Codex поема по-леки задачи и втори поглед на големи етапи (`docs/process/DECISIONS.md`). Задачите по-долу са подготвени на 31.10.2026 (DECISIONS „График сега, учителското съдържание — по-късно; задачи за Codex“). Работи по реда, по един клон `codex/<име>` и един PR на точка; запиши реда в „В работа“ преди старт и го махни след merge.
 
-0. **Прочети** `AGENTS.md`, `docs/process/WORKFLOW.md` (т. 10 — ревюъри), `docs/process/DECISIONS.md` и този файл. Проверки преди всеки PR: `composer verify` в `apps/api`, `pnpm verify` в `platform/`; CI пуска и `e2e`.
+0. **Прочети** `AGENTS.md` и **`docs/process/CODEX.md`** (как работиш тук: без brainstorming и нови спецификации, кратък план в PR-а, дизайн само по `docs/design/mockups/`). Проверки преди всеки PR: засегнатите тестове локално; CI пуска всичко.
 1. **`composer setup` с ролята-собственик** (бърза; горещ: `platform/apps/api/composer.json`). В скрипта `setup` миграцията да е `@php artisan migrate --database=pgsql_admin --force`. Готово, когато: `composer.lock` не се променя (`composer validate` минава), CI е зелен.
 2. **Dependabot** (бърза; `.github/dependabot.yml`): правила `ignore` — Node без LTS (нечетни мажорни версии), PHP над 8.4 в образите, TypeScript 7 (докато Next не го поддържа). Готово, когато: файлът минава `docs:check` и CI.
 3. **Пестеливи проверки в CI** (бърза; горещ: `.github/workflows/ci.yml`). Две неща:
@@ -16,7 +16,7 @@
    - Готово, когато: PR само с документи завършва за под 2 минути с всички 5 проверки зелени; PR с код пуска всичко.
 4. **„Махни“ → „Премахни“** в целия уеб (бърза). Видимият текст и `aria-label` в `platform/apps/web/src/**`, но **не** в `features/team/**` и `features/catalog/**`, ако там има отворен PR на Claude — виж „В работа“. Тестовете, които търсят стария текст, се обновяват. Готово, когато: `grep -rn "Махни" platform/apps/web/src` е празно, освен в коментари.
 5. **Втори поглед по сигурност** по шаблона `docs/process/reviewers/security.md` (само четене, без код). Етапът „Права“ — PR #81, #82, #83, #84 и поканите #74. Тесен вход: diff-ът на PR-а и `docs/product/team-rights.md`. Само сериозни находки — като коментар в PR-а и ред в „Опашка“ тук.
-6. ~~График — PR 3: изгледи Месец и Ден~~ — **поема го Claude** (собственикът, 31.10.2026; DECISIONS „График PR 3 — Claude вместо Codex“). Вече не е задача за Codex — виж „Опашка“.
+6. **График — промени по занимания, PR 4б и 4в** — по `docs/process/CODEX.md`, т. 9.2–9.3 и `docs/product/schedule-changes.md`. Започват след merge на 4а (Claude, `claude/schedule-changes-4a`). Ако Claude е спрял по средата на 4а — т. 9.1.
 
 По-старите точки (#8, #18, #26 — втори поглед) остават в „Опашка“ с по-нисък приоритет. „API: 500 → JSON 401“ вече е направено (`bootstrap/app.php`, `shouldRenderJsonWhen`).
 

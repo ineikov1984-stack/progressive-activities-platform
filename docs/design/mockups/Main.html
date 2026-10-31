@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Учител — днес</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#173F5F}a:hover{color:#0F2A40}
+.card{display:flex;flex-direction:column;gap:10px;padding:16px;border:1px solid #E2E6EA;border-radius:16px;background:#FFFFFF}
+.meta{margin:0;font-size:14px;line-height:20px;color:#5B6878}
+.tag{display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;font-size:13px;font-weight:600}
+.btn{display:flex;align-items:center;justify-content:center;min-height:48px;padding:0 16px;border:0;border-radius:12px;background:#173F5F;color:#FFFFFF;font:inherit;font-size:16px;font-weight:600;text-decoration:none}
+.btn-quiet{display:flex;align-items:center;justify-content:center;min-height:44px;padding:0 14px;border:1.5px solid #173F5F;border-radius:12px;background:#FFFFFF;color:#173F5F;font:inherit;font-size:15px;font-weight:600;text-decoration:none}
+</style>
+</head>
+<body>
+<div style="width: 390px; height: 920px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; padding: 16px; background: #F6F4EF; font-family: 'Onest', ui-sans-serif, system-ui, sans-serif; color: #344054;">
+  <header style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span aria-hidden="true" style="display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: #B8561A; color: #FFFFFF; font-weight: 700; font-size: 14px;">PA</span>
+      <div style="display: flex; flex-direction: column;">
+        <strong style="font-size: 15px; color: #173F5F;">Иван Петров</strong>
+        <span style="font-size: 13px; color: #5B6878;">Преподавател · Школа „Звезда“</span>
+      </div>
+    </div>
+    <button type="button" aria-label="Меню" style="display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #E2E6EA; border-radius: 12px; background: #FFFFFF;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#173F5F" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+  </header>
+
+  <div style="display: flex; flex-direction: column; gap: 2px;">
+    <h1 style="margin: 0; font-size: 28px; line-height: 34px; color: #173F5F;">Днес</h1>
+    <p class="meta">Понеделник, 2 ноември · 17:40</p>
+  </div>
+
+  <section class="card" aria-labelledby="waiting" style="border-color: #E8B48F; background: #FFF9F4;">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span class="tag" style="background: #B8561A; color: #FFFFFF;">Чака вас</span>
+      <h2 id="waiting" style="margin: 0; font-size: 16px; color: #173F5F;">Неотбелязано от петък</h2>
+    </div>
+    <p class="meta" style="color: #344054;">Шахмат · Група 2 · 3.–4. клас<br>Петък, 30 октомври · 17:30–18:30</p>
+    <a class="btn-quiet" href="MarkA.html">Отбележи присъствията</a>
+    <p class="meta" style="font-size: 13px;">Можете да отбелязвате и поправяте до края на следващия ден. След това — само администраторът, с причина.</p>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 10px;" aria-labelledby="today">
+    <h2 id="today" style="margin: 0; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: #5B6878;">Моите занимания днес</h2>
+
+    <article class="card">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px;">
+        <strong style="font-size: 18px; color: #173F5F;">16:00–17:00</strong>
+        <span class="tag" style="background: #E3F1EA; color: #1F5A41;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right: 4px;"><path d="M5 12l5 5 9-10"/></svg>Отбелязано
+        </span>
+      </div>
+      <p style="margin: 0; font-size: 16px; font-weight: 600; color: #173F5F;">Шахмат · Група 1 · 1.–2. клас</p>
+      <p class="meta">Зала „Слънце“ · Вие сте водещ</p>
+      <p class="meta">9 от 10 присъстваха · отбелязано в 17:05</p>
+      <a href="History.html" style="font-size: 15px; font-weight: 600;">Виж или поправи</a>
+    </article>
+
+    <article class="card" style="border-color: #173F5F; box-shadow: inset 0 0 0 1px #173F5F;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px;">
+        <strong style="font-size: 18px; color: #173F5F;">17:30–18:30</strong>
+        <span class="tag" style="background: #173F5F; color: #FFFFFF;">Сега</span>
+      </div>
+      <p style="margin: 0; font-size: 16px; font-weight: 600; color: #173F5F;">Шахмат · Група 2 · 3.–4. клас</p>
+      <p class="meta">Зала „Слънце“ · Вие сте помощник · водещ е Мария Колева</p>
+      <p class="meta">8 деца · 1 пробно · 1 предупредено отсъствие</p>
+      <a class="btn" href="MarkA.html">Отбележи присъствията</a>
+    </article>
+  </section>
+
+  <a href="TeacherPay.html" style="margin-top: auto; display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0 16px; border-radius: 12px; background: #FFFFFF; border: 1px solid #E2E6EA; font-size: 15px; font-weight: 600; text-decoration: none;">
+    Моите възнаграждения
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+  </a>
+  <a href="Schedule.html" style="display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0 16px; border-radius: 12px; background: #FFFFFF; border: 1px solid #E2E6EA; font-size: 15px; font-weight: 600; text-decoration: none;">
+    Моят график за седмицата
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+  </a>
+</div>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Дете — страничен панел</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#173F5F}a:hover{color:#0F2A40}
+.meta{margin:0;font-size:14px;line-height:20px;color:#5B6878}
+.sec{display:flex;flex-direction:column;gap:8px;padding:16px 0;border-top:1px solid #E2E6EA}
+.cap{margin:0;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#5B6878}
+.chip{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;font-size:13px;font-weight:600}
+.line{display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:14px;line-height:20px}
+.line strong{color:#173F5F}
+.dot{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;font-size:13px;font-weight:700}
+.y{background:#E3F1EA;color:#1F5A41}
+.x{background:#FFF1E6;color:#8A3E10}
+.o{background:#EEF1F4;color:#4A5767}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 14px;border-radius:12px;font-size:15px;font-weight:600;text-decoration:none}
+</style>
+</head>
+<body>
+<div style="width: 480px; height: 1500px; box-sizing: border-box; display: flex; flex-direction: column; padding: 20px 24px; background: #FFFFFF; border-left: 1px solid #E2E6EA; font-family: 'Onest', ui-sans-serif, system-ui, sans-serif; color: #344054;">
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 12px;">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <span aria-hidden="true" style="display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: #EAF0F6; color: #173F5F; font-size: 18px; font-weight: 700;">КП</span>
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <h2 style="margin: 0; font-size: 22px; line-height: 28px; color: #173F5F;">Калоян Петков</h2>
+        <p class="meta">4. клас · 9 години · сестра: Ива Петкова</p>
+      </div>
+    </div>
+    <a href="ScheduleWeek.html" aria-label="Затвори" style="display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #E2E6EA; border-radius: 12px; text-decoration: none;">✕</a>
+  </div>
+  <div style="display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 14px;">
+    <span class="chip" style="background: #DCE7F3; color: #173F5F;">Шахмат · Група 2</span>
+    <span class="chip" style="background: #EEF1F4; color: #4A5767;">Записан от 1 септември</span>
+  </div>
+
+  <section aria-labelledby="money" style="display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 14px; background: #FFF9F4; border: 1px solid #E8B48F;">
+    <h3 id="money" class="cap" style="color: #8A3E10;">Плащания на семейството</h3>
+    <p style="margin: 0; font-size: 20px; line-height: 26px; font-weight: 700; color: #173F5F;">Дължат 190,00 €</p>
+    <p style="margin: 0; font-size: 15px; line-height: 21px; color: #8A3E10; font-weight: 600;">⚠ от тях 60,00 € са просрочени с 12 дни</p>
+    <div class="line"><span>Калоян</span><strong>120,00 €</strong></div>
+    <div class="line"><span>Ива</span><strong>70,00 €</strong></div>
+    <div class="line" style="padding-top: 6px; border-top: 1px dashed #E8B48F;"><span>В портфейла</span><strong style="color: #1F5A41;">10,00 € кредит</strong></div>
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">
+      <a class="btn" href="Payment.html" style="background: #173F5F; color: #FFFFFF;">Приеми плащане</a>
+      <a class="btn" href="Wallet.html" style="border: 1.5px solid #173F5F; background: #FFFFFF;">Портфейл</a>
+    </div>
+  </section>
+
+  <div class="sec" style="margin-top: 8px;">
+    <p class="cap">Неплатени такси · първо най-старите</p>
+    <div class="line"><span>Октомври · Шахмат · <span style="color: #8A3E10; font-weight: 600;">просрочено 12 дни</span></span><strong>60,00 €</strong></div>
+    <div class="line"><span>Ноември · Шахмат · (3 присъствия + 1 неявяване) × 15 €</span><strong>60,00 €</strong></div>
+    <div class="line"><span>Ноември · Балет (Ива) · до 5 декември</span><strong>70,00 €</strong></div>
+  </div>
+
+  <div class="sec">
+    <p class="cap">Присъствия през ноември</p>
+    <p style="margin: 0; font-size: 16px; font-weight: 600; color: #173F5F;">3 от 5 · 60 %</p>
+    <div style="display: flex; gap: 6px;" aria-label="Последните занимания">
+      <span class="dot x" title="2 ноември — предупредено отсъствие">пр</span>
+      <span class="dot y" title="4 ноември — присъства">✓</span>
+      <span class="dot y" title="9 ноември — присъства">✓</span>
+      <span class="dot o" title="11 ноември — отменено">—</span>
+      <span class="dot y" title="16 ноември — присъства">✓</span>
+      <span class="dot x" title="18 ноември — отсъства">✕</span>
+    </div>
+    <a href="Admin.html" style="font-size: 14px; font-weight: 600;">Всички присъствия</a>
+  </div>
+
+  <div class="sec">
+    <p class="cap">Родители и контакти</p>
+    <div class="line"><span><strong>Елена Петкова</strong> · майка · плаща</span><a href="#" style="font-weight: 600;">0888 000 111</a></div>
+    <p class="meta">elena.petkova@example.test · предпочита Viber</p>
+    <div class="line"><span><strong>Иван Петков</strong> · баща</span><a href="#" style="font-weight: 600;">0899 000 222</a></div>
+    <p class="meta">Може да го взима: майка, баща, баба Мария Петкова</p>
+  </div>
+
+  <div class="sec">
+    <p class="cap">Здраве</p>
+    <p class="meta">Няма бележки.</p>
+  </div>
+
+  <div class="sec">
+    <p class="cap">Последни плащания</p>
+    <div class="line"><span>28 септ. · в брой · квитанция № 0042</span><strong>60,00 €</strong></div>
+    <div class="line"><span>2 септ. · по банка · основание „Калоян шах“</span><strong>60,00 €</strong></div>
+    <a href="Wallet.html" style="font-size: 14px; font-weight: 600;">Всички движения</a>
+  </div>
+
+  <div class="sec">
+    <p class="cap">Бележка на екипа</p>
+    <p style="margin: 0; font-size: 14px; line-height: 20px;">В сряда идва от плуване — може да закъснее до 10 минути.</p>
+  </div>
+
+  <div class="sec" style="margin-top: auto;">
+    <a class="btn" href="#" style="border: 1.5px solid #173F5F;">Отвори целия профил</a>
+    <p class="meta" style="font-size: 13px;">Сумите виждат собственикът, администраторът и касиерът. Учителят вижда само присъствията, групите и бележките.</p>
+  </div>
+</div>
+</body>
+</html>

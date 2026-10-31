@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Учител — моите възнаграждения</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#173F5F}a:hover{color:#0F2A40}
+.meta{margin:0;font-size:14px;line-height:20px;color:#5B6878}
+.card{display:flex;flex-direction:column;gap:8px;padding:16px;border:1px solid #E2E6EA;border-radius:16px;background:#FFFFFF}
+.sum{display:flex;justify-content:space-between;gap:12px;font-size:15px;line-height:21px}
+.sum strong{color:#173F5F}
+</style>
+</head>
+<body>
+<div style="width: 390px; height: 900px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 16px; background: #F6F4EF; font-family: 'Onest', ui-sans-serif, system-ui, sans-serif; color: #344054;">
+  <a href="Main.html" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 15px; font-weight: 600; text-decoration: none;">← Днес</a>
+  <div>
+    <h1 style="margin: 0; font-size: 26px; line-height: 32px; color: #173F5F;">Моите възнаграждения</h1>
+    <p class="meta">Петър Стоянов · ноември 2026</p>
+  </div>
+
+  <section class="card" aria-label="Ноември до днес" style="background: #173F5F; border-color: #173F5F; color: #FFFFFF;">
+    <span style="font-size: 14px; opacity: .9;">Ноември до днес</span>
+    <strong style="font-size: 32px; line-height: 38px;">518,00 €</strong>
+    <span style="font-size: 14px; line-height: 20px; opacity: .9;">Окончателно след приключването на месеца.</span>
+  </section>
+
+  <section class="card" aria-labelledby="g1">
+    <h2 id="g1" style="margin: 0; font-size: 16px; color: #173F5F;">Футбол · Група 1</h2>
+    <div class="sum"><span>Платени такси в групата</span><strong>1 400,00 €</strong></div>
+    <div class="sum"><span>Вашите 20 %</span><strong>280,00 €</strong></div>
+  </section>
+
+  <section class="card" aria-labelledby="g2">
+    <h2 id="g2" style="margin: 0; font-size: 16px; color: #173F5F;">Футбол · Група 2</h2>
+    <div class="sum"><span>8 занимания × 12 €</span><strong>96,00 €</strong></div>
+    <div class="sum"><span>92 присъствия × 1 €</span><strong>92,00 €</strong></div>
+  </section>
+
+  <section class="card" aria-label="Бонуси">
+    <div class="sum"><span>Бонус — турнир на 14 ноември</span><strong style="color: #1F5A41;">+ 50,00 €</strong></div>
+  </section>
+
+  <a href="MarkA.html" style="display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 12px; background: #FFF9F4; border: 1px solid #E8B48F; color: #8A3E10; text-decoration: none;">
+    <strong style="font-size: 15px;">! Отбележете присъствията от 18 ноември</strong>
+    <span style="font-size: 14px;">Без тях месецът не може да се приключи.</span>
+  </a>
+
+  <section class="card" aria-labelledby="past">
+    <h2 id="past" style="margin: 0; font-size: 16px; color: #173F5F;">Предишни месеци</h2>
+    <div class="sum"><span>Октомври · изплатени на 5 ноем.</span><strong>486,00 €</strong></div>
+    <div class="sum"><span>Септември · изплатени на 5 окт.</span><strong>452,00 €</strong></div>
+  </section>
+</div>
+</body>
+</html>
