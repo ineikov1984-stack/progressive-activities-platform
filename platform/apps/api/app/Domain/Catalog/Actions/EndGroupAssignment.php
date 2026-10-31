@@ -8,6 +8,7 @@ use App\Domain\Audit\ValueObjects\AuditableReference;
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Services\GroupTeachers;
+use App\Domain\Catalog\Services\TeamAssignments;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
@@ -23,7 +24,12 @@ use Illuminate\Validation\ValidationException;
  */
 final readonly class EndGroupAssignment
 {
-    public function __construct(private TenantContext $context, private GroupTeachers $teachers, private AuditRecorder $audit) {}
+    public function __construct(
+        private TenantContext $context,
+        private GroupTeachers $teachers,
+        private TeamAssignments $assignments,
+        private AuditRecorder $audit,
+    ) {}
 
     /** @param array<string, mixed> $payload */
     public function handle(User $actor, Group $group, string $profileId, array $payload): Group
@@ -35,11 +41,13 @@ final readonly class EndGroupAssignment
             'version' => ['required', 'integer', 'min:1'],
         ])->validate();
 
-        return DB::transaction(function () use ($group, $profileId, $data): Group {
+        return DB::transaction(function () use ($actor, $group, $profileId, $data): Group {
             Activity::query()->whereKey($group->offering()->value('activity_id'))->lockForUpdate()->firstOrFail();
             $group = Group::query()->whereKey($group->id)->lockForUpdate()->firstOrFail();
             $assignment = $group->assignments()->where('instructor_profiles.id', $profileId)->first();
             abort_if($assignment === null, 404);
+            // Changing the end can extend the rights an assignment gives; an added right never changes one's own.
+            $this->assignments->assertNotSelf($actor, [(string) $assignment->id]);
             $current = GroupTeachers::assignment($assignment);
             abort_unless($current['version'] === (int) $data['version'], 409, 'Assignment version conflict.');
 
