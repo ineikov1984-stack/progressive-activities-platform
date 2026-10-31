@@ -48,7 +48,7 @@ describe('payment terms in the activity editor', () => {
   it('shows the organization\'s default, or the ready-made "Стандартни" when it has none', () => {
     const none = organizationTerms(workspace([]), 'monthly');
     expect(none).toMatchObject({ kindLabel: 'Месечна такса', presetLabel: 'Стандартни' });
-    expect(none.lines.map((line) => line.title)).toEqual(['Ако спрете', 'Пауза', 'Отсъствия']);
+    expect(none.lines.map((line) => line.title)).toEqual(['Прекратяване', 'Пауза', 'Отсъствия']);
     const own = organizationTerms(workspace([set('d', { is_default: true, preset: 'flexible', preset_label: 'Гъвкави' })]), 'monthly');
     expect(own.presetLabel).toBe('Гъвкави');
   });

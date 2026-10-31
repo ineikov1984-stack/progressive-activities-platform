@@ -92,7 +92,7 @@ class PaymentTermsApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('usage.monthly', ['Футбол'])
             ->assertJsonPath('usage.visit', ['Пробно по футбол'])
-            ->assertJsonPath('billing_kinds.1.label', 'Цял курс наведнъж');
+            ->assertJsonPath('billing_kinds.1.label', 'За целия период');
     }
 
     public function test_a_restricted_organization_reads_but_does_not_change(): void

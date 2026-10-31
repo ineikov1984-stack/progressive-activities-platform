@@ -248,9 +248,9 @@ class PaymentTermsCopyTest extends TestCase
             $draft(['monthly' => $refused])->assertUnprocessable()->assertJsonPath('errors', $error('monthly', 'Изберете условия от „Такси, отсъствия и отказ“.'));
         }
         $draft(['monthly' => $visit['id']])->assertUnprocessable()
-            ->assertJsonPath('errors', $error('monthly', 'Тези условия са за „Пробно или единично посещение“, а изборът е за „Месечна такса“.'));
+            ->assertJsonPath('errors', $error('monthly', 'Тези условия са за „Пробно занимание или еднократно посещение“, а изборът е за „Месечна такса“.'));
         $draft(['visit' => $visit['id']])->assertUnprocessable()
-            ->assertJsonPath('errors', $error('visit', 'Дейността няма цена „Пробно или единично посещение“.'));
+            ->assertJsonPath('errors', $error('visit', 'Дейността няма цена „Пробно занимание или еднократно посещение“.'));
         $draft(['day_camp' => $own['id']])->assertUnprocessable()->assertJsonValidationErrors('offering.payment_terms');
 
         // Back to the organization's terms for every way of paying.
