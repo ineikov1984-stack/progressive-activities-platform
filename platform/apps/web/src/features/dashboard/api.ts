@@ -42,6 +42,13 @@ export type DashboardAuditEvent = {
   correlation_id?: string;
 };
 
+/** A group the signed-in person teaches (`GET /me/teaching`, docs/product/team.md, т. 8): led, assisted or substituted. */
+export type TeachingGroup = {
+  group_id: string; group_name: string; activity_id: string; activity_title: string; label: string;
+  basis: 'assignment' | 'offering_lead' | 'substitute' | string; role: 'lead' | 'assistant' | string;
+  starts_on: string | null; ends_on: string | null; next_session_starts_at: string | null;
+};
+
 export type DashboardData = {
   user: DashboardUser;
   organization: DashboardOrganization;
@@ -137,6 +144,12 @@ export async function loadDashboard(): Promise<DashboardData> {
 
     throw new Error('Не успяхме да заредим административното табло.');
   }
+}
+
+/** The groups the user teaches in the organization — any role with a teacher profile; empty for those who teach none. */
+export async function loadTeaching(organizationId: string): Promise<TeachingGroup[]> {
+  const body = await requestJson<{ groups?: TeachingGroup[] }>('/backend/api/v1/me/teaching', { headers: { 'X-Organization-Id': organizationId } });
+  return Array.isArray(body.groups) ? body.groups : [];
 }
 
 /**

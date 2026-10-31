@@ -62,7 +62,11 @@ async function request<T>(organizationId: string, path: string, init: RequestIni
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { message?: unknown; errors?: Record<string, string[]> };
-    throw new PaymentTermsApiError(errorMessage(response.status, body.message), response.status, body.errors ?? {});
+    // Reading is refused to the teacher and the viewer (DECISIONS 31.10.2026); changing, to all but the owner and the administrator.
+    const text = !write && response.status === 403
+      ? 'Таксите, отсъствията и отказа виждат собственикът, администраторът, координаторът и счетоводителят.'
+      : errorMessage(response.status, body.message);
+    throw new PaymentTermsApiError(text, response.status, body.errors ?? {});
   }
   return response.json() as Promise<T>;
 }

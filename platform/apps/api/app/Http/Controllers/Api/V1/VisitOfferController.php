@@ -20,7 +20,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class VisitOfferController extends Controller
 {
-    public function __construct(private readonly PaymentTermsResolver $paymentTerms) {}
+    public function __construct(private readonly PaymentTermsResolver $paymentTerms, private readonly TenantContext $tenant) {}
 
     /** Offer fields that no longer apply (docs/product/visits.md, т. 8a.8). */
     private const RETIRED = [
@@ -33,14 +33,17 @@ final class VisitOfferController extends Controller
     {
         Gate::forUser($request->user())->authorize('catalog.view', $this->organization($context));
 
-        return response()->json(['visit_offers' => VisitOffer::query()->with('sessions')->latest()->get()->map($this->present(...))->all()]);
+        $terms = $this->seesTerms($request);
+
+        return response()->json(['visit_offers' => VisitOffer::query()->with('sessions')->latest()->get()
+            ->map(fn (VisitOffer $offer): array => $this->present($offer, $terms))->all()]);
     }
 
     public function show(Request $request, TenantContext $context, string $visitOffer): JsonResponse
     {
         Gate::forUser($request->user())->authorize('catalog.view', $this->organization($context));
 
-        return response()->json(['visit_offer' => $this->present(VisitOffer::query()->with('sessions')->findOrFail($visitOffer))]);
+        return response()->json(['visit_offer' => $this->present(VisitOffer::query()->with('sessions')->findOrFail($visitOffer), $this->seesTerms($request))]);
     }
 
     public function store(Request $request, TenantContext $context, SaveVisitOffer $save): JsonResponse
@@ -49,7 +52,7 @@ final class VisitOfferController extends Controller
         $data = $this->validated($request, $context);
         $offer = $save->create($request->user(), $data);
 
-        return response()->json(['visit_offer' => $this->present($offer)], Response::HTTP_CREATED);
+        return response()->json(['visit_offer' => $this->present($offer, $this->seesTerms($request))], Response::HTTP_CREATED);
     }
 
     public function update(Request $request, TenantContext $context, string $visitOffer, SaveVisitOffer $save): JsonResponse
@@ -59,7 +62,7 @@ final class VisitOfferController extends Controller
         $data = $this->validated($request, $context, $offer);
         $updated = $save->update($request->user(), $offer, $data['version'], $data);
 
-        return response()->json(['visit_offer' => $this->present($updated)]);
+        return response()->json(['visit_offer' => $this->present($updated, $this->seesTerms($request))]);
     }
 
     public function publish(Request $request, string $visitOffer, PublishVisitOffer $action): JsonResponse
@@ -82,7 +85,7 @@ final class VisitOfferController extends Controller
         $data = $request->validate(['version' => ['required', 'integer', 'min:1']]);
         $offer = VisitOffer::query()->findOrFail($id);
 
-        return response()->json(['visit_offer' => $this->present($action->handle($request->user(), $offer, $data['version'], $transition))]);
+        return response()->json(['visit_offer' => $this->present($action->handle($request->user(), $offer, $data['version'], $transition), $this->seesTerms($request))]);
     }
 
     /** @return array<string, mixed> */
@@ -154,8 +157,17 @@ final class VisitOfferController extends Controller
         return Organization::query()->findOrFail($context->organizationId());
     }
 
+    /**
+     * The rules of "Такси, отсъствия и отказ" only for those who read them — the owner, the administrator, the
+     * coordinator, the accountant and the editors of the activities (DECISIONS 31.10.2026); parents see them on the site.
+     */
+    private function seesTerms(Request $request): bool
+    {
+        return Gate::forUser($request->user())->allows('viewPaymentTerms', $this->organization($this->tenant));
+    }
+
     /** @return array<string, mixed> */
-    private function present(VisitOffer $offer): array
+    private function present(VisitOffer $offer, bool $withTerms): array
     {
         $offer->loadMissing(['sessions', 'group.priceOptions', 'group.offering.priceOptions', 'group.offering.paymentTermsChoices']);
         $price = $offer->stepSixPrice();
@@ -176,7 +188,7 @@ final class VisitOfferController extends Controller
                 'amount_cents' => $price->amount_cents, 'currency' => $price->currency,
             ],
             // The activity's "Такси, отсъствия и отказ" for visits, which every application copies (т. 8a.3).
-            'payment_terms' => $offer->group === null ? null : $this->paymentTerms
+            'payment_terms' => ! $withTerms || $offer->group === null ? null : $this->paymentTerms
                 ->forPrice('single', $offer->group->offering->paymentTermsByKind())?->presentForParent(),
             'published_at' => $offer->published_at?->toIso8601String(),
             'closed_at' => $offer->closed_at?->toIso8601String(),

@@ -173,7 +173,7 @@ function WaitingQueues({ queues, counts, busyId, canManage, onDecide, onDetails 
   );
 }
 
-function GroupsView({ groups, organizationId, canManage, openGroup, onToggleGroup, onChanged, onDetails }: { groups: StaffGroup[]; organizationId: string; canManage: boolean; openGroup?: string; onToggleGroup: (groupId: string) => void; onChanged: () => void; onDetails: (target: DetailsTarget, opener: HTMLElement) => void }) {
+function GroupsView({ groups, organizationId, canManage, canChangeApproval, openGroup, onToggleGroup, onChanged, onDetails }: { groups: StaffGroup[]; organizationId: string; canManage: boolean; canChangeApproval: boolean; openGroup?: string; onToggleGroup: (groupId: string) => void; onChanged: () => void; onDetails?: (target: DetailsTarget, opener: HTMLElement) => void }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<GroupFilter>('all');
   // Many activities open folded, except the one with the group opened from a link.
@@ -264,7 +264,7 @@ function GroupsView({ groups, organizationId, canManage, openGroup, onToggleGrou
                               <span className={styles.toggle}><span className={styles.toggleText}>{expanded ? 'Скрий децата' : 'Деца'}</span><Chevron open={expanded} /></span>
                             </button>
                           </h4>
-                          {expanded ? <GroupRosterPanel organizationId={organizationId} groupId={group.id} canManage={canManage} onChanged={onChanged} onDetails={onDetails} /> : null}
+                          {expanded ? <GroupRosterPanel organizationId={organizationId} groupId={group.id} canManage={canManage} canChangeApproval={canChangeApproval} onChanged={onChanged} onDetails={onDetails} /> : null}
                         </li>
                       );
                     })}
@@ -284,13 +284,18 @@ const noFilters: FilterValues = { search: '', activityId: '', groupId: '' };
 export function EnrollmentsPage() {
   const { organization } = useDashboardContext();
   const searchParams = useSearchParams();
-  const [tab, setTab] = useState<Tab>(() => initialTab(searchParams.get('view')));
+  // A teacher without "Вижда децата и записванията" comes from "Начало" to their own groups only: no applications
+  // and no waiting lists (DECISIONS 31.10.2026).
+  const canView = organization.permissions.includes('enrollment.view');
+  const [tab, setTab] = useState<Tab>(() => canView ? initialTab(searchParams.get('view')) : 'groups');
   const [submitted, setSubmitted] = useState<ApplicationPage>();
   const [waitlisted, setWaitlisted] = useState<ApplicationPage>();
   const [groups, setGroups] = useState<StaffGroup[]>();
   const [groupsError, setGroupsError] = useState('');
   const canManage = organization.permissions.includes('enrollment.manage');
-  const canView = organization.permissions.includes('enrollment.view');
+  // How a group approves is set with the activities, not with "Записва деца". "Подробности" (the child's record) needs
+  // "Вижда децата и записванията": a teacher's own list already has what they need.
+  const canChangeApproval = organization.permissions.includes('catalog.manage');
   const canSeeContacts = organization.permissions.includes('enrollment.contacts');
   // One "Подробности" panel at a time; closing it gives the focus back to the button that opened it.
   const [details, setDetails] = useState<DetailsTarget>();
@@ -353,11 +358,12 @@ export function EnrollmentsPage() {
   }, [filtering, filterKey, organization.id, tab, query, filters.activityId, filters.groupId]);
 
   const refresh = useCallback(async () => {
+    if (!canView) return;
     const [newOnes, waiting] = await Promise.all([loadApplications(organization.id, 'submitted'), loadApplications(organization.id, 'waitlisted')]);
     setSubmitted(newOnes);
     setWaitlisted(waiting);
     setListVersion((version) => version + 1);
-  }, [organization.id]);
+  }, [organization.id, canView]);
 
   // After a change in a group the counts follow: the group list (without closing the open group)
   // and the "Заявки / Чакащи" counters (a waiting child may have been approved from the group).
@@ -367,12 +373,13 @@ export function EnrollmentsPage() {
   }, [organization.id, refresh]);
 
   useEffect(() => {
+    if (!canView) return;
     let active = true;
     Promise.all([loadApplications(organization.id, 'submitted'), loadApplications(organization.id, 'waitlisted')])
       .then(([newOnes, waiting]) => { if (active) { setSubmitted(newOnes); setWaitlisted(waiting); } })
       .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : 'Заявките не се заредиха.'); });
     return () => { active = false; };
-  }, [organization.id]);
+  }, [organization.id, canView]);
 
   useEffect(() => {
     if (tab !== 'groups' || groups) return;
@@ -414,11 +421,11 @@ export function EnrollmentsPage() {
     } finally { setBusyId(''); }
   }
 
-  const tabs: { id: Tab; label: string; title: string; count?: number }[] = [
+  const tabs: { id: Tab; label: string; title: string; count?: number }[] = canView ? [
     { id: 'submitted', label: 'Заявки', title: 'Заявки, които чакат решение', count: submitted?.total },
     { id: 'waitlisted', label: 'Чакащи', title: 'Списък на чакащите', count: waitlisted?.total },
     { id: 'groups', label: 'Групи', title: 'Групи и записани деца' },
-  ];
+  ] : [{ id: 'groups', label: 'Групи', title: 'Вашите групи и децата в тях' }];
   const unfiltered = tab === 'submitted' ? submitted : waitlisted;
   const page = filtering ? (filtered?.key === filterKey ? filtered.page : undefined) : unfiltered;
   const list = page?.applications;
@@ -443,17 +450,19 @@ export function EnrollmentsPage() {
     <div className={styles.page}>
       <header className={styles.header}>
         <p className={styles.eyebrow}>Управление</p>
-        <h1>Записвания</h1>
-        <p className={styles.muted}>Решете заявките на родителите и вижте кой е във всяка група.</p>
+        <h1>{canView ? 'Записвания' : 'Моите групи'}</h1>
+        <p className={styles.muted}>{canView ? 'Решете заявките на родителите и вижте кой е във всяка група.' : 'Децата във всяка група, която водите.'}</p>
       </header>
 
-      <div className={styles.tabs} role="group" aria-label="Изглед">
-        {tabs.map((item) => (
-          <button key={item.id} type="button" aria-pressed={tab === item.id} className={`${styles.tab} ${tab === item.id ? styles.tabOn : ''}`} onClick={() => chooseTab(item.id)}>
-            {item.label}{item.count !== undefined ? <span className={styles.count}>{item.count}</span> : null}
-          </button>
-        ))}
-      </div>
+      {tabs.length > 1 ? (
+        <div className={styles.tabs} role="group" aria-label="Изглед">
+          {tabs.map((item) => (
+            <button key={item.id} type="button" aria-pressed={tab === item.id} className={`${styles.tab} ${tab === item.id ? styles.tabOn : ''}`} onClick={() => chooseTab(item.id)}>
+              {item.label}{item.count !== undefined ? <span className={styles.count}>{item.count}</span> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <p ref={noticeRef} tabIndex={-1} className={notice ? styles.success : styles.srOnly} role="status">{notice?.text ?? ''}</p>
       {error ? <p ref={errorRef} tabIndex={-1} className={styles.error} role="alert">{error}</p> : null}
@@ -495,12 +504,13 @@ export function EnrollmentsPage() {
           </div>
         ) : groups.length === 0 ? (
           <div className={styles.empty}>
-            <strong>Все още няма групи</strong>
-            <p>Групите се създават в стъпка 7 на всяка дейност. <Link href="/dashboard/activities">Към дейностите</Link></p>
+            <strong>{canView ? 'Все още няма групи' : 'Все още нямате групи'}</strong>
+            <p>{canView ? <>Групите се създават в стъпка 7 на всяка дейност. <Link href="/dashboard/activities">Към дейностите</Link></> : 'Когато ви добавят в група, тя ще се появи тук и на „Начало“.'}</p>
           </div>
         ) : (
-          <GroupsView groups={groups} organizationId={organization.id} canManage={canManage} openGroup={openGroup}
-            onToggleGroup={(groupId) => setOpenGroup((current) => current === groupId ? undefined : groupId)} onChanged={refreshGroups} onDetails={openDetails} />
+          <GroupsView groups={groups} organizationId={organization.id} canManage={canManage} canChangeApproval={canChangeApproval} openGroup={openGroup}
+            onToggleGroup={(groupId) => setOpenGroup((current) => current === groupId ? undefined : groupId)} onChanged={refreshGroups}
+            onDetails={canView ? openDetails : undefined} />
         )}
       </section>
       {details ? <ChildDetailsPanel key={`${details.kind}-${details.id}`} organizationId={organization.id} target={details} onClose={closeDetails} /> : null}

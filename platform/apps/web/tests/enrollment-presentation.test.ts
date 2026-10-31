@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ChildRecord, GroupRoster, HistoryItem, RosterEnrollment, StaffGroup } from '../src/features/enrollment/api';
 import {
-  activitySummary, actorText, addDays, ageText, applicationPlaces, childLine, historyText, ordinalText, queueText, reasonText, recordStatusText, recordTone, needsGroupPlace, waitingQueues, groupFill, groupsByActivity, hasPlaceForWaiting, lastDayOfMonth, matchesGroupFilter, matchesGroupSearch, moveInSummary,
+  activitySummary, actorText, addDays, ageText, applicationPlaces, approvalLine, childLine, historyText, ordinalText, queueText, reasonText, recordStatusText, recordTone, needsGroupPlace, waitingQueues, groupFill, groupsByActivity, hasPlaceForWaiting, lastDayOfMonth, matchesGroupFilter, matchesGroupSearch, moveInSummary,
   placesText, priceText, rosterNotes, scheduleText, skippableSessions, sofiaDay, waitingText, weekdayDay, revealErrorText,
 } from '../src/features/enrollment/presentation';
 
@@ -186,5 +186,13 @@ describe('enrollment presentation', () => {
     expect(revealErrorText(404)).toBe('Контактът вече не е достъпен.');
     expect(revealErrorText(403)).toBe('Нямате право да виждате контактите на родителите в тази група.');
     expect(revealErrorText(0)).toMatch(/^Контактът не се показа/);
+  });
+
+  // DECISIONS 31.10.2026: whoever does not change the setting reads it in one line; a teacher's list does not say it.
+  it('says in one line how a group approves, and nothing when the list does not say', () => {
+    expect(approvalLine('manual')).toBe('Как се одобряват заявките: ръчно.');
+    expect(approvalLine('automatic')).toBe('Как се одобряват заявките: автоматично.');
+    expect(approvalLine(undefined)).toBe('');
+    expect(approvalLine('sometimes')).toBe('');
   });
 });

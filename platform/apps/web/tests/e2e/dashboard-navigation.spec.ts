@@ -4,7 +4,7 @@ async function openDashboard(page: import('@playwright/test').Page) {
   await page.route('**/backend/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/me')) return route.fulfill({ json: { user: { id: 'user-1', name: 'Иван Николов', email: 'owner@example.test' } } });
-    if (path.endsWith('/organizations')) return route.fulfill({ json: { organizations: [{ id: 'org-1', name: 'Progressive Academy', slug: 'progressive-academy', status: 'active', role: 'organization_owner', permissions: ['create', 'update', 'invite', 'finance', 'view'] }] } });
+    if (path.endsWith('/organizations')) return route.fulfill({ json: { organizations: [{ id: 'org-1', name: 'Progressive Academy', slug: 'progressive-academy', status: 'active', role: 'organization_owner', permissions: ['create', 'update', 'invite', 'finance', 'view', 'catalog.view', 'catalog.manage', 'terms.view'] }] } });
     if (path.endsWith('/invitations')) return route.fulfill({ json: { invitations: [] } });
     if (path.endsWith('/audit-events')) return route.fulfill({ json: { events: [] } });
     return route.fulfill({ status: 404, json: { message: 'Not mocked' } });

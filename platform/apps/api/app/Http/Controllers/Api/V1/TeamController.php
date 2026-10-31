@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domain\Audit\Enums\AuditAction;
 use App\Domain\Audit\Models\AuditEvent;
 use App\Domain\Catalog\Actions\LinkInstructorProfile;
 use App\Domain\Catalog\Services\AccessScope;
@@ -18,6 +19,7 @@ use App\Domain\Organizations\Models\Invitation;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
 use App\Domain\Organizations\Models\StaffMember;
+use App\Domain\Organizations\Services\TeamAbilities;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Http\Presenters\StaffAccessCard;
@@ -37,6 +39,9 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class TeamController extends Controller
 {
+    /** The rights given, with a new end, or taken: in "История" with the rights they name. */
+    private const GRANT_ACTIONS = ['team.access_grant_added', 'team.access_grant_changed', 'team.access_grant_revoked'];
+
     public function __construct(
         private readonly TenantContext $context,
         private readonly StaffTeaching $teaching,
@@ -300,19 +305,80 @@ class TeamController extends Controller
         })->values()->all();
     }
 
-    /** @return list<array{action: string, at: string, by: string|null}> */
+    /**
+     * "История" of the profile: what, who and when; for the rights also which were given or taken — the rights of one
+     * save in one entry — and the role before and after (the owner's review of 31.10.2026). Keys only, never a phone,
+     * an e-mail or a name of a child.
+     *
+     * @return list<array<string, mixed>>
+     */
     private function history(StaffMember $member): array
     {
         $events = AuditEvent::query()->where('organization_id', $this->context->organizationId())
             ->where('subject_type', 'staff_member')->where('subject_id', $member->id)
-            ->latest()->limit(50)->get(['action', 'actor_id', 'created_at']);
+            ->latest()->limit(50)->get(['action', 'actor_id', 'correlation_id', 'metadata', 'created_at']);
         $names = User::query()->whereIn('id', $events->pluck('actor_id')->filter()->unique()->values()->all())->pluck('name', 'id');
 
-        return $events->map(fn (AuditEvent $event): array => [
-            'action' => (string) $event->getAttribute('action'),
-            'at' => $event->created_at?->toIso8601String() ?? '',
-            'by' => $event->getAttribute('actor_id') === null ? null : ($names[$event->getAttribute('actor_id')] ?? null),
-        ])->values()->all();
+        $entries = [];
+        /** @var array<string, int> $together the entry of the rights given or taken in one request by one person */
+        $together = [];
+        /** @var array<int, list<string>> $abilities */
+        $abilities = [];
+        foreach ($events as $event) {
+            $action = (string) $event->getAttribute('action');
+            $actor = $event->getAttribute('actor_id');
+            $metadata = $event->metadata;
+            $details = match ($action) {
+                AuditAction::TeamRoleChanged->value, AuditAction::TeamAccessScopeChanged->value, AuditAction::TeamAccessTemplateChanged->value => ['from', 'to'],
+                AuditAction::TeamAccessGrantRevoked->value => ['reason'],
+                default => [],
+            };
+            $entry = [
+                'action' => $action,
+                'at' => $event->created_at?->toIso8601String() ?? '',
+                'by' => $actor === null ? null : ($names[$actor] ?? null),
+                ...array_intersect_key($metadata, array_flip($details)),
+            ];
+            // A group or a whole activity added to the scope or taken from it: the kind only, never which one.
+            if (in_array($action, [AuditAction::TeamAccessGroupAdded->value, AuditAction::TeamAccessGroupRemoved->value], true)) {
+                $entry['target'] = is_string($metadata['group_id'] ?? null) ? 'group' : 'activity';
+            }
+            $ability = $metadata['ability'] ?? null;
+            if (! in_array($action, self::GRANT_ACTIONS, true) || ! is_string($ability)) {
+                $entries[] = $entry;
+
+                continue;
+            }
+            // One save: the same request, the same second, the same person — never two saves that share a request id.
+            $key = implode('|', [
+                $action, (string) $event->getAttribute('correlation_id'), $event->created_at?->format('Y-m-d H:i:s') ?? '',
+                (string) $actor, (string) ($metadata['reason'] ?? ''),
+            ]);
+            if (! isset($together[$key])) {
+                $together[$key] = count($entries);
+                $entries[] = $entry;
+            }
+            $abilities[$together[$key]][] = $ability;
+        }
+        $result = [];
+        foreach ($entries as $index => $entry) {
+            $result[] = isset($abilities[$index]) ? [...$entry, 'abilities' => self::inCardOrder($abilities[$index])] : $entry;
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param  list<string>  $abilities
+     * @return list<string>
+     */
+    private static function inCardOrder(array $abilities): array
+    {
+        $order = array_flip(TeamAbilities::GRANTABLE);
+        $abilities = array_values(array_unique($abilities));
+        usort($abilities, fn (string $a, string $b): int => ($order[$a] ?? PHP_INT_MAX) <=> ($order[$b] ?? PHP_INT_MAX));
+
+        return $abilities;
     }
 
     private function organization(): Organization

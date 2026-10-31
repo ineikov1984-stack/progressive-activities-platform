@@ -152,7 +152,8 @@ class TeamRightsNarrowScopeTest extends TestCase
             'POST api/v1/enrollment/applications/{application}/contact/reveal' => ["{$application}/contact/reveal", [], 200],
             'POST api/v1/enrollment/enrollments/{enrollment}/contact/reveal' => ["{$enrollment}/contact/reveal", [], 200],
             'POST api/v1/enrollment/applications/{application}/review' => ["{$application}/review", [], 422],
-            'PATCH api/v1/enrollment/groups/{group}/approval' => ["/api/v1/enrollment/groups/{$tuesday}/approval", [], 422],
+            // A setting of the group, changed with the activities — for the whole organization only (31.10.2026).
+            'PATCH api/v1/enrollment/groups/{group}/approval' => ["/api/v1/enrollment/groups/{$tuesday}/approval", [], 403],
             'POST api/v1/enrollment/enrollments/{enrollment}/transfer' => ["{$enrollment}/transfer", [], 422],
             'POST api/v1/enrollment/enrollments/{enrollment}/pauses' => ["{$enrollment}/pauses", [], 422],
             'POST api/v1/enrollment/enrollments/{enrollment}/pauses/{pause}/end' => ["{$enrollment}/pauses/{$missing}/end", [], 422],
