@@ -22,6 +22,9 @@ describe('dashboard navigation', () => {
     const labels = (permissions: string[]) => dashboardNavigation('/dashboard', permissions).flatMap((group) => group.items).map((item) => item.label);
     expect(labels(['view', 'catalog.view'])).not.toContain('Записвания');
     expect(labels(['view', 'catalog.view', 'enrollment.view'])).toContain('Записвания');
+    // A teacher has no "Екип"; the roles that see the team do.
+    expect(labels(['view', 'catalog.view'])).not.toContain('Екип');
+    expect(labels(['view', 'catalog.view', 'team.view'])).toContain('Екип');
   });
 
   it('marks exactly one destination active, including nested routes', () => {
@@ -35,6 +38,8 @@ describe('dashboard navigation', () => {
     expect(active('/dashboard/open-days')).toEqual(['Отворени врати']);
     expect(active('/dashboard/enrollments')).toEqual(['Записвания']);
     expect(active('/dashboard/settings/payment-terms')).toEqual(['Такси, отсъствия и отказ']);
+    expect(active('/dashboard/team')).toEqual(['Екип']);
+    expect(active('/dashboard/team/member-1')).toEqual(['Екип']);
   });
 
   it('starts expanded on desktop, compact on tablet and leaves mobile to the drawer', () => {

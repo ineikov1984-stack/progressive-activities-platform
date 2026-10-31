@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createInvitation, loadDashboard } from '../src/features/dashboard/api';
+import { loadDashboard, loadWorkspaceOverview } from '../src/features/dashboard/api';
 
 const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -53,22 +53,14 @@ describe('dashboard API', () => {
     await expect(loadDashboard()).rejects.toThrow('Не успяхме да заредим административното табло.');
   });
 
-  it('creates an invitation through the real invitation endpoint contract', async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(null, { status: 204 }))
-      .mockResolvedValueOnce(jsonResponse({
-        invitation: { id: 'invite-1', email: 'teacher@example.test', role: 'instructor', status: 'pending' },
-        token: 'one-time-token',
-      }, 201));
+  it('asks for invitations only when the role invites, so the other roles see the home screen without an error', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({ events: [] }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await createInvitation('org-1', 'teacher@example.test', 'instructor');
+    const overview = await loadWorkspaceOverview('org-1', false);
 
-    expect(result.token).toBe('one-time-token');
-    expect(fetchMock).toHaveBeenLastCalledWith('/backend/api/v1/invitations', expect.objectContaining({
-      method: 'POST',
-      headers: expect.objectContaining({ 'X-Organization-Id': 'org-1' }),
-      body: JSON.stringify({ email: 'teacher@example.test', role: 'instructor' }),
-    }));
+    expect(overview).toEqual({ invitations: [], auditEvents: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('/backend/api/v1/audit-events', expect.anything());
   });
 });

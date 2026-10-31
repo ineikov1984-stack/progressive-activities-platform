@@ -18,6 +18,7 @@
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
 | Екип и назначения — етап 1 (`docs/product/team.md`), PR 2б: покана, писмо, приемане, роли | Claude | `claude/team-invite-accept` | Organizations (покани, роли), Identity (регистрация по покана); **миграции**, `routes/api.php`, `routes/console.php` | след ревю по сигурност → поправки → CI |
+| Екип и назначения — етап 1, PR 4: екранът „Екип“ и страницата за покана | Claude | `claude/team-page` | `apps/web/src/app/dashboard/team`, `apps/web/src/app/invite`, `features/team`, навигацията; TeamController (покана в списъка) | код и тестове готови → CI, проверка на 390/768/1440 px → ревю по UX |
 
 ## Опашка (по приоритет)
 

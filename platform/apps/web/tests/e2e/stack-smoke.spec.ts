@@ -85,17 +85,57 @@ test('sign in leads to the home screen with tasks', async () => {
   await expect(page.getByText(/catalog\.|tenant|organization_id/)).toHaveCount(0);
 });
 
-test('an owner invites a colleague from the home screen', async () => {
-  // Wait until the team list has loaded, so it cannot replace the new invitation afterwards.
-  await page.goto('/dashboard');
-  await slow(page.getByText(/Очаква приемане|Приета|Изтекла|Все още не сте поканили колеги/).first()).toBeVisible();
-  const email = `teacher-e2e+${Date.now()}@example.test`;
-  await slow(page.getByLabel('Имейл')).toBeVisible();
-  await page.getByLabel('Имейл').fill(email);
-  await page.getByLabel('Роля').selectOption('instructor');
-  await page.getByRole('button', { name: 'Изпрати покана' }).click();
-  await slow(page.getByRole('status')).toContainText('Поканата е създадена');
-  await expect(page.getByText(email)).toBeVisible();
+test('the owner adds a teacher without a login, then invites them by e-mail and sees the link to copy', async ({ browser, baseURL }) => {
+  // A synthetic person; in CI the e-mail goes to the log (MAIL_MAILER=log).
+  const stamp = Date.now().toString(36);
+  const name = `Тест Учител ${stamp}`;
+  const email = `teacher-e2e+${stamp}@example.test`;
+  await page.goto('/dashboard/team');
+  await slow(page.getByRole('heading', { level: 1, name: 'Екип' })).toBeVisible();
+  await page.getByRole('button', { name: '+ Добави човек' }).click();
+  const panel = page.getByRole('dialog', { name: 'Добави човек в екипа' });
+  await panel.getByLabel('Име и фамилия').fill(name);
+  await panel.getByLabel('Телефон').fill('0888 123 456');
+  await expect(panel.getByRole('radio', { name: /^Преподавател или треньор/ })).toBeChecked();
+  await expect(panel.getByRole('switch', { name: /Покани да влиза/ })).not.toBeChecked();
+  await Promise.all([
+    page.waitForURL(/\/dashboard\/team\/[0-9a-f-]{36}\?tab=groups&added=1$/),
+    panel.getByRole('button', { name: 'Добави човека' }).click(),
+  ]);
+  await slow(page.getByRole('heading', { level: 1, name })).toBeVisible();
+  await expect(page.getByText('Само профил, без вход').first()).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Групи' })).toBeVisible();
+
+  const invitation = page.getByRole('region', { name: 'Покана за вход' });
+  await invitation.getByLabel('Роля').selectOption('instructor');
+  await invitation.getByLabel('Имейл').fill(email);
+  await invitation.getByRole('button', { name: 'Изпрати поканата', exact: true }).click();
+  await slow(invitation.getByText(`Изпратихме покана на ${email}.`)).toBeVisible();
+  const link = invitation.getByLabel('Връзка за копиране');
+  await expect(link).toHaveValue(/\/invite#[A-Za-z0-9]{64}$/);
+  const href = await link.inputValue();
+  await expect(invitation.getByRole('button', { name: 'Копирай връзката' })).toBeVisible();
+  await expect(invitation.getByRole('button', { name: 'Изпрати поканата пак' })).toBeVisible();
+
+  // The list shows that the invitation waits, never its link.
+  await page.goto('/dashboard/team');
+  const row = page.getByRole('row').filter({ hasText: name });
+  await slow(row.getByText(/^Поканен · изтича /)).toBeVisible();
+  await expect(row.getByRole('link', { name: 'Изпрати поканата пак' })).toBeVisible();
+  await expect(page.getByText('/invite#')).toHaveCount(0);
+
+  // Someone without a session opens the link: the organization and the role, and the token leaves the address.
+  const guest = await browser.newContext({ baseURL });
+  try {
+    const visitor = await guest.newPage();
+    await visitor.goto(`/invite${new URL(href).hash}`);
+    await slow(visitor.getByRole('heading', { level: 1, name: 'Покана за екипа на Progressive Academy Demo' })).toBeVisible();
+    await expect(visitor.getByText('Роля: Преподавател')).toBeVisible();
+    await expect(visitor.getByRole('button', { name: 'Създай профил и приеми' })).toBeVisible();
+    await expect.poll(() => visitor.evaluate(() => window.location.hash)).toBe('');
+  } finally {
+    await guest.close();
+  }
 });
 
 test('the session survives navigation, reloads and many API calls', async () => {
