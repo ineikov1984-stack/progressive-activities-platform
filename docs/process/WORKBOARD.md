@@ -17,7 +17,6 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Учителят — само своите групи; кой одобрява и кой вижда таксите (DECISIONS 31.10.2026) | Claude | `claude/teacher-menu-rights` | API: `OrganizationRole`, `TeamAbilities`, `OrganizationPolicy`, `StaffEnrollmentController::updateApproval`, `TeamController::history`, тестовете за права; уеб: `features/dashboard` (меню, „Начало“), `features/enrollment` (одобрение, „Моите групи“), `features/team` (история), `features/payment-terms/api.ts`; `docs/product/team-rights.md` | код и тестове → CI → проверка на 390/768/1440 px |
 | „Моят профил“ (DECISIONS 31.10.2026 „Моят профил и заместник“) | Claude | `claude/my-profile` | API: `AuthController::updateContact`, `UpdateOwnStaffContact`, `OrganizationContextController` (`grants`); уеб: `features/me`, `app/dashboard/me`, `features/dashboard` (обвивка, меню от аватара, „Начало“); e2e `stack-smoke` | код и тестове → CI → проверка на 390/768/1440 px |
 
 ## Опашка (по приоритет)
@@ -61,6 +60,7 @@
 
 ## Наскоро завършено
 
+- 31.10.2026 — PR #84: учителят вижда само „Начало“ и своите групи; таксите — четири роли (`terms.view`); „Ръчно/Автоматично“ — с `catalog.manage`; историята на правата казва какво е дадено и отнето; ревю по сигурност (Claude).
 - 31.10.2026 — PR #83: права, PR 3 — уеб: „Добави в екипа“ с права, страница „Права“, „Покажи телефона“ в подробностите и в списъка на учителя, менюто по `access` (Claude).
 - 31.10.2026 — PR #82: права, PR 2 — API за правата и контактите: картата „Права“ с версия, почистване при смяна на роля, покана и архив, скритите контакти с „Покажи телефона“ и лимит; ревю по сигурност (Claude).
 - 31.10.2026 — PR #81: права, PR 1 — модел, услуги и миграция (`staff_grants`, `staff_scope_groups`, `StaffRights`, `AccessScope`, `team.assign` за назначенията); ревю по сигурност (Claude).
