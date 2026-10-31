@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api\V1;
 use App\Domain\Audit\AuditRecorder;
 use App\Domain\Audit\Enums\AuditAction;
 use App\Domain\Audit\ValueObjects\AuditableReference;
+use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
+use App\Domain\Organizations\Services\StaffRights;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -62,11 +64,26 @@ class OrganizationContextController extends Controller
         });
     }
 
-    public function current(TenantContext $context): JsonResponse
+    /**
+     * The selected organization and what the user has in it (docs/product/team-rights.md, т. 9): the role, the rights
+     * with the added ones, and the scope — for the menu and the buttons. `GET /organizations` keeps the role's rights.
+     */
+    public function current(Request $request, TenantContext $context, StaffRights $rights): JsonResponse
     {
         $organization = Organization::query()->findOrFail($context->organizationId());
+        /** @var User $user */
+        $user = $request->user();
+        $access = $rights->for($user);
+        $abilities = $access->abilities;
+        sort($abilities);
 
-        return response()->json(['organization' => $this->present($organization)]);
+        return response()->json(['organization' => $this->present($organization), 'access' => [
+            'role' => $access->role?->value,
+            'scope' => $access->scope->value,
+            'abilities' => $abilities,
+            'groups' => $access->groupIds,
+            'activities' => $access->activityIds,
+        ]]);
     }
 
     /** @return array{id: string, name: string, slug: string, status: string} */

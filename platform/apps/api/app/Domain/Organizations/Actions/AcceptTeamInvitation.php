@@ -26,7 +26,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 final readonly class AcceptTeamInvitation
 {
-    public function __construct(private InvitationTokens $tokens, private AuditRecorder $audit) {}
+    public function __construct(private InvitationTokens $tokens, private ReconcileStaffAccess $access, private AuditRecorder $audit) {}
 
     /**
      * @param  bool  $fromMailOnly  the profile was just made for the invitation's address: only the e-mail's token proves it
@@ -95,6 +95,8 @@ final readonly class AcceptTeamInvitation
                 $person->forceFill(['user_id' => $user->id, 'email' => $person->email ?? $email, 'version' => $person->version + 1])->save();
             }
             $invitation->forceFill(['accepted_at' => now(), 'accepted_by' => $user->id, 'active_key' => null])->save();
+            // The rights follow the role of the invitation (docs/product/team-rights.md, т. 4.6).
+            $this->access->handle($user, $person, $invitation->role, guardFinance: false);
 
             $this->audit->record(AuditAction::TeamInvitationAccepted, new AuditableReference('staff_member', $person->id), [
                 'invitation_id' => $invitation->id, 'membership_id' => $membership->id, 'role' => $invitation->role->value,

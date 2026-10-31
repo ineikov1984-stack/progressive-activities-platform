@@ -48,6 +48,22 @@ final class TeamAbilities
         'enrollment.contacts' => 'contacts.view',
     ];
 
+    /**
+     * The rights on the card "Права", by area, in the order of the screen (т. 2, 10). The keys from before and the base
+     * of every role are not on it.
+     *
+     * @var array<string, list<string>>
+     */
+    public const AREAS = [
+        'enrollment' => ['enrollment.view', 'enrollment.view_own', 'enrollment.enroll'],
+        'attendance' => ['attendance.mark', 'attendance.correct_late', 'attendance.view_month'],
+        'schedule' => ['schedule.view_all', 'schedule.manage'],
+        'contacts' => ['contacts.view', 'contacts.message'],
+        'team' => ['team.view', 'team.assign', 'team.manage'],
+        'finance' => ['finance.view', 'finance.collect', 'finance.pay_view'],
+        'settings' => ['catalog.manage', 'catalog.publish', 'terms.manage'],
+    ];
+
     /** "Партньор от училище": a viewer with selected groups and these two rights (т. 7). */
     public const SCHOOL_PARTNER = ['enrollment.enroll', 'attendance.mark'];
 

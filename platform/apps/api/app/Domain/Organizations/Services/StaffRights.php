@@ -83,12 +83,27 @@ final class StaffRights
             return StaffAccess::none();
         }
 
-        $roleAbilities = self::canonical($role->abilities());
         $person = StaffMember::query()->where('user_id', $userId)->whereNull('archived_at')->first();
         if ($person === null) {
-            return $this->access($role, null, $role->defaultScope(), $roleAbilities, [], [], []);
+            return $this->access($role, null, $role->defaultScope(), self::canonical($role->abilities()), [], [], []);
         }
 
+        return $this->describe($role, $person);
+    }
+
+    /**
+     * What a person of the team would have with the role — for their card "Права" (docs/product/team-rights.md, т. 9),
+     * also before they log in, with the role of their invitation. Without a role, nothing. Not a check of rights: those
+     * ask `for()`, which needs an active membership.
+     */
+    public function forMember(StaffMember $member, ?OrganizationRole $role): StaffAccess
+    {
+        return $role === null || $member->archived_at !== null ? StaffAccess::none() : $this->describe($role, $member);
+    }
+
+    private function describe(OrganizationRole $role, StaffMember $person): StaffAccess
+    {
+        $roleAbilities = self::canonical($role->abilities());
         $grants = [];
         foreach (StaffGrant::query()->where('staff_member_id', $person->id)->whereNull('revoked_at')
             ->where(fn ($open) => $open->whereNull('expires_at')->orWhere('expires_at', '>', now()))

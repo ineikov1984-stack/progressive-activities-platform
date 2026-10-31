@@ -159,7 +159,7 @@ final class SubmitEnrollmentApplication
                         'session_starts_at' => $session->starts_at->toIso8601String(),
                     ];
                     if ($overrideActor !== null && trim((string) $overrideReason) !== '') {
-                        $this->eligibility->assertOverride($overrideActor, $overrideReason);
+                        $this->eligibility->assertOverride($overrideActor, $overrideReason, $groupId);
                         $metadata['eligibility_override_reason'] = trim($overrideReason);
                     }
                 } elseif ($session !== null) {

@@ -17,7 +17,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Права, PR 1: модел, услуги, миграция (`docs/product/team-rights.md`, т. 12) | Claude | `claude/team-rights-model` | **горещ:** `database/migrations/**`; `Domain/Organizations` (права, `TeamRoles`), `Domain/Catalog` (`AccessScope`, `TeachingScope`, назначенията), политиките, `RecordVisitOutcome`, `VisitOfferEligibility` | код и тестове → CI → ревю по сигурност |
+| Права, PR 2: API за правата и контактите (`docs/product/team-rights.md`, т. 12) | Claude | `claude/team-rights-api` | **горещ:** `routes/api.php`; `Domain/Organizations` (права, покана, роля, архив), `TeamController`, „Записвания“ (контролери, презентери, `RecordVisitOutcome`), `AuditEventController`, `OrganizationContextController` | код и тестове → CI → ревю по сигурност |
 | Екип — групата води към децата ѝ в „Записвания“ (DECISIONS 31.10.2026 „Права…“) | Claude | `claude/team-group-link` | `features/team` (списък, профил, `presentation.ts`), `tests/team-presentation.test.ts` | код и тест готови → CI → проверка на 390/768/1440 px |
 
 ## Опашка (по приоритет)
@@ -60,6 +60,7 @@
 
 ## Наскоро завършено
 
+- 31.10.2026 — PR #81: права, PR 1 — модел, услуги и миграция (`staff_grants`, `staff_scope_groups`, `StaffRights`, `AccessScope`, `team.assign` за назначенията); ревю по сигурност (Claude).
 - 31.10.2026 — PR #79: спецификация „Права — роля плюс допълнителни права“ (`docs/product/team-rights.md`) след ревю на архитект (Claude).
 - 31.10.2026 — `GET /audit-events` — само ролите с „Вижда екипа“; подробностите — само за собственика и администратора (Claude).
 - 31.10.2026 — PR #78: група в „Екип“ води към децата ѝ в „Записвания“ (Claude).

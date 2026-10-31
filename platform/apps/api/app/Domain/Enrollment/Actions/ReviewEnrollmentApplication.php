@@ -116,7 +116,7 @@ final class ReviewEnrollmentApplication
                 }
                 $this->eligibility->assertEligible($current->child, $offer, $current->session, $actor, $eligibilityOverrideReason, $current->id);
                 if ($eligibilityOverrideReason !== null) {
-                    $this->eligibility->assertOverride($actor, $eligibilityOverrideReason);
+                    $this->eligibility->assertOverride($actor, $eligibilityOverrideReason, $current->group_id);
                 }
             } elseif ($visitFromPrice) {
                 if ($current->session === null || now()->greaterThanOrEqualTo($current->session->starts_at)) {

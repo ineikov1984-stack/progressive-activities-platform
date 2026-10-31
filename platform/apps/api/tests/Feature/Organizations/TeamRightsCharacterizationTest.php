@@ -38,6 +38,9 @@ class TeamRightsCharacterizationTest extends TestCase
     /** Who records how a visit went: the platform operator does not (RecordVisitOutcome). */
     private const VISIT_STAFF = ['organization_owner', 'organization_admin', 'coordinator'];
 
+    /** Who sees the parents' contacts: the owner at once, the administrator and the coordinator with "Покажи телефона". */
+    private const CONTACTS = ['organization_owner', 'organization_admin', 'coordinator'];
+
     private const CATALOG_VIEW = ['platform_admin', 'organization_owner', 'organization_admin', 'coordinator', 'instructor', 'viewer'];
 
     private const CATALOG_MANAGE = ['platform_admin', 'organization_owner', 'organization_admin', 'coordinator'];
@@ -107,6 +110,36 @@ class TeamRightsCharacterizationTest extends TestCase
         $this->assertSame([], $mismatches, "Role {$role} answers differently than before.");
     }
 
+    /**
+     * The one change of PR 2 (docs/product/team-rights.md, т. 6): the phone and the e-mail of a parent are shown at once
+     * to the owner only; the administrator and the coordinator get them hidden and show them with "Покажи телефона".
+     */
+    #[DataProvider('roles')]
+    public function test_only_the_owner_sees_the_parents_phone_at_once(string $role): void
+    {
+        $f = $this->rightsFixture();
+        $actor = $this->memberOf($f['organization'], $role);
+        $details = $this->signInTo($actor, $f['organization'])->getJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}");
+
+        if (! in_array($role, self::ENROLLMENT_VIEW, true)) {
+            $details->assertForbidden();
+
+            return;
+        }
+        $details->assertOk()->assertJsonPath('contact_status', match ($role) {
+            'organization_owner' => 'shown',
+            'organization_admin', 'coordinator' => 'hidden',
+            default => 'not_allowed',
+        });
+        if ($role === 'organization_owner') {
+            $details->assertJsonPath('contact.name', 'Мария Иванова')->assertJsonPath('contact.hidden', null);
+            $this->assertNotNull($details->json('contact.phone'));
+        } elseif (in_array($role, self::CONTACTS, true)) {
+            $details->assertJsonPath('contact.name', 'Мария Иванова')->assertJsonPath('contact.hidden', true)
+                ->assertJsonPath('contact.phone', null)->assertJsonPath('contact.email', null);
+        }
+    }
+
     #[DataProvider('roles')]
     public function test_the_organizations_list_still_gives_each_role_its_rights_from_before(string $role): void
     {
@@ -169,6 +202,9 @@ class TeamRightsCharacterizationTest extends TestCase
 
             'GET api/v1/team' => ['GET', '/api/v1/team', [], self::TEAM_VIEW, 200],
             'GET api/v1/team/members/{member}' => ['GET', $member, [], self::TEAM_VIEW, 200],
+            // New in PR 2 (docs/product/team-rights.md, т. 9): the card "Права"; a person without a login has none yet.
+            'GET api/v1/team/members/{member}/access' => ['GET', "{$member}/access", [], self::TEAM_VIEW, 200],
+            'PUT api/v1/team/members/{member}/access' => ['PUT', "{$member}/access", [], self::TEAM_MANAGE, 422],
             'POST api/v1/team/members' => ['POST', '/api/v1/team/members', [], self::TEAM_MANAGE, 422],
             'PATCH api/v1/team/members/{member}' => ['PATCH', $member, [], self::TEAM_MANAGE, 422],
             'POST api/v1/team/members/{member}/archive' => ['POST', "{$member}/archive", [], self::TEAM_MANAGE, 422],
@@ -182,6 +218,9 @@ class TeamRightsCharacterizationTest extends TestCase
             'GET api/v1/enrollment/enrollments/{enrollment}/transfer-options' => ['GET', "{$enrollment}/transfer-options", [], self::ENROLLMENT_MANAGE, 200],
             'GET api/v1/enrollment/applications/{application}' => ['GET', $application, [], self::ENROLLMENT_VIEW, 200],
             'GET api/v1/enrollment/enrollments/{enrollment}' => ['GET', $enrollment, [], self::ENROLLMENT_VIEW, 200],
+            // New in PR 2 (т. 6): "Покажи телефона" for those who see contacts.
+            'POST api/v1/enrollment/applications/{application}/contact/reveal' => ['POST', "{$application}/contact/reveal", [], self::CONTACTS, 200],
+            'POST api/v1/enrollment/enrollments/{enrollment}/contact/reveal' => ['POST', "{$enrollment}/contact/reveal", [], self::CONTACTS, 200],
             'POST api/v1/enrollment/applications/{application}/review' => ['POST', "{$application}/review", [], self::ENROLLMENT_MANAGE, 422],
             'PATCH api/v1/enrollment/groups/{group}/approval' => ['PATCH', "/api/v1/enrollment/groups/{$tuesday}/approval", [], self::ENROLLMENT_MANAGE, 422],
             'POST api/v1/enrollment/enrollments/{enrollment}/transfer' => ['POST', "{$enrollment}/transfer", [], self::ENROLLMENT_MANAGE, 422],

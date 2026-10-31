@@ -39,13 +39,16 @@ final class TeacherRosterPresenter
 
     /**
      * @param  iterable<Enrollment>  $enrollments  loaded with `child`, `pauses` and `sessionExceptions.session`
+     * @param  bool  $canRevealContact  "sees the phone" added in the group: each row may show the parent's contact on
+     *                                  request — never in the list itself, not even the parent's name (docs/product/team-rights.md, т. 6)
      * @return array{group: array<string, mixed>, enrollments: list<array<string, mixed>>}
      */
-    public static function roster(Group $group, iterable $enrollments, string $today): array
+    public static function roster(Group $group, iterable $enrollments, string $today, bool $canRevealContact = false): array
     {
         $rows = [];
         foreach ($enrollments as $enrollment) {
-            $rows[] = self::enrollment($enrollment, $today);
+            $rows[] = self::enrollment($enrollment, $today) + ($canRevealContact
+                ? ['can_reveal_contact' => true, 'enrollment_id' => $enrollment->id] : []);
         }
 
         return [

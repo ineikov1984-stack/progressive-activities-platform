@@ -51,13 +51,22 @@ class StaffEnrollmentDetailsTest extends TestCase
             ->assertJsonPath('child.class_label', '2 клас')
             ->assertJsonPath('child.age', 8)
             ->assertJsonPath('child.school_name', 'СУ „Христо Ботев“')
-            ->assertJsonPath('contact_status', 'shown')
+            // Only the owner sees the phone and the e-mail at once; the coordinator shows them with "Покажи телефона"
+            // (docs/product/team-rights.md, т. 6).
+            ->assertJsonPath('contact_status', 'hidden')
             ->assertJsonPath('contact.name', 'Мария Петрова')
-            ->assertJsonPath('contact.phone', '+359881234567')
-            ->assertJsonPath('contact.phone_display', '088 123 4567')
-            ->assertJsonPath('contact.email', $f['parent']->email)
+            ->assertJsonPath('contact.hidden', true)
+            ->assertJsonPath('contact.has_phone', true)
+            ->assertJsonPath('contact.has_email', true)
+            ->assertJsonPath('contact.can_reveal', true)
+            ->assertJsonPath('contact.phone', null)
+            ->assertJsonPath('contact.phone_display', null)
+            ->assertJsonPath('contact.email', null)
             ->assertJsonPath('contact.email_verified', true)
-            ->assertJsonPath('parent_note', self::NOTE);
+            ->assertJsonPath('parent_note', self::NOTE)
+            ->assertJsonPath('contact_reveals', null);
+        $this->assertStringNotContainsString('881234567', (string) $response->getContent());
+        $this->assertStringNotContainsString((string) $f['parent']->email, (string) $response->getContent());
 
         // "При нас": the other group here, with its next session — never the other organization's.
         $this->assertEquals([[

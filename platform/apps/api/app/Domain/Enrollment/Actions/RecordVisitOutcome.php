@@ -30,7 +30,7 @@ final class RecordVisitOutcome
             $session = Session::query()->whereKey($enrollment->session_id)->lockForUpdate()->firstOrFail();
             $current = Enrollment::query()->lockForUpdate()->findOrFail($enrollment->id);
             $application = $current->application;
-            $staff = $actor->is_active && $this->recordsVisits($actor);
+            $staff = $actor->is_active && $this->recordsVisits($actor, $current->group_id);
             $cancellation = in_array($outcome, ['cancelled_in_time', 'late_cancelled'], true);
             abort_unless($staff || ($cancellation && $actor->is_active && $application->parent_user_id === $actor->id), 403);
             if ($current->scope === EnrollmentScope::FullPeriod
@@ -95,14 +95,13 @@ final class RecordVisitOutcome
     }
 
     /**
-     * The team records how a visit went with "enrollment.enroll" (docs/product/team-rights.md, т. 2.2) — until the scope
-     * reaches the enrollment routes, for the whole organization only; with the stage "Присъствия", "attendance.mark".
-     * The platform operator does not, as before.
+     * The team records how a visit went with "enrollment.enroll" in the visit's group (docs/product/team-rights.md,
+     * т. 2.2, 9); with the stage "Присъствия", "attendance.mark". The platform operator does not, as before.
      */
-    private function recordsVisits(User $actor): bool
+    private function recordsVisits(User $actor, string $groupId): bool
     {
         return $this->scope->access($actor)->role?->isTeam() === true
-            && $this->scope->allowsEverywhere($actor, 'enrollment.enroll');
+            && $this->scope->allows($actor, 'enrollment.enroll', $groupId);
     }
 
     /**

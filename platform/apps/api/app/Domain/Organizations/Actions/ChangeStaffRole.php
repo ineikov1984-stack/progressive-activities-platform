@@ -25,7 +25,12 @@ use Illuminate\Validation\ValidationException;
  */
 final readonly class ChangeStaffRole
 {
-    public function __construct(private TenantContext $context, private TeamRoles $roles, private AuditRecorder $audit) {}
+    public function __construct(
+        private TenantContext $context,
+        private TeamRoles $roles,
+        private ReconcileStaffAccess $access,
+        private AuditRecorder $audit,
+    ) {}
 
     /** @param  array<string, mixed>  $payload */
     public function handle(User $actor, StaffMember $member, array $payload): StaffMember
@@ -73,6 +78,9 @@ final readonly class ChangeStaffRole
             $this->audit->record(AuditAction::TeamRoleChanged, new AuditableReference('staff_member', $member->id), [
                 'membership_id' => $membership->id, 'from' => $from->value, 'to' => $to->value,
             ]);
+            // The rights follow the new role in the same transaction; taking finance away is the owner's
+            // (docs/product/team-rights.md, т. 4.6).
+            $this->access->handle($actor, $member, $to);
 
             return $member;
         });

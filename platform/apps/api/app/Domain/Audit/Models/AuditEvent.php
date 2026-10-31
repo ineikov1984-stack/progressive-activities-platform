@@ -6,6 +6,9 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use LogicException;
 
+/**
+ * @property array<string, mixed> $metadata identifiers and keys only, never personal data
+ */
 class AuditEvent extends Model
 {
     use HasUuids;

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Organizations;
 
+use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Organizations\Models\StaffGrant;
 use App\Domain\Organizations\Models\StaffScopeGroup;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -14,10 +15,11 @@ use Tests\Support\TeamRightsFixture;
 use Tests\TestCase;
 
 /**
- * A narrow scope opens nothing that is not asked for its group (docs/product/team-rights.md, т. 2.2, 11): a viewer with
- * one selected group and every added right is refused on every route of enrollment, the team and the catalog's changes,
- * because the check for the whole organization of a right of a group holds only with the scope "all". The routes are
- * taken from the router; a route without an expected answer here fails. PR 2 turns the filtered ones to "only that group".
+ * A narrow scope opens only its group (docs/product/team-rights.md, т. 2.2, 9, 11): a viewer with one selected group and
+ * every added right works there — the lists hold only that group, a record of it answers, a change of it reaches its
+ * validation — and is refused anywhere else, on the team outside the group, and on every change of the catalog (rights
+ * for the whole organization only fall away). The routes are taken from the router; a route without an expected answer
+ * here fails.
  */
 #[TestGroup('authorization')]
 class TeamRightsNarrowScopeTest extends TestCase
@@ -38,9 +40,13 @@ class TeamRightsNarrowScopeTest extends TestCase
         $this->travelTo('2026-11-02 10:00:00');
     }
 
-    public function test_a_viewer_with_one_group_is_refused_on_every_route_of_enrollment_the_team_and_catalog_changes(): void
+    public function test_a_viewer_with_one_group_works_only_in_that_group(): void
     {
         $f = $this->rightsFixture();
+        // An application in another group of the same activity.
+        $outside = $this->inTenant($f['organization'], fn (): EnrollmentApplication => $this->rightsApplication(
+            $f['owner'], $f['owner']->children()->create(['first_name' => 'Дани', 'last_name' => 'Колев'])->id, $f['thursday']->id, $f['price']->id, 'waitlisted',
+        ));
         $viewer = $this->memberOf($f['organization'], 'viewer');
         $person = $this->personFor($f['organization'], $viewer);
         $this->inTenant($f['organization'], function () use ($f, $person): void {
@@ -70,16 +76,34 @@ class TeamRightsNarrowScopeTest extends TestCase
 
                     continue;
                 }
-                [$uri, $body] = $requests[$key];
+                [$uri, $body, $expected] = $requests[$key];
                 $status = $this->signInTo($viewer, $f['organization'])->json($method, $uri, $body)->status();
-                if ($status !== 403) {
-                    $answers[] = "{$key}: {$status}";
+                if ($status !== $expected) {
+                    $answers[] = "{$key}: expected {$expected}, got {$status}";
                 }
             }
         }
 
         $this->assertSame([], $unlisted, 'Add the new routes to the narrow scope test.');
-        $this->assertSame([], $answers, 'A narrow scope must not open these routes.');
+        $this->assertSame([], $answers, 'A narrow scope answers only for its group.');
+
+        // The lists hold only the group; the team, only the person themselves (nobody teaches "Вторник").
+        $this->signInTo($viewer, $f['organization']);
+        $this->assertSame([$f['tuesday']->id], array_column($this->getJson('/api/v1/enrollment/groups')->assertOk()->json('groups'), 'id'));
+        $waiting = $this->getJson('/api/v1/enrollment/applications?status=waitlisted')->assertOk()->json('applications');
+        $this->assertSame([$f['tuesday']->id], array_values(array_unique(array_column(array_column($waiting, 'group'), 'id'))));
+        $this->assertSame([$person->id], array_column($this->getJson('/api/v1/team')->assertOk()->json('members'), 'id'));
+        $this->assertSame([], $this->getJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/transfer-options")->assertOk()->json('groups'));
+        // Outside the group: refused.
+        $this->getJson("/api/v1/enrollment/groups/{$f['thursday']->id}/roster")->assertForbidden();
+        $this->getJson("/api/v1/enrollment/applications/{$outside->id}")->assertForbidden();
+        $this->postJson("/api/v1/enrollment/applications/{$outside->id}/review", ['decision' => 'approve', 'version' => 1])->assertForbidden();
+        $this->postJson("/api/v1/enrollment/applications/{$outside->id}/contact/reveal")->assertForbidden();
+        $this->patchJson("/api/v1/enrollment/groups/{$f['thursday']->id}/approval", ['enrollment_approval_mode' => 'automatic'])->assertForbidden();
+        $this->postJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/transfer", [
+            'target_group_id' => $f['thursday']->id, 'price_option_id' => $f['price']->id, 'effective_date' => '2026-11-12', 'reason' => 'Смяна', 'version' => 1,
+        ])->assertForbidden();
+        $this->inTenant($f['organization'], fn () => $this->assertSame('waitlisted', EnrollmentApplication::query()->findOrFail($outside->id)->status->value));
     }
 
     private function covered(string $method, string $uri): bool
@@ -92,7 +116,7 @@ class TeamRightsNarrowScopeTest extends TestCase
 
     /**
      * @param  array<string, mixed>  $f
-     * @return array<string, array{string, array<string, mixed>}>
+     * @return array<string, array{string, array<string, mixed>, int}> address, body, the status in the selected group
      */
     private function requests(array $f): array
     {
@@ -107,53 +131,58 @@ class TeamRightsNarrowScopeTest extends TestCase
         $version = ['version' => 1];
 
         return [
-            'POST api/v1/enrollments/{enrollment}/visit-outcome' => ["/api/v1/enrollments/{$f['visit']->id}/visit-outcome", ['outcome' => 'attended']],
-            'GET api/v1/team' => ['/api/v1/team', []],
-            'GET api/v1/team/members/{member}' => [$member, []],
-            'POST api/v1/team/members' => ['/api/v1/team/members', []],
-            'PATCH api/v1/team/members/{member}' => [$member, []],
-            'POST api/v1/team/members/{member}/archive' => ["{$member}/archive", []],
-            'POST api/v1/team/members/{member}/instructor-profile' => ["{$member}/instructor-profile", []],
-            'POST api/v1/team/members/{member}/role' => ["{$member}/role", []],
-            'POST api/v1/team/members/{member}/invitation' => ["{$member}/invitation", []],
-            'GET api/v1/enrollment/applications' => ['/api/v1/enrollment/applications', []],
-            'GET api/v1/enrollment/groups' => ['/api/v1/enrollment/groups', []],
-            'GET api/v1/enrollment/groups/{group}/roster' => ["/api/v1/enrollment/groups/{$tuesday}/roster", []],
-            'GET api/v1/enrollment/enrollments/{enrollment}/transfer-options' => ["{$enrollment}/transfer-options", []],
-            'GET api/v1/enrollment/applications/{application}' => [$application, []],
-            'GET api/v1/enrollment/enrollments/{enrollment}' => [$enrollment, []],
-            'POST api/v1/enrollment/applications/{application}/review' => ["{$application}/review", []],
-            'PATCH api/v1/enrollment/groups/{group}/approval' => ["/api/v1/enrollment/groups/{$tuesday}/approval", []],
-            'POST api/v1/enrollment/enrollments/{enrollment}/transfer' => ["{$enrollment}/transfer", []],
-            'POST api/v1/enrollment/enrollments/{enrollment}/pauses' => ["{$enrollment}/pauses", []],
-            'POST api/v1/enrollment/enrollments/{enrollment}/pauses/{pause}/end' => ["{$enrollment}/pauses/{$missing}/end", []],
-            'POST api/v1/enrollment/enrollments/{enrollment}/end' => ["{$enrollment}/end", []],
-            'POST api/v1/enrollment/enrollments/{enrollment}/reopen' => ["{$enrollment}/reopen", []],
-            'POST api/v1/enrollment/enrollments/{enrollment}/skipped-sessions' => ["{$enrollment}/skipped-sessions", []],
-            'DELETE api/v1/enrollment/enrollments/{enrollment}/skipped-sessions/{session}' => ["{$enrollment}/skipped-sessions/{$f['session']->id}", []],
-            'POST api/v1/catalog/activities' => ['/api/v1/catalog/activities', []],
-            'PATCH api/v1/catalog/activities/{activity}' => [$activity, []],
-            'POST api/v1/catalog/activities/{activity}/publish' => ["{$activity}/publish", $version],
-            'POST api/v1/catalog/activities/{activity}/groups' => ["{$activity}/groups", []],
-            'PATCH api/v1/catalog/groups/{group}' => ["/api/v1/catalog/groups/{$tuesday}", []],
-            'POST api/v1/catalog/groups/{group}/assignments' => ["/api/v1/catalog/groups/{$tuesday}/assignments", []],
-            'POST api/v1/catalog/groups/{group}/assignments/{instructor}/end' => ["/api/v1/catalog/groups/{$tuesday}/assignments/{$missing}/end", []],
-            'POST api/v1/catalog/media' => ['/api/v1/catalog/media', []],
-            'PATCH api/v1/catalog/profile' => ['/api/v1/catalog/profile', []],
-            'POST api/v1/catalog/locations' => ['/api/v1/catalog/locations', []],
-            'PATCH api/v1/catalog/locations/{location}' => ["/api/v1/catalog/locations/{$f['location']->id}", []],
-            'POST api/v1/catalog/instructors' => ['/api/v1/catalog/instructors', []],
-            'PATCH api/v1/catalog/instructors/{instructor}' => ["/api/v1/catalog/instructors/{$missing}", []],
-            'POST api/v1/catalog/visit-offers' => ['/api/v1/catalog/visit-offers', []],
-            'PATCH api/v1/catalog/visit-offers/{visitOffer}' => [$offer, []],
-            'POST api/v1/catalog/visit-offers/{visitOffer}/publish' => ["{$offer}/publish", $version],
-            'POST api/v1/catalog/visit-offers/{visitOffer}/close' => ["{$offer}/close", $version],
-            'POST api/v1/catalog/visit-offers/{visitOffer}/cancel' => ["{$offer}/cancel", $version],
-            'POST api/v1/catalog/open-day-campaigns' => ['/api/v1/catalog/open-day-campaigns', []],
-            'PATCH api/v1/catalog/open-day-campaigns/{campaign}' => [$campaign, []],
-            'POST api/v1/catalog/open-day-campaigns/{campaign}/publish' => ["{$campaign}/publish", $version],
-            'POST api/v1/catalog/open-day-campaigns/{campaign}/close' => ["{$campaign}/close", $version],
-            'POST api/v1/catalog/open-day-campaigns/{campaign}/cancel' => ["{$campaign}/cancel", $version],
+            'POST api/v1/enrollments/{enrollment}/visit-outcome' => ["/api/v1/enrollments/{$f['visit']->id}/visit-outcome", ['outcome' => 'attended'], 422],
+            'GET api/v1/team' => ['/api/v1/team', [], 200],
+            // "Петър" teaches no group of the scope.
+            'GET api/v1/team/members/{member}' => [$member, [], 403],
+            'GET api/v1/team/members/{member}/access' => ["{$member}/access", [], 403],
+            'PUT api/v1/team/members/{member}/access' => ["{$member}/access", [], 403],
+            'POST api/v1/team/members' => ['/api/v1/team/members', [], 403],
+            'PATCH api/v1/team/members/{member}' => [$member, [], 403],
+            'POST api/v1/team/members/{member}/archive' => ["{$member}/archive", [], 403],
+            'POST api/v1/team/members/{member}/instructor-profile' => ["{$member}/instructor-profile", [], 403],
+            'POST api/v1/team/members/{member}/role' => ["{$member}/role", [], 403],
+            'POST api/v1/team/members/{member}/invitation' => ["{$member}/invitation", [], 403],
+            'GET api/v1/enrollment/applications' => ['/api/v1/enrollment/applications', [], 200],
+            'GET api/v1/enrollment/groups' => ['/api/v1/enrollment/groups', [], 200],
+            'GET api/v1/enrollment/groups/{group}/roster' => ["/api/v1/enrollment/groups/{$tuesday}/roster", [], 200],
+            'GET api/v1/enrollment/enrollments/{enrollment}/transfer-options' => ["{$enrollment}/transfer-options", [], 200],
+            'GET api/v1/enrollment/applications/{application}' => [$application, [], 200],
+            'GET api/v1/enrollment/enrollments/{enrollment}' => [$enrollment, [], 200],
+            'POST api/v1/enrollment/applications/{application}/contact/reveal' => ["{$application}/contact/reveal", [], 200],
+            'POST api/v1/enrollment/enrollments/{enrollment}/contact/reveal' => ["{$enrollment}/contact/reveal", [], 200],
+            'POST api/v1/enrollment/applications/{application}/review' => ["{$application}/review", [], 422],
+            'PATCH api/v1/enrollment/groups/{group}/approval' => ["/api/v1/enrollment/groups/{$tuesday}/approval", [], 422],
+            'POST api/v1/enrollment/enrollments/{enrollment}/transfer' => ["{$enrollment}/transfer", [], 422],
+            'POST api/v1/enrollment/enrollments/{enrollment}/pauses' => ["{$enrollment}/pauses", [], 422],
+            'POST api/v1/enrollment/enrollments/{enrollment}/pauses/{pause}/end' => ["{$enrollment}/pauses/{$missing}/end", [], 422],
+            'POST api/v1/enrollment/enrollments/{enrollment}/end' => ["{$enrollment}/end", [], 422],
+            'POST api/v1/enrollment/enrollments/{enrollment}/reopen' => ["{$enrollment}/reopen", [], 422],
+            'POST api/v1/enrollment/enrollments/{enrollment}/skipped-sessions' => ["{$enrollment}/skipped-sessions", [], 422],
+            'DELETE api/v1/enrollment/enrollments/{enrollment}/skipped-sessions/{session}' => ["{$enrollment}/skipped-sessions/{$f['session']->id}", [], 422],
+            'POST api/v1/catalog/activities' => ['/api/v1/catalog/activities', [], 403],
+            'PATCH api/v1/catalog/activities/{activity}' => [$activity, [], 403],
+            'POST api/v1/catalog/activities/{activity}/publish' => ["{$activity}/publish", $version, 403],
+            'POST api/v1/catalog/activities/{activity}/groups' => ["{$activity}/groups", [], 403],
+            'PATCH api/v1/catalog/groups/{group}' => ["/api/v1/catalog/groups/{$tuesday}", [], 403],
+            'POST api/v1/catalog/groups/{group}/assignments' => ["/api/v1/catalog/groups/{$tuesday}/assignments", [], 403],
+            'POST api/v1/catalog/groups/{group}/assignments/{instructor}/end' => ["/api/v1/catalog/groups/{$tuesday}/assignments/{$missing}/end", [], 403],
+            'POST api/v1/catalog/media' => ['/api/v1/catalog/media', [], 403],
+            'PATCH api/v1/catalog/profile' => ['/api/v1/catalog/profile', [], 403],
+            'POST api/v1/catalog/locations' => ['/api/v1/catalog/locations', [], 403],
+            'PATCH api/v1/catalog/locations/{location}' => ["/api/v1/catalog/locations/{$f['location']->id}", [], 403],
+            'POST api/v1/catalog/instructors' => ['/api/v1/catalog/instructors', [], 403],
+            'PATCH api/v1/catalog/instructors/{instructor}' => ["/api/v1/catalog/instructors/{$missing}", [], 403],
+            'POST api/v1/catalog/visit-offers' => ['/api/v1/catalog/visit-offers', [], 403],
+            'PATCH api/v1/catalog/visit-offers/{visitOffer}' => [$offer, [], 403],
+            'POST api/v1/catalog/visit-offers/{visitOffer}/publish' => ["{$offer}/publish", $version, 403],
+            'POST api/v1/catalog/visit-offers/{visitOffer}/close' => ["{$offer}/close", $version, 403],
+            'POST api/v1/catalog/visit-offers/{visitOffer}/cancel' => ["{$offer}/cancel", $version, 403],
+            'POST api/v1/catalog/open-day-campaigns' => ['/api/v1/catalog/open-day-campaigns', [], 403],
+            'PATCH api/v1/catalog/open-day-campaigns/{campaign}' => [$campaign, [], 403],
+            'POST api/v1/catalog/open-day-campaigns/{campaign}/publish' => ["{$campaign}/publish", $version, 403],
+            'POST api/v1/catalog/open-day-campaigns/{campaign}/close' => ["{$campaign}/close", $version, 403],
+            'POST api/v1/catalog/open-day-campaigns/{campaign}/cancel' => ["{$campaign}/cancel", $version, 403],
         ];
     }
 }

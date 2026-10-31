@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\PriceOption;
+use App\Domain\Catalog\Services\AccessScope;
 use App\Domain\Enrollment\Actions\ChangeEnrollment;
 use App\Domain\Enrollment\Enums\EnrollmentApplicationStatus;
 use App\Domain\Enrollment\Models\Enrollment;
@@ -11,13 +12,12 @@ use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Enrollment\Models\EnrollmentPause;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
 use App\Domain\Enrollment\Services\SessionApplicability;
-use App\Domain\Organizations\Models\Organization;
-use App\Domain\Organizations\Tenancy\TenantContext;
+use App\Domain\Identity\Models\User;
 use App\Http\Controllers\Controller;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -38,12 +38,15 @@ final class StaffEnrollmentChangeController extends Controller
         'min' => 'Презаредете страницата и опитайте отново.',
     ];
 
-    public function __construct(private readonly TenantContext $context) {}
+    public function __construct(private readonly AccessScope $scope) {}
 
     public function transferOptions(Request $request, string $enrollment, EnrollmentCapacity $capacity): JsonResponse
     {
         $this->authorizeManage($request);
         $record = Enrollment::query()->with('group.offering')->findOrFail($enrollment);
+        $this->requireGroup($request, $record->group_id);
+        // Only the groups where the user enrolls (docs/product/team-rights.md, т. 9).
+        $allowed = $this->scope->groups($this->user($request), 'enrollment.enroll');
         $validated = $request->validate(['date' => ['sometimes', 'date_format:Y-m-d']], self::MESSAGES);
         $activityId = $record->group?->offering?->activity_id;
         // Places are counted for the day the child would move (default: today).
@@ -53,6 +56,7 @@ final class StaffEnrollmentChangeController extends Controller
             : CarbonImmutable::now($timezone);
 
         $groups = Group::query()->where('status', 'published')->whereKeyNot($record->group_id)
+            ->when($allowed !== null, fn ($query) => $query->whereKey($allowed ?? []))
             ->whereHas('offering', fn ($query) => $query->where('activity_id', $activityId))
             ->with(['priceOptions', 'offering.priceOptions'])
             ->orderBy('name')
@@ -90,6 +94,7 @@ final class StaffEnrollmentChangeController extends Controller
     {
         $this->authorizeManage($request);
         $record = Enrollment::query()->findOrFail($enrollment);
+        $this->requireGroup($request, $record->group_id);
         $validated = $request->validate([
             'target_group_id' => ['required', 'uuid'],
             'price_option_id' => ['required', 'uuid'],
@@ -98,6 +103,8 @@ final class StaffEnrollmentChangeController extends Controller
             'version' => ['required', 'integer', 'min:1'],
         ], self::MESSAGES);
 
+        // A move enrolls in the other group too.
+        $this->requireGroup($request, (string) $validated['target_group_id']);
         $moved = $changes->transfer(
             $request->user(), $record, $validated['target_group_id'], $validated['price_option_id'],
             $validated['effective_date'], $validated['reason'], (int) $validated['version'],
@@ -110,6 +117,7 @@ final class StaffEnrollmentChangeController extends Controller
     {
         $this->authorizeManage($request);
         $record = Enrollment::query()->findOrFail($enrollment);
+        $this->requireGroup($request, $record->group_id);
         $validated = $request->validate([
             'starts_on' => ['required', 'date_format:Y-m-d'],
             'ends_on' => ['required', 'date_format:Y-m-d'],
@@ -130,6 +138,7 @@ final class StaffEnrollmentChangeController extends Controller
     {
         $this->authorizeManage($request);
         $record = Enrollment::query()->findOrFail($enrollment);
+        $this->requireGroup($request, $record->group_id);
         $validated = $request->validate([
             'resume_on' => ['required', 'date_format:Y-m-d'],
             'version' => ['required', 'integer', 'min:1'],
@@ -144,6 +153,7 @@ final class StaffEnrollmentChangeController extends Controller
     {
         $this->authorizeManage($request);
         $record = Enrollment::query()->findOrFail($enrollment);
+        $this->requireGroup($request, $record->group_id);
         $validated = $request->validate([
             'last_day' => ['required', 'date_format:Y-m-d'],
             'reason' => ['required', 'string', 'max:500'],
@@ -159,6 +169,7 @@ final class StaffEnrollmentChangeController extends Controller
     {
         $this->authorizeManage($request);
         $record = Enrollment::query()->findOrFail($enrollment);
+        $this->requireGroup($request, $record->group_id);
         $validated = $request->validate([
             'version' => ['required', 'integer', 'min:1'],
         ], self::MESSAGES);
@@ -172,6 +183,7 @@ final class StaffEnrollmentChangeController extends Controller
     {
         $this->authorizeManage($request);
         $record = Enrollment::query()->findOrFail($enrollment);
+        $this->requireGroup($request, $record->group_id);
         $validated = $request->validate([
             'session_id' => ['required', 'uuid'],
             'reason' => ['required', 'string', 'max:500'],
@@ -187,6 +199,7 @@ final class StaffEnrollmentChangeController extends Controller
     {
         $this->authorizeManage($request);
         $record = Enrollment::query()->findOrFail($enrollment);
+        $this->requireGroup($request, $record->group_id);
         $validated = $request->validate([
             'version' => ['required', 'integer', 'min:1'],
         ], self::MESSAGES);
@@ -221,9 +234,25 @@ final class StaffEnrollmentChangeController extends Controller
         ];
     }
 
+    /** Enrolling somewhere — otherwise 403 before anything is read, as before. */
     private function authorizeManage(Request $request): void
     {
-        $organization = Organization::query()->findOrFail($this->context->organizationId());
-        Gate::forUser($request->user())->authorize('enrollment.enroll', $organization);
+        if (! $this->scope->access($this->user($request))->has('enrollment.enroll')) {
+            throw new AuthorizationException;
+        }
+    }
+
+    /** Enrolling in the record's group: the scope (docs/product/team-rights.md, т. 4.4, 9). */
+    private function requireGroup(Request $request, string $groupId): void
+    {
+        abort_unless($this->scope->allows($this->user($request), 'enrollment.enroll', $groupId), 403, 'Нямате достъп до тази група.');
+    }
+
+    private function user(Request $request): User
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        return $user;
     }
 }

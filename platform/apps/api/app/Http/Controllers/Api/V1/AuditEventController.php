@@ -16,6 +16,11 @@ use Illuminate\Support\Facades\Gate;
  */
 class AuditEventController extends Controller
 {
+    private const TEAM_MANAGE_ONLY = [
+        'team.access_grant_added', 'team.access_grant_changed', 'team.access_grant_revoked', 'team.access_scope_changed',
+        'team.access_group_added', 'team.access_group_removed', 'team.access_template_changed', 'enrollment.contact_revealed',
+    ];
+
     public function index(Request $request, TenantContext $context): JsonResponse
     {
         $organization = Organization::query()->findOrFail($context->organizationId());
@@ -24,6 +29,9 @@ class AuditEventController extends Controller
 
         $events = AuditEvent::query()
             ->where('organization_id', $context->organizationId())
+            // Who got which rights and whose contact was shown: only for those who manage the team
+            // (docs/product/team-rights.md, т. 6).
+            ->when(! $details, fn ($query) => $query->whereNotIn('action', self::TEAM_MANAGE_ONLY))
             ->latest('created_at')
             ->limit(50)
             ->get()
