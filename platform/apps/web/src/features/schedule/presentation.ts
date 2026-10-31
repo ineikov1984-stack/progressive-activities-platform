@@ -125,6 +125,13 @@ export function sessionWhen(session: Pick<ScheduleSession, 'starts_at' | 'ends_a
   return `${name.weekday}, ${name.date} · ${timeRange(session)}`;
 }
 
+/** Original Sofia day and start time remain stable across repeated moves. */
+export function movedFromLabel(session: Pick<ScheduleSession, 'moved_from'>): string | null {
+  if (!session.moved_from) return null;
+  const name = dayName(sofiaDay(session.moved_from));
+  return `Преместено от ${name.weekday.toLocaleLowerCase('bg-BG')}, ${name.date} · ${startClock({ starts_at: session.moved_from })}`;
+}
+
 /** Six weeks from the Monday of the week that holds the month's first day (т. 3.2): always 42 days. */
 export function monthGrid(day: string): Week & { month: string } {
   const month = day.slice(0, 7);

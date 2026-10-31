@@ -3,7 +3,7 @@
 import { type CSSProperties, type FocusEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ScheduleSession } from './api';
 import {
-  dayName, fillOf, fillText, groupTitle, instructorsText, markLabels, monthLine, type ScheduleNames, sessionMark, sessionWhen, waitingText,
+  dayName, fillOf, fillText, groupTitle, instructorsText, markLabels, movedFromLabel, monthLine, type ScheduleNames, sessionMark, sessionWhen, waitingText,
 } from './presentation';
 import styles from './schedule.module.css';
 
@@ -26,6 +26,7 @@ export function SessionFacts({ session, now }: { session: ScheduleSession; now: 
   return (
     <div className={styles.factsBox}>
       {mark ? <span className={`${styles.badge} ${styles[`mark_${mark}`]}`}>{markLabels[mark]}</span> : null}
+      {movedFromLabel(session) ? <span className={styles.small}>{movedFromLabel(session)}</span> : null}
       {cancelled ? null : (
         <span className={styles.fillFact}>
           <span>{fillText(session, 'long')}</span>

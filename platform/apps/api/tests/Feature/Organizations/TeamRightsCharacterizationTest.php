@@ -177,7 +177,7 @@ class TeamRightsCharacterizationTest extends TestCase
             ->assertJsonCount($role === 'instructor' ? 4 : 12, 'sessions')
             ->assertJsonPath("abilities.{$f['tuesday']->id}", ['children' => true, 'manage' => $manage]);
         $panel = $this->getJson("/api/v1/schedule/sessions/{$f['session']->id}")->assertOk()->assertJsonCount(2, 'session.children')
-            ->assertJsonPath('abilities.manage', $manage)->assertJsonPath('actions', $manage ? ['cancel'] : []);
+            ->assertJsonPath('abilities.manage', $manage)->assertJsonPath('actions', $manage ? ['move', 'cancel'] : []);
         // Why a session changed: with "schedule.manage", also for the platform operator, who changes nothing.
         if (in_array($role, self::CATALOG_MANAGE, true)) {
             $panel->assertJsonPath('session.change_reason', null);

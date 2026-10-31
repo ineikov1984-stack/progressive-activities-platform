@@ -71,7 +71,7 @@ class ScheduleMoveTest extends TestCase
         ]))->assertCreated();
         $this->assertNull($this->current($f, $f['session'])->original_starts_at);
         $this->signInTo($f['owner'], $f['organization'])->getJson('/api/v1/schedule/sessions/'.$f['session']->id)
-            ->assertOk()->assertJsonPath('session.moved', false)->assertJsonPath('actions', ['cancel']);
+            ->assertOk()->assertJsonPath('session.moved', false)->assertJsonPath('actions', ['move', 'cancel']);
     }
 
     public function test_move_rejects_unchanged_cancelled_overlapping_past_and_invalid_local_times(): void

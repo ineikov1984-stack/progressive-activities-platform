@@ -2,12 +2,15 @@
 
 import { type MouseEvent, type RefObject, useEffect, useRef, useState } from 'react';
 import { loadSessionPanel, type ScheduleSession, ScheduleApiError, type SessionChild, type SessionPanel } from './api';
+import { ScheduleChangeDialog } from './change-dialog';
+import { type ChangeAction, type ChangeResult } from './changes';
+import type { ScheduleBoard } from './api';
 import { ChildCardDialog } from './child-card';
 import {
   activityColor, CHILDREN_SHOWN, childMarks, childrenHeading, dayName, groupTitle, instructorsText, moreChildrenText, type ScheduleNames,
   sessionMark, sessionWhen, sofiaDay, startClock,
 } from './presentation';
-import { SessionCard } from './schedule-views';
+import { SessionCard, type SessionSelection } from './schedule-views';
 import { SessionFacts } from './session-preview';
 import { CloseIcon, EyeIcon, PreviousIcon } from './icons';
 import styles from './schedule.module.css';
@@ -22,6 +25,9 @@ type Props = {
   /** "Профил на детето →" in the card of a child for those who see the enrollments. */
   withDetails: boolean;
   onClose: () => void;
+  board: ScheduleBoard;
+  selection?: SessionSelection;
+  onChanged: (result: ChangeResult) => void;
   /** A child's name from their card, for the label of the filter "Дете". */
   onChildNamed?: (id: string, name: string) => void;
 };
@@ -29,9 +35,9 @@ type Props = {
 /**
  * The side panel (т. 4): a session with who leads, the places and the children; or, from "+N още", the sessions at
  * that time, each opening its own. A modal panel — the heading takes the focus, Esc and ✕ close it and the page gives
- * the focus back to where it was opened. No actions yet: "Премести", "Отмени" and "Присъствия" come later.
+ * the focus back to where it was opened. Change actions follow the fresh panel permissions.
  */
-export function SchedulePanel({ organizationId, target, names, now, withDetails, onClose, onChildNamed }: Props) {
+export function SchedulePanel({ organizationId, target, names, now, withDetails, onClose, onChildNamed, board, onChanged, selection }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const [chosen, setChosen] = useState<ScheduleSession | undefined>(target.kind === 'session' ? target.session : undefined);
@@ -53,9 +59,9 @@ export function SchedulePanel({ organizationId, target, names, now, withDetails,
       <div className={styles.drawerInner}>
         {chosen ? (
           <SessionDetails key={chosen.id} organizationId={organizationId} session={chosen} names={names} now={now} withDetails={withDetails} heading={heading} onClose={close}
-            onBack={target.kind === 'more' ? () => setChosen(undefined) : undefined} onChildNamed={onChildNamed} />
+            board={board} onChanged={onChanged} onBack={target.kind === 'more' ? () => setChosen(undefined) : undefined} onChildNamed={onChildNamed} />
         ) : target.kind === 'more' ? (
-          <MoreList sessions={target.sessions} names={names} now={now} heading={heading} onClose={close} onChoose={setChosen} />
+          <MoreList sessions={target.sessions} names={names} now={now} heading={heading} onClose={close} onChoose={setChosen} selection={selection} />
         ) : null}
       </div>
     </dialog>
@@ -67,8 +73,8 @@ function CloseButton({ onClose }: { onClose: () => void }) {
 }
 
 /** "+N още" until "Ден по зали" (PR 3): the sessions at that time; each opens its panel. */
-function MoreList({ sessions, names, now, heading, onClose, onChoose }: {
-  sessions: ScheduleSession[]; names: ScheduleNames; now: Date; heading: RefObject<HTMLHeadingElement | null>; onClose: () => void; onChoose: (session: ScheduleSession) => void;
+function MoreList({ sessions, names, now, heading, onClose, onChoose, selection }: {
+  selection?: SessionSelection; sessions: ScheduleSession[]; names: ScheduleNames; now: Date; heading: RefObject<HTMLHeadingElement | null>; onClose: () => void; onChoose: (session: ScheduleSession) => void;
 }) {
   const first = sessions[0];
   const day = first ? dayName(sofiaDay(first.starts_at)) : undefined;
@@ -85,7 +91,7 @@ function MoreList({ sessions, names, now, heading, onClose, onChoose }: {
       </header>
       <div className={styles.drawerBody}>
         <ul className={styles.cardList}>
-          {sessions.map((session) => <li key={session.id}><SessionCard session={session} names={names} now={now} onOpen={(item) => onChoose(item)} /></li>)}
+          {sessions.map((session) => <li key={session.id}><SessionCard session={session} names={names} now={now} onOpen={(item) => onChoose(item)} selection={selection} /></li>)}
         </ul>
       </div>
     </>
@@ -94,11 +100,13 @@ function MoreList({ sessions, names, now, heading, onClose, onChoose }: {
 
 type CardChild = SessionChild & { child_id: string };
 
-function SessionDetails({ organizationId, session, names, now, withDetails, heading, onClose, onBack, onChildNamed }: {
+function SessionDetails({ organizationId, session, names, now, withDetails, heading, onClose, onBack, onChildNamed, board, onChanged }: {
   organizationId: string; session: ScheduleSession; names: ScheduleNames; now: Date; withDetails: boolean;
+  board: ScheduleBoard; onChanged: (result: ChangeResult) => void;
   heading: RefObject<HTMLHeadingElement | null>; onClose: () => void; onBack?: () => void; onChildNamed?: (id: string, name: string) => void;
 }) {
   const [attempt, setAttempt] = useState(0);
+  const [change, setChange] = useState<ChangeAction>();
   const key = `${session.id}:${attempt}`;
   const [result, setResult] = useState<{ key: string; panel?: SessionPanel; error?: string }>();
 
@@ -150,7 +158,8 @@ function SessionDetails({ organizationId, session, names, now, withDetails, head
       <div className={styles.drawerBody}>
         {/* The same summary as the quick look on a computer: the state, how full with the bar, who waits. */}
         <SessionFacts session={current} now={now} />
-        {reason ? <p className={styles.reason}><strong>Причина:</strong> {reason}</p> : null}
+        {panel?.last_change ? <p className={styles.reason}><strong>Причина за промяна:</strong> {panel.last_change.reason ?? reason ?? 'Промяна в графика'}{panel.last_change.by ? ` · ${panel.last_change.by}` : ''} · {new Date(panel.last_change.at).toLocaleString('bg-BG', { timeZone: 'Europe/Sofia' })}</p> : reason ? <p className={styles.reason}><strong>Причина:</strong> {reason}</p> : null}
+        {panel?.abilities.manage ? <div className={styles.changeActions}>{panel.actions?.map((action) => <button key={action} type="button" className={styles.button} onClick={() => setChange(action)}>{action === 'move' ? 'Премести' : action === 'cancel' ? 'Отмени' : 'Възстанови'}</button>)}</div> : null}
         {loaded?.error ? (
           <div className={styles.problem}>
             <p role="alert">{loaded.error}</p>
@@ -163,6 +172,7 @@ function SessionDetails({ organizationId, session, names, now, withDetails, head
         ) : null}
         {!panel && !loaded?.error ? <span className="sr-only" role="status">Зареждане на децата…</span> : null}
       </div>
+      {change && panel?.abilities.manage ? <ScheduleChangeDialog organizationId={organizationId} action={change} sessions={[current]} board={board} day={sofiaDay(current.starts_at)} onClose={() => setChange(undefined)} onApplied={(result) => { setChange(undefined); setAttempt((n) => n + 1); onChanged(result); }} /> : null}
       {cardChild ? (
         <ChildCardDialog organizationId={organizationId} child={cardChild} session={current} withDetails={withDetails} now={now} onClose={closeCard}
           onNamed={onChildNamed} onChanged={() => setAttempt((value) => value + 1)} />
