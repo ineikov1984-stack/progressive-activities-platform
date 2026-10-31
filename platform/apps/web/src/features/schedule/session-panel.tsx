@@ -4,10 +4,11 @@ import Link from 'next/link';
 import { type MouseEvent, type RefObject, useEffect, useRef, useState } from 'react';
 import { loadSessionPanel, type ScheduleSession, ScheduleApiError, type SessionPanel } from './api';
 import {
-  activityColor, CHILDREN_SHOWN, childLink, childMarks, dayName, groupTitle, instructorsText, markLabels, moreChildrenText, placesText,
-  type ScheduleNames, sessionMark, sessionWhen, sofiaDay, startClock, waitingText,
+  activityColor, CHILDREN_SHOWN, childLink, childMarks, childrenHeading, dayName, groupTitle, instructorsText, moreChildrenText, type ScheduleNames,
+  sessionMark, sessionWhen, sofiaDay, startClock,
 } from './presentation';
 import { SessionCard } from './schedule-views';
+import { SessionFacts } from './session-preview';
 import { CloseIcon, EyeIcon, PreviousIcon } from './icons';
 import styles from './schedule.module.css';
 
@@ -115,7 +116,6 @@ function SessionDetails({ organizationId, session, names, now, withDetails, head
   const group = panel?.group ?? names.group(current.group_id);
   const place = panel ? panel.location?.name : names.location(current.location_id);
   const mark = sessionMark(current, now);
-  const waiting = waitingText(current.waiting);
   const reason = panel?.session.change_reason;
 
   return (
@@ -131,14 +131,9 @@ function SessionDetails({ organizationId, session, names, now, withDetails, head
         <CloseButton onClose={onClose} />
       </header>
       <div className={styles.drawerBody}>
-        {mark ? <p className={styles.small}><span className={`${styles.badge} ${styles[`mark_${mark}`]}`}>{markLabels[mark]}</span></p> : null}
+        {/* The same summary as the quick look on a computer: the state, how full with the bar, who waits. */}
+        <SessionFacts session={current} now={now} />
         {reason ? <p className={styles.reason}><strong>Причина:</strong> {reason}</p> : null}
-        {mark === 'cancelled' ? null : (
-          <ul className={styles.facts} aria-label="Места">
-            <li>{placesText(current, 'long')}</li>
-            {waiting ? <li>{waiting}</li> : null}
-          </ul>
-        )}
         {loaded?.error ? (
           <div className={styles.problem}>
             <p role="alert">{loaded.error}</p>
@@ -165,7 +160,7 @@ function ChildrenList({ kids, groupId, withDetails, cancelled }: { kids: NonNull
 
   return (
     <section className={styles.section} aria-labelledby="schedule-panel-children">
-      <h3 id="schedule-panel-children">{cancelled ? 'Децата, които щяха да дойдат' : 'Децата'} <span className={styles.small}>({kids.length})</span></h3>
+      <h3 id="schedule-panel-children">{childrenHeading(kids, cancelled)}</h3>
       {kids.length === 0 ? <p className={styles.small}>Още няма записани деца.</p> : (
         <ul className={styles.kids}>
           {shown.map((child, index) => (

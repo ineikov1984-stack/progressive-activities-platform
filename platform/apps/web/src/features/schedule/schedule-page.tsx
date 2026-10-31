@@ -13,6 +13,7 @@ import {
 import { ScheduleFilterBar } from './schedule-filters';
 import { MonthView } from './month-view';
 import { CardsView, DayView, ScheduleSkeleton, WeekView } from './schedule-views';
+import { SchedulePreview, usePreview } from './session-preview';
 import { type PanelTarget, SchedulePanel } from './session-panel';
 import { NextIcon, PreviousIcon } from './icons';
 import styles from './schedule.module.css';
@@ -87,12 +88,16 @@ export function SchedulePage() {
   const board = current?.board;
   const names = useMemo(() => scheduleNames(dictionary ?? emptyBoard), [dictionary]);
 
+  // The quick look on a computer; it goes when the view, the period or the filters change.
+  const preview = usePreview();
+  const closePreview = preview.handlers.close;
   const go = useCallback((next: Partial<ScheduleAddress>) => {
+    closePreview();
     const target: ScheduleAddress = { view, date: day, by: address.by, filters: address.filters, ...next };
     // "По треньори" holds within the day; any way into the day from another view is "Ден по зали" (т. 3.2, 3.3).
     if (target.view !== 'day') target.by = 'rooms';
     window.history.pushState(null, '', `${window.location.pathname}${scheduleAddress(target)}`);
-  }, [view, day, address.by, address.filters]);
+  }, [view, day, address.by, address.filters, closePreview]);
 
   function chooseView(next: ScheduleView) {
     setRemembered(next);
@@ -142,18 +147,20 @@ export function SchedulePage() {
   } else if (board.sessions.length === 0) {
     body = (
       <div className={styles.empty}>
-        <p role="status">{emptyText(view)}</p>
+        <p role="status">{emptyText(view, filtered)}</p>
         {filtered ? <button type="button" className={styles.button} onClick={clearFilters}>Изчисти филтрите</button> : null}
       </div>
     );
   } else if (view === 'month') {
     body = <MonthView day={day} sessions={board.sessions} activities={board.activities} names={names} today={today} now={now} onOpen={openSession}
-      onDay={(chosen) => go({ view: 'day', date: chosen })} onPick={(chosen) => go({ date: chosen })} />;
+      onDay={(chosen) => go({ view: 'day', date: chosen })} onPick={(chosen) => go({ date: chosen })} preview={preview.handlers} />;
   } else if (view === 'day') {
-    body = <DayView day={day} by={address.by} sessions={board.sessions} dictionary={board} names={names} today={today} now={now} onOpen={openSession} onMore={openMore} />;
+    // A new day or columns open the grid anew at today's session (the key).
+    body = <DayView key={`${query}|${address.by}`} day={day} by={address.by} sessions={board.sessions} dictionary={board} names={names} today={today} now={now}
+      onOpen={openSession} onMore={openMore} preview={preview.handlers} />;
   } else if (view === 'week') {
-    body = <WeekView week={period} sessions={board.sessions} activities={board.activities} names={names} today={today} now={now} onOpen={openSession}
-      onMore={weekMore} moreOpensDay={!own} />;
+    body = <WeekView key={query} week={period} sessions={board.sessions} activities={board.activities} names={names} today={today} now={now} onOpen={openSession}
+      onMore={weekMore} moreOpensDay={!own} preview={preview.handlers} />;
   } else {
     body = <CardsView week={period} sessions={board.sessions} names={names} today={today} now={now} onOpen={openSession} />;
   }
@@ -192,6 +199,7 @@ export function SchedulePage() {
 
       {body}
 
+      {preview.shown && !panel ? <SchedulePreview shown={preview.shown} names={names} now={now} onEnter={preview.keep} onLeave={preview.hide} /> : null}
       {panel ? <SchedulePanel organizationId={organization.id} target={panel} names={names} now={now} withDetails={withDetails} onClose={closePanel} /> : null}
     </div>
   );

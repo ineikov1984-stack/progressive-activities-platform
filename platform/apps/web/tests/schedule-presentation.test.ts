@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { ScheduleSession } from '../src/features/schedule/api';
 import {
-  activityColor, activityColorToken, addDays, childLink, childMarks, clock, dayBlockDetail, dayLayout, dayName, defaultView, emptyText, filterChips,
+  activityColor, activityColorToken, addDays, blockLines, cardDays, childLink, childMarks, childrenHeading, clock, dayBlockDetail, fillOf, fillText,
+  openingPoint, dayLayout, dayName, defaultView, emptyText, filterChips,
   filterOptions, groupTitle, instructorLabel, instructorsText, isDay, legend, monthGrid, monthLayout, monthLine, moreChildrenText, NO_COLUMN, noFilters,
   parseScheduleAddress, parseStoredView, periodLabel, periodOf, placesText, scheduleAddress, scheduleNames, scheduleQuery, scheduleViewStorageKey,
   sessionMark, sessionsByDay, sessionsCount, sessionWhen, shortGroupName, sofiaDay, sofiaMinutes, startClock, stepDay, stepsOf, timeRange, toggleFilter,
@@ -122,25 +123,26 @@ describe('schedule — the week as a calendar', () => {
     expect(blocks.map((block) => block.kind === 'session' && block.session.id)).toEqual([chess.id, art.id]);
   });
 
-  it('shows four sessions at once', () => {
-    const four = [0, 1, 2, 3].map(() => at('2026-11-18', '17:00'));
-    const blocks = weekLayout(four, days).days[2].blocks;
-    expect(blocks).toHaveLength(4);
-    expect(blocks.every((block) => block.kind === 'session' && block.lanes === 4)).toBe(true);
+  it('shows two sessions at once side by side', () => {
+    const two = [0, 1].map(() => at('2026-11-18', '17:00'));
+    const blocks = weekLayout(two, days).days[2].blocks;
+    expect(blocks).toHaveLength(2);
+    expect(blocks.every((block) => block.kind === 'session' && block.lanes === 2)).toBe(true);
   });
 
-  it('with more than four at once shows three and "+N още" with the rest', () => {
-    const six = [0, 1, 2, 3, 4, 5].map((index) => at('2026-11-18', index < 5 ? '17:00' : '17:30'));
+  it('with more than two at once shows the first and "+N още" with the rest, never narrower blocks', () => {
+    const four = [0, 1, 2, 3].map((index) => at('2026-11-18', index < 3 ? '17:00' : '17:30'));
     const earlier = at('2026-11-18', '15:00');
-    const blocks = weekLayout([earlier, ...six], days).days[2].blocks;
+    const blocks = weekLayout([earlier, ...four], days).days[2].blocks;
     expect(blocks[0]).toMatchObject({ kind: 'session', lanes: 1 });
     const shown = blocks.filter((block) => block.kind === 'session' && block.session.id !== earlier.id);
-    expect(shown.map((block) => block.kind === 'session' && [block.session.id, block.lane, block.lanes])).toEqual([
-      [six[0].id, 0, 4], [six[1].id, 1, 4], [six[2].id, 2, 4],
-    ]);
+    expect(shown.map((block) => block.kind === 'session' && [block.session.id, block.lane, block.lanes])).toEqual([[four[0].id, 0, 2]]);
     const more = blocks.find((block) => block.kind === 'more');
-    expect(more).toMatchObject({ kind: 'more', lane: 3, lanes: 4, start: 17 * 60, end: 18 * 60 + 30 });
-    expect(more?.kind === 'more' && more.sessions.map((session) => session.id)).toEqual([six[3].id, six[4].id, six[5].id]);
+    expect(more).toMatchObject({ kind: 'more', lane: 1, lanes: 2, start: 17 * 60, end: 18 * 60 + 30 });
+    expect(more?.kind === 'more' && more.sessions.map((session) => session.id)).toEqual([four[1].id, four[2].id, four[3].id]);
+    expect(weekLayout(four, days).days[2].blocks.every((block) => block.lanes <= 2)).toBe(true);
+    // The old limit of four is still there for whoever asks for it.
+    expect(weekLayout(four, days, 4).days[2].blocks.filter((block) => block.kind === 'session')).toHaveLength(4);
   });
 
   it('gives the cards only the days with sessions, in order, and the legend only the activities shown', () => {
@@ -171,7 +173,7 @@ describe('schedule — the address', () => {
   });
 
   it('gives "Моят график" the week and the cards only', () => {
-    expect(viewsFor(false).map((view) => view.label)).toEqual(['Месец', 'Седмица', 'Ден по зали', 'Карти']);
+    expect(viewsFor(false).map((view) => view.label)).toEqual(['Месец', 'Седмица', 'Ден', 'Карти']);
     expect(viewsFor(true).map((view) => view.label)).toEqual(['Седмица', 'Карти']);
     expect(parseScheduleAddress('?view=month', { own: true }).view).toBeNull();
     expect(parseScheduleAddress('?view=day', { own: true }).view).toBeNull();
@@ -323,6 +325,8 @@ describe('schedule — periods of the views', () => {
     expect(stepsOf('day')).toEqual({ previous: 'Предишен ден', next: 'Следващ ден' });
     expect([emptyText('month'), emptyText('week'), emptyText('day'), emptyText('cards')])
       .toEqual(['Няма занимания в този месец.', 'Няма занимания в тази седмица.', 'Няма занимания в този ден.', 'Няма занимания в тази седмица.']);
+    expect(emptyText('week', true)).toBe('Няма занимания по избраните филтри.');
+    expect(emptyText('month', true)).toBe('Няма занимания по избраните филтри.');
   });
 });
 
@@ -381,6 +385,7 @@ describe('schedule — the month', () => {
     expect(shortGroupName('Начинаещи')).toBe('Начинаещи');
     expect(shortGroupName('Групата на Мими')).toBe('Групата на Мими');
     expect([sessionsCount(0), sessionsCount(1), sessionsCount(3)]).toEqual(['няма занимания', '1 занимание', '3 занимания']);
+    expect([sessionsCount(3, 1), sessionsCount(0, 2)]).toEqual(['3 занимания, 1 отменено', 'няма занимания, 2 отменени']);
   });
 });
 
@@ -432,5 +437,93 @@ describe('schedule — the day by places and by people', () => {
     expect(dayBlockDetail(standIn, 'teachers', names)).toBe('Зала „Слънце“ · замества Ани Петрова');
     expect(dayBlockDetail(at('2026-11-18', '18:00'), 'teachers', names)).toBe('Без зала');
     expect(dayBlockDetail(at('2026-11-18', '18:00'), 'rooms', names)).toBe('Без преподавател');
+  });
+});
+
+describe('schedule — how full, at a glance', () => {
+  it('gives the level and the words: empty, a little, almost full, full, without a limit', () => {
+    expect(fillOf({ capacity: 10, taken: 0 })).toEqual({ level: 'empty', percent: 0, word: 'Няма записани' });
+    expect(fillOf({ capacity: 10, taken: 3 })).toEqual({ level: 'low', percent: 30, word: null });
+    expect(fillOf({ capacity: 10, taken: 8 })).toEqual({ level: 'almost', percent: 80, word: null });
+    expect(fillOf({ capacity: 10, taken: 10 })).toEqual({ level: 'full', percent: 100, word: 'Пълна' });
+    // More than the places (a visit on a full day) is full too, and the bar does not run over.
+    expect(fillOf({ capacity: 10, taken: 11 })).toEqual({ level: 'full', percent: 100, word: 'Пълна' });
+    expect(fillOf({ capacity: null, taken: 8 })).toEqual({ level: 'none', percent: 0, word: null });
+    expect(fillOf({ capacity: null, taken: 0 })).toEqual({ level: 'none', percent: 0, word: 'Няма записани' });
+  });
+
+  it('says it in a block, on a card and in the panel', () => {
+    expect([fillText({ capacity: 10, taken: 8 }, 'block'), fillText({ capacity: 10, taken: 8 }, 'short'), fillText({ capacity: 10, taken: 8 }, 'long')])
+      .toEqual(['8/10', '8/10 места', '8 от 10 места']);
+    expect([fillText({ capacity: 10, taken: 10 }, 'block'), fillText({ capacity: 10, taken: 10 }, 'short'), fillText({ capacity: 10, taken: 10 }, 'long')])
+      .toEqual(['Пълна', '10/10 места · Пълна', '10 от 10 места · Пълна']);
+    expect([fillText({ capacity: 12, taken: 0 }, 'block'), fillText({ capacity: 12, taken: 0 }, 'long')]).toEqual(['Няма записани', '0 от 12 места · Няма записани']);
+    expect([fillText({ capacity: null, taken: 8 }, 'block'), fillText({ capacity: null, taken: 1 }, 'long'), fillText({ capacity: null, taken: 0 }, 'short')])
+      .toEqual(['8 деца', '1 дете', 'Няма записани']);
+  });
+
+  it('heads the children with who comes and who is away, so the places and the names agree', () => {
+    const kids = (states: string[]) => states.map((state) => ({ state }));
+    expect(childrenHeading(kids(['active', 'active', 'paused', 'skipped', 'active']), false)).toBe('Децата: 3 идват · 2 в пауза или пропускат');
+    expect(childrenHeading(kids(['active', 'paused']), false)).toBe('Децата: 1 идва · 1 е в пауза или пропуска');
+    expect(childrenHeading(kids(['active', 'active']), false)).toBe('Децата: 2 идват');
+    expect(childrenHeading(kids(['active', 'paused']), true)).toBe('Децата, които щяха да дойдат: 2');
+  });
+});
+
+describe('schedule — after the UX review', () => {
+  const days = weekOf('2026-11-18').days;
+  const names = scheduleNames({
+    activities: [{ id: A, title: 'Шахмат', color: 0 }], groups: [{ id: G, name: 'Група 1', activity_id: A, age_label: null }],
+    locations: [{ id: L, name: 'Двор' }], instructors: [],
+  });
+
+  it('counts the sessions held in a day of the month apart from the cancelled ones', () => {
+    const layout = monthLayout([at('2026-11-18', '16:00'), at('2026-11-18', '17:00', 60, { status: 'cancelled' }), at('2026-11-18', '18:00')], '2026-11-18');
+    expect(layout.weeks[3][2]).toMatchObject({ held: 2, cancelled: 1 });
+    expect(layout.weeks[3][3]).toMatchObject({ held: 0, cancelled: 0 });
+  });
+
+  it('puts Monday to Friday in the cards always, Saturday and Sunday only with sessions', () => {
+    const saturday = at('2026-11-21', '10:00');
+    expect(cardDays([at('2026-11-18', '17:00'), saturday], days).map((item) => [item.day, item.sessions.length, item.weekday])).toEqual([
+      ['2026-11-16', 0, true], ['2026-11-17', 0, true], ['2026-11-18', 1, true], ['2026-11-19', 0, true], ['2026-11-20', 0, true], ['2026-11-21', 1, false],
+    ]);
+  });
+
+  it('writes a block line by line, the state next to the time, how full in words where needed', () => {
+    const now = new Date('2026-11-20T16:20:00+02:00');
+    const going = at('2026-11-20', '16:00', 60, { location_id: L, capacity: 10, taken: 10 });
+    expect(blockLines(going, 'week', 'rooms', names, now)).toEqual({
+      time: '16:00', mark: 'now', lines: ['Шахмат', 'Пълна', 'Група 1', 'Двор'],
+      label: '16:00–17:00, Шахмат, Група 1, Двор, 10 от 10 места · Пълна, Сега',
+    });
+    const day = blockLines(at('2026-11-20', '18:00', 60, { capacity: 10, taken: 8 }), 'day', 'rooms', names, now);
+    expect(day).toMatchObject({ time: '18:00–19:00', mark: null, lines: ['Шахмат · Група 1', '8/10', 'Без преподавател'] });
+    const cancelled = blockLines(at('2026-11-19', '18:00', 60, { status: 'cancelled' }), 'week', 'rooms', names, now);
+    expect(cancelled).toMatchObject({ mark: 'cancelled', lines: ['Шахмат', 'Група 1'] });
+    expect(cancelled.label.endsWith('Отменено')).toBe(true);
+  });
+
+  it('opens the week at today\'s column and the session going on now, else the first one today, else the first of the week', () => {
+    const now = new Date('2026-11-20T16:20:00+02:00');
+    const week = (sessions: ScheduleSession[]) => weekLayout(sessions, days).days.map((column) => ({ blocks: column.blocks, today: column.day === '2026-11-20' }));
+    expect(openingPoint('week', week([at('2026-11-21', '09:00'), at('2026-11-20', '16:00'), at('2026-11-20', '18:00')]), now)).toEqual({ column: 4, minute: 16 * 60 });
+    expect(openingPoint('week', week([at('2026-11-21', '09:00'), at('2026-11-20', '18:00')]), now)).toEqual({ column: 4, minute: 18 * 60 });
+    // Nothing today: today's column still, at the week's first session.
+    expect(openingPoint('week', week([at('2026-11-18', '15:30'), at('2026-11-21', '09:00')]), now)).toEqual({ column: 4, minute: 9 * 60 });
+    // Another week: its first session.
+    const other = weekLayout([at('2026-11-25', '17:00'), at('2026-11-24', '16:00')], weekOf('2026-11-25').days).days.map((column) => ({ blocks: column.blocks }));
+    expect(openingPoint('week', other, now)).toEqual({ column: 1, minute: 16 * 60 });
+    expect(openingPoint('week', weekLayout([], weekOf('2026-11-25').days).days.map((column) => ({ blocks: column.blocks })), now)).toBeNull();
+  });
+
+  it('opens the day at the place of the session going on now, else at the first one', () => {
+    const now = new Date('2026-11-20T16:20:00+02:00');
+    const columns = (sessions: ScheduleSession[], today: boolean) => dayLayout(sessions, '2026-11-20', 'rooms', { locations: [{ id: L, name: 'Двор' }], instructors: [] }).columns
+      .map((column) => ({ blocks: column.blocks, today }));
+    const sessions = [at('2026-11-20', '15:00', 60, { location_id: L }), at('2026-11-20', '16:00', 60, { location_id: null })];
+    expect(openingPoint('day', columns(sessions, true), now)).toEqual({ column: 1, minute: 16 * 60 });
+    expect(openingPoint('day', columns(sessions, false), now)).toEqual({ column: 0, minute: 15 * 60 });
   });
 });

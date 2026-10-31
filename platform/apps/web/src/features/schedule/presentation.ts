@@ -12,7 +12,8 @@ export type ScheduleView = 'month' | 'week' | 'day' | 'cards';
 export const scheduleViews: { id: ScheduleView; label: string }[] = [
   { id: 'month', label: 'Месец' },
   { id: 'week', label: 'Седмица' },
-  { id: 'day', label: 'Ден по зали' },
+  // "По зали · По треньори" is the day's own switch (UX review of "График").
+  { id: 'day', label: 'Ден' },
   { id: 'cards', label: 'Карти' },
 ];
 
@@ -174,8 +175,9 @@ export function stepsOf(view: ScheduleView): { previous: string; next: string } 
   return stepLabels[view === 'cards' ? 'week' : view];
 }
 
-/** The empty view says what is empty. */
-export function emptyText(view: ScheduleView): string {
+/** The empty view says what is empty: the chosen filters, or the period. */
+export function emptyText(view: ScheduleView, filtered = false): string {
+  if (filtered) return 'Няма занимания по избраните филтри.';
   if (view === 'month') return 'Няма занимания в този месец.';
   if (view === 'day') return 'Няма занимания в този ден.';
   return 'Няма занимания в тази седмица.';
@@ -325,6 +327,35 @@ export function placesText(session: Pick<ScheduleSession, 'capacity' | 'taken'>,
     : `${session.taken} от ${session.capacity} ${places(session.capacity)}`;
 }
 
+/**
+ * How full the group is at a glance (решение на собственика, 31.10.2026): the share for a thin bar under the block —
+ * "low" up to 80 %, "almost" from 80 %, "full" when no place is left — and always the words "Пълна" and "Няма
+ * записани", never the colour alone. A group without a limit has no bar.
+ */
+export type FillLevel = 'none' | 'empty' | 'low' | 'almost' | 'full';
+export type Fill = { level: FillLevel; percent: number; word: string | null };
+
+export function fillOf(session: Pick<ScheduleSession, 'capacity' | 'taken'>): Fill {
+  const { capacity, taken } = session;
+  if (capacity === null || capacity === undefined || capacity <= 0) return { level: 'none', percent: 0, word: taken > 0 ? null : 'Няма записани' };
+  if (taken <= 0) return { level: 'empty', percent: 0, word: 'Няма записани' };
+  if (taken >= capacity) return { level: 'full', percent: 100, word: 'Пълна' };
+  const share = taken / capacity;
+  return { level: share >= 0.8 ? 'almost' : 'low', percent: Math.round(share * 100), word: null };
+}
+
+/**
+ * The places with the words: "8/10" in a block ("Пълна" and "Няма записани" alone, where room is short), "8/10 места"
+ * on a card, "8 от 10 места" in the panel and the preview; "8 деца" without a limit.
+ */
+export function fillText(session: Pick<ScheduleSession, 'capacity' | 'taken'>, style: 'block' | 'short' | 'long'): string {
+  const fill = fillOf(session);
+  if (fill.level === 'none') return fill.word ?? placesText(session, style === 'long' ? 'long' : 'short');
+  if (style === 'block') return fill.word ?? `${session.taken}/${session.capacity}`;
+  const places = placesText(session, style);
+  return fill.word ? `${places} · ${fill.word}` : places;
+}
+
 /** The same for every session of the group (т. 5), so it says "в групата". */
 export function waitingText(waiting: number): string | null {
   if (!waiting || waiting < 1) return null;
@@ -361,6 +392,19 @@ export function childMarks(child: Pick<SessionChild, 'scope' | 'state'>): string
   return marks;
 }
 
+/**
+ * Above the children: those who come (the places the session takes) and those away — so that "8 от 10 места" next to
+ * 11 names does not look like an overfull group (UX review). A cancelled session lists who would have come.
+ */
+export function childrenHeading(children: Pick<SessionChild, 'state'>[], cancelled: boolean): string {
+  if (cancelled) return `Децата, които щяха да дойдат: ${children.length}`;
+  const away = children.filter((child) => child.state === 'paused' || child.state === 'skipped').length;
+  const coming = children.length - away;
+  const comes = coming === 1 ? '1 идва' : `${coming} идват`;
+  if (away === 0) return `Децата: ${comes}`;
+  return `Децата: ${comes} · ${away} ${away === 1 ? 'е в пауза или пропуска' : 'в пауза или пропускат'}`;
+}
+
 /** The panel shows this many children, then "Още N деца". */
 export const CHILDREN_SHOWN = 8;
 
@@ -394,8 +438,11 @@ export function sessionLabel(session: ScheduleSession, names: ScheduleNames, now
 
 /** The shortest a block is drawn, so that its time and name fit. */
 const MIN_MINUTES = 30;
-/** More sessions at the same time than this give "+N още" (т. 3.1). */
-export const MAX_LANES = 4;
+/**
+ * At most two side by side (UX review of "График"): with more at the same time, the first one and "+N още" — in the
+ * week it opens the day, in the day the panel with the rest.
+ */
+export const MAX_LANES = 2;
 
 export type WeekBlock =
   | { kind: 'session'; session: ScheduleSession; start: number; end: number; lane: number; lanes: number }
@@ -536,7 +583,8 @@ export function dayBlockDetail(session: ScheduleSession, by: DayColumns, names: 
 /** In a day of the month: this many lines, then "+N още" (т. 3.2). */
 export const MONTH_ROWS = 3;
 
-export type MonthDay = { day: string; number: number; inMonth: boolean; sessions: ScheduleSession[]; shown: ScheduleSession[]; more: number };
+/** `held` — the sessions that are not cancelled, the number a day shows on a phone. */
+export type MonthDay = { day: string; number: number; inMonth: boolean; sessions: ScheduleSession[]; shown: ScheduleSession[]; more: number; held: number; cancelled: number };
 export type MonthLayout = { month: string; weeks: MonthDay[][] };
 
 /** The month's six weeks; each day with its sessions by Sofia, the first three of them and how many more. */
@@ -547,7 +595,11 @@ export function monthLayout(sessions: ScheduleSession[], day: string, rows = MON
   const days = grid.days.map((item) => {
     // The API's order: by start, then by activity.
     const list = [...(byDay.get(item) ?? [])].sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at));
-    return { day: item, number: Number(item.slice(8)), inMonth: item.startsWith(grid.month), sessions: list, shown: list.slice(0, rows), more: Math.max(0, list.length - rows) };
+    const cancelled = list.filter((session) => session.status === 'cancelled').length;
+    return {
+      day: item, number: Number(item.slice(8)), inMonth: item.startsWith(grid.month), sessions: list, shown: list.slice(0, rows),
+      more: Math.max(0, list.length - rows), held: list.length - cancelled, cancelled,
+    };
   });
   return { month: grid.month, weeks: Array.from({ length: 6 }, (_, week) => days.slice(week * 7, week * 7 + 7)) };
 }
@@ -563,10 +615,57 @@ export function monthLine(session: ScheduleSession, names: Pick<ScheduleNames, '
   return `${startClock(session)} ${names.activity(session.activity_id)?.title ?? 'Занимание'}${group ? ` · ${shortGroupName(group)}` : ''}`;
 }
 
-/** "3 занимания", "1 занимание", "няма занимания". */
-export function sessionsCount(count: number): string {
-  if (count === 0) return 'няма занимания';
-  return count === 1 ? '1 занимание' : `${count} занимания`;
+/** "3 занимания", "1 занимание", "няма занимания"; with the cancelled ones apart: "3 занимания, 1 отменено". */
+export function sessionsCount(count: number, cancelled = 0): string {
+  const held = count === 0 ? 'няма занимания' : count === 1 ? '1 занимание' : `${count} занимания`;
+  if (cancelled === 0) return held;
+  return `${held}, ${cancelled === 1 ? '1 отменено' : `${cancelled} отменени`}`;
+}
+
+/**
+ * The days of the cards when there is room (UX review): Monday to Friday always, each in its column, Saturday and
+ * Sunday after them when they have sessions. On a narrow screen only the days with sessions are shown.
+ */
+export function cardDays(sessions: ScheduleSession[], days: string[]): { day: string; sessions: ScheduleSession[]; weekday: boolean }[] {
+  return days
+    .map((day) => ({ day, sessions: sessions.filter((session) => sofiaDay(session.starts_at) === day), weekday: weekdayOf(day) <= 5 }))
+    .filter((item) => item.weekday || item.sessions.length > 0);
+}
+
+/**
+ * What a block in the week or the day says, line by line, and to a screen reader: the first line is the time with the
+ * state next to it ("Сега", "Отменено"); the lines that do not fit in a short block are left out whole.
+ */
+export function blockLines(session: ScheduleSession, kind: 'week' | 'day', by: DayColumns, names: ScheduleNames, now: Date): { time: string; mark: SessionMark | null; lines: string[]; label: string } {
+  const mark = sessionMark(session, now);
+  const activity = names.activity(session.activity_id)?.title ?? 'Занимание';
+  const group = names.group(session.group_id)?.name;
+  const place = names.location(session.location_id);
+  const fill = mark === 'cancelled' ? null : fillText(session, 'block');
+  const lines = kind === 'week'
+    ? [activity, fill, group, place]
+    : [group ? `${activity} · ${group}` : activity, fill, dayBlockDetail(session, by, names)];
+  const label = [
+    timeRange(session), activity, group, kind === 'week' ? place : dayBlockDetail(session, by, names),
+    mark === 'cancelled' ? null : fillText(session, 'long'), mark && mark !== 'later' ? markLabels[mark] : null,
+  ].filter(Boolean).join(', ');
+  return { time: kind === 'week' ? startClock(session) : timeRange(session), mark: mark === 'later' ? null : mark, lines: lines.filter((line): line is string => Boolean(line)), label };
+}
+
+/**
+ * Where the week and the day open (UX review): today's column — in the week, also when it is empty — at the session
+ * going on now, else at the first session of that day; another week at its first session. `minute` is of the day.
+ */
+export function openingPoint(kind: 'week' | 'day', columns: { blocks: WeekBlock[]; today?: boolean }[], now: Date): { column: number; minute: number } | null {
+  const nowMinute = sofiaMinutes(now);
+  const items = columns.flatMap((column, index) => column.blocks.map((block) => ({ index, today: Boolean(column.today), start: block.start, end: block.end })));
+  const running = items.find((item) => item.today && item.start <= nowMinute && nowMinute < item.end);
+  if (running) return { column: running.index, minute: running.start };
+  const todayColumn = kind === 'week' ? columns.findIndex((column) => column.today) : -1;
+  const pool = todayColumn === -1 ? items : items.filter((item) => item.index === todayColumn);
+  const first = [...pool].sort((a, b) => a.start - b.start || a.index - b.index)[0];
+  if (todayColumn !== -1) return { column: todayColumn, minute: first?.start ?? Math.min(...items.map((item) => item.start), nowMinute) };
+  return first ? { column: first.index, minute: first.start } : null;
 }
 
 /** The days of the cards (т. 3.4): only those with sessions, in order. */

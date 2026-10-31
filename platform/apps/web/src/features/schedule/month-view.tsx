@@ -1,46 +1,62 @@
 'use client';
 
 import type { ScheduleActivity, ScheduleSession } from './api';
-import { dayName, legend, type MonthDay, monthLayout, monthLine, type ScheduleNames, sessionsCount } from './presentation';
+import { dayName, fillOf, fillText, legend, type MonthDay, monthLayout, monthLine, type ScheduleNames, sessionsCount } from './presentation';
 import { colorClass, Legend, type OpenSession, SessionCard } from './schedule-views';
+import { FillBar, type PreviewHandlers } from './session-preview';
 import styles from './schedule.module.css';
 
 type Props = {
-  /** A day of the month shown; on a phone also the chosen day, whose sessions are listed under the grid. */
+  /** A day of the month shown; on a narrower screen also the chosen day, whose sessions are listed under the grid. */
   day: string;
   sessions: ScheduleSession[];
   activities: ScheduleActivity[];
   names: ScheduleNames;
   today: string;
   now: Date;
-  /** A day of the grid opens "Ден по зали" for it (т. 3.2). */
+  /** A day of the grid opens "Ден" by places for it (т. 3.2). */
   onDay: (day: string) => void;
-  /** On a phone a day is chosen first, and its sessions are listed under the grid. */
+  /** On a narrower screen a day is chosen first, and its sessions are listed under the grid. */
   onPick: (day: string) => void;
   onOpen: OpenSession;
+  preview: PreviewHandlers;
 };
 
 const headings = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'нд'];
 
 function dayWords(item: MonthDay, today: string): string {
   const name = dayName(item.day);
-  return `${name.weekday}, ${name.date}${item.day === today ? ', днес' : ''}: ${sessionsCount(item.sessions.length)}.`;
+  return `${name.weekday}, ${name.date}${item.day === today ? ', днес' : ''}: ${sessionsCount(item.held, item.cancelled)}.`;
 }
 
 /**
- * Месец (т. 3.2): six weeks from Monday. When there is room, a day shows up to three lines ("16:00 Шахмат · Гр. 1")
- * and "+N още", and opens "Ден по зали". On a phone the grid is compact — the number of sessions in each day — and
- * the chosen day's sessions are listed under it. The days of the next and the previous month are paler, still
- * readable.
+ * A line of a day: "16:00 Шахмат · Гр. 1 · 8/10" when it fits; "Пълна" and "Няма записани" always stay; a cancelled
+ * one starts with "Отменено ·". A thin bar under it shows how full.
  */
-export function MonthView({ day, sessions, activities, names, today, now, onDay, onPick, onOpen }: Props) {
+function MonthLine({ session, names, preview }: { session: ScheduleSession; names: ScheduleNames; preview: PreviewHandlers }) {
+  const cancelled = session.status === 'cancelled';
+  const fill = fillOf(session);
+  return (
+    <span className={`${styles.monthLine} ${colorClass(names.activity(session.activity_id))} ${cancelled ? styles.monthCancelled : ''}`}
+      onMouseEnter={(event) => preview.enter({ kind: 'session', session }, event.currentTarget)} onMouseLeave={preview.leave}>
+      {cancelled ? <span className={styles.monthCancelWord}>Отменено ·</span> : null}
+      <span className={styles.monthText}>{monthLine(session, names)}</span>
+      {cancelled ? null : <span className={fill.word ? styles.monthFillWord : styles.monthFill}>{fillText(session, 'block')}</span>}
+      {cancelled ? null : <FillBar session={session} className={styles.monthBar} />}
+    </span>
+  );
+}
+
+/**
+ * Месец (т. 3.2): six weeks from Monday. When there is room (about 860 px), a day shows up to three lines and "+N
+ * още", and opens "Ден"; on a narrower screen the grid is compact — the number of sessions held in each day — and the
+ * chosen day's cards are listed under it. The other month's days are paler, still readable.
+ */
+export function MonthView({ day, sessions, activities, names, today, now, onDay, onPick, onOpen, preview }: Props) {
   const layout = monthLayout(sessions, day);
   const chosen = layout.weeks.flat().find((item) => item.day === day);
   const chosenName = dayName(day);
-  const cellClass = (item: MonthDay) => [
-    item.inMonth ? '' : styles.monthOut,
-    item.day === today ? styles.monthToday : '',
-  ].join(' ');
+  const cellClass = (item: MonthDay) => [item.inMonth ? '' : styles.monthOut, item.day === today ? styles.monthToday : ''].join(' ');
 
   return (
     <section className={styles.month} aria-label="Месец">
@@ -50,21 +66,21 @@ export function MonthView({ day, sessions, activities, names, today, now, onDay,
         <tbody>
           {layout.weeks.map((week) => (
             <tr key={week[0].day}>
-              {week.map((item) => (
-                <td key={item.day} className={cellClass(item)}>
-                  <button type="button" className={styles.monthDay} onClick={() => onDay(item.day)}>
-                    <span className={styles.monthNumber} aria-hidden="true">{item.number}</span>
-                    <span className="sr-only">{dayWords(item, today)}</span>
-                    {item.shown.map((session) => (
-                      <span key={session.id} className={`${styles.monthLine} ${colorClass(names.activity(session.activity_id))} ${session.status === 'cancelled' ? styles.monthCancelled : ''}`}>
-                        {monthLine(session, names)}{session.status === 'cancelled' ? <span className="sr-only"> (отменено)</span> : null}
-                      </span>
-                    ))}
-                    {item.more ? <span className={styles.monthMore}>+{item.more} още</span> : null}
-                    <span className="sr-only"> Виж деня.</span>
-                  </button>
-                </td>
-              ))}
+              {week.map((item) => {
+                const target = { kind: 'day' as const, day: item.day, sessions: item.sessions };
+                return (
+                  <td key={item.day} className={cellClass(item)}>
+                    <button type="button" className={styles.monthDay} aria-describedby={preview.describedBy(`day-${item.day}`)}
+                      onClick={() => { preview.close(); onDay(item.day); }} onFocus={(event) => preview.focus(target, event)} onBlur={preview.blur}>
+                      <span className={styles.monthNumber} aria-hidden="true">{item.number}</span>
+                      <span className="sr-only">{dayWords(item, today)}</span>
+                      {item.shown.map((session) => <MonthLine key={session.id} session={session} names={names} preview={preview} />)}
+                      {item.more ? <span className={styles.monthMore}>+{item.more} още</span> : null}
+                      <span className="sr-only"> Виж деня.</span>
+                    </button>
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>
@@ -80,7 +96,7 @@ export function MonthView({ day, sessions, activities, names, today, now, onDay,
                   <td key={item.day} className={cellClass(item)}>
                     <button type="button" className={styles.monthPick} aria-pressed={item.day === day} onClick={() => onPick(item.day)}>
                       <span className={styles.monthNumber} aria-hidden="true">{item.number}</span>
-                      {item.sessions.length ? <span className={styles.monthCount} aria-hidden="true">{item.sessions.length}</span> : null}
+                      {item.held ? <span className={styles.monthCount} aria-hidden="true">{item.held}</span> : null}
                       <span className="sr-only">{dayWords(item, today)}</span>
                     </button>
                   </td>
