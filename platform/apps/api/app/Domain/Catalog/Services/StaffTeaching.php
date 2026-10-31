@@ -132,6 +132,26 @@ final readonly class StaffTeaching
     }
 
     /**
+     * The activities the groups belong to.
+     *
+     * @param  list<string>  $groupIds
+     * @return list<string>
+     */
+    public function activitiesOf(array $groupIds): array
+    {
+        if ($groupIds === []) {
+            return [];
+        }
+
+        return array_values(DB::table('activity_groups')
+            ->join('offerings', 'offerings.id', '=', 'activity_groups.offering_id')
+            ->where('activity_groups.organization_id', $this->context->organizationId())
+            ->whereIn('activity_groups.id', $groupIds)
+            ->distinct()->orderBy('offerings.activity_id')
+            ->pluck('offerings.activity_id')->map(fn (mixed $id): string => (string) $id)->all());
+    }
+
+    /**
      * The titles of activities for the screen.
      *
      * @param  list<string>  $activityIds

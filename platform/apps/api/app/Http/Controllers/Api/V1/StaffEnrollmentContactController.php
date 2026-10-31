@@ -22,9 +22,11 @@ use Illuminate\Support\Facades\RateLimiter;
  * "Покажи телефона" (docs/product/team-rights.md, т. 6): the parent's phone and e-mail for one application or
  * enrollment, to whoever sees contacts in its group — a POST, because it is written down, never cached. In this order:
  * 1. the record is found inside the organization — another organization's is 404;
- * 2. "contacts.view" in the record's group — otherwise 403;
+ * 2. "contacts.view" in the record's group, and for an application "enrollment.view" there too: a teacher sees the
+ *    children enrolled in their group, not the applications — otherwise 403;
  * 3. the contacts' window (enrollment-contacts-and-emails.md, т. 3.1) — otherwise 404.
- * At most 30 a hour and 100 a day for a person in an organization; the owner sees them at once and is not counted.
+ * At most 30 a hour and 100 a day for a person in an organization, counted before the check so that requests at the
+ * same moment cannot pass it together; the owner sees them at once and is not counted.
  * The audit holds identifiers only: never the phone, the e-mail or a name.
  */
 final class StaffEnrollmentContactController extends Controller
@@ -45,7 +47,7 @@ final class StaffEnrollmentContactController extends Controller
         $record = EnrollmentApplication::query()->with(['parent', 'enrollment'])->findOrFail($application);
 
         return $this->reveal($request, $record->group_id, fn (): bool => $this->window->application($record), $record->parent,
-            new AuditableReference('enrollment_application', $record->id), $record->child_id);
+            new AuditableReference('enrollment_application', $record->id), $record->child_id, ['enrollment.view']);
     }
 
     public function enrollment(Request $request, string $enrollment): JsonResponse
@@ -56,12 +58,17 @@ final class StaffEnrollmentContactController extends Controller
             new AuditableReference('enrollment', $record->id), $record->child_id);
     }
 
-    /** @param callable(): bool $inWindow */
-    private function reveal(Request $request, string $groupId, callable $inWindow, ?User $parent, AuditableReference $subject, string $childId): JsonResponse
+    /**
+     * @param  callable(): bool  $inWindow
+     * @param  list<string>  $alsoNeeded  the rights the record needs in its group besides "contacts.view"
+     */
+    private function reveal(Request $request, string $groupId, callable $inWindow, ?User $parent, AuditableReference $subject, string $childId, array $alsoNeeded = []): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
-        abort_unless($this->scope->allows($user, 'contacts.view', $groupId), 403, 'Нямате право да виждате контактите на родителите в тази група.');
+        foreach (['contacts.view', ...$alsoNeeded] as $ability) {
+            abort_unless($this->scope->allows($user, $ability, $groupId), 403, 'Нямате право да виждате контактите на родителите в тази група.');
+        }
         if ($parent === null || ! $inWindow()) {
             abort(404, 'Контактът вече не е достъпен.');
         }
@@ -70,10 +77,10 @@ final class StaffEnrollmentContactController extends Controller
         if ($access->role !== OrganizationRole::OrganizationOwner) {
             $hour = 'contact-reveal:hour:'.$this->context->organizationId().':'.$user->id;
             $day = 'contact-reveal:day:'.$this->context->organizationId().':'.$user->id;
-            abort_if(RateLimiter::tooManyAttempts($hour, self::PER_HOUR) || RateLimiter::tooManyAttempts($day, self::PER_DAY),
-                429, 'Показахте много контакти за кратко време. Опитайте по-късно.');
-            RateLimiter::hit($hour, 3600);
-            RateLimiter::hit($day, 86400);
+            // Counted first, then compared: two requests at the same moment never both take the last place.
+            $inHour = RateLimiter::hit($hour, 3600);
+            $inDay = RateLimiter::hit($day, 86400);
+            abort_if($inHour > self::PER_HOUR || $inDay > self::PER_DAY, 429, 'Показахте много контакти за кратко време. Опитайте по-късно.');
         }
 
         $from = $request->input('from');
