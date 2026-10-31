@@ -360,7 +360,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
                           <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={uploadCover} disabled={locked || busy === 'cover'} />
                           {busy === 'cover' ? 'Качване…' : activity.hero_image_path ? 'Смени снимката' : 'Качи снимка'}
                         </label>
-                        {activity.hero_image_path ? <button type="button" className={styles.quiet} onClick={removeCover} disabled={busy === 'cover'}>Махни снимката</button> : null}
+                        {activity.hero_image_path ? <button type="button" className={styles.quiet} onClick={removeCover} disabled={busy === 'cover'}>Премахни снимката</button> : null}
                         <span className={styles.hint}>JPG, PNG или WebP до 5 MB. Хоризонтална снимка от истинско занимание работи най-добре.</span>
                       </div>
                     </div>

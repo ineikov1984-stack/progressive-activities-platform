@@ -20,7 +20,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| „Махни“ → „Премахни“ (т. 4) | Codex | `codex/remove-wording` | web/features/payment-terms/rule-editors, team/member-rights, catalog/admin/wizard/activity-wizard; без горещи файлове | В работа — текстове и проверка на засегнатите екрани |
+| „Махни“ → „Премахни“ (т. 4) | Codex | `codex/remove-wording` | web/features/payment-terms/rule-editors, team/member-rights, catalog/admin/wizard/activity-wizard; без горещи файлове | Текстовете са обновени; lint/typecheck и 6 браузърни проверки минават; снимки на 390/1440 px; следва CI и merge |
 
 ## Опашка (по приоритет)
 
