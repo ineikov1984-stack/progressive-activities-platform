@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadDashboard, loadOrganizationAccess, loadWorkspaceOverview, withAccess } from '../src/features/dashboard/api';
+import { loadDashboard, loadOrganizationAccess, loadTeaching, loadWorkspaceOverview, withAccess } from '../src/features/dashboard/api';
 
 const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -88,5 +88,16 @@ describe('dashboard API', () => {
     expect(fetchMock).toHaveBeenCalledWith('/backend/api/v1/context/organization', expect.objectContaining({ headers: expect.objectContaining({ 'X-Organization-Id': 'org-1' }) }));
     // When it cannot be read, the role's rights stay.
     expect(await loadOrganizationAccess('org-1')).toBeNull();
+  });
+
+  it('loads the groups the user teaches in the selected organization', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ groups: [{ group_id: 'g-1', group_name: 'Вторник', activity_title: 'Шах' }] }))
+      .mockResolvedValueOnce(jsonResponse({}));
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect((await loadTeaching('org-1')).map((group) => group.group_id)).toEqual(['g-1']);
+    expect(fetchMock).toHaveBeenCalledWith('/backend/api/v1/me/teaching', expect.objectContaining({ headers: expect.objectContaining({ 'X-Organization-Id': 'org-1' }) }));
+    expect(await loadTeaching('org-1')).toEqual([]);
   });
 });

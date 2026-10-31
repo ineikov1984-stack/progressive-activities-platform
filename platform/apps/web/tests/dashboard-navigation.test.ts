@@ -27,6 +27,31 @@ describe('dashboard navigation', () => {
     expect(labels(['view', 'catalog.view', 'team.view'])).toContain('Екип');
   });
 
+  // DECISIONS 31.10.2026 „Учителят — само своите групи; кой одобрява и кой вижда таксите“: the rights as the API gives
+  // them (OrganizationRole::abilities, and the added ones with what they bring along).
+  it('follows the rights: a teacher has only "Начало" until a right is added', () => {
+    const labels = (permissions: string[]) => dashboardNavigation('/dashboard', permissions).flatMap((group) => group.items).map((item) => item.label);
+    const teacher = ['view', 'enrollment.view_own'];
+    expect(labels(teacher)).toEqual(['Начало']);
+    // "Записва деца" brings "Вижда децата и записванията".
+    expect(labels([...teacher, 'enrollment.enroll', 'enrollment.view', 'enrollment.manage'])).toEqual(['Начало', 'Записвания']);
+    // "Създава и променя дейности" brings the catalog and the payment terms its editor chooses from.
+    expect(labels([...teacher, 'catalog.manage', 'catalog.view', 'terms.view'])).toEqual(['Начало', 'Дейности', 'Отворени врати', 'Такси, отсъствия и отказ']);
+
+    expect(labels(['view', 'catalog.view', 'enrollment.view', 'team.view', 'attendance.view_month'])).toEqual(['Начало', 'Дейности', 'Записвания', 'Отворени врати', 'Екип']);
+    expect(labels(['finance', 'view', 'enrollment.view', 'team.view', 'attendance.view_month', 'finance.view', 'terms.view']))
+      .toEqual(['Начало', 'Записвания', 'Екип', 'Такси, отсъствия и отказ']);
+    expect(labels(['view', 'catalog.view', 'catalog.manage', 'enrollment.view', 'team.view', 'terms.view']))
+      .toEqual(['Начало', 'Дейности', 'Записвания', 'Отворени врати', 'Екип', 'Такси, отсъствия и отказ']);
+  });
+
+  it('shows "Такси, отсъствия и отказ" only with the right to see them', () => {
+    const settings = (permissions: string[]) => dashboardNavigation('/dashboard', permissions).flatMap((group) => group.items).some((item) => item.id === 'settings');
+    expect(settings(['view', 'catalog.view', 'enrollment.view', 'team.view'])).toBe(false);
+    expect(settings(['view', 'terms.view'])).toBe(true);
+    expect(settings(['view', 'terms.manage'])).toBe(false);
+  });
+
   it('marks exactly one destination active, including nested routes', () => {
     const active = (pathname: string) => dashboardNavigation(pathname)
       .flatMap((group) => group.items)

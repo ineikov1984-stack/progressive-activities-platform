@@ -12,7 +12,8 @@ import { ContactReveal, REVEAL_NOTE } from './contact-reveal';
 import { addDays, dateText, needsGroupPlace, placesText, type RosterNote, rosterNotes, scopeLabels, shortDay, sofiaDay } from './presentation';
 import styles from './enrollments.module.css';
 
-type Props = { organizationId: string; groupId: string; canManage: boolean; onChanged?: () => void; onDetails?: (target: DetailsTarget, opener: HTMLElement) => void };
+/** `canChangeApproval`: the setting of the group, with the activities ("catalog.manage"), not with "Записва деца". */
+type Props = { organizationId: string; groupId: string; canManage: boolean; canChangeApproval: boolean; onChanged?: () => void; onDetails?: (target: DetailsTarget, opener: HTMLElement) => void };
 type Notice = { enrollmentId: string; text: string; token: number };
 /** More children than this and the group gets a search by name. */
 const SEARCH_FROM = 10;
@@ -27,7 +28,7 @@ const noteStyle: Record<RosterNote['kind'], string> = {
 };
 
 /** Children in a group, what is special about each, and the team's changes (docs/product/staff-enrollment.md, т. 9.7). */
-export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged, onDetails }: Props) {
+export function GroupRosterPanel({ organizationId, groupId, canManage, canChangeApproval, onChanged, onDetails }: Props) {
   const [roster, setRoster] = useState<GroupRoster>();
   const [error, setError] = useState('');
   const [notice, setNotice] = useState<Notice>();
@@ -103,8 +104,10 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, onChanged
           {roster.enrollments.length > fullPeriodCount ? ` · ${roster.enrollments.length - fullPeriodCount} с еднократно или пробно посещение` : ''}
         </p>
       ) : null}
-      <ApprovalSetting key={roster.group.enrollment_approval_mode} organizationId={organizationId} groupId={groupId} canManage={canManage}
-        mode={roster.group.enrollment_approval_mode === 'automatic' ? 'automatic' : 'manual'} onSaved={() => onChanged?.()} />
+      {/* A teacher's list does not say how the group approves (TeacherRosterPresenter): then nothing is shown. */}
+      <ApprovalSetting key={roster.group.enrollment_approval_mode} organizationId={organizationId} groupId={groupId} canChange={canChangeApproval}
+        mode={roster.group.enrollment_approval_mode === 'automatic' || roster.group.enrollment_approval_mode === 'manual' ? roster.group.enrollment_approval_mode : undefined}
+        onSaved={() => onChanged?.()} />
       <p ref={topNotice} tabIndex={-1} className={topText ? styles.rowNotice : styles.srOnly}>{topText}</p>
       {error ? <div className={styles.actions}><p className={styles.error} role="alert">{error}</p>{retry}</div> : null}
       {searchable ? (

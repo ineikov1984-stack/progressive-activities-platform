@@ -29,7 +29,14 @@ export type TeamMember = {
   email?: string | null;
 };
 export type TeamList = { members: TeamMember[]; can_manage: boolean };
-export type HistoryEntry = { action: string; at: string; by: string | null };
+/**
+ * For the rights also which were given or taken (the rights of one save together) and the role or scope before and
+ * after — keys only (TeamController::history).
+ */
+export type HistoryEntry = {
+  action: string; at: string; by: string | null;
+  abilities?: string[]; reason?: string | null; from?: string | null; to?: string | null;
+};
 /** `history` comes only for those who manage the team. */
 export type MemberDetails = { member: TeamMember; history?: HistoryEntry[] };
 /** Rights are given only together with an invitation: `access` without `invitation` is refused and nobody is added. */

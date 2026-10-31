@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import { type ApprovalMode, changeErrorMessage, saveGroupApproval } from './api';
+import { approvalLine } from './presentation';
 import styles from './enrollments.module.css';
 
-type Props = { organizationId: string; groupId: string; mode: ApprovalMode; canManage: boolean; onSaved: () => void };
+/** `canChange`: "Създава и променя дейности" — the owner, the administrator, the coordinator (DECISIONS 31.10.2026). */
+type Props = { organizationId: string; groupId: string; mode?: ApprovalMode; canChange: boolean; onSaved: () => void };
 
 const options: { value: ApprovalMode; title: string; text: string }[] = [
   { value: 'manual', title: 'Ръчно от екипа', text: 'Всяка заявка чака вашето решение.' },
@@ -12,14 +14,15 @@ const options: { value: ApprovalMode; title: string; text: string }[] = [
 ];
 
 /** How the group's applications are decided. Changes apply to new applications; the ones waiting stay with the team. */
-export function ApprovalSetting({ organizationId, groupId, mode, canManage, onSaved }: Props) {
-  const [current, setCurrent] = useState<ApprovalMode>(mode);
+export function ApprovalSetting({ organizationId, groupId, mode, canChange, onSaved }: Props) {
+  const [current, setCurrent] = useState<ApprovalMode>(mode ?? 'manual');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  if (!canManage) {
-    return <p className={styles.small}>Одобрение на заявките: {options.find((item) => item.value === current)?.title.toLocaleLowerCase('bg')}.</p>;
+  if (!canChange || !mode) {
+    const line = approvalLine(mode);
+    return line ? <p className={styles.small}>{line}</p> : null;
   }
 
   async function choose(next: ApprovalMode) {

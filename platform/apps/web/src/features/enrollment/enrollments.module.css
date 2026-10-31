@@ -166,9 +166,14 @@ ol.list { padding-left: var(--space-6); list-style: decimal; }
 .optionDisabled { cursor: not-allowed; }
 .optionDisabled input { opacity: .5; }
 /* A group without a place looks like a full day: dashed, muted, not choosable. */
-/* The group's approval setting at the top of its roster. */
-.approval { display: grid; gap: var(--space-2); margin: 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-warm); }
-.approval legend { padding: 0 var(--space-1); color: var(--ink); font-size: 14px; font-weight: 700; }
+/*
+ * The group's approval setting at the top of its roster. The fieldset itself is not a grid: Safari lays the legend of
+ * a grid fieldset out at its narrowest — one word per line ("Одобрение / на / заявките"). The legend takes its own
+ * width and wraps only when the box is narrower than it.
+ */
+.approval { display: block; min-inline-size: 0; margin: 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-warm); }
+.approval > * + * { margin-block-start: var(--space-2); }
+.approval legend { inline-size: max-content; max-inline-size: 100%; padding: 0 var(--space-1); color: var(--ink); font-size: 14px; font-weight: 700; }
 .approvalOptions { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--space-2); }
 .optionOn { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 .optionFull { border-style: dashed; color: var(--ink-muted); background: var(--surface-sunken); cursor: not-allowed; }

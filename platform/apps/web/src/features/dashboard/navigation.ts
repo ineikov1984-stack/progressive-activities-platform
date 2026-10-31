@@ -19,7 +19,7 @@ export type DashboardNavItem = {
   href?: string;
   isAvailable: boolean;
   isActive: boolean;
-  /** Shown only to members whose role has this permission. */
+  /** Shown only to members who have this right — by role or added (DECISIONS 31.10.2026). */
   requires?: string;
 };
 
@@ -37,10 +37,11 @@ const navigationGroups: Array<Omit<DashboardNavGroup, 'items'> & { items: Naviga
     label: 'Управление',
     items: [
       { id: 'home', label: 'Начало', icon: 'home', href: '/dashboard', isAvailable: true },
-      { id: 'activities', label: 'Дейности', icon: 'activities', href: '/dashboard/activities', isAvailable: true },
+      // A teacher has "Начало" and their own groups; the catalog only with an added right that needs it.
+      { id: 'activities', label: 'Дейности', icon: 'activities', href: '/dashboard/activities', isAvailable: true, requires: 'catalog.view' },
       { id: 'groups', label: 'Групи и графици', icon: 'calendar', isAvailable: false },
       { id: 'enrollments', label: 'Записвания', icon: 'enrollments', href: '/dashboard/enrollments', isAvailable: true, requires: 'enrollment.view' },
-      { id: 'open-days', label: 'Отворени врати', icon: 'open-days', href: '/dashboard/open-days', isAvailable: true },
+      { id: 'open-days', label: 'Отворени врати', icon: 'open-days', href: '/dashboard/open-days', isAvailable: true, requires: 'catalog.view' },
     ],
   },
   {
@@ -59,8 +60,9 @@ const navigationGroups: Array<Omit<DashboardNavGroup, 'items'> & { items: Naviga
       { id: 'locations', label: 'Места', icon: 'locations', isAvailable: false },
       { id: 'team', label: 'Екип', icon: 'team', href: '/dashboard/team', isAvailable: true, requires: 'team.view' },
       { id: 'media', label: 'Медия', icon: 'media', isAvailable: false },
-      // Only "Такси, отсъствия и отказ" (the payment terms) so far; the other settings join it later.
-      { id: 'settings', label: 'Такси, отсъствия и отказ', icon: 'settings', href: '/dashboard/settings/payment-terms', isAvailable: true },
+      // Only "Такси, отсъствия и отказ" (the payment terms) so far; the other settings join it later. Seen by the owner,
+      // the administrator, the coordinator and the accountant; changed by the first two.
+      { id: 'settings', label: 'Такси, отсъствия и отказ', icon: 'settings', href: '/dashboard/settings/payment-terms', isAvailable: true, requires: 'terms.view' },
     ],
   },
 ];

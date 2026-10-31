@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ActivityDraft } from '../src/features/catalog/admin/api';
 import type { DashboardInvitation } from '../src/features/dashboard/api';
-import { buildTasks, freedPlaces, greeting } from '../src/features/dashboard/tasks';
+import { buildTasks, freedPlaces, greeting, teachingCard } from '../src/features/dashboard/tasks';
 
 const draft = (id: string, title: string, extra: Partial<ActivityDraft> = {}): ActivityDraft => ({
   id, slug: id, status: 'draft', version: 1, title, category: 'Друго',
@@ -59,5 +59,24 @@ describe('pending applications', () => {
     expect(freed).toEqual([{ id: 'g1', name: 'Вторник', waiting: 2 }]);
     const tasks = buildTasks([draft('a', 'Шахмат', { status: 'published' })], [], 0, freed);
     expect(tasks[0]).toMatchObject({ id: 'freed-places', title: 'Свободно място в „Вторник“ — 2 деца чакат', href: '/dashboard/enrollments?view=groups&group=g1' });
+  });
+
+  // DECISIONS 31.10.2026: a teacher has "Начало" and their own groups.
+  it('never asks a teacher or an accountant to create a first activity', () => {
+    expect(buildTasks([], [], 0, [], false)).toEqual([]);
+    expect(buildTasks([], [], 2, [], false).map((task) => task.id)).toEqual(['applications']);
+  });
+
+  it('shows each own group with the part in it and the next session, linked to its children', () => {
+    const group = {
+      group_id: 'g-1', group_name: 'Вторник', activity_id: 'a-1', activity_title: 'Шах', label: 'Шах · Вторник',
+      basis: 'assignment', role: 'lead', starts_on: null, ends_on: null, next_session_starts_at: '2026-11-03T15:00:00Z',
+    };
+    const card = teachingCard(group);
+    expect(card).toMatchObject({ id: 'g-1', title: 'Шах · Вторник', href: '/dashboard/enrollments?view=groups&group=g-1' });
+    // 17:00 in Sofia; the words around the date follow the browser's calendar data.
+    expect(card.detail).toMatch(/^Водещ · следващо: вторник, 3 ноември.*17:00/);
+    expect(teachingCard({ ...group, role: 'assistant', next_session_starts_at: null }).detail).toBe('Помощник · няма предстоящи занимания');
+    expect(teachingCard({ ...group, basis: 'substitute', role: 'lead' }).detail).toMatch(/^Заместник · следващо: /);
   });
 });
