@@ -25,6 +25,7 @@
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
 | График — PR 3 (#93): Месец и Ден, поправките от UX ревюто, колко е пълна групата и бърз преглед (`docs/product/schedule.md`, т. 3.1–3.6а, 4) — стандартна | Claude | `claude/schedule-month-day` | уеб: `features/schedule/**` (нов `month-view.tsx`, `session-preview.tsx`); тест `schedule-presentation`. Без горещи файлове и без промени в API-то | поправките са commit-нати → push → CI → merge |
+| График — PR 4а: миграцията, „Отмени“ и „Възстанови“ на едно занимание и писмата (`docs/product/schedule-changes.md`, т. 3–7, 10) — строга | Claude | `claude/schedule-changes-4a` | **горещи:** `database/migrations/**` (нова `2026_10_31_182000_create_schedule_changes`), `routes/api.php` (`/schedule/changes`); API: `Domain/Catalog` (промени на графика), `Domain/Enrollment` (последствия, писма, `RecordVisitOutcome`, `ChangeEnrollment::transfer`), `SchedulePresenter`. Без уеб | commit без push → ревю по сигурност на PR-а; „Премести“ — следващ PR (4а-2) |
 
 ## Опашка (по приоритет)
 
