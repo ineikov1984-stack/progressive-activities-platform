@@ -29,7 +29,7 @@ final readonly class EndGroupAssignment
     public function handle(User $actor, Group $group, string $profileId, array $payload): Group
     {
         abort_unless($group->organization_id === $this->context->organizationId(), 404);
-        Gate::forUser($actor)->authorize('catalog.manage', Organization::query()->findOrFail($group->organization_id));
+        Gate::forUser($actor)->authorize('team.assign', Organization::query()->findOrFail($group->organization_id));
         $data = Validator::make($payload, [
             'ends_on' => ['required', 'date_format:Y-m-d'],
             'version' => ['required', 'integer', 'min:1'],

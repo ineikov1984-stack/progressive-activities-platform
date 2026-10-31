@@ -4,6 +4,7 @@ namespace App\Domain\Enrollment\Actions;
 
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\Session;
+use App\Domain\Catalog\Services\AccessScope;
 use App\Domain\Enrollment\Enums\EnrollmentScope;
 use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Child;
@@ -11,7 +12,6 @@ use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentEvent;
 use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Identity\Models\User;
-use App\Domain\Organizations\Models\OrganizationMembership;
 use App\Domain\PaymentTerms\Enums\BillingKind;
 use App\Domain\PaymentTerms\Services\AppliedTerms;
 use Carbon\CarbonImmutable;
@@ -20,6 +20,8 @@ use Illuminate\Validation\ValidationException;
 
 final class RecordVisitOutcome
 {
+    public function __construct(private readonly AccessScope $scope) {}
+
     public function handle(User $actor, Enrollment $enrollment, string $outcome, ?string $reason): EnrollmentTransition
     {
         return DB::transaction(function () use ($actor, $enrollment, $outcome, $reason): EnrollmentTransition {
@@ -28,9 +30,7 @@ final class RecordVisitOutcome
             $session = Session::query()->whereKey($enrollment->session_id)->lockForUpdate()->firstOrFail();
             $current = Enrollment::query()->lockForUpdate()->findOrFail($enrollment->id);
             $application = $current->application;
-            $staff = $actor->is_active && OrganizationMembership::query()->where('user_id', $actor->id)
-                ->where('organization_id', $current->organization_id)->where('status', 'active')
-                ->whereIn('role', ['organization_owner', 'organization_admin', 'coordinator'])->exists();
+            $staff = $actor->is_active && $this->recordsVisits($actor);
             $cancellation = in_array($outcome, ['cancelled_in_time', 'late_cancelled'], true);
             abort_unless($staff || ($cancellation && $actor->is_active && $application->parent_user_id === $actor->id), 403);
             if ($current->scope === EnrollmentScope::FullPeriod
@@ -92,6 +92,17 @@ final class RecordVisitOutcome
 
             return $transition;
         });
+    }
+
+    /**
+     * The team records how a visit went with "enrollment.enroll" (docs/product/team-rights.md, т. 2.2) — until the scope
+     * reaches the enrollment routes, for the whole organization only; with the stage "Присъствия", "attendance.mark".
+     * The platform operator does not, as before.
+     */
+    private function recordsVisits(User $actor): bool
+    {
+        return $this->scope->access($actor)->role?->isTeam() === true
+            && $this->scope->allowsEverywhere($actor, 'enrollment.enroll');
     }
 
     /**

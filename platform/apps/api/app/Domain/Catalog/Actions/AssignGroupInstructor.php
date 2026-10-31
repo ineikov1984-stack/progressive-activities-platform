@@ -9,6 +9,7 @@ use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\InstructorProfile;
 use App\Domain\Catalog\Services\GroupTeachers;
+use App\Domain\Catalog\Services\TeamAssignments;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\StaffMember;
@@ -27,13 +28,19 @@ use Illuminate\Validation\ValidationException;
  */
 final readonly class AssignGroupInstructor
 {
-    public function __construct(private TenantContext $context, private GroupTeachers $teachers, private AuditRecorder $audit) {}
+    public function __construct(
+        private TenantContext $context,
+        private GroupTeachers $teachers,
+        private TeamAssignments $assignments,
+        private AuditRecorder $audit,
+    ) {}
 
     /** @param array<string, mixed> $payload */
     public function handle(User $actor, Group $group, array $payload): Group
     {
         abort_unless($group->organization_id === $this->context->organizationId(), 404);
-        Gate::forUser($actor)->authorize('catalog.manage', Organization::query()->findOrFail($group->organization_id));
+        // An assignment gives rights: "team.assign", and with it from an added right alone, not oneself (docs/product/team-rights.md, т. 2).
+        Gate::forUser($actor)->authorize('team.assign', Organization::query()->findOrFail($group->organization_id));
         $data = Validator::make($payload, [
             'instructor_profile_id' => ['required', 'uuid', Rule::exists('instructor_profiles', 'id')->where('organization_id', $group->organization_id)],
             'role' => ['sometimes', Rule::in(['lead', 'assistant'])],
@@ -49,6 +56,8 @@ final readonly class AssignGroupInstructor
             Activity::query()->whereKey($group->offering()->value('activity_id'))->lockForUpdate()->firstOrFail();
             $group = Group::query()->whereKey($group->id)->lockForUpdate()->firstOrFail();
             $profile = InstructorProfile::query()->findOrFail($data['instructor_profile_id']);
+            // The profile as loaded, whatever the case of the identifier sent.
+            $this->assignments->assertNotSelf($actor, [(string) $profile->id]);
             // Under a lock: archiving the person at the same moment waits, then sees this assignment (т. 6).
             $person = $profile->getAttribute('staff_member_id') === null ? null
                 : StaffMember::query()->lockForUpdate()->find($profile->getAttribute('staff_member_id'));

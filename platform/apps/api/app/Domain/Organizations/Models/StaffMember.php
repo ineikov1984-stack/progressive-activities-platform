@@ -22,6 +22,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $user_id
  * @property CarbonImmutable|null $archived_at
  * @property int $version
+ * @property string|null $access_scope own, groups or all; null — the role's default (docs/product/team-rights.md, т. 4.1)
+ * @property string|null $access_template school_partner, the label of a template (т. 7)
  */
 #[Fillable(['full_name', 'phone', 'email', 'user_id', 'archived_at', 'version', 'created_by'])]
 #[Hidden(['phone', 'email'])]

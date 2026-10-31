@@ -11,6 +11,7 @@ use App\Domain\Organizations\Enums\OrganizationRole;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
 use App\Domain\Organizations\Models\StaffMember;
+use App\Domain\Organizations\Services\TeamRoles;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
@@ -23,7 +24,12 @@ use Illuminate\Validation\ValidationException;
  */
 final readonly class ArchiveStaffMember
 {
-    public function __construct(private TenantContext $context, private StaffTeaching $teaching, private AuditRecorder $audit) {}
+    public function __construct(
+        private TenantContext $context,
+        private StaffTeaching $teaching,
+        private TeamRoles $roles,
+        private AuditRecorder $audit,
+    ) {}
 
     public function handle(User $actor, StaffMember $member, int $version): StaffMember
     {
@@ -79,9 +85,7 @@ final readonly class ArchiveStaffMember
         if ($actorRole !== OrganizationRole::OrganizationOwner->value && in_array($role, $protected, true)) {
             throw new AuthorizationException('Нямате право да архивирате този човек.');
         }
-        if ($role === OrganizationRole::OrganizationOwner->value && $membership->getAttribute('status') === 'active'
-            && ! OrganizationMembership::query()->withoutGlobalScopes()->where('organization_id', $organization->id)
-                ->where('role', $role)->where('status', 'active')->where('user_id', '<>', $member->user_id)->exists()) {
+        if ($this->roles->isLastActiveOwner($organization, $member->user_id)) {
             throw ValidationException::withMessages(['member' => 'Организацията трябва да има поне един собственик.']);
         }
     }

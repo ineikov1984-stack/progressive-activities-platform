@@ -15,16 +15,20 @@ use App\Domain\Catalog\Models\Offering;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Catalog\Services\GroupTeachers;
 use App\Domain\Catalog\Services\SessionScheduleGenerator;
+use App\Domain\Catalog\Services\TeamAssignments;
 use App\Domain\Catalog\ValueObjects\SchedulePattern;
+use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\StaffMember;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -36,6 +40,7 @@ final readonly class SaveGroupSchedule
         private SessionScheduleGenerator $generator,
         private SyncPriceOptions $prices,
         private GroupTeachers $teachers,
+        private TeamAssignments $assignments,
         private AuditRecorder $audit,
     ) {}
 
@@ -56,6 +61,11 @@ final readonly class SaveGroupSchedule
             if ($group->exists) {
                 abort_unless($group->version === (int) $data['version'], 409, 'Group version conflict.');
                 abort_unless($group->status === 'draft', 409, 'Only draft groups can be edited.');
+            }
+            if (array_key_exists('instructor_ids', $data)) {
+                // Who teaches the group is an assignment (docs/product/team-rights.md, т. 2.2); the same teachers need nothing.
+                $current = $group->exists ? $group->instructors()->pluck('instructor_profiles.id')->map(fn (mixed $id): string => (string) $id)->all() : [];
+                $this->assertTeachers($current, $data['instructor_ids']);
             }
             $offering = $group->exists ? $group->offering()->firstOrFail() : $activity->offerings()
                 ->when(isset($data['offering_id']), fn ($query) => $query->whereKey($data['offering_id']))
@@ -131,6 +141,9 @@ final readonly class SaveGroupSchedule
                 if (! $session) {
                     throw ValidationException::withMessages(["session_overrides.{$index}.id" => 'Занятието не е в тази група.']);
                 }
+                if (array_key_exists('instructor_ids', $override)) {
+                    $this->assertTeachers($session->instructors()->pluck('instructor_profiles.id')->map(fn (mixed $id): string => (string) $id)->all(), $override['instructor_ids']);
+                }
                 $this->overrideSession($session, $override, $index);
             }
             if (array_key_exists('price_options', $data)) {
@@ -139,6 +152,29 @@ final readonly class SaveGroupSchedule
 
             return $group->refresh()->load(['instructors', 'sessions.instructors', 'priceOptions']);
         });
+    }
+
+    /**
+     * Changing who teaches places teachers and takes them away: "team.assign", and not oneself with it from an added
+     * right alone. The same teachers again need nothing.
+     *
+     * @param  array<int, string>  $current
+     */
+    private function assertTeachers(array $current, mixed $wanted): void
+    {
+        // In lower case: PostgreSQL finds a profile by its UUID in any case.
+        $wanted = array_values(array_unique(array_map(fn (mixed $id): string => Str::lower((string) $id), is_array($wanted) ? $wanted : [])));
+        $current = array_values(array_unique(array_map(Str::lower(...), $current)));
+        sort($wanted);
+        sort($current);
+        if ($wanted === $current) {
+            return;
+        }
+        $actor = Auth::user();
+        if (! $actor instanceof User) {
+            throw new AuthorizationException;
+        }
+        $this->assignments->assertMayAssign($actor, array_values(array_diff($wanted, $current)));
     }
 
     /**

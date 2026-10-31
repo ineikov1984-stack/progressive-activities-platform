@@ -63,9 +63,7 @@ final readonly class ChangeStaffRole
             if ($from === $to) {
                 return $member;
             }
-            if ($from === OrganizationRole::OrganizationOwner && $membership->getAttribute('status') === 'active'
-                && ! OrganizationMembership::query()->withoutGlobalScopes()->where('organization_id', $organization->id)
-                    ->where('role', $from->value)->where('status', 'active')->where('user_id', '<>', $member->user_id)->exists()) {
+            if ($this->roles->isLastActiveOwner($organization, $member->user_id)) {
                 throw ValidationException::withMessages(['role' => 'Организацията трябва да има поне един собственик.']);
             }
 

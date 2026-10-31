@@ -55,6 +55,56 @@ final readonly class TeachingScope
         return array_keys($this->teaching($this->profilesFor($user)));
     }
 
+    /**
+     * The groups that are the person's today, for the other rights in a group — the added ones and those of the role
+     * with the scope "own" (docs/product/team-rights.md, т. 4.4, 8): an assignment that has begun (`starts_on` up to
+     * today) and not ended; a substitution from the start of the session's day to the end of the next day (Sofia); every
+     * group of an offering the person leads. So an added "sees the phone" does not hold before the first day in the group.
+     *
+     * @return list<string>
+     */
+    public function activeGroupsFor(User $user): array
+    {
+        $profiles = $this->profilesFor($user);
+        if ($profiles === []) {
+            return [];
+        }
+
+        $organizationId = $this->context->organizationId();
+        $now = CarbonImmutable::now(self::TIMEZONE);
+        $today = $now->toDateString();
+        $assigned = DB::table('activity_group_instructors')
+            ->where('organization_id', $organizationId)
+            ->whereIn('instructor_profile_id', $profiles)
+            ->where(fn ($begun) => $begun->whereNull('starts_on')->orWhere('starts_on', '<=', $today))
+            ->where(fn ($open) => $open->whereNull('ends_on')->orWhere('ends_on', '>=', $today))
+            ->pluck('group_id');
+        $led = DB::table('activity_groups')
+            ->join('offerings', 'offerings.id', '=', 'activity_groups.offering_id')
+            ->where('activity_groups.organization_id', $organizationId)
+            ->where('offerings.organization_id', $organizationId)
+            ->whereIn('offerings.lead_instructor_profile_id', $profiles)
+            ->pluck('activity_groups.id');
+        $substituted = DB::table('activity_session_instructors')
+            ->join('activity_sessions', 'activity_sessions.id', '=', 'activity_session_instructors.session_id')
+            ->where('activity_session_instructors.organization_id', $organizationId)
+            ->where('activity_sessions.organization_id', $organizationId)
+            ->whereIn('activity_session_instructors.instructor_profile_id', $profiles)
+            ->where('activity_sessions.status', 'scheduled')
+            ->where('activity_sessions.starts_at', '>=', $now->subDay()->startOfDay()->utc())
+            ->where('activity_sessions.starts_at', '<', $now->addDay()->startOfDay()->utc())
+            ->pluck('activity_sessions.group_id');
+
+        $groups = [];
+        foreach ([...$assigned, ...$led, ...$substituted] as $groupId) {
+            $groups[(string) $groupId] = true;
+        }
+        $result = array_map('strval', array_keys($groups));
+        sort($result);
+
+        return $result;
+    }
+
     public function includes(User $user, string $groupId): bool
     {
         return in_array($groupId, $this->groupsFor($user), true);

@@ -7,6 +7,7 @@ use App\Domain\Enrollment\Models\Child;
 use App\Domain\Enrollment\Policies\EnrollmentPolicy;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Policies\OrganizationPolicy;
+use App\Domain\Organizations\Services\StaffRights;
 use App\Domain\Organizations\Tenancy\OperatorContext;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -25,6 +26,8 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->scoped(TenantContext::class, fn (): TenantContext => new TenantContext);
         $this->app->scoped(OperatorContext::class, fn (): OperatorContext => new OperatorContext);
+        // Rights are read once for a request of an organization (docs/product/team-rights.md, т. 4.5).
+        $this->app->scoped(StaffRights::class);
     }
 
     /**
@@ -37,8 +40,12 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('catalog.view', [CatalogPolicy::class, 'view']);
         Gate::define('catalog.manage', [CatalogPolicy::class, 'manage']);
         Gate::define('catalog.publish', [CatalogPolicy::class, 'publish']);
+        Gate::define('team.assign', [CatalogPolicy::class, 'assign']);
         Gate::define('enrollment.view', [CatalogPolicy::class, 'viewEnrollments']);
         Gate::define('enrollment.view_own', [CatalogPolicy::class, 'viewOwnEnrollments']);
+        Gate::define('enrollment.enroll', [CatalogPolicy::class, 'manageEnrollments']);
+        Gate::define('contacts.view', [CatalogPolicy::class, 'viewEnrollmentContacts']);
+        // The keys from before, until the web moves to the new ones (docs/product/team-rights.md, т. 2.1).
         Gate::define('enrollment.manage', [CatalogPolicy::class, 'manageEnrollments']);
         Gate::define('enrollment.contacts', [CatalogPolicy::class, 'viewEnrollmentContacts']);
 

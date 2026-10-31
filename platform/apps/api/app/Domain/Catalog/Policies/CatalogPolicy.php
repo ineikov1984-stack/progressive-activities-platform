@@ -2,15 +2,19 @@
 
 namespace App\Domain\Catalog\Policies;
 
+use App\Domain\Catalog\Services\AccessScope;
 use App\Domain\Identity\Models\User;
-use App\Domain\Organizations\Enums\OrganizationRole;
 use App\Domain\Organizations\Models\Organization;
-use App\Domain\Organizations\Models\OrganizationMembership;
 use App\Domain\Organizations\Tenancy\TenantContext;
 
+/**
+ * The checks for the whole organization (`Gate::…($organization)`, docs/product/team-rights.md, т. 2.2): the role and the
+ * added rights through `AccessScope`; a right of a group holds here only with the scope "all". The old keys
+ * "enrollment.manage" and "enrollment.contacts" are synonyms of "enrollment.enroll" and "contacts.view".
+ */
 final readonly class CatalogPolicy
 {
-    public function __construct(private TenantContext $context) {}
+    public function __construct(private TenantContext $context, private AccessScope $scope) {}
 
     public function view(User $user, Organization $organization): bool
     {
@@ -25,6 +29,12 @@ final readonly class CatalogPolicy
     public function publish(User $user, Organization $organization): bool
     {
         return $this->allows($user, $organization, 'catalog.publish');
+    }
+
+    /** Who leads or assists a group, teaches a session or leads an offering: assignments give rights (т. 2). */
+    public function assign(User $user, Organization $organization): bool
+    {
+        return $this->allows($user, $organization, 'team.assign');
     }
 
     public function viewEnrollments(User $user, Organization $organization): bool
@@ -43,13 +53,13 @@ final readonly class CatalogPolicy
 
     public function manageEnrollments(User $user, Organization $organization): bool
     {
-        return $this->allows($user, $organization, 'enrollment.manage');
+        return $this->allows($user, $organization, 'enrollment.enroll');
     }
 
     /** Parents' names, phones, emails and notes (docs/product/enrollment-contacts-and-emails.md, т. 3). */
     public function viewEnrollmentContacts(User $user, Organization $organization): bool
     {
-        return $this->allows($user, $organization, 'enrollment.contacts');
+        return $this->allows($user, $organization, 'contacts.view');
     }
 
     private function allows(User $user, Organization $organization, string $ability): bool
@@ -59,17 +69,6 @@ final readonly class CatalogPolicy
             return false;
         }
 
-        $role = OrganizationMembership::query()
-            ->withoutGlobalScopes()
-            ->where('organization_id', $organization->getKey())
-            ->where('user_id', $user->getAuthIdentifier())
-            ->where('status', 'active')
-            ->value('role');
-
-        if (! is_string($role)) {
-            return false;
-        }
-
-        return OrganizationRole::tryFrom($role)?->allows($ability) ?? false;
+        return $this->scope->allowsEverywhere($user, $ability);
     }
 }

@@ -32,11 +32,14 @@ class DashboardDataTest extends TestCase
             ->assertOk()
             ->assertJsonPath('organizations.0.id', $organization->id)
             ->assertJsonPath('organizations.0.role', 'organization_owner')
+            // The role's rights: the keys from before, then the new ones (docs/product/team-rights.md, т. 2.1).
             ->assertJsonPath('organizations.0.permissions', [
                 'create', 'update', 'invite', 'finance', 'view',
                 'catalog.view', 'catalog.manage', 'catalog.publish',
                 'enrollment.view', 'enrollment.manage', 'enrollment.contacts', 'terms.manage',
                 'team.view', 'team.manage',
+                'enrollment.enroll', 'attendance.mark', 'attendance.correct_late', 'attendance.view_month', 'schedule.manage',
+                'contacts.view', 'contacts.message', 'team.assign', 'finance.view', 'finance.collect', 'finance.pay_view',
             ]);
     }
 

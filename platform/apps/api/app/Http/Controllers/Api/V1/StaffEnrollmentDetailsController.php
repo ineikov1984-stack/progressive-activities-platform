@@ -35,9 +35,9 @@ use Illuminate\Support\Facades\Gate;
  * enrollment (docs/product/enrollment-contacts-and-emails.md, т. 9.1). Rights are checked before
  * anything is loaded; another organization's records are 404 (tenant scope and RLS).
  *
- * - contacts, the parent's note, age and school: only with enrollment.contacts, contacts and note
+ * - contacts, the parent's note, age and school: only with contacts.view, contacts and note
  *   only inside the window (т. 3.1), each time with an audit entry that holds identifiers only;
- * - history (who, when, what the parent was told; internal notes): only with enrollment.manage;
+ * - history (who, when, what the parent was told; internal notes): only with enrollment.enroll;
  * - "При нас": the child's other groups and open applications here, for everyone who sees enrollments.
  */
 final class StaffEnrollmentDetailsController extends Controller
@@ -406,8 +406,8 @@ final class StaffEnrollmentDetailsController extends Controller
         $gate->authorize('enrollment.view', $organization);
 
         return [
-            'contacts' => $gate->allows('enrollment.contacts', $organization),
-            'manage' => $gate->allows('enrollment.manage', $organization),
+            'contacts' => $gate->allows('contacts.view', $organization),
+            'manage' => $gate->allows('enrollment.enroll', $organization),
         ];
     }
 }

@@ -9,13 +9,12 @@ use App\Domain\Catalog\Models\VisitOffer;
 use App\Domain\Enrollment\Models\Child;
 use App\Domain\Enrollment\Services\VisitBooking;
 use App\Domain\Identity\Models\User;
-use App\Domain\Organizations\Models\OrganizationMembership;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Illuminate\Validation\ValidationException;
 
 final class VisitOfferEligibility
 {
-    public function __construct(private readonly VisitBooking $visits) {}
+    public function __construct(private readonly VisitBooking $visits, private readonly AccessScope $scope) {}
 
     /**
      * A visit on chosen dates follows the same rules as a visit from the schedule (docs/product/visits.md, т. 8a.5):
@@ -61,10 +60,11 @@ final class VisitOfferEligibility
             return false;
         }
 
+        // The team makes the exception with "enrollment.enroll" (docs/product/team-rights.md, т. 2.2) — for the whole
+        // organization until the scope reaches the enrollment routes; the platform operator does not, as before.
         return $actor->exists && $actor->is_active
-            && OrganizationMembership::query()->where('user_id', $actor->id)
-                ->where('organization_id', $organizationId)
-                ->where('status', 'active')
-                ->whereIn('role', ['organization_owner', 'organization_admin', 'coordinator'])->exists();
+            && app(TenantContext::class)->organizationId() === $organizationId
+            && $this->scope->access($actor)->role?->isTeam() === true
+            && $this->scope->allowsEverywhere($actor, 'enrollment.enroll');
     }
 }
