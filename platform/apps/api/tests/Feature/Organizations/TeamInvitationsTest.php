@@ -280,18 +280,28 @@ class TeamInvitationsTest extends TestCase
         $this->app['auth']->forgetGuards();
         User::factory()->create(['email' => 'petar@example.test']);
 
-        foreach ([$copy, $mailed] as $token) {
+        foreach (['copy' => $copy, 'email' => $mailed] as $link => $token) {
             $page = $this->lookup($token)->assertOk()
                 ->assertJsonPath('invitation.organization_name', 'Школа')
                 ->assertJsonPath('invitation.role', 'instructor')
                 ->assertJsonPath('invitation.role_label', 'Преподавател')
                 ->assertJsonPath('invitation.status', 'pending')
-                // Whether an address has a profile is not told: the page offers both and relies on the 409.
-                ->assertJsonMissingPath('invitation.has_account')
-                ->assertJsonMissingPath('invitation.email');
-            $this->assertStringNotContainsString('petar', (string) $page->getContent());
+                // Which link was opened, so the page offers a login (copy) or a new profile (e-mail).
+                ->assertJsonPath('invitation.link', $link)
+                // Whether an address has a profile is not told: the page relies on the 409.
+                ->assertJsonMissingPath('invitation.has_account');
             $this->assertStringNotContainsString(hash('sha256', $token), (string) $page->getContent());
         }
+        // The inviter's link can be passed to anyone: no address. The e-mail's link was delivered to it: its address.
+        $copied = $this->lookup($copy)->assertJsonMissingPath('invitation.email');
+        $this->assertStringNotContainsString('petar', (string) $copied->getContent());
+        $this->lookup($mailed)->assertJsonPath('invitation.email', 'petar@example.test');
+        // The old form's one token was shown to the inviter: it counts as a copied link.
+        $this->withHeader('X-Organization-Id', $organization->id);
+        $old = $this->actingAs($owner)->postJson('/api/v1/invitations', ['email' => 'maria@example.test', 'role' => 'viewer'])->assertCreated()->json('token');
+        $this->flushHeaders();
+        $this->app['auth']->forgetGuards();
+        $this->lookup($old)->assertOk()->assertJsonPath('invitation.link', 'copy')->assertJsonMissingPath('invitation.email');
 
         DB::table('invitations')->update(['expires_at' => now()->subMinute()]);
         $this->lookup($copy)->assertOk()->assertJsonPath('invitation.status', 'expired');

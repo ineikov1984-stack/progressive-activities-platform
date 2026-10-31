@@ -22,20 +22,31 @@ use Throwable;
 /**
  * The page "/invite#{token}" (docs/product/team.md, т. 7.4): what the invitation is, then a login or a new profile,
  * then the organization of the invitation becomes the active one. The token comes in the request body, never in the
- * path (it would reach the access logs); the invitation's e-mail is never shown.
+ * path (it would reach the access logs). The invitation's e-mail is shown only for the e-mail's link, whose holder
+ * owns the address; never for the inviter's link for copying.
  */
 class InvitationAcceptanceController extends Controller
 {
-    /** Public: the organization, the role, until when. */
+    /**
+     * Public: the organization, the role, until when, and which link was opened — `email` (it may make a new profile)
+     * or `copy` (it only joins an existing one), so the page offers the right form.
+     */
     public function lookup(Request $request, InvitationTokens $tokens): JsonResponse
     {
-        $body = $tokens->within($this->token($request), null, fn (Invitation $invitation): array => [
-            'organization_name' => (string) Organization::query()->whereKey($invitation->organization_id)->value('name'),
-            'role' => $invitation->role->value,
-            'role_label' => $invitation->role->label(),
-            'expires_at' => $invitation->expires_at->toIso8601String(),
-            'status' => $invitation->status(),
-        ]);
+        $body = $tokens->within($this->token($request), null, function (Invitation $invitation, string $hash): array {
+            $fromMail = InvitationTokens::kind($invitation, $hash) === InvitationTokens::MAIL;
+
+            return [
+                'organization_name' => (string) Organization::query()->whereKey($invitation->organization_id)->value('name'),
+                'role' => $invitation->role->value,
+                'role_label' => $invitation->role->label(),
+                'expires_at' => $invitation->expires_at->toIso8601String(),
+                'status' => $invitation->status(),
+                'link' => $fromMail ? 'email' : 'copy',
+                // The holder of the e-mail's link owns the address; the inviter's link could be passed to anyone.
+                ...($fromMail ? ['email' => $invitation->email] : []),
+            ];
+        });
 
         return response()->json(['invitation' => $body]);
     }

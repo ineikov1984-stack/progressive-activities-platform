@@ -137,7 +137,7 @@
 | `POST /team/members/{id}/instructor-profile` | `team.manage` | свързва съществуващ профил или създава нов |
 | `POST /catalog/groups/{group}/assignments` | `catalog.manage` | профил, роля, от, до; приключило назначение се отваря отново |
 | `POST /catalog/groups/{group}/assignments/{instructor}/end` | `catalog.manage` | дата на край; `version` на назначението |
-| `POST /invitations/lookup` | без вход | токен в тялото; само организация, роля, срок, състояние (без имейл) |
+| `POST /invitations/lookup` | без вход | токен в тялото; организация, роля, срок, състояние и коя връзка е (`email` или `copy`); имейлът — само за връзката от писмото (UX ревю на PR 4) |
 | `POST /invitations/join` | вход | токен в тялото; т. 7.4 |
 | `POST /invitations/register` | гост | токен от писмото, име, парола; т. 7.4 |
 | `GET /me/teaching` | вход + свързан профил | т. 8 |
