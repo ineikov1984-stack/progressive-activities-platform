@@ -31,6 +31,6 @@ final readonly class PlannedSessionChange
     /** What the letters call the change of this session. */
     public function effect(): string
     {
-        return $this->after->status === 'cancelled' ? 'cancelled' : 'restored';
+        return $this->after->status === 'cancelled' ? 'cancelled' : ($this->before->status === 'cancelled' ? 'restored' : 'moved');
     }
 }

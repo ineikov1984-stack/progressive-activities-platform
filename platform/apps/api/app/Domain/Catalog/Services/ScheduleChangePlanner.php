@@ -93,7 +93,7 @@ final readonly class ScheduleChangePlanner
 
         $planned = [];
         foreach ($sessions as $session) {
-            $planned[] = $this->planOne($request->action, $session, $now);
+            $planned[] = $this->planOne($request, $session, $now);
         }
 
         return $planned;
@@ -165,8 +165,9 @@ final readonly class ScheduleChangePlanner
         return $warnings;
     }
 
-    private function planOne(string $action, Session $session, CarbonImmutable $now): PlannedSessionChange
+    private function planOne(ScheduleChangeRequest $request, Session $session, CarbonImmutable $now): PlannedSessionChange
     {
+        $action = $request->action;
         $group = $session->group;
         if ($group?->status === 'archived') {
             throw ValidationException::withMessages(['sessions' => 'Групата е в архива.']);
@@ -187,18 +188,51 @@ final readonly class ScheduleChangePlanner
             return new PlannedSessionChange($session, $after, null, $teachersBefore, $teachersBefore);
         }
 
-        if ($session->status !== 'cancelled') {
+        if ($action === 'move') {
+            if ($session->status !== 'scheduled') {
+                throw ValidationException::withMessages(['sessions' => 'Отмененото занимание първо го върнете.']);
+            }
+            $timezone = $group?->schedule_pattern['timezone'] ?? self::TIMEZONE;
+            $today = $now->setTimezone($timezone)->startOfDay();
+            $day = (string) $request->date;
+            if ($day < $today->toDateString() || $day > $today->addDays(365)->toDateString()) {
+                throw ValidationException::withMessages(['date' => 'Изберете ден от днес до една година напред.']);
+            }
+            $start = CarbonImmutable::parse($day.' '.$request->from, $timezone);
+            $end = CarbonImmutable::parse($day.' '.$request->to, $timezone);
+            // A missing spring hour must not silently become another time.
+            if ($start->format('Y-m-d H:i') !== $day.' '.$request->from || $start->lessThanOrEqualTo($now)) {
+                throw ValidationException::withMessages(['date' => 'Изберете бъдещ ден и час.']);
+            }
+            if ($end->format('Y-m-d H:i') !== $day.' '.$request->to || $end->lessThanOrEqualTo($start)) {
+                throw ValidationException::withMessages(['to' => 'Краят трябва да е след началото.']);
+            }
+            $locationId = $request->locationProvided ? $request->locationId : $session->location_id;
+            if ($request->locationProvided && $locationId !== null && ! Location::query()->whereKey($locationId)->exists()) {
+                throw ValidationException::withMessages(['location_id' => 'Мястото не е намерено.']);
+            }
+            if ($start->equalTo($session->starts_at) && $end->equalTo($session->ends_at) && $locationId === $session->location_id) {
+                throw ValidationException::withMessages(['sessions' => 'Нищо не е променено.']);
+            }
+            $after->starts_at = $start->utc();
+            $after->ends_at = $end->utc();
+            $after->location_id = $locationId;
+            if (! $start->equalTo($session->starts_at)) {
+                $original = $session->original_starts_at ?? $session->starts_at;
+                $after->original_starts_at = $start->equalTo($original) ? null : $original;
+            }
+        } elseif ($session->status !== 'cancelled') {
             throw ValidationException::withMessages(['sessions' => 'Заниманието не е отменено.']);
         }
         $after->status = 'scheduled';
         // Meanwhile another session of the group may have been put at this time (т. 4.4).
         $taken = Session::query()->where('group_id', $session->group_id)->where('status', 'scheduled')->whereKeyNot($session->id)
-            ->where('starts_at', '<', $session->ends_at)->where('ends_at', '>', $session->starts_at)->exists();
+            ->where('starts_at', '<', $after->ends_at)->where('ends_at', '>', $after->starts_at)->exists();
         if ($taken) {
             throw ValidationException::withMessages(['sessions' => 'Групата вече има занимание по това време.']);
         }
         // While it was cancelled, the session did not follow the assignments (т. 4.9); changed by hand, it keeps its teachers.
-        $sync = $session->instructors_source === 'assignment' && $group !== null ? $this->teachers->forSession($group, $session->starts_at) : null;
+        $sync = $session->instructors_source === 'assignment' && $group !== null ? $this->teachers->forSession($group, $after->starts_at) : null;
 
         return new PlannedSessionChange($session, $after, $sync, $teachersBefore,
             $sync === null ? $teachersBefore : array_map('strval', array_keys($sync)));

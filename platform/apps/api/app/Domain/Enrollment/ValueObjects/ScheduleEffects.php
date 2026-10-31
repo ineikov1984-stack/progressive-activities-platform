@@ -30,6 +30,10 @@ final readonly class ScheduleEffects
         public array $confirmedAddress,
         public array $warnings,
         public int $children,
+        /** @var array<string, list<string>> enrollment => moved sessions whose skips are dropped */
+        public array $droppedSkips = [],
+        /** @var array<string, array{from: string, to: string}> visit => new local day */
+        public array $visitStarts = [],
     ) {}
 
     public static function none(): self

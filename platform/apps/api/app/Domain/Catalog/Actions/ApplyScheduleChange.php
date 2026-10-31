@@ -100,6 +100,10 @@ final readonly class ApplyScheduleChange
         foreach ($planned as $change) {
             Session::query()->whereKey($change->sessionId())->update([
                 'status' => $change->after->status,
+                'starts_at' => $change->after->starts_at->utc(),
+                'ends_at' => $change->after->ends_at->utc(),
+                'original_starts_at' => $change->after->original_starts_at?->utc(),
+                'location_id' => $change->after->location_id,
                 // The latest reason, for the panel (т. 3.3).
                 'change_reason' => $request->reason,
                 'version' => $change->after->version,
@@ -183,7 +187,7 @@ final readonly class ApplyScheduleChange
             ]),
             'visits_cancelled' => $effects->count('visit_cancelled'),
             'applications_rejected' => $effects->count('application_rejected'),
-            'skips_dropped' => 0,
+            'skips_dropped' => array_sum(array_map('count', $effects->droppedSkips)),
             'starts_changed' => count($effects->starts),
             'families' => count($effects->families()),
         ]);

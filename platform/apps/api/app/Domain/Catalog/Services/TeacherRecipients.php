@@ -36,7 +36,11 @@ final readonly class TeacherRecipients
         $letters = [];
         foreach ($planned as $change) {
             $effect = $change->effect();
-            $teachers = $effect === 'cancelled' ? $change->teachersBefore : $change->teachersAfter;
+            $teachers = match ($effect) {
+                'cancelled' => $change->teachersBefore,
+                'moved' => array_values(array_unique([...$change->teachersBefore, ...$change->teachersAfter])),
+                default => $change->teachersAfter,
+            };
             $told = [];
             foreach ($teachers as $profileId) {
                 $userId = $users[$profileId] ?? null;

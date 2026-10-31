@@ -24,7 +24,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| График PR 4а-2 — Премести (CODEX 9.1) | Codex | `codex/schedule-move` | Catalog: schedule changes/planner/conflicts/presenter; Enrollment: effects/letters; засегнатите тестове; без горещи файлове | В работа — тестове и изпълнение по готовата спецификация |
+| График PR 4а-2 — Премести (CODEX 9.1) | Codex | `codex/schedule-move` | Catalog: schedule changes/planner/conflicts/presenter; Enrollment: effects/letters; засегнатите тестове; без горещи файлове | В работа — API и писма готови; 81 засегнати теста локално; независимо ревю по сигурност и двете поправки; следва CI и PostgreSQL |
 
 ## Опашка (по приоритет)
 
