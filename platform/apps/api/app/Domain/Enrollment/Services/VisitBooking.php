@@ -23,9 +23,14 @@ final class VisitBooking
     /** Booking opens this far ahead, so one far-off visit does not hold the group for months (т. 2.6). */
     public const OPENS_DAYS_BEFORE = 60;
 
+    /**
+     * Open for a trial or a single visit from a price: planned, from 60 days to 2 hours before its current start. Never
+     * a session added from the schedule (docs/product/schedule-changes.md, т. 4.7, decision 9) — so it is in no list
+     * of visit days and no application for it is taken; an offer chooses its sessions by hand and is not asked here.
+     */
     public static function isOpen(Session $session, CarbonImmutable $now): bool
     {
-        return $session->status === 'scheduled'
+        return $session->status === 'scheduled' && ! $session->extra
             && $now->lessThan($session->starts_at->subHours(self::CLOSES_HOURS_BEFORE))
             && $session->starts_at->lessThanOrEqualTo($now->addDays(self::OPENS_DAYS_BEFORE));
     }

@@ -118,12 +118,24 @@ class TeamRightsNarrowScopeTest extends TestCase
         $this->inTenant($f['organization'], fn () => $this->assertSame('waitlisted', EnrollmentApplication::query()->findOrFail($outside->id)->status->value));
     }
 
+    /**
+     * A cancellation of a session of the selected group itself.
+     *
+     * @param  array<string, mixed>  $f
+     * @return array<string, mixed>
+     */
+    private function cancelling(array $f): array
+    {
+        return ['action' => 'cancel', 'sessions' => [['id' => $f['session']->id, 'version' => 1]], 'reason' => 'Ремонт'];
+    }
+
     private function covered(string $method, string $uri): bool
     {
         return str_starts_with($uri, 'api/v1/enrollment/')
             || $uri === 'api/v1/team' || str_starts_with($uri, 'api/v1/team/')
             || (str_starts_with($uri, 'api/v1/catalog/') && $method !== 'GET')
-            || $uri === 'api/v1/enrollments/{enrollment}/visit-outcome';
+            || $uri === 'api/v1/enrollments/{enrollment}/visit-outcome'
+            || str_starts_with($uri, 'api/v1/schedule/changes');
     }
 
     /**
@@ -199,6 +211,9 @@ class TeamRightsNarrowScopeTest extends TestCase
             'POST api/v1/catalog/open-day-campaigns/{campaign}/publish' => ["{$campaign}/publish", $version, 403],
             'POST api/v1/catalog/open-day-campaigns/{campaign}/close' => ["{$campaign}/close", $version, 403],
             'POST api/v1/catalog/open-day-campaigns/{campaign}/cancel' => ["{$campaign}/cancel", $version, 403],
+            // "schedule.manage" holds for the whole organization only: added with a narrow scope, it gives nothing.
+            'POST api/v1/schedule/changes/preview' => ['/api/v1/schedule/changes/preview', $this->cancelling($f), 403],
+            'POST api/v1/schedule/changes' => ['/api/v1/schedule/changes', $this->cancelling($f), 403],
         ];
     }
 }

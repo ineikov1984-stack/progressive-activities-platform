@@ -16,6 +16,7 @@ use stdClass;
  * @phpstan-import-type SessionTeacher from SessionRoles
  * @phpstan-import-type ScheduleGroup from ScheduleReader
  * @phpstan-import-type ScheduleDictionary from ScheduleReader
+ * @phpstan-import-type LastChange from ScheduleReader
  */
 final class SchedulePresenter
 {
@@ -50,28 +51,43 @@ final class SchedulePresenter
 
     /**
      * `GET /schedule/sessions/{session}` (т. 6.2): the session as in the list, the reason for a change and the children
-     * when they may be seen, and the names of its group, activity and place.
+     * when they may be seen, and the names of its group, activity and place. The latest change of the schedule
+     * (docs/product/schedule-changes.md, т. 7.5): what and when for everybody, who and why only with "schedule.manage";
+     * the actions the person may take now — only for the team, and none on a session that has started.
      *
-     * @param  array{session: Session, teachers: list<SessionTeacher>, group: ScheduleGroup, location: array{id: string, name: string}|null}  $panel
+     * @param  array{session: Session, teachers: list<SessionTeacher>, group: ScheduleGroup, location: array{id: string, name: string}|null, last_change: LastChange|null}  $panel
      * @param  array<string, int>  $taken
      * @param  array<string, int>  $waiting
      * @param  list<array{enrollment_id: string, name: string, class: string|null, state: string, scope: string}>|null  $children  null — not to be seen
+     * @param  bool  $reasons  "schedule.manage" for the whole organization: why and who
+     * @param  bool  $manage  and a person of the team: the actions
      * @return array<string, mixed>
      */
-    public static function panel(array $panel, array $taken, array $waiting, ?array $children, bool $manage): array
+    public static function panel(array $panel, array $taken, array $waiting, ?array $children, bool $reasons, bool $manage): array
     {
         $session = $panel['session'];
         $group = $panel['group'];
+        $last = $panel['last_change'];
+        $actions = [];
+        if ($manage && $session->starts_at->isFuture()) {
+            $actions = $session->status === 'cancelled' ? ['restore'] : ['cancel'];
+        }
 
         return [
             'session' => [
                 ...self::session($session, $panel['teachers'], $group, $taken, $waiting),
-                ...($manage ? ['change_reason' => $session->change_reason] : []),
+                ...($reasons ? ['change_reason' => $session->change_reason] : []),
                 ...($children === null ? [] : ['children' => $children]),
             ],
             'group' => ['id' => $group['id'], 'name' => $group['name'], 'age_label' => $group['age_label']],
             'activity' => ['id' => $group['activity_id'], 'title' => $group['activity_title']],
             'location' => $panel['location'],
+            'last_change' => $last === null ? null : [
+                'action' => $last['action'],
+                'at' => $last['at'],
+                ...($reasons ? ['by' => $last['by'], 'reason' => $last['reason']] : []),
+            ],
+            'actions' => $actions,
             'abilities' => ['children' => $children !== null, 'manage' => $manage],
         ];
     }
@@ -93,8 +109,12 @@ final class SchedulePresenter
             'starts_at' => $session->starts_at->utc()->toIso8601String(),
             'ends_at' => $session->ends_at->utc()->toIso8601String(),
             'status' => (string) $session->status,
-            // A move cannot be told from today's data — `change_reason` is written for a new place or capacity too (т. 5).
-            'moved' => false,
+            // The version to send with a change (docs/product/schedule-changes.md, т. 7.5).
+            'version' => $session->version,
+            // Moved from its time by the group's schedule: "Преместено от сряда, 17:30".
+            'moved' => $session->original_starts_at !== null,
+            'moved_from' => $session->original_starts_at?->utc()->toIso8601String(),
+            'extra' => $session->extra === true,
             'group_id' => $groupId,
             'activity_id' => $group['activity_id'] ?? null,
             'location_id' => $session->location_id === null ? null : (string) $session->location_id,

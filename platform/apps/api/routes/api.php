@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\ParentChildController;
 use App\Http\Controllers\Api\V1\ParentEnrollmentController;
 use App\Http\Controllers\Api\V1\PaymentTermsController;
 use App\Http\Controllers\Api\V1\PublicCatalogController;
+use App\Http\Controllers\Api\V1\ScheduleChangeController;
 use App\Http\Controllers\Api\V1\ScheduleController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentChangeController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentContactController;
@@ -119,10 +120,18 @@ Route::prefix('v1')->group(function (): void {
                     Route::delete('/enrollments/{enrollment}/skipped-sessions/{session}', [StaffEnrollmentChangeController::class, 'restoreSession'])->whereUuid(['enrollment', 'session']);
                 });
             });
-            // "График" (docs/product/schedule.md, т. 6): the sessions of the person's scope and the panel of one; read only, no audit.
-            Route::prefix('schedule')->middleware(['tenant', 'organization.access:operational.read', 'throttle:120,1'])->group(function (): void {
-                Route::get('/', [ScheduleController::class, 'index']);
-                Route::get('/sessions/{session}', [ScheduleController::class, 'show'])->whereUuid('session');
+            Route::prefix('schedule')->middleware('tenant')->group(function (): void {
+                // "График" (docs/product/schedule.md, т. 6): the sessions of the person's scope and the panel of one; read only, no audit.
+                Route::middleware(['organization.access:operational.read', 'throttle:120,1'])->group(function (): void {
+                    Route::get('/', [ScheduleController::class, 'index']);
+                    Route::get('/sessions/{session}', [ScheduleController::class, 'show'])->whereUuid('session');
+                });
+                // Changes of the schedule (docs/product/schedule-changes.md, т. 7.1): the team with "schedule.manage" for the
+                // whole organization; the preview reads only, the change has its key for a repeat. Counters of their own.
+                Route::middleware('organization.access:operational.write')->group(function (): void {
+                    Route::post('/changes/preview', [ScheduleChangeController::class, 'preview'])->middleware('throttle:60,1,schedule-preview');
+                    Route::post('/changes', [ScheduleChangeController::class, 'store'])->middleware('throttle:30,1,schedule-change');
+                });
             });
             // Sets of payment terms (docs/product/payment-policies.md, т. 7.1): the team reads, owner and administrator change.
             Route::prefix('payment-terms')->middleware('tenant')->group(function (): void {

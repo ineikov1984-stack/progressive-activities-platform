@@ -83,7 +83,7 @@ final class ScheduleController extends Controller
             $this->capacity->waitingForGroups($groupIds),
             // Where the person only stands in, the panel decides by the session (`scheduleChildrenAt`).
             $this->scope->scheduleChildren($user),
-            $this->scope->allowsEverywhere($user, 'schedule.manage'),
+            $this->manages($user),
         ));
     }
 
@@ -107,7 +107,18 @@ final class ScheduleController extends Controller
             $this->capacity->waitingForGroups([$groupId]),
             $children,
             $this->scope->allowsEverywhere($user, 'schedule.manage'),
+            $this->manages($user),
         ));
+    }
+
+    /**
+     * Who changes the schedule (docs/product/schedule-changes.md, т. 4.1, 7.5): a person of the team with "schedule.manage"
+     * for the whole organization. The platform operator has the right by role, sees why a session changed, but has no
+     * buttons (decision 8).
+     */
+    private function manages(User $user): bool
+    {
+        return $this->scope->access($user)->role?->isTeam() === true && $this->scope->allowsEverywhere($user, 'schedule.manage');
     }
 
     /** @return array<string, list<string>> */

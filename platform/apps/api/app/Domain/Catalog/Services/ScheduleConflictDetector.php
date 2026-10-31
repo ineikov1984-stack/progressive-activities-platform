@@ -6,6 +6,7 @@ use App\Domain\Catalog\Enums\LocationType;
 use App\Domain\Catalog\Enums\SpaceUsage;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\Session;
+use App\Domain\Catalog\Models\SessionChange;
 use App\Domain\Organizations\Tenancy\TenantContext;
 
 final readonly class ScheduleConflictDetector
@@ -45,6 +46,50 @@ final readonly class ScheduleConflictDetector
             }
         }
 
-        return $conflicts;
+        if ($conflicts === []) {
+            return [];
+        }
+        // An overlap the office confirmed in the latest change of either session no longer stops anything
+        // (docs/product/schedule-changes.md, т. 4.8): otherwise one confirmed overlap would stop publishing for good.
+        $confirmed = $this->confirmed(array_values(array_unique(array_merge(
+            array_column($conflicts, 'session_id'), array_column($conflicts, 'conflicting_session_id'),
+        ))));
+
+        return array_values(array_filter($conflicts, fn (array $conflict): bool => ! isset(
+            $confirmed[self::pair($conflict['type'], $conflict['session_id'], $conflict['conflicting_session_id'])],
+        )));
+    }
+
+    /**
+     * The overlaps confirmed in the latest change of each session.
+     *
+     * @param  list<string>  $sessionIds
+     * @return array<string, true>
+     */
+    private function confirmed(array $sessionIds): array
+    {
+        $latest = [];
+        foreach (SessionChange::query()->whereIn('session_id', $sessionIds)->orderByDesc('schedule_change_id')
+            ->get(['session_id', 'schedule_change_id', 'confirmed_overlaps']) as $change) {
+            $latest[(string) $change->session_id] ??= $change;
+        }
+        $confirmed = [];
+        foreach ($latest as $change) {
+            foreach ($change->confirmed_overlaps as $key) {
+                if (is_string($key['other_session_id'] ?? null)) {
+                    $confirmed[self::pair((string) $key['type'], (string) $key['session_id'], $key['other_session_id'])] = true;
+                }
+            }
+        }
+
+        return $confirmed;
+    }
+
+    private static function pair(string $type, string $first, string $second): string
+    {
+        $ids = [$first, $second];
+        sort($ids);
+
+        return $type.':'.implode(':', $ids);
     }
 }

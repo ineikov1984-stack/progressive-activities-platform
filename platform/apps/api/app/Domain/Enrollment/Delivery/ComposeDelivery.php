@@ -5,6 +5,7 @@ namespace App\Domain\Enrollment\Delivery;
 use App\Domain\Catalog\Actions\CatalogMediaStore;
 use App\Domain\Catalog\Models\OrganizationCatalogProfile;
 use App\Domain\Enrollment\Enums\EnrollmentApplicationStatus;
+use App\Domain\Enrollment\Enums\EnrollmentStatus;
 use App\Domain\Enrollment\Models\Enrollment;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Enrollment\Models\EnrollmentEvent;
@@ -28,12 +29,30 @@ final class ComposeDelivery
         private readonly EnrollmentCapacity $capacity,
         private readonly CatalogMediaStore $media,
         private readonly SessionApplicability $sessions,
+        private readonly ScheduleLetters $schedule,
     ) {}
 
     /** @return array{to: string, mail: MailContent}|array{skip: string} */
     public function handle(EnrollmentEventDelivery $delivery): array
     {
         $event = EnrollmentEvent::query()->find($delivery->event_id);
+        // A change of the schedule names its family or teacher itself (docs/product/schedule-changes.md, т. 6.1).
+        if ($event !== null && in_array($event->type, ScheduleLetters::TYPES, true)) {
+            $organization = Organization::query()->find($event->organization_id);
+            $profile = OrganizationCatalogProfile::query()->first();
+            $name = trim((string) ($profile?->public_name ?: $organization?->name)) ?: 'Организацията';
+            $contact = $organization?->public_contact_email;
+
+            return $this->schedule->handle($delivery, $event, [
+                'organization' => $name,
+                'organizationId' => (string) $event->organization_id,
+                'platform' => (string) config('platform.name'),
+                'webUrl' => (string) config('platform.web_url'),
+                'brand' => Branding::forOrganization($name, $profile, (string) config('platform.web_url'), $this->logoStored($profile)),
+                'replyTo' => is_string($contact) && filter_var($contact, FILTER_VALIDATE_EMAIL) !== false ? $contact : null,
+                'profile' => $profile,
+            ]);
+        }
         $application = $event?->application_id === null ? null : EnrollmentApplication::query()
             ->with(['child', 'parent', 'session', 'group.offering.activity', 'group.offering.location', 'group.location'])
             ->find($event->application_id);
@@ -60,6 +79,13 @@ final class ComposeDelivery
         if ($enrollment === null && $event->type === 'enrollment.application_approved') {
             $enrollment = Enrollment::query()->with(['group.offering.activity', 'group.offering.location', 'group.location', 'session'])
                 ->where('application_id', $application->id)->first();
+        }
+        // A visit the organization cancelled before this was sent: the invitation for another day says it all
+        // (docs/product/schedule-changes.md, т. 6.4).
+        if ($event->type === 'enrollment.application_approved' && $enrollment !== null
+            && $enrollment->scope->value !== 'full_period' && $enrollment->status === EnrollmentStatus::Cancelled
+            && EnrollmentTransition::query()->where('enrollment_id', $enrollment->id)->where('metadata->effect', 'visit_cancelled')->exists()) {
+            return ['skip' => 'superseded'];
         }
         // A skipped or restored session whose state has changed again before sending (restored, then paused):
         // only the latest is told, so the parent never reads "we expect her" next to "she is on a pause".

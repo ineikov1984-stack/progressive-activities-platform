@@ -20,7 +20,8 @@ use Tests\TestCase;
  * nothing changes on the way. A new route of an organization fails this test until it is added here. The approved
  * changes since: the contacts (PR 2, т. 6) and the owner's decision of 31.10.2026 — the teacher has no catalog, the
  * payment terms are read by the owner, the administrator, the coordinator and the accountant, and the approval of a
- * group is a setting of the catalog. New since: the schedule (docs/product/schedule.md).
+ * group is a setting of the catalog. New since: the schedule (docs/product/schedule.md) and its changes, which the
+ * platform operator no longer manages (docs/product/schedule-changes.md, decision 8).
  */
 #[TestGroup('authorization')]
 class TeamRightsCharacterizationTest extends TestCase
@@ -50,6 +51,9 @@ class TeamRightsCharacterizationTest extends TestCase
     private const CATALOG_MANAGE = ['platform_admin', 'organization_owner', 'organization_admin', 'coordinator'];
 
     private const CATALOG_PUBLISH = ['platform_admin', 'organization_owner', 'organization_admin'];
+
+    /** Who changes the schedule: "schedule.manage" for the whole organization and of the team — not the platform operator (decision 8, 31.10.2026). */
+    private const SCHEDULE_MANAGE = ['organization_owner', 'organization_admin', 'coordinator'];
 
     private const INVITE = ['platform_admin', 'organization_owner', 'organization_admin'];
 
@@ -165,13 +169,15 @@ class TeamRightsCharacterizationTest extends TestCase
                 $this->inTenant($f['organization'], fn () => $f['tuesday']->assignments()->attach($profile->id, ['role' => 'lead', 'version' => 1]));
             }
         }
-        $manage = in_array($role, self::CATALOG_MANAGE, true);
+        $manage = in_array($role, self::SCHEDULE_MANAGE, true);
 
         $this->signInTo($actor, $f['organization'])->getJson('/api/v1/schedule?from=2026-11-02&to=2026-11-29')->assertOk()
             ->assertJsonCount($role === 'instructor' ? 4 : 12, 'sessions')
             ->assertJsonPath("abilities.{$f['tuesday']->id}", ['children' => true, 'manage' => $manage]);
-        $panel = $this->getJson("/api/v1/schedule/sessions/{$f['session']->id}")->assertOk()->assertJsonCount(2, 'session.children');
-        if ($manage) {
+        $panel = $this->getJson("/api/v1/schedule/sessions/{$f['session']->id}")->assertOk()->assertJsonCount(2, 'session.children')
+            ->assertJsonPath('abilities.manage', $manage)->assertJsonPath('actions', $manage ? ['cancel'] : []);
+        // Why a session changed: with "schedule.manage", also for the platform operator, who changes nothing.
+        if (in_array($role, self::CATALOG_MANAGE, true)) {
             $panel->assertJsonPath('session.change_reason', null);
         } else {
             $panel->assertJsonMissingPath('session.change_reason');
@@ -286,6 +292,9 @@ class TeamRightsCharacterizationTest extends TestCase
             // the group they lead, which holds this session.
             'GET api/v1/schedule' => ['GET', '/api/v1/schedule?from=2026-11-02&to=2026-11-29', [], self::ALL, 200],
             'GET api/v1/schedule/sessions/{session}' => ['GET', "/api/v1/schedule/sessions/{$f['session']->id}", [], self::ALL, 200],
+            // New with the changes of the schedule (docs/product/schedule-changes.md, т. 7.1): the right first, then the form.
+            'POST api/v1/schedule/changes/preview' => ['POST', '/api/v1/schedule/changes/preview', [], self::SCHEDULE_MANAGE, 422],
+            'POST api/v1/schedule/changes' => ['POST', '/api/v1/schedule/changes', [], self::SCHEDULE_MANAGE, 422],
 
             'GET api/v1/payment-terms' => ['GET', '/api/v1/payment-terms', [], self::TERMS_VIEW, 200],
             'POST api/v1/payment-terms' => ['POST', '/api/v1/payment-terms', [], self::TERMS_MANAGE, 422],

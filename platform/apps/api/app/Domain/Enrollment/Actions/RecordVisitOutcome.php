@@ -54,15 +54,21 @@ final class RecordVisitOutcome
             $offer = $copy ? null : $application->visitOffer;
             $accepted = $application->transitions()->whereNotNull($offer !== null
                 ? 'metadata->cancellation_deadline_hours' : 'metadata->session_starts_at')->first()?->metadata;
-            $start = isset($accepted['session_starts_at']) ? CarbonImmutable::parse($accepted['session_starts_at']) : $session->starts_at;
+            // The start the parent booked for counts only for the deadline of a timely cancellation; whether the visit
+            // has happened is told by the session's current start (docs/product/schedule-changes.md, т. 5.5).
+            $booked = isset($accepted['session_starts_at']) ? CarbonImmutable::parse($accepted['session_starts_at']) : $session->starts_at;
             $deadlineHours = $offer !== null
                 ? ($accepted['cancellation_deadline_hours'] ?? $offer->cancellation_deadline_hours)
                 : $this->freeCancellationHours($application->payment_terms_snapshot);
-            $timely = $deadlineHours !== null && now()->lessThanOrEqualTo($start->subHours($deadlineHours));
-            if ((! $staff && (now()->greaterThanOrEqualTo($start) || now()->greaterThanOrEqualTo($session->starts_at)))
+            // Only the organization moves a session: until its new start a cancellation is always in time, without a fee
+            // (decision 5, 31.10.2026).
+            $moved = ! $booked->equalTo($session->starts_at);
+            $timely = ($moved && now()->lessThan($session->starts_at))
+                || ($deadlineHours !== null && now()->lessThanOrEqualTo($booked->subHours($deadlineHours)));
+            if ((! $staff && now()->greaterThanOrEqualTo($session->starts_at))
                 || ($outcome === 'cancelled_in_time' && ! $timely)
                 || ($outcome === 'late_cancelled' && $timely)
-                || (! $cancellation && now()->lessThan($start))) {
+                || (! $cancellation && now()->lessThan($session->starts_at))) {
                 throw ValidationException::withMessages(['outcome' => 'Резултатът не съответства на срока за посещението.']);
             }
             $metadata = $offer !== null ? [
