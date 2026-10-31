@@ -23,8 +23,9 @@ use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * "Настройки → Условия за плащане" (docs/product/payment-policies.md, т. 7.1; step 2b). The team reads; the
- * owner and the administrator change. A way of paying without a saved default uses "Стандартни".
+ * "Настройки → Условия за плащане" (docs/product/payment-policies.md, т. 7.1; step 2b). The owner, the administrator,
+ * the coordinator and the accountant read (DECISIONS 31.10.2026); the owner and the administrator change. A way of
+ * paying without a saved default uses "Стандартни".
  */
 final class PaymentTermsController extends Controller
 {

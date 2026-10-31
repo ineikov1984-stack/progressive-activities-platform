@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AccessCard } from '../src/features/team/api';
 import {
   accessHeadings, accessSummary, addsFinance, applyPartner, areaSummary, draftFromCard, emptyDraft, endLimits, financeLock, firstName, grantableFor,
-  groupPlaces, lastDayOf, longDay, losesFinance, partnerFits, payloadFromDraft, rightRows, rightsErrors, rightsHeadline, rightsHistoryText, rightsOfRole, rightTexts,
+  groupPlaces, lastDayOf, longDay, losesFinance, memberHistoryItem, partnerFits, payloadFromDraft, rightRows, rightsErrors, rightsHeadline, rightsHistoryText, rightsOfRole, rightTexts,
   roleAs, roleChangeLines, sameDraft, scopeDrops, selectionSummary, templateLabel, touchesFinance, withEnd, withRight, withScope,
 } from '../src/features/team/rights';
 
@@ -236,6 +236,26 @@ describe('team rights', () => {
       expect(text.label).toMatch(/[А-Яа-я]/);
       expect(text.label).not.toContain(key);
       expect(text.hint).toMatch(/[А-Яа-я]/);
+    }
+  });
+
+  // The owner's review of 31.10.2026: "История" said only "Промяна — Демо собственик".
+  it('names in the profile history the rights given or taken together and the role change', () => {
+    const entry = (action: string, extra: Record<string, unknown> = {}) => ({ action, at: '2026-10-31T10:00:00Z', by: 'Демо собственик', ...extra });
+    expect(memberHistoryItem(entry('team.access_grant_added', { abilities: ['enrollment.enroll', 'contacts.message'] })))
+      .toEqual({ what: 'Дадено: Записва деца, Пише до родителите', who: 'Демо собственик' });
+    expect(memberHistoryItem(entry('team.access_grant_revoked', { abilities: ['contacts.view'], reason: 'removed' })).what).toBe('Отнето: Вижда телефона и имейла');
+    expect(memberHistoryItem(entry('team.access_grant_revoked', { abilities: ['catalog.manage'], reason: 'role_changed' })).what)
+      .toBe('Отнето със смяната на ролята: Създава и променя дейности');
+    expect(memberHistoryItem(entry('team.access_grant_revoked', { abilities: ['attendance.mark'], reason: 'expired' })).what).toBe('Изтече: Отбелязва присъствия');
+    expect(memberHistoryItem(entry('team.role_changed', { from: 'instructor', to: 'coordinator' })).what).toBe('Смяна на ролята: Преподавател → Координатор');
+    expect(memberHistoryItem(entry('team.access_scope_changed', { from: null, to: 'groups' })).what).toBe('За кои групи: Избрани групи');
+    // Older entries and the other actions as before.
+    expect(memberHistoryItem(entry('team.role_changed')).what).toBe('Смяна на ролята');
+    expect(memberHistoryItem(entry('team.access_grant_added')).what).toBe('Дадено: право');
+    expect(memberHistoryItem(entry('team.member_added'))).toEqual({ what: 'Добавяне в екипа', who: 'Демо собственик' });
+    for (const action of ['team.access_grant_added', 'team.access_grant_revoked', 'team.access_template_changed', 'team.access_group_added', 'unknown.action']) {
+      expect(memberHistoryItem(entry(action, { abilities: ['enrollment.enroll'], reason: 'removed', to: 'school_partner' })).what).not.toMatch(/[A-Za-z_]/);
     }
   });
 });

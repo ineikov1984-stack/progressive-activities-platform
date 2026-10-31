@@ -29,7 +29,8 @@ final class TeamAbilities
 
     /**
      * What an added right brings along, in the same scope, so that a right is never given that cannot be used (т. 2).
-     * The settings, the assignments and the schedule need the catalog for reading — the accountant has none by role.
+     * The settings, the assignments and the schedule need the catalog for reading — the accountant and the teacher have
+     * none by role; the editor of the activities chooses their payment terms, so it reads them (DECISIONS 31.10.2026).
      * Only the added rights: the roles are complete sets by themselves.
      *
      * @var array<string, list<string>>
@@ -37,8 +38,8 @@ final class TeamAbilities
     public const IMPLIES = [
         'enrollment.enroll' => ['enrollment.view'],
         'team.assign' => ['team.view', 'catalog.view'],
-        'catalog.manage' => ['catalog.view'],
-        'catalog.publish' => ['catalog.manage', 'catalog.view'],
+        'catalog.manage' => ['catalog.view', 'terms.view'],
+        'catalog.publish' => ['catalog.manage', 'catalog.view', 'terms.view'],
         'schedule.manage' => ['catalog.view'],
     ];
 
@@ -67,9 +68,12 @@ final class TeamAbilities
     /** "Партньор от училище": a viewer with selected groups and these two rights (т. 7). */
     public const SCHOOL_PARTNER = ['enrollment.enroll', 'attendance.mark'];
 
-    /** Hold with every scope: the base of every role, the old keys and the whole schedule for reading. */
+    /**
+     * Hold with every scope: the base of every role, the old keys, the whole schedule and the payment terms for reading
+     * ("terms.view": the owner, the administrator, the coordinator and the accountant — not on the card "Права").
+     */
     private const ORGANIZATION = [
-        'view', 'catalog.view', 'create', 'update', 'invite', 'finance', 'enrollment.view_own', 'schedule.view_all',
+        'view', 'catalog.view', 'create', 'update', 'invite', 'finance', 'enrollment.view_own', 'schedule.view_all', 'terms.view',
     ];
 
     private const WHOLE_ORGANIZATION = [

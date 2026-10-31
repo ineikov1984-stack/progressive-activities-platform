@@ -73,38 +73,42 @@ enum OrganizationRole: string
             self::PlatformAdmin => [
                 'create', 'update', 'invite', 'finance', 'view', 'catalog.view', 'catalog.manage', 'catalog.publish',
                 'enrollment.view', 'enrollment.manage',
-                'enrollment.enroll', 'team.assign', 'schedule.manage',
+                'enrollment.enroll', 'team.assign', 'schedule.manage', 'terms.view',
             ],
-            // Payment terms are changed only by the owner and the administrator (docs/product/payment-policies.md, т. 7.1).
+            // Payment terms are changed only by the owner and the administrator (docs/product/payment-policies.md, т. 7.1);
+            // read by them, the coordinator and the accountant — and the platform operator, who edits activities
+            // (DECISIONS 31.10.2026 „Учителят — само своите групи“).
             // The team: who is in it for most roles; phones, e-mails and changes for the owner and the administrator
             // (docs/product/team.md, т. 4).
             self::OrganizationOwner => [
                 'create', 'update', 'invite', 'finance', 'view', 'catalog.view', 'catalog.manage', 'catalog.publish',
                 'enrollment.view', 'enrollment.manage', 'enrollment.contacts', 'terms.manage', 'team.view', 'team.manage',
                 'enrollment.enroll', 'attendance.mark', 'attendance.correct_late', 'attendance.view_month', 'schedule.manage',
-                'contacts.view', 'contacts.message', 'team.assign', 'finance.view', 'finance.collect', 'finance.pay_view',
+                'contacts.view', 'contacts.message', 'team.assign', 'finance.view', 'finance.collect', 'finance.pay_view', 'terms.view',
             ],
             self::OrganizationAdmin => [
                 'create', 'update', 'invite', 'view', 'catalog.view', 'catalog.manage', 'catalog.publish',
                 'enrollment.view', 'enrollment.manage', 'enrollment.contacts', 'terms.manage', 'team.view', 'team.manage',
                 'enrollment.enroll', 'attendance.mark', 'attendance.correct_late', 'attendance.view_month', 'schedule.manage',
-                'contacts.view', 'contacts.message', 'team.assign',
+                'contacts.view', 'contacts.message', 'team.assign', 'terms.view',
             ],
             self::Coordinator => [
                 'create', 'update', 'view', 'catalog.view', 'catalog.manage',
                 'enrollment.view', 'enrollment.manage', 'enrollment.contacts', 'team.view',
                 'enrollment.enroll', 'attendance.mark', 'attendance.view_month', 'schedule.manage',
-                'contacts.view', 'contacts.message', 'team.assign',
+                'contacts.view', 'contacts.message', 'team.assign', 'terms.view',
             ],
             // Only their own groups and, in them, only what the teacher needs about each child — never applications,
             // contacts or changes (docs/product/team.md, т. 8). "enrollment.view_own" does not give "enrollment.view";
             // marking attendance comes from the assignment, not from the role (docs/product/team-rights.md, т. 8).
-            self::Instructor => ['view', 'catalog.view', 'enrollment.view_own'],
+            // No activities, open days or payment terms either: the teacher's menu is "Начало" and their own groups
+            // (DECISIONS 31.10.2026); the catalog comes only with an added right that needs it (TeamAbilities::IMPLIES).
+            self::Instructor => ['view', 'enrollment.view_own'],
             self::Viewer => ['view', 'catalog.view', 'enrollment.view', 'team.view', 'attendance.view_month'],
-            // The accountant still has no catalog: nothing changes for a role on any route (т. 2.1).
+            // The accountant still has no catalog (т. 2.1), but reads the payment terms.
             self::Finance => [
                 'finance', 'view', 'enrollment.view', 'team.view',
-                'attendance.view_month', 'finance.view', 'finance.collect', 'finance.pay_view',
+                'attendance.view_month', 'finance.view', 'finance.collect', 'finance.pay_view', 'terms.view',
             ],
         };
     }

@@ -24,7 +24,8 @@ class CatalogResourcesTest extends TestCase
         yield 'owner' => ['organization_owner', true, true, true];
         yield 'administrator' => ['organization_admin', true, true, true];
         yield 'coordinator' => ['coordinator', true, true, false];
-        yield 'instructor' => ['instructor', true, false, false];
+        // The teacher's menu is "Начало" and their own groups (DECISIONS 31.10.2026).
+        yield 'instructor' => ['instructor', false, false, false];
         yield 'viewer' => ['viewer', true, false, false];
         yield 'finance' => ['finance', false, false, false];
     }

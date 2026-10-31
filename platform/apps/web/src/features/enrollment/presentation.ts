@@ -33,6 +33,16 @@ export function dateTimeText(value: string | null | undefined): string {
 }
 
 /** "1 свободно място", "Няма свободни места", "Без ограничение на местата". */
+/**
+ * How a group's applications are decided, in one line, for those who do not change it (DECISIONS 31.10.2026): the
+ * setting is changed with the activities; "Записва деца" only decides. Nothing when the list does not say (a teacher's).
+ */
+export function approvalLine(mode: string | null | undefined): string {
+  if (mode === 'automatic') return 'Как се одобряват заявките: автоматично.';
+  if (mode === 'manual') return 'Как се одобряват заявките: ръчно.';
+  return '';
+}
+
 export function placesText(remaining: number | null): string {
   if (remaining === null) return 'Без ограничение на местата';
   if (remaining <= 0) return 'Няма свободни места';

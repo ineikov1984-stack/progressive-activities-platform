@@ -1,8 +1,25 @@
-import type { DashboardInvitation } from './api';
+import type { DashboardInvitation, TeachingGroup } from './api';
 import type { ActivityDraft } from '../catalog/admin/api';
 import { activityCompleteness } from '../catalog/admin/presentation';
 
 export type Task = { id: string; tone: 'limited' | 'action' | 'info'; title: string; detail: string; href: string };
+
+const sessionFormat = new Intl.DateTimeFormat('bg-BG', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Sofia' });
+
+/**
+ * "Моите групи" on "Начало" (DECISIONS 31.10.2026): the group, the person's part in it and the next session; the card
+ * opens the group's list of children.
+ */
+export function teachingCard(group: TeachingGroup): { id: string; title: string; detail: string; href: string } {
+  const part = group.basis === 'substitute' ? 'Заместник' : group.role === 'assistant' ? 'Помощник' : 'Водещ';
+  const next = group.next_session_starts_at ? `следващо: ${sessionFormat.format(new Date(group.next_session_starts_at))}` : 'няма предстоящи занимания';
+  return {
+    id: group.group_id,
+    title: `${group.activity_title} · ${group.group_name}`,
+    detail: `${part} · ${next}`,
+    href: `/dashboard/enrollments?view=groups&group=${encodeURIComponent(group.group_id)}`,
+  };
+}
 
 export function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
@@ -17,7 +34,8 @@ export function freedPlaces(groups: { id: string; name: string; capacity_max: nu
     .map((group) => ({ id: group.id, name: group.name, waiting: group.waitlist_count }));
 }
 
-export function buildTasks(activities: ActivityDraft[], invitations: DashboardInvitation[], pendingApplications = 0, freed: FreedPlace[] = []): Task[] {
+/** `canCreateActivity`: "Създай първата дейност" only for those who may — never for a teacher or an accountant. */
+export function buildTasks(activities: ActivityDraft[], invitations: DashboardInvitation[], pendingApplications = 0, freed: FreedPlace[] = [], canCreateActivity = true): Task[] {
   const tasks: Task[] = [];
   if (pendingApplications > 0) {
     tasks.push({
@@ -66,7 +84,7 @@ export function buildTasks(activities: ActivityDraft[], invitations: DashboardIn
       href: '/dashboard/team?state=invited',
     });
   }
-  if (activities.length === 0) {
+  if (activities.length === 0 && canCreateActivity) {
     tasks.push({
       id: 'first-activity',
       tone: 'info',

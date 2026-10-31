@@ -1,6 +1,6 @@
 import { sofiaDay } from '../enrollment/presentation';
-import type { AccessCard, AccessChanges, AccessHistoryEntry, AccessPayload, AccessScope, AccessTarget } from './api';
-import { assignmentRole, roleLabel, type TeamRole } from './presentation';
+import type { AccessCard, AccessChanges, AccessHistoryEntry, AccessPayload, AccessScope, AccessTarget, HistoryEntry } from './api';
+import { assignmentRole, historyItem, roleLabel, type TeamRole } from './presentation';
 
 /*
  * The rights of a person of the team in words (docs/product/team-rights.md, т. 2–4, 10). The lists mirror
@@ -541,6 +541,37 @@ export function rightsHistoryText(entry: AccessHistoryEntry): string {
     case 'catalog.assignment_removed': return `Махната група: ${group ?? 'група'}`;
     case 'enrollment.contact_revealed': return `Показан телефон на родител${group ? ` · ${group}` : ''}`;
     default: return 'Промяна на правата';
+  }
+}
+
+/* "История" of the profile (the owner's review of 31.10.2026): which rights were given or taken, and the role. */
+
+const takenWords: Record<string, string> = {
+  removed: 'Отнето',
+  role_changed: 'Отнето със смяната на ролята',
+  scope_changed: 'Отнето с промяната на групите',
+  archived: 'Отнето с архива',
+  expired: 'Изтече',
+};
+
+/** "Дадено: Записва деца, Пише до родителите — Мария Колева"; the other entries as before ("Добавяне в екипа"). */
+export function memberHistoryItem(entry: HistoryEntry): { what: string; who: string | null } {
+  const rights = (entry.abilities ?? []).map(rightLabel).join(', ') || 'право';
+  const who = entry.by;
+  switch (entry.action) {
+    case 'team.access_grant_added': return { what: `Дадено: ${rights}`, who };
+    case 'team.access_grant_changed': return { what: `Нов срок: ${rights}`, who };
+    case 'team.access_grant_revoked': return { what: `${takenWords[entry.reason ?? ''] ?? 'Отнето'}: ${rights}`, who };
+    case 'team.role_changed': return {
+      what: entry.from && entry.to ? `Смяна на ролята: ${roleLabel(entry.from)} → ${roleLabel(entry.to)}` : 'Смяна на ролята',
+      who,
+    };
+    case 'team.access_scope_changed':
+    case 'team.access_group_added':
+    case 'team.access_group_removed':
+    case 'team.access_template_changed':
+      return { what: rightsHistoryText({ ...entry, group_label: null, reason: entry.reason ?? undefined }), who };
+    default: return historyItem(entry);
   }
 }
 

@@ -11,9 +11,9 @@ import {
 } from './api';
 import { MemberGroups } from './member-groups';
 import {
-  focusLater, historyItem, initials, invitableRoles, invitationFold, memberRole, memberStatus, roleLabel, roleLabels, type TeamRole,
+  focusLater, initials, invitableRoles, invitationFold, memberRole, memberStatus, roleLabel, roleLabels, type TeamRole,
 } from './presentation';
-import { accessSummary, draftFromCard, rightsHeadline, templateLabel } from './rights';
+import { accessSummary, draftFromCard, memberHistoryItem, rightsHeadline, templateLabel } from './rights';
 import { AccessLists, RoleAccessList } from './role-access';
 import { SentInvitationNotice } from './sent-invitation';
 import { NoTeamAccess } from './team-page';
@@ -361,7 +361,7 @@ function HistoryCard({ history }: { history: HistoryEntry[] }) {
       {history.length === 0 ? <p className={styles.muted}>Още няма записани промени.</p> : (
         <ul id="history-list" className={styles.rows}>
           {shown.map((entry, index) => {
-            const item = historyItem(entry);
+            const item = memberHistoryItem(entry);
             return (
               <li key={`${entry.at}-${index}`}>
                 <span><strong>{item.what}</strong>{item.who ? ` — ${item.who}` : ''}</span>

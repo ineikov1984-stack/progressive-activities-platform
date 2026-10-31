@@ -7,11 +7,13 @@ import {
   AuthenticationRequiredError,
   type DashboardAuditEvent,
   type DashboardInvitation,
+  loadTeaching,
   loadWorkspaceOverview,
+  type TeachingGroup,
 } from './api';
 import { useDashboardContext } from './dashboard-context';
 import { type ActivityDraft, loadCatalogWorkspace } from '@/features/catalog/admin/api';
-import { buildTasks, type FreedPlace, freedPlaces, greeting, plural, type Task } from './tasks';
+import { buildTasks, type FreedPlace, freedPlaces, greeting, plural, type Task, teachingCard } from './tasks';
 import { loadApplications, loadStaffGroups } from '@/features/enrollment/api';
 import { OrganizationStatusCard } from '@/features/organizations/application/status-card';
 import { roleLabel } from '@/features/team/presentation';
@@ -85,8 +87,13 @@ export function Dashboard() {
   const [pendingApplications, setPendingApplications] = useState(0);
   const [freed, setFreed] = useState<FreedPlace[]>([]);
   const canManageEnrollments = organization.permissions.includes('enrollment.manage');
+  const canSeeEnrollments = organization.permissions.includes('enrollment.view');
   const canInvite = organization.permissions.includes('invite');
   const canSeeTeam = organization.permissions.includes('team.view');
+  // A teacher has "Начало" and their own groups: no activities or open days unless a right is added (DECISIONS 31.10.2026).
+  const canSeeCatalog = organization.permissions.includes('catalog.view');
+  const canCreateActivity = organization.permissions.includes('catalog.manage');
+  const [teaching, setTeaching] = useState<TeachingGroup[]>();
   const [invitations, setInvitations] = useState<DashboardInvitation[]>();
   const [auditEvents, setAuditEvents] = useState<DashboardAuditEvent[]>();
   const [loadError, setLoadError] = useState<string>();
@@ -95,15 +102,20 @@ export function Dashboard() {
     let active = true;
     Promise.all([
       loadWorkspaceOverview(organization.id, canInvite, canSeeTeam),
-      loadCatalogWorkspace(organization.id).then((workspace) => workspace.activities).catch(() => [] as ActivityDraft[]),
+      canSeeCatalog
+        ? loadCatalogWorkspace(organization.id).then((workspace) => workspace.activities).catch(() => [] as ActivityDraft[])
+        : Promise.resolve([] as ActivityDraft[]),
       // Roles without access to enrollments simply see no such task.
-      loadApplications(organization.id).then((page) => page.total).catch(() => 0),
+      canSeeEnrollments ? loadApplications(organization.id).then((page) => page.total).catch(() => 0) : Promise.resolve(0),
       // Only those who decide on enrollments get the "free place" task.
       canManageEnrollments
         ? loadStaffGroups(organization.id).then(freedPlaces).catch(() => [] as FreedPlace[])
         : Promise.resolve([] as FreedPlace[]),
-    ]).then(([overview, catalogActivities, pending, freedGroups]) => {
+      // "Моите групи": anyone who teaches — the teacher, also an owner who teaches.
+      loadTeaching(organization.id).catch(() => [] as TeachingGroup[]),
+    ]).then(([overview, catalogActivities, pending, freedGroups, ownGroups]) => {
       if (!active) return;
+      setTeaching(ownGroups);
       setPendingApplications(pending);
       setFreed(freedGroups);
       setInvitations(overview.invitations);
@@ -115,12 +127,30 @@ export function Dashboard() {
       else setLoadError('Част от таблото не се зареди. Опитайте да презаредите страницата.');
     });
     return () => { active = false; };
-  }, [organization.id, router, canManageEnrollments, canInvite, canSeeTeam]);
+  }, [organization.id, router, canManageEnrollments, canSeeEnrollments, canInvite, canSeeTeam, canSeeCatalog]);
 
   const isLoaded = activities !== undefined && invitations !== undefined;
-  const tasks = isLoaded ? buildTasks(activities, invitations, pendingApplications, freed) : [];
+  const tasks = isLoaded ? buildTasks(activities, invitations, pendingApplications, freed, canCreateActivity) : [];
   const published = activities?.filter((activity) => activity.status === 'published').length ?? 0;
   const firstName = user.name.split(/\s+/)[0];
+  // For a teacher their groups are the page; for the others they come after "Какво ви чака".
+  const groupsFirst = !canSeeEnrollments;
+  // Applications, drafts and invitations are the tasks: without any of them "Какво ви чака" has nothing to say.
+  const mayHaveTasks = canSeeEnrollments || canSeeCatalog || canInvite;
+  const ownGroups = teaching === undefined ? null : teaching.length > 0 || groupsFirst ? (
+    <section aria-labelledby="teaching-title" className={styles.section}>
+      <h2 id="teaching-title" className={styles.sectionTitle}>Моите групи</h2>
+      {teaching.length === 0 ? (
+        <p className={styles.muted}>Все още нямате групи. Когато ви добавят в група, тя ще се появи тук.</p>
+      ) : (
+        <div className={styles.shortcuts}>
+          {teaching.map(teachingCard).map((card) => (
+            <Link key={card.id} href={card.href} className={styles.shortcut}><strong>{card.title}</strong><span>{card.detail}</span></Link>
+          ))}
+        </div>
+      )}
+    </section>
+  ) : null;
 
   return (
     <div className={styles.page}>
@@ -128,18 +158,22 @@ export function Dashboard() {
         <div className={styles.heading}>
           <p className={styles.eyebrow}>{greeting(new Date())}, {firstName}</p>
           <h1>{organization.name}</h1>
-          <p className={styles.muted}>{roleLabel(organization.role)}{activities ? ` · ${plural(published, 'публикувана дейност', 'публикувани дейности')}` : ''}</p>
+          <p className={styles.muted}>{roleLabel(organization.role)}{activities && canSeeCatalog ? ` · ${plural(published, 'публикувана дейност', 'публикувани дейности')}` : ''}</p>
         </div>
-        <Link className={styles.primary} href="/dashboard/activities?new=1">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-          Създай нова дейност
-        </Link>
+        {canCreateActivity ? (
+          <Link className={styles.primary} href="/dashboard/activities?new=1">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            Създай нова дейност
+          </Link>
+        ) : null}
       </header>
 
       {organization.status !== 'active' ? <OrganizationStatusCard organizationId={organization.id} /> : null}
       {loadError ? <p className={styles.error} role="alert">{loadError}</p> : null}
 
-      <section aria-labelledby="tasks-title" className={styles.section}>
+      {groupsFirst ? ownGroups : null}
+
+      {mayHaveTasks ? <section aria-labelledby="tasks-title" className={styles.section}>
         <h2 id="tasks-title" className={styles.sectionTitle}>Какво ви чака</h2>
         {!isLoaded ? (
           <div className={styles.taskGrid} aria-busy="true">{[0, 1, 2].map((item) => <span className={styles.skeleton} key={item} />)}</div>
@@ -158,13 +192,19 @@ export function Dashboard() {
             ))}
           </div>
         )}
-      </section>
+      </section> : null}
+
+      {groupsFirst ? null : ownGroups}
 
       <section aria-labelledby="shortcuts-title" className={styles.section}>
         <h2 id="shortcuts-title" className={styles.sectionTitle}>Бърз достъп</h2>
         <div className={styles.shortcuts}>
-          <Link href="/dashboard/activities" className={styles.shortcut}><strong>Дейности</strong><span>{activities ? plural(activities.length, 'дейност', 'дейности') : '…'}</span></Link>
-          <Link href="/dashboard/open-days" className={styles.shortcut}><strong>Отворени врати</strong><span>Кампании и пробни занимания</span></Link>
+          {canSeeCatalog ? (
+            <>
+              <Link href="/dashboard/activities" className={styles.shortcut}><strong>Дейности</strong><span>{activities ? plural(activities.length, 'дейност', 'дейности') : '…'}</span></Link>
+              <Link href="/dashboard/open-days" className={styles.shortcut}><strong>Отворени врати</strong><span>Кампании и пробни занимания</span></Link>
+            </>
+          ) : null}
           <Link href={`/o/${organization.slug}`} className={styles.shortcut}><strong>Публичен профил</strong><span>Как ви виждат родителите</span></Link>
           {/* "Покани колега" moved to "Екип" (docs/product/team.md, т. 10): people, their groups and invitations. */}
           {canSeeTeam ? <Link href="/dashboard/team" className={styles.shortcut}><strong>Екип</strong><span>Хора, групи и покани за вход</span></Link> : null}
