@@ -59,7 +59,7 @@ class ScheduleChangesMigrationTest extends TestCase
         $this->assertSame('2026-11-12', $notBefore($bounded));
         $this->assertNull($notBefore($plain));
         // Existing sessions are neither moved nor added.
-        $session = $this->session();
+        $session = $this->freshSessionId();
         $this->assertSame([null, 0], [DB::table('activity_sessions')->where('id', $session)->value('original_starts_at'),
             (int) DB::table('activity_sessions')->where('id', $session)->value('extra')]);
 
@@ -150,7 +150,7 @@ class ScheduleChangesMigrationTest extends TestCase
         return $id;
     }
 
-    private function session(): string
+    private function freshSessionId(): string
     {
         $id = (string) Str::uuid();
         DB::table('activity_sessions')->insert([

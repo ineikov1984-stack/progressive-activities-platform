@@ -397,7 +397,7 @@ final class ScheduleLetters
         $cancellation = $metadata['schedule_change_id'] ?? null;
 
         return is_string($cancellation) && $this->letterSent($cancellation, $parentId, (string) $session->id,
-            ['visit_cancelled', 'application_rejected'], $enrollment?->id ?? $application->id, $change->created_at);
+            ['visit_cancelled', 'application_rejected'], $enrollment->id ?? $application->id, $change->created_at);
     }
 
     /**
@@ -528,7 +528,7 @@ final class ScheduleLetters
     /** @param  Line  $line */
     private static function child(array $line): string
     {
-        $child = $line['enrollment']?->child ?? $line['application']->child;
+        $child = $line['enrollment']->child ?? $line['application']->child;
 
         return trim((string) $child?->first_name) ?: 'детето';
     }
@@ -551,7 +551,7 @@ final class ScheduleLetters
 
     private static function activity(?Group $group): string
     {
-        return (string) ($group?->offering?->activity?->title ?? 'заниманието');
+        return (string) ($group->offering->activity->title ?? 'заниманието');
     }
 
     private static function timezone(Session $session): string
@@ -606,7 +606,7 @@ final class ScheduleLetters
      */
     private static function place(Session $session): ?array
     {
-        $location = $session->location ?? $session->group?->location ?? $session->group?->offering?->location;
+        $location = $session->location ?? $session->group->location ?? $session->group->offering->location;
         if (! $location instanceof Location) {
             return null;
         }

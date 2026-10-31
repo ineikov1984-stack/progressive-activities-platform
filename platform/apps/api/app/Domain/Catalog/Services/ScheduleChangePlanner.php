@@ -59,7 +59,7 @@ final readonly class ScheduleChangePlanner
      */
     public function assertFound(ScheduleChangeRequest $request, Collection $sessions): void
     {
-        $visible = $sessions->filter(fn (Session $session): bool => ($session->group?->status ?? 'draft') !== 'draft');
+        $visible = $sessions->filter(fn (Session $session): bool => ($session->group->status ?? 'draft') !== 'draft');
         abort_if($visible->count() !== count($request->sessionIds()), 404, 'Заниманието не е намерено.');
     }
 
@@ -201,7 +201,7 @@ final readonly class ScheduleChangePlanner
         $sync = $session->instructors_source === 'assignment' && $group !== null ? $this->teachers->forSession($group, $session->starts_at) : null;
 
         return new PlannedSessionChange($session, $after, $sync, $teachersBefore,
-            $sync === null ? $teachersBefore : array_values(array_map('strval', array_keys($sync))));
+            $sync === null ? $teachersBefore : array_map('strval', array_keys($sync)));
     }
 
     private static function time(CarbonImmutable $moment): string
