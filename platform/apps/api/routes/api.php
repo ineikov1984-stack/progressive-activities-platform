@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\V1\PublicCatalogController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentChangeController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentController;
 use App\Http\Controllers\Api\V1\StaffEnrollmentDetailsController;
+use App\Http\Controllers\Api\V1\TeachingController;
 use App\Http\Controllers\Api\V1\TeamController;
 use App\Http\Controllers\Api\V1\VisitOfferController;
 use Illuminate\Support\Facades\Route;
@@ -46,6 +47,8 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/auth/logout', [AuthController::class, 'logout']);
             Route::get('/me', [AuthController::class, 'me']);
             Route::patch('/me/contact', [AuthController::class, 'updateContact'])->middleware('throttle:30,1');
+            // The groups I teach here, for every role with a teacher profile (docs/product/team.md, т. 8).
+            Route::get('/me/teaching', [TeachingController::class, 'index'])->middleware(['tenant', 'organization.access:operational.read']);
             Route::get('/parent/children', [ParentChildController::class, 'index']);
             Route::post('/parent/children', [ParentChildController::class, 'store']);
             Route::get('/parent/children/{child}', [ParentChildController::class, 'show'])->whereUuid('child');

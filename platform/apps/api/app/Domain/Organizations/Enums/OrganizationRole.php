@@ -43,8 +43,9 @@ enum OrganizationRole: string
             self::OrganizationOwner => ['create', 'update', 'invite', 'finance', 'view', 'catalog.view', 'catalog.manage', 'catalog.publish', 'enrollment.view', 'enrollment.manage', 'enrollment.contacts', 'terms.manage', 'team.view', 'team.manage'],
             self::OrganizationAdmin => ['create', 'update', 'invite', 'view', 'catalog.view', 'catalog.manage', 'catalog.publish', 'enrollment.view', 'enrollment.manage', 'enrollment.contacts', 'terms.manage', 'team.view', 'team.manage'],
             self::Coordinator => ['create', 'update', 'view', 'catalog.view', 'catalog.manage', 'enrollment.view', 'enrollment.manage', 'enrollment.contacts', 'team.view'],
-            // Instructors will see only their own groups (docs/product/staff-enrollment.md, Б2).
-            self::Instructor => ['view', 'catalog.view'],
+            // Only their own groups and, in them, only what the teacher needs about each child — never applications,
+            // contacts or changes (docs/product/team.md, т. 8). "enrollment.view_own" does not give "enrollment.view".
+            self::Instructor => ['view', 'catalog.view', 'enrollment.view_own'],
             self::Viewer => ['view', 'catalog.view', 'enrollment.view', 'team.view'],
             self::Finance => ['finance', 'view', 'enrollment.view', 'team.view'],
         };
