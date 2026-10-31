@@ -22,10 +22,11 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property EnrollmentStatus $status
  * @property CarbonImmutable $starts_on
  * @property CarbonImmutable|null $ends_on
+ * @property CarbonImmutable|null $starts_not_before a continuation after a transfer starts on this day at the earliest
  */
 #[Fillable([
     'application_id', 'child_id', 'group_id', 'price_option_id', 'session_id',
-    'scope', 'status', 'starts_on', 'ends_on', 'transferred_from_id', 'version',
+    'scope', 'status', 'starts_on', 'ends_on', 'transferred_from_id', 'version', 'starts_not_before',
 ])]
 class Enrollment extends Model
 {
@@ -116,6 +117,7 @@ class Enrollment extends Model
             'status' => EnrollmentStatus::class,
             'starts_on' => 'immutable_date',
             'ends_on' => 'immutable_date',
+            'starts_not_before' => 'immutable_date',
             'version' => 'integer',
         ];
     }
