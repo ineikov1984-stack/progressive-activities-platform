@@ -24,8 +24,6 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| График — PR 2: уеб (`docs/product/schedule.md`, т. 3.1, 3.4, 3.5, 4) — стандартна | Claude | `claude/schedule-web` | уеб: нов `features/schedule/**`, `app/dashboard/schedule`; менюто (`features/dashboard/navigation.ts`, `dashboard-shell.tsx`); връзката от група в „Екип“ (`features/team/presentation.ts`, `team-page.tsx`, `member-groups.tsx`, `member-profile.tsx`); `?enrollment=` в `features/enrollment/enrollments-page.tsx`; тестове `schedule-*`, `dashboard-navigation`, `team-presentation`. Без горещи файлове и без промени в API-то | код и тестове → UX ревю веднъж → CI → merge. Филтърът „Дете“ чака търсене на записаните деца — въпрос в PR-а |
-| График — PR 3: уеб, Месец и Ден по зали / по треньори (`docs/product/schedule.md`, т. 3.2, 3.3) — стандартна | Claude | `claude/schedule-month-day` (върху `claude/schedule-web`) | уеб: `features/schedule/**` (`presentation.ts`, `schedule-views.tsx`, нов `month-view.tsx`, `schedule-page.tsx`, `schedule.module.css`); тест `schedule-presentation`. Без горещи файлове и без промени в API-то | код и тестове → след merge на PR 2 (#92) — PR → CI → merge |
 
 ## Опашка (по приоритет)
 
@@ -72,6 +70,7 @@
 
 ## Наскоро завършено
 
+- 31.10.2026 — PR #92: „График“ — уеб: Седмица, Карти, филтри, панел на заниманието, „Моят график“ за учителя, група в „Екип“ води към графика (Claude).
 - 31.10.2026 — PR #91: „График“, PR 1 — API: `GET /schedule` и панелът на заниманието, обхват по `AccessScope::scheduleGroups`, ролите на преподавателите, заетите места групово; ревю по сигурност (Claude).
 - 31.10.2026 — PR #90: спецификация „График“ (`docs/product/schedule.md`) след ревю на архитект; „Учителят обогатява“ PR 1b и PR 2 — отложени; задачи за Codex (Claude).
 - 31.10.2026 — PR #89: всяка снимка на каталога се пази без данните от телефона (EXIF, GPS, XMP, IPTC, ICC), граница 24 MP за JPEG и 16 MP за PNG и WebP, `catalog:sanitize-media` за старите, „Махни от страницата“ за снимка от галерията; ревю по сигурност (Claude).
