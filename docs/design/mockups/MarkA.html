@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Отбелязване на присъствията</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#173F5F}a:hover{color:#0F2A40}
+.meta{margin:0;font-size:14px;line-height:20px;color:#5B6878}
+.row{display:flex;flex-direction:column;gap:10px;padding:12px 16px;border-bottom:1px solid #E2E6EA;background:#FFFFFF}
+.who{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.name{font-size:16px;font-weight:600;color:#173F5F;text-decoration:none}
+.eye{display:grid;place-items:center;flex:none;width:44px;height:44px;border-radius:10px;color:#173F5F;text-decoration:none}
+.tag{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 10px;border-radius:999px;font-size:13px;font-weight:600}
+.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.opt{display:flex;align-items:center;justify-content:center;gap:6px;min-height:44px;border:1.5px solid #808D99;border-radius:10px;background:#FFFFFF;color:#173F5F;font:inherit;font-size:15px;font-weight:600}
+.here{border-color:#1F6B4F;background:#1F6B4F;color:#FFFFFF}
+.away{border-color:#B8561A;background:#B8561A;color:#FFFFFF}
+.count{display:inline-flex;align-items:center;height:30px;padding:0 10px;border-radius:999px;font-size:14px;font-weight:600}
+</style>
+</head>
+<body>
+<div style="width: 390px; height: 1240px; box-sizing: border-box; display: flex; flex-direction: column; background: #F6F4EF; font-family: 'Onest', ui-sans-serif, system-ui, sans-serif; color: #344054;">
+  <header style="display: flex; flex-direction: column; gap: 6px; padding: 16px 16px 12px;">
+    <a href="Main.html" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 15px; font-weight: 600; text-decoration: none;">← Днес</a>
+    <h1 style="margin: 0; font-size: 22px; line-height: 28px; color: #173F5F;">Шахмат · Група 2 · 3.–4. клас</h1>
+    <p class="meta">Понеделник, 2 ноември · 17:30–18:30 · Зала „Слънце“</p>
+  </header>
+
+  <div style="display: flex; flex-direction: column; gap: 12px; padding: 0 16px 16px;">
+    <button type="button" style="display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; border: 0; border-radius: 12px; background: #1F6B4F; color: #FFFFFF; font: inherit; font-size: 17px; font-weight: 600;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>
+      Всички присъстват
+    </button>
+    <p class="meta" style="font-size: 13px; margin-top: -4px;">Отбелязва неотбелязаните. Предупредените отсъствия и децата в пауза не се променят.</p>
+    <div role="status" aria-label="Отбелязани досега" style="display: flex; flex-wrap: wrap; gap: 8px;">
+      <span class="count" style="background: #E3F1EA; color: #1F5A41;">Присъстват 5</span>
+      <span class="count" style="background: #FFF1E6; color: #8A3E10;">Отсъстват 2</span>
+      <span class="count" style="background: #EEF1F4; color: #4A5767;">Неотбелязани 1</span>
+    </div>
+    <label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: #173F5F;">
+      Тема на заниманието (по избор)
+      <input value="Мат с топ и цар" style="height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #808D99; border-radius: 10px; font: inherit; font-size: 16px; font-weight: 400; color: #173F5F; background: #FFFFFF;">
+    </label>
+  </div>
+
+  <section aria-label="Деца в групата" style="display: flex; flex-direction: column; border-top: 1px solid #E2E6EA;">
+    <div class="row">
+      <div class="who"><div><a class="name" href="ChildSheet.html">Ана Иванова</a> <span class="meta">· 3. клас</span></div><a class="eye" href="ChildSheet.html" aria-label="Виж Ана Иванова"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></a></div>
+      <div class="pair"><button type="button" class="opt here" aria-pressed="true">✓ Присъства</button><button type="button" class="opt" aria-pressed="false">Отсъства</button></div>
+    </div>
+    <div class="row">
+      <div class="who"><div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;"><a class="name" href="ChildSheet.html">Борис Георгиев</a><span class="tag" style="background: #FCE8E8; color: #8E1F1F;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg>Здравна бележка</span></div><a class="eye" href="ChildSheet.html" aria-label="Виж Борис Георгиев"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></a></div>
+      <div class="pair"><button type="button" class="opt here" aria-pressed="true">✓ Присъства</button><button type="button" class="opt" aria-pressed="false">Отсъства</button></div>
+    </div>
+    <div class="row">
+      <div class="who"><div><a class="name" href="ChildSheet.html">Виктория Николова</a> <span class="meta">· 3. клас</span></div><a class="eye" href="ChildSheet.html" aria-label="Виж Виктория Николова"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></a></div>
+      <div class="pair"><button type="button" class="opt" aria-pressed="false">Присъства</button><button type="button" class="opt away" aria-pressed="true">✕ Отсъства</button></div>
+    </div>
+    <div class="row">
+      <div class="who"><div><a class="name" href="ChildSheet.html">Георги Димитров</a> <span class="meta">· 4. клас</span></div><a class="eye" href="ChildSheet.html" aria-label="Виж Георги Димитров"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></a></div>
+      <div class="pair"><button type="button" class="opt" aria-pressed="false">Присъства</button><button type="button" class="opt" aria-pressed="false">Отсъства</button></div>
+    </div>
+    <div class="row">
+      <div class="who"><div><a class="name" href="ChildSheet.html">Дария Стоянова</a> <span class="meta">· 3. клас</span></div><a class="eye" href="ChildSheet.html" aria-label="Виж Дария Стоянова"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></a></div>
+      <div class="pair"><button type="button" class="opt here" aria-pressed="true">✓ Присъства</button><button type="button" class="opt" aria-pressed="false">Отсъства</button></div>
+    </div>
+    <div class="row">
+      <div class="who"><div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;"><a class="name" href="ChildSheet.html">Елена Тодорова</a><span class="tag" style="background: #EAF0F6; color: #173F5F;">Пробно</span></div><a class="eye" href="ChildSheet.html" aria-label="Виж Елена Тодорова"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></a></div>
+      <div class="pair"><button type="button" class="opt here" aria-pressed="true">✓ Присъства</button><button type="button" class="opt" aria-pressed="false">Отсъства</button></div>
+    </div>
+    <div class="row">
+      <div class="who"><div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;"><a class="name" href="ChildSheet.html">Калоян Петков</a><span class="tag" style="background: #FFF1E6; color: #8A3E10;">Предупредено отсъствие</span></div><a class="eye" href="ChildSheet.html" aria-label="Виж Калоян Петков"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></a></div>
+      <div class="pair"><button type="button" class="opt" aria-pressed="false">Присъства</button><button type="button" class="opt away" aria-pressed="true">✕ Отсъства</button></div>
+      <p class="meta" style="font-size: 13px;">Отбелязано от екипа в събота. Ако все пак дойде — натиснете „Присъства“.</p>
+    </div>
+    <div class="row">
+      <div class="who"><div><a class="name" href="ChildSheet.html">Николай Савов</a> <span class="meta">· 4. клас</span></div><a class="eye" href="ChildSheet.html" aria-label="Виж Николай Савов"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></a></div>
+      <div class="pair"><button type="button" class="opt here" aria-pressed="true">✓ Присъства</button><button type="button" class="opt" aria-pressed="false">Отсъства</button></div>
+    </div>
+  </section>
+
+  <section aria-label="Не се очакват днес" style="display: flex; flex-direction: column; gap: 4px; padding: 14px 16px;">
+    <p style="margin: 0; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: #5B6878;">Не се очакват днес</p>
+    <p style="margin: 0; font-size: 15px; color: #344054;"><strong style="color: #173F5F;">Мария Илиева</strong> · в пауза до 15 ноември</p>
+  </section>
+
+  <footer style="margin-top: auto; display: flex; flex-direction: column; gap: 10px; padding: 16px; border-top: 1px solid #E2E6EA; background: #FFFFFF;">
+    <div role="status" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 0 8px 0 14px; border-radius: 12px; background: #173F5F; color: #FFFFFF; font-size: 15px;">
+      <span>Записано: Дария — Присъства</span>
+      <button type="button" style="min-height: 40px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: #FFFFFF; font: inherit; font-size: 15px; font-weight: 600; text-decoration: underline;">Отмени</button>
+    </div>
+    <p class="meta">Записва се при всяко докосване. Можете да поправяте до вторник, 3 ноември, 23:59.</p>
+    <a href="History.html" style="display: flex; align-items: center; justify-content: center; min-height: 48px; border: 1.5px solid #173F5F; border-radius: 12px; background: #FFFFFF; font-size: 16px; font-weight: 600; text-decoration: none;">Готово</a>
+  </footer>
+</div>
+</body>
+</html>

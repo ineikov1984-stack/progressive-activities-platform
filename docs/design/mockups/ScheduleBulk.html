@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>График — избор на няколко занимания и почивен ден</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#173F5F}
+.meta{margin:0;font-size:14px;line-height:20px;color:#5B6878}
+.fbtn{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 14px;border:1px solid #808D99;border-radius:999px;background:#FFFFFF;font:inherit;font-size:14px;font-weight:600;color:#173F5F}
+.on{background:#173F5F;border-color:#173F5F;color:#FFFFFF}
+.col{position:relative;height:400px;border-left:1px solid #E2E6EA;background-image:linear-gradient(#E2E6EA 1px,transparent 1px);background-size:100% 80px}
+.hr{height:80px;box-sizing:border-box;padding-top:2px;font-size:12px;color:#5B6878;text-align:right;padding-right:6px}
+.ev{position:absolute;left:3px;right:3px;box-sizing:border-box;display:flex;gap:6px;padding:6px 7px;border-radius:8px;font-size:12px;line-height:15px;overflow:hidden}
+.ev input{flex:none;width:18px;height:18px;margin:0;accent-color:#173F5F}
+.ev span{display:flex;flex-direction:column}
+.picked{outline:2px solid #173F5F;outline-offset:-2px}
+.chess{background:#DCE7F3;color:#173F5F}.foot{background:#DDF0E6;color:#1F5A41}.art{background:#FBE6D6;color:#7A3A12}.ballet{background:#F2E1F0;color:#6B2A63}
+.btn{display:flex;align-items:center;justify-content:center;min-height:44px;padding:0 14px;border:1.5px solid #173F5F;border-radius:10px;background:#FFFFFF;color:#173F5F;font-size:14px;font-weight:600;text-decoration:none}
+.f{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:600;color:#173F5F}
+.in{display:flex;align-items:center;min-height:44px;box-sizing:border-box;padding:0 12px;border:1px solid #808D99;border-radius:10px;font-size:15px;font-weight:400;color:#173F5F;background:#FFFFFF}
+.day{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 10px;border-radius:999px;background:#EAF0F6;font-size:14px;font-weight:600;color:#173F5F}
+.opt{display:flex;align-items:flex-start;gap:10px;font-size:14px;color:#344054}
+.opt input{width:20px;height:20px;margin:0;accent-color:#173F5F}
+</style>
+</head>
+<body>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; display: flex; gap: 20px; padding: 24px; background: #F6F4EF; font-family: 'Onest', ui-sans-serif, system-ui, sans-serif; color: #344054;">
+
+  <main style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <h1 style="margin: 0; font-size: 26px; color: #173F5F;">График</h1>
+        <strong style="font-size: 16px; color: #173F5F;">21–27 декември 2026</strong>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button type="button" class="fbtn">Почивен ден</button>
+        <button type="button" class="fbtn on" aria-pressed="true">Избери ✓</button>
+        <button type="button" class="fbtn">+ Ново ▾</button>
+      </div>
+    </div>
+    <p class="meta">Натиснете заниманията, които искате да промените заедно. Можете да изберете и цял ден от заглавието му.</p>
+
+    <section aria-label="Седмица" style="padding: 12px 12px 16px 0; border: 1px solid #E2E6EA; border-radius: 16px; background: #FFFFFF;">
+      <div style="display: grid; grid-template-columns: 52px repeat(5, minmax(0, 1fr)); padding-bottom: 8px;">
+        <span></span>
+        <label style="display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 13px; color: #5B6878;"><input type="checkbox" style="width: 18px; height: 18px; accent-color: #173F5F;">пн <strong style="color: #173F5F;">21</strong></label>
+        <label style="display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 13px; color: #5B6878;"><input type="checkbox" style="width: 18px; height: 18px; accent-color: #173F5F;">вт <strong style="color: #173F5F;">22</strong></label>
+        <label style="display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 13px; color: #5B6878;"><input type="checkbox" style="width: 18px; height: 18px; accent-color: #173F5F;">ср <strong style="color: #173F5F;">23</strong></label>
+        <label style="display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 13px; color: #173F5F; font-weight: 700;"><input type="checkbox" checked style="width: 18px; height: 18px; accent-color: #173F5F;">чт 24</label>
+        <label style="display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 13px; color: #5B6878;"><input type="checkbox" style="width: 18px; height: 18px; accent-color: #173F5F;">пт <strong style="color: #173F5F;">25</strong></label>
+      </div>
+      <div style="display: grid; grid-template-columns: 52px repeat(5, minmax(0, 1fr));">
+        <div><div class="hr">15:00</div><div class="hr">16:00</div><div class="hr">17:00</div><div class="hr">18:00</div><div class="hr">19:00</div></div>
+        <div class="col">
+          <label class="ev chess" style="top: 82px; height: 76px;"><input type="checkbox"><span><strong>16:00 Шахмат · Гр. 1</strong>Зала „Слънце“</span></label>
+          <label class="ev chess" style="top: 202px; height: 76px;"><input type="checkbox"><span><strong>17:30 Шахмат · Гр. 2</strong>Зала „Слънце“</span></label>
+        </div>
+        <div class="col">
+          <label class="ev foot" style="top: 82px; height: 76px;"><input type="checkbox"><span><strong>16:00 Футбол · Гр. 1</strong>Двор</span></label>
+          <label class="ev art" style="top: 162px; height: 76px;"><input type="checkbox"><span><strong>17:00 Рисуване · Гр. 3</strong>Ателие</span></label>
+        </div>
+        <div class="col">
+          <label class="ev ballet picked" style="top: 122px; height: 76px;"><input type="checkbox" checked><span><strong>16:30 Балет · Гр. 2</strong>Зала 2</span></label>
+          <label class="ev chess picked" style="top: 202px; height: 76px;"><input type="checkbox" checked><span><strong>17:30 Шахмат · Гр. 2</strong>Зала „Слънце“</span></label>
+        </div>
+        <div class="col" style="background-color: #F5F8FB;">
+          <label class="ev foot picked" style="top: 82px; height: 76px;"><input type="checkbox" checked><span><strong>16:00 Футбол · Гр. 1</strong>Двор</span></label>
+          <label class="ev art picked" style="top: 162px; height: 76px;"><input type="checkbox" checked><span><strong>17:00 Рисуване · Гр. 3</strong>Ателие</span></label>
+          <label class="ev chess picked" style="top: 242px; height: 76px;"><input type="checkbox" checked><span><strong>18:00 Шахмат · Гр. 1</strong>Зала „Слънце“</span></label>
+        </div>
+        <div class="col">
+          <label class="ev ballet picked" style="top: 162px; height: 76px;"><input type="checkbox" checked><span><strong>17:00 Балет · Гр. 1</strong>Зала 2</span></label>
+        </div>
+      </div>
+    </section>
+
+    <div role="region" aria-label="Избрани занимания" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-radius: 14px; background: #173F5F; color: #FFFFFF;">
+      <span style="font-size: 15px;"><strong>Избрани 6 занимания</strong> · 64 деца · <a href="#" style="color: #FFFFFF;">Изчисти</a></span>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <a href="ScheduleNew.html" class="btn" style="border-color: #FFFFFF;">Смени залата</a>
+        <a href="Substitute.html" class="btn" style="border-color: #FFFFFF;">Назначи заместник</a>
+        <a href="#" class="btn" style="border-color: #FFFFFF;">Съобщение до родителите</a>
+        <a href="ScheduleNew.html" class="btn" style="border-color: #FFFFFF; color: #9A3B12;">Отмени избраните</a>
+      </div>
+    </div>
+  </main>
+
+  <aside role="dialog" aria-labelledby="hd" style="width: 400px; flex: none; display: flex; flex-direction: column; gap: 14px; padding: 20px; border: 1px solid #173F5F; border-radius: 16px; background: #FFFFFF; box-shadow: 0 12px 32px rgba(23,63,95,.16);">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+      <div>
+        <h2 id="hd" style="margin: 0; font-size: 20px; color: #173F5F;">Почивен ден</h2>
+        <p class="meta">Отменя всички занимания в избраните дни — за празници и ваканции.</p>
+      </div>
+      <button type="button" aria-label="Затвори" style="width: 40px; height: 40px; border: 1px solid #E2E6EA; border-radius: 10px; background: #FFFFFF; color: #173F5F; font: inherit;">✕</button>
+    </div>
+    <div class="f">Дни
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <span class="day">чт, 24 декември ✕</span>
+        <span class="day">пт, 25 декември ✕</span>
+        <span class="day">пн, 28 декември ✕</span>
+        <button type="button" class="fbtn" style="min-height: 36px;">+ Добави ден</button>
+      </div>
+    </div>
+    <div class="f">Кои занимания
+      <label class="opt"><input type="radio" name="w" checked><span>Всички</span></label>
+      <label class="opt"><input type="radio" name="w"><span>Само на избрани места или дейности</span></label>
+    </div>
+    <label class="f">Причина<span class="in">Коледни празници</span></label>
+    <label class="opt"><input type="checkbox" checked><span><strong style="color: #173F5F;">Изпрати писмо на родителите</strong><br><span class="meta">„Заниманията на 24, 25 и 28 декември няма да се проведат: Коледни празници.“</span></span></label>
+    <div style="display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; background: #F2F4F5; font-size: 14px; line-height: 20px;">
+      <strong style="color: #173F5F;">Ще се отменят 14 занимания в 9 групи</strong>
+      <span>Писмо до 96 семейства. Таксите — по правилата в „Такси, отсъствия и отказ“.</span>
+      <a href="#" style="font-weight: 600;">Виж списъка</a>
+    </div>
+    <div style="margin-top: auto; display: grid; grid-template-columns: 1fr 2fr; gap: 8px;">
+      <a href="#" class="btn">Отказ</a>
+      <a href="#" class="btn" style="background: #9A3B12; border-color: #9A3B12; color: #FFFFFF;">Отмени 14 занимания</a>
+    </div>
+  </aside>
+</div>
+</body>
+</html>

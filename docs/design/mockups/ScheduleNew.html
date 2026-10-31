@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>График — „+ Ново“, „Премести“ и „Отмени“</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#173F5F}
+.lab{margin:0 0 8px;font-size:14px;font-weight:700;color:#5B6878}
+.card{display:flex;flex-direction:column;gap:14px;padding:20px;border:1px solid #E2E6EA;border-radius:16px;background:#FFFFFF}
+.meta{margin:0;font-size:14px;line-height:20px;color:#5B6878}
+.h{margin:0;font-size:20px;color:#173F5F}
+.f{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:600;color:#173F5F}
+.in{display:flex;align-items:center;min-height:44px;box-sizing:border-box;padding:0 12px;border:1px solid #808D99;border-radius:10px;font-size:15px;font-weight:400;color:#173F5F;background:#FFFFFF}
+.ta{min-height:72px;align-items:flex-start;padding-top:10px}
+.btn{display:flex;align-items:center;justify-content:center;min-height:48px;padding:0 14px;border:1.5px solid #173F5F;border-radius:12px;background:#FFFFFF;color:#173F5F;font-size:15px;font-weight:600;text-decoration:none}
+.pri{background:#173F5F;color:#FFFFFF}
+.red{background:#9A3B12;border-color:#9A3B12;color:#FFFFFF}
+.item{display:flex;flex-direction:column;gap:2px;padding:12px 14px;border-radius:12px;text-decoration:none;color:#173F5F;font-size:15px;font-weight:600}
+.item span{font-size:13px;font-weight:400;color:#5B6878}
+.warn{display:flex;gap:8px;padding:10px 12px;border-radius:12px;background:#FFF6EC;color:#7A3A12;font-size:14px;line-height:20px}
+.opt{display:flex;align-items:flex-start;gap:10px;font-size:14px;color:#344054}
+.opt input{width:20px;height:20px;margin:0;accent-color:#173F5F}
+.sum{display:flex;flex-direction:column;gap:4px;padding:12px 14px;border-radius:12px;background:#F2F4F5;font-size:14px;line-height:20px}
+</style>
+</head>
+<body>
+<div style="width: 1280px; height: 820px; box-sizing: border-box; display: grid; grid-template-columns: 340px repeat(2, minmax(0, 1fr)); gap: 24px; padding: 28px; background: #F6F4EF; font-family: 'Onest', ui-sans-serif, system-ui, sans-serif; color: #344054;">
+
+  <div>
+    <p class="lab">1 · „+ Ново“ горе вдясно</p>
+    <div role="menu" aria-label="Ново" class="card" style="gap: 4px; padding: 8px; box-shadow: 0 12px 32px rgba(23,63,95,.16);">
+      <a role="menuitem" href="#" class="item" style="background: #EAF0F6;">Нова група<span>Отваря дейността на стъпка „Групи“ с избрания ден и час.</span></a>
+      <a role="menuitem" href="#" class="item">Допълнително занимание<span>Еднократно — например за отработване или подготовка за изява.</span></a>
+      <a role="menuitem" href="#" class="item">Запиши дете<span>Дете в група, по телефон или на място. Идва с „Записвания от екипа“.</span></a>
+    </div>
+    <p class="meta" style="margin-top: 12px;">Учителят не вижда „+ Ново“. Офисът вижда само това, за което има право.</p>
+  </div>
+
+  <div>
+    <p class="lab">2 · Премести едно занимание</p>
+    <section role="dialog" aria-labelledby="mv" class="card">
+      <div>
+        <h2 id="mv" class="h">Премести заниманието</h2>
+        <p class="meta">Шахмат · Група 2 · сряда, 18 ноември, 17:30–18:30</p>
+      </div>
+      <div style="display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px;">
+        <label class="f">Нов ден<span class="in">чт, 19 ноември</span></label>
+        <label class="f">От<span class="in">17:30</span></label>
+        <label class="f">До<span class="in">18:30</span></label>
+      </div>
+      <label class="f">Място<span class="in">Зала „Слънце“ ▾</span></label>
+      <div class="warn"><span aria-hidden="true">⚠</span><span>Зала „Слънце“ е заета 17:00–18:00 от Рисуване · Група 3.</span></div>
+      <div class="warn"><span aria-hidden="true">⚠</span><span>Мария Колева води друго занимание по това време.</span></div>
+      <label class="opt"><input type="checkbox"><span>Знам, премести въпреки това</span></label>
+      <label class="f">Причина<span class="in ta">Залата е заета за родителска среща.</span></label>
+      <label class="opt"><input type="checkbox" checked><span>Изпрати причината на родителите</span></label>
+      <div class="sum"><strong style="color: #173F5F;">Писмо до 8 семейства</strong><span>В графика ще пише „Преместено от сряда, 17:30“.</span></div>
+      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px;">
+        <a href="#" class="btn">Отказ</a>
+        <a href="#" class="btn pri">Премести</a>
+      </div>
+    </section>
+  </div>
+
+  <div>
+    <p class="lab">3 · Отмени едно занимание</p>
+    <section role="dialog" aria-labelledby="cn" class="card">
+      <div>
+        <h2 id="cn" class="h">Отмени заниманието</h2>
+        <p class="meta">Шахмат · Група 2 · сряда, 18 ноември, 17:30–18:30</p>
+      </div>
+      <label class="f">Причина<span class="in ta">Треньорът е болен, а няма свободен заместник.</span></label>
+      <label class="opt"><input type="checkbox"><span>Изпрати причината на родителите<br><span class="meta">Иначе писмото казва само, че заниманието няма да се проведе.</span></span></label>
+      <div class="sum">
+        <strong style="color: #173F5F;">Засяга 8 деца</strong>
+        <span>1 пробно посещение — родителят ще получи покана за друг ден.</span>
+        <span>Писмо до 8 семейства. Таксите — по правилата в „Такси, отсъствия и отказ“.</span>
+      </div>
+      <a href="Substitute.html" style="font-size: 14px; font-weight: 600;">Вместо това — намери заместник</a>
+      <div style="margin-top: auto; display: grid; grid-template-columns: 1fr 2fr; gap: 8px;">
+        <a href="#" class="btn">Назад</a>
+        <a href="#" class="btn red">Отмени заниманието</a>
+      </div>
+      <p class="meta" style="font-size: 13px;">Отмененото остава в графика като „Отменено“ и може да се върне, докато не е започнало.</p>
+    </section>
+  </div>
+</div>
+</body>
+</html>

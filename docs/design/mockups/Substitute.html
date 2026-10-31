@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Търся заместник</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#173F5F}a:hover{color:#0F2A40}
+.lab{margin:0;font-size:14px;line-height:20px;font-weight:700;color:#5B6878;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta{margin:0;font-size:14px;line-height:20px;color:#5B6878}
+.small{margin:0;font-size:13px;line-height:18px;color:#5B6878}
+.card{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border:1px solid #E2E6EA;border-radius:16px;background:#FFFFFF}
+.head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:28px}
+.h2{margin:0;font-size:18px;line-height:24px;font-weight:700;color:#173F5F}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;box-sizing:border-box;padding:0 18px;border:0;border-radius:12px;background:#B8561A;color:#FFFFFF;font:inherit;font-size:16px;font-weight:600;text-decoration:none;white-space:nowrap}
+.btn-navy{background:#173F5F}
+.btn2{display:flex;align-items:center;justify-content:center;min-height:44px;box-sizing:border-box;padding:0 14px;border:1.5px solid #173F5F;border-radius:12px;background:#FFFFFF;color:#173F5F;font:inherit;font-size:15px;font-weight:600;text-decoration:none;white-space:nowrap}
+.lnk{display:inline-flex;align-items:center;min-height:44px;padding:0 2px;border:0;background:none;font:inherit;font-size:14px;font-weight:600;color:#173F5F;text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
+.tag{display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;font-size:13px;font-weight:600;white-space:nowrap}
+.ok{background:#E3F1EA;color:#1F5A41}
+.warm{background:#FFF1E6;color:#8A3E10}
+.no{background:#EEF1F4;color:#4A5767}
+.navy{background:#173F5F;color:#FFFFFF}
+.av{display:grid;place-items:center;flex:none;border-radius:50%;background:#EAF0F6;color:#173F5F;font-weight:700}
+.dot{display:inline-block;flex:none;width:10px;height:10px;border-radius:3px;box-sizing:border-box}
+.chess{background:#DCE7F3;border:1px solid #173F5F}
+.sport{background:#DDF0E6;border:1px solid #1F5A41}
+.phone{position:relative;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;border:1px solid #E2E6EA;border-radius:22px;background:#F6F4EF}
+.fade{position:absolute;left:0;right:0;bottom:0;height:40px;background:linear-gradient(rgba(246,244,239,0),#F6F4EF);pointer-events:none}
+.me{display:flex;align-items:center;gap:10px;min-height:44px;padding:2px 8px 2px 2px;border-radius:12px;text-decoration:none}
+fieldset{margin:0;padding:0;border:0;min-width:0;display:flex;flex-direction:column;gap:8px}
+legend{padding:0;margin-bottom:6px;font-size:16px;line-height:22px;font-weight:700;color:#173F5F}
+.opt{display:flex;align-items:center;gap:8px;min-height:44px;box-sizing:border-box;padding:0 12px;white-space:nowrap;border:1.5px solid #C9D0D6;border-radius:12px;font-size:15px;line-height:20px;font-weight:600;color:#173F5F;background:#FFFFFF}
+.opt input{flex:none;width:20px;height:20px;margin:0;accent-color:#173F5F}
+.chip{position:relative;padding:0 14px}
+.chip input{position:absolute;opacity:0;width:1px;height:1px}
+.chip.on::before{content:"✓";margin-right:2px;font-weight:700}
+.on{border-color:#173F5F;background:#F5F8FB;box-shadow:inset 0 0 0 1px #173F5F}
+.in{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;box-sizing:border-box;padding:0 12px;border:1px solid #808D99;border-radius:10px;font-size:16px;color:#173F5F;background:#FFFFFF}
+.f{display:flex;flex-direction:column;gap:6px;font-size:15px;font-weight:700;color:#173F5F}
+.pick{display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;column-gap:12px;min-height:56px;box-sizing:border-box;padding:6px 12px;border:1.5px solid #C9D0D6;border-radius:12px;background:#FFFFFF}
+.pick input{width:22px;height:22px;margin:0;accent-color:#173F5F}
+.pick b{display:block;font-size:15px;line-height:21px;color:#173F5F}
+.pick small{display:block;font-size:13px;line-height:18px;color:#5B6878}
+.free{color:#1F5A41;font-weight:600}
+.busy{color:#8A3E10;font-weight:600}
+.off{border-style:dashed;background:#F7F8F9}
+.off b{color:#4A5767}
+.sub{margin:4px 0 0;font-size:13px;font-weight:700;letter-spacing:.04em;color:#5B6878}
+</style>
+</head>
+<body>
+<div style="width: 1440px; height: 1000px; box-sizing: border-box; display: grid; grid-template-columns: 390px 390px minmax(0, 1fr); column-gap: 24px; padding: 14px 24px; background: #F7F8F9; font-family: 'Onest', ui-sans-serif, system-ui, sans-serif; color: #344054;">
+
+  <!-- COLUMN 1 · teacher entry, after sending, the substitute -->
+  <div style="display: flex; flex-direction: column; gap: 6px; min-height: 0;">
+    <p class="lab">1 · Учителят · „Днес“ — „Няма да мога“</p>
+    <div class="phone" style="flex: none; height: 330px;">
+      <header style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px 6px;">
+        <a class="me" href="MyProfile.html" aria-label="Моят профил — Иван Петров">
+          <span aria-hidden="true" style="display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: #B8561A; color: #FFFFFF; font-weight: 700; font-size: 14px;">PA</span>
+          <span style="display: flex; flex-direction: column;"><strong style="font-size: 15px; color: #173F5F;">Иван Петров</strong><span style="font-size: 13px; color: #5B6878;">Преподавател · Школа „Звезда“</span></span>
+          <span aria-hidden="true" style="margin-left: 4px; color: #173F5F; font-weight: 700;">›</span>
+        </a>
+        <button type="button" aria-label="Меню" style="display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #E2E6EA; border-radius: 12px; background: #FFFFFF;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#173F5F" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      </header>
+      <div style="display: flex; flex-direction: column; gap: 10px; padding: 0 16px;">
+        <p style="margin: 0; display: flex; align-items: baseline; gap: 10px;"><strong style="font-size: 24px; line-height: 30px; color: #173F5F;">Днес</strong><span class="meta">понеделник, 2 ноември · 14:10</span></p>
+        <article class="card">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px;"><strong style="font-size: 18px; color: #173F5F;">16:00–17:00</strong><span class="tag no">Предстои</span></div>
+          <p style="margin: 0; font-size: 16px; font-weight: 600; color: #173F5F;">Шахмат · Група 1 · 1.–2. клас</p>
+          <p class="meta">Зала „Слънце“ · Вие сте водещ</p>
+          <a class="btn2" href="#">Няма да мога</a>
+        </article>
+        <a href="#form" style="display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0 16px; border-radius: 12px; background: #FFFFFF; border: 1px solid #E2E6EA; font-size: 15px; font-weight: 600; text-decoration: none;">Търся заместник за друг ден<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></a>
+      </div>
+    </div>
+
+    <p class="lab" style="margin-top: 6px;">3 · След „Изпрати“ — заявката е в „Днес“ на Иван</p>
+    <div class="phone" style="flex: none; gap: 10px; padding: 12px 16px;">
+      <section class="card" aria-label="Заявка за заместник — чака решение" style="border-color: #E8B48F; background: #FFF9F4; gap: 4px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;"><span class="tag warm">Чака решение</span><span class="meta">четвъртък, 12 ноември</span></div>
+        <p style="margin: 0; font-size: 16px; line-height: 22px;"><strong style="color: #173F5F;">Търсите заместник</strong> · Шахмат · Група 1</p>
+        <p class="small">Докато няма заместник, заниманието е ваше.</p>
+        <button type="button" class="lnk" style="align-self: flex-start;">Отмени заявката</button>
+      </section>
+      <section class="card" aria-label="Заявка за заместник — има заместник" style="gap: 4px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;"><span class="tag ok">✓ Има заместник</span><span class="meta">четвъртък, 12 ноември</span></div>
+        <p style="margin: 0; font-size: 16px; line-height: 22px;"><strong style="color: #173F5F;">Мария Колева ще ви замести</strong></p>
+        <p class="small">Назначи Елена Димитрова · получихте имейл</p>
+      </section>
+    </div>
+
+    <p class="lab" style="margin-top: 6px;">5 · Заместникът · „Днес“ на Мария, 12 ноември</p>
+    <div class="phone" style="flex: 1; min-height: 0; gap: 8px; padding: 10px 16px;">
+      <p style="margin: 0; display: flex; align-items: baseline; gap: 10px;"><strong style="font-size: 24px; line-height: 30px; color: #173F5F;">Днес</strong><span class="meta">четвъртък, 12 ноември</span></p>
+      <article class="card" style="border-color: #E8B48F; box-shadow: inset 0 0 0 1px #E8B48F; gap: 6px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;"><strong style="font-size: 18px; color: #173F5F;">16:00–17:00</strong><span class="tag warm">Замествате</span></div>
+        <p style="margin: 0; font-size: 16px; font-weight: 600; color: #173F5F;">Замествате Иван Петров</p>
+        <p class="meta" style="color: #344054;">Шахмат · Група 1 · 1.–2. клас · Зала „Слънце“</p>
+        <a class="btn btn-navy" href="MarkA.html">Отбележи присъствията</a>
+        <p class="small">Групата е ваша до 13 ноември, 23:59 — после изчезва сама.</p>
+      </article>
+    </div>
+  </div>
+
+  <!-- COLUMN 2 · the form -->
+  <div style="display: flex; flex-direction: column; gap: 6px; min-height: 0;">
+    <p class="lab">2 · „Търся заместник“ — бутонът е долу</p>
+    <div id="form" class="phone" style="flex: 1; min-height: 0;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 56px; padding: 0 8px 0 16px; background: #FFFFFF; border-bottom: 1px solid #E2E6EA;">
+        <h1 style="margin: 0; font-size: 20px; line-height: 26px; color: #173F5F;">Търся заместник</h1>
+        <button type="button" aria-label="Затвори" style="width: 44px; height: 44px; border: 0; border-radius: 10px; background: transparent; color: #173F5F; font: inherit; font-size: 18px;">✕</button>
+      </div>
+      <form style="display: flex; flex-direction: column; gap: 16px; padding: 12px 16px 90px;">
+        <p class="meta" style="margin-bottom: -6px;">Собственикът ще избере кой ще ви замести.</p>
+
+        <fieldset>
+          <legend>Кога няма да можете?</legend>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <label class="opt on"><input type="radio" name="when" checked>Един ден</label>
+            <label class="opt"><input type="radio" name="when">Няколко дни</label>
+          </div>
+          <label class="f" style="font-weight: 600; font-size: 14px;">Ден<span class="in">Четвъртък, 12 ноември <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16v16H4z"/><path d="M8 3v4M16 3v4M4 10h16"/></svg></span></label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Кои занимания</legend>
+          <label class="pick on"><input type="checkbox" checked><span><b>16:00–17:00 · Шахмат · Група 1</b><small>Зала „Слънце“ · вие сте водещ</small></span><span></span></label>
+          <p class="small" style="margin-top: -2px;">Отметнати са всичките ви занимания в този ден.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Причина</legend>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <label class="opt chip"><input type="radio" name="why">Отпуск</label>
+            <label class="opt chip on"><input type="radio" name="why" checked>Лични причини</label>
+            <label class="opt chip"><input type="radio" name="why">Друго</label>
+          </div>
+          <label class="f" style="font-weight: 600; font-size: 14px; margin-top: 4px;">Бележка за собственика (по избор)
+            <span class="in" style="align-items: flex-start; min-height: 56px; padding-top: 10px;">Ще бъда извън града.</span>
+          </label>
+          <p class="small">Не пишете здравни подробности.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Предлагам колега (по избор)</legend>
+          <label class="pick on" style="min-height: 52px;"><input type="radio" name="who" checked><span><b>Мария Колева</b><small>Води Шахмат · Група 2</small></span><span></span></label>
+          <label class="pick" style="min-height: 52px;"><input type="radio" name="who"><span><b>Петър Стоянов</b><small>Води Шахмат · Група 3</small></span><span></span></label>
+          <label class="pick" style="min-height: 48px;"><input type="radio" name="who"><span><b>Нямам предложение</b></span><span></span></label>
+          <p class="small">Само преподавателите на Шахмат. Кой ще замества, решава собственикът.</p>
+        </fieldset>
+      </form>
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 16px; background: #FFFFFF; border-top: 1px solid #E2E6EA;">
+        <button type="button" class="btn" style="width: 100%;">Изпрати на собственика</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- COLUMN 3 · owner -->
+  <div style="display: flex; flex-direction: column; gap: 6px; min-height: 0;">
+    <p class="lab">4 · Собственикът · компютър (на телефон панелът е на цял екран)</p>
+    <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 14px 18px; border: 1px solid #E2E6EA; border-radius: 16px; background: #F6F4EF; overflow: hidden;">
+      <section aria-labelledby="tasks" style="display: flex; flex-direction: column; gap: 8px;">
+        <h2 id="tasks" class="h2">Какво ви чака</h2>
+        <a href="#assign" class="card" aria-current="true" style="flex-direction: row; align-items: center; gap: 12px; padding: 10px 14px; text-decoration: none; border-color: #173F5F; box-shadow: inset 0 0 0 1px #173F5F;">
+          <span class="av" aria-hidden="true" style="width: 40px; height: 40px; font-size: 14px;">ИП</span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column;"><strong style="font-size: 16px; color: #173F5F;">Иван Петров търси заместник</strong><span class="meta">Четвъртък, 12 ноември · Шахмат · Група 1</span></span>
+          <span class="tag no">след 10 дни</span>
+        </a>
+        <a href="#" class="card" style="flex-direction: row; align-items: center; gap: 12px; padding: 8px 14px; min-height: 48px; text-decoration: none;">
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column;"><strong style="font-size: 15px; color: #173F5F;">2 нови заявки чакат решение</strong><span class="small">Одобрете, поставете в чакащи или откажете</span></span>
+          <span aria-hidden="true" style="color: #173F5F; font-weight: 700;">›</span>
+        </a>
+      </section>
+
+      <section id="assign" class="card" aria-labelledby="assign-title" style="gap: 10px; padding: 14px 18px;">
+        <div class="head">
+          <h2 id="assign-title" class="h2" style="font-size: 20px;">Назначи заместник</h2>
+          <button type="button" aria-label="Затвори" style="width: 44px; height: 44px; border: 1px solid #E2E6EA; border-radius: 10px; background: #FFFFFF; color: #173F5F; font: inherit;">✕</button>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 3px; padding: 10px 14px; border-radius: 12px; background: #F2F4F5;">
+          <p style="margin: 0; font-size: 15px; line-height: 22px; color: #344054;"><strong style="color: #173F5F;">Иван Петров</strong> няма да може · изпратено днес, 14:12</p>
+          <p style="margin: 0; display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: #173F5F;"><span class="dot chess" aria-hidden="true"></span>Шахмат · Група 1 · 1.–2. клас</p>
+          <p class="meta" style="color: #344054;">Четвъртък, 12 ноември · 16:00–17:00 · Зала „Слънце“</p>
+          <p class="meta">Причина: лични причини · „Ще бъда извън града.“</p>
+        </div>
+
+        <fieldset style="gap: 6px;">
+          <legend style="margin-bottom: 2px;">Кой ще замести</legend>
+          <p class="small">Свободен ли е — по графика на 12 ноември, 16:00–17:00.</p>
+          <p class="sub">ПРЕПОДАВАТЕЛИ НА ШАХМАТ</p>
+          <label class="pick on"><input type="radio" name="sub" checked><span><b>Мария Колева</b><small class="free">✓ Свободна · води Група 2</small></span><span class="tag warm">Предлага Иван</span></label>
+          <label class="pick off" aria-disabled="true"><input type="radio" name="sub" disabled><span><b>Петър Стоянов</b><small class="busy">✕ Зает: <span class="dot sport" aria-hidden="true" style="vertical-align: -1px;"></span> Баскетбол · Начинаещи, 15:30–17:00</small></span><span></span></label>
+          <label class="pick"><input type="radio" name="sub"><span><b>Деси Маринова</b><small><span class="free">✓ Свободна</span> · без достъп — присъствията отбелязвате вие</small></span><span></span></label>
+          <button type="button" class="lnk" aria-expanded="false" style="align-self: flex-start; text-decoration: none;">Други от екипа (2)&nbsp;<span aria-hidden="true">▾</span></button>
+        </fieldset>
+
+        <div style="display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; border-radius: 12px; background: #FFF9F4; box-shadow: inset 3px 0 0 #B8561A;">
+          <p style="margin: 0; font-size: 14px; line-height: 20px; color: #344054;"><strong style="color: #173F5F;">Мария ще вижда</strong> Шахмат · Група 1 само на 12 ноември — децата, име и клас — и ще отбелязва присъствията до 13 ноември, 23:59. После групата изчезва сама.</p>
+          <p class="small">Иван и Мария получават имейл. Записва се в историята.</p>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+          <button type="button" class="btn">Назначи Мария Колева</button>
+          <button type="button" class="btn2" style="min-height: 48px;">Откажи заявката</button>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Учителят обогатява дейността</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#173F5F}a:hover{color:#0F2A40}
+.lab{margin:0;font-size:14px;line-height:20px;font-weight:700;color:#5B6878;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta{margin:0;font-size:14px;line-height:20px;color:#5B6878}
+.small{margin:0;font-size:13px;line-height:18px;color:#5B6878}
+.card{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border:1px solid #E2E6EA;border-radius:16px;background:#FFFFFF}
+.head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:28px}
+.h2{margin:0;font-size:18px;line-height:24px;font-weight:700;color:#173F5F}
+.h3{margin:0;font-size:16px;line-height:22px;font-weight:700;color:#173F5F}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;box-sizing:border-box;padding:0 18px;border:0;border-radius:12px;background:#B8561A;color:#FFFFFF;font:inherit;font-size:16px;font-weight:600;text-decoration:none;white-space:nowrap}
+.btn-navy{background:#173F5F}
+.btn2{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;box-sizing:border-box;padding:0 14px;border:1.5px solid #173F5F;border-radius:12px;background:#FFFFFF;color:#173F5F;font:inherit;font-size:15px;font-weight:600;text-decoration:none;white-space:nowrap}
+.lnk{display:inline-flex;align-items:center;min-height:44px;padding:0 2px;border:0;background:none;font:inherit;font-size:14px;font-weight:600;color:#173F5F;text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
+.tag{display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;font-size:13px;font-weight:600;white-space:nowrap}
+.ok{background:#E3F1EA;color:#1F5A41}
+.warm{background:#FFF1E6;color:#8A3E10}
+.no{background:#EEF1F4;color:#4A5767}
+.navy{background:#173F5F;color:#FFFFFF}
+.av{display:grid;place-items:center;flex:none;border-radius:50%;background:#EAF0F6;color:#173F5F;font-weight:700}
+.dot{display:inline-block;flex:none;width:10px;height:10px;border-radius:3px;box-sizing:border-box}
+.chess{background:#DCE7F3;border:1px solid #173F5F}
+.logic{background:#DDF0E6;border:1px solid #1F5A41}
+.phone{position:relative;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;border:1px solid #E2E6EA;border-radius:22px;background:#F6F4EF}
+.fade{position:absolute;left:0;right:0;bottom:0;height:40px;background:linear-gradient(rgba(246,244,239,0),#F6F4EF);pointer-events:none}
+.me{display:flex;align-items:center;gap:10px;min-height:44px;padding:2px 8px 2px 2px;border-radius:12px;text-decoration:none}
+fieldset{margin:0;padding:0;border:0;min-width:0;display:flex;flex-direction:column;gap:8px}
+legend{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:0;margin-bottom:6px;font-size:16px;line-height:22px;font-weight:700;color:#173F5F}
+.in{display:flex;align-items:center;gap:8px;min-height:44px;box-sizing:border-box;padding:0 12px;border:1px solid #808D99;border-radius:10px;font-size:15px;line-height:21px;font-weight:400;color:#173F5F;background:#FFFFFF}
+.ta{align-items:flex-start;padding:10px 12px}
+.f{display:flex;flex-direction:column;gap:4px;font-size:14px;font-weight:600;color:#173F5F}
+.pick{display:grid;grid-template-columns:24px minmax(0,1fr);align-items:center;column-gap:12px;min-height:52px;box-sizing:border-box;padding:6px 12px;border:1.5px solid #C9D0D6;border-radius:12px;background:#FFFFFF}
+.pick input{width:24px;height:24px;margin:0;accent-color:#173F5F}
+.pick b{display:block;font-size:15px;line-height:21px;color:#173F5F}
+.on{border-color:#173F5F;background:#F5F8FB;box-shadow:inset 0 0 0 1px #173F5F}
+.sub{margin:4px 0 0;font-size:13px;font-weight:700;letter-spacing:.04em;color:#5B6878}
+/* photo placeholders: grey with an icon, never real photos */
+.ph{position:relative;display:grid;place-items:center;flex:none;box-sizing:border-box;border-radius:8px;background:#DDE2E7;color:#5B6878}
+.ph svg{width:22px;height:22px}
+.ph-new{border:2.5px solid #B8561A;background:#E6E2DD}
+.ph-new .tag{position:absolute;top:4px;left:4px;height:20px;padding:0 7px;font-size:12px}
+.thumbs{display:flex;gap:6px}
+/* proposed text: colour plus underline, and the block says "ново" — not by colour alone */
+mark{background:#FFE9D6;color:#344054;border-bottom:2px solid #B8561A;padding:0 2px}
+.was{padding:10px 12px;border-radius:10px;background:#F2F4F5;font-size:14px;line-height:21px;color:#4A5767}
+.will{padding:10px 12px;border:1.5px solid #173F5F;border-radius:10px;background:#FFFFFF;font-size:14px;line-height:21px;color:#344054}
+.pill{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:700;letter-spacing:.03em;white-space:nowrap}
+.p-was{background:#E2E6EA;color:#4A5767}
+.p-will{background:#173F5F;color:#FFFFFF}
+.cmp{display:flex;flex-direction:column;gap:6px}
+.cmp-h{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:30px}
+.line{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:10px;min-height:28px;border-bottom:1px solid #E2E6EA;font-size:14px;line-height:20px}
+.line:last-child{border-bottom:0}
+.line b{font-weight:600;color:#173F5F}
+.line span{color:#5B6878}
+.yes{display:flex;align-items:flex-start;gap:10px;font-size:14px;line-height:20px;color:#344054}
+.yes::before{content:"✓";flex:none;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;font-size:12px;font-weight:700;background:#E3F1EA;color:#1F5A41}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:52px;box-sizing:border-box;padding:6px 14px;border:1px solid #E2E6EA;border-radius:12px;background:#FFFFFF;text-decoration:none}
+.row b{display:block;font-size:15px;line-height:21px;color:#173F5F}
+.row small{display:block;font-size:13px;line-height:18px;color:#5B6878}
+</style>
+</head>
+<body>
+<div style="width: 1440px; height: 1100px; box-sizing: border-box; display: grid; grid-template-columns: 390px 390px minmax(0, 1fr); column-gap: 24px; padding: 14px 24px; background: #F7F8F9; font-family: 'Onest', ui-sans-serif, system-ui, sans-serif; color: #344054;">
+
+  <!-- COLUMN 1 · teacher: my activities, the activity, after sending -->
+  <div style="display: flex; flex-direction: column; gap: 6px; min-height: 0;">
+    <p class="lab">1 · Учителят · „Начало“ — „Моите дейности“</p>
+    <div class="phone" style="flex: none; height: 226px;">
+      <header style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px 4px;">
+        <a class="me" href="MyProfile.html" aria-label="Моят профил — Иван Петров">
+          <span aria-hidden="true" style="display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: #B8561A; color: #FFFFFF; font-weight: 700; font-size: 14px;">PA</span>
+          <span style="display: flex; flex-direction: column;"><strong style="font-size: 15px; color: #173F5F;">Иван Петров</strong><span style="font-size: 13px; color: #5B6878;">Преподавател · Школа „Звезда“</span></span>
+          <span aria-hidden="true" style="margin-left: 4px; color: #173F5F; font-weight: 700;">›</span>
+        </a>
+        <button type="button" aria-label="Меню" style="display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #E2E6EA; border-radius: 12px; background: #FFFFFF;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#173F5F" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      </header>
+      <section aria-labelledby="mine" style="display: flex; flex-direction: column; gap: 8px; padding: 0 16px;">
+        <div class="head"><h2 id="mine" class="h2">Моите дейности</h2><span class="meta">2 дейности</span></div>
+        <a href="#activity" class="row" aria-current="true" style="border-color: #173F5F; box-shadow: inset 0 0 0 1px #173F5F;">
+          <span><b style="display: flex; align-items: center; gap: 8px;"><span class="dot chess" aria-hidden="true"></span>Шахмат</b><small>Водещ · Група 1 · Помощник · Група 2</small></span>
+          <span aria-hidden="true" style="color: #173F5F; font-weight: 700;">›</span>
+        </a>
+        <a href="#" class="row">
+          <span><b style="display: flex; align-items: center; gap: 8px;"><span class="dot logic" aria-hidden="true"></span>Логически игри</b><small>Водещ · Група 4</small></span>
+          <span aria-hidden="true" style="color: #173F5F; font-weight: 700;">›</span>
+        </a>
+      </section>
+      <span class="fade" aria-hidden="true"></span>
+    </div>
+
+    <p class="lab" style="margin-top: 6px;">2 · Дейността — какво виждат родителите</p>
+    <div id="activity" class="phone" style="flex: none; height: 374px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 10px 0;">
+        <a href="#" style="display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 6px; font-size: 15px; font-weight: 600; text-decoration: none;"><span aria-hidden="true">‹</span>Начало</a>
+        <a href="#" class="lnk" style="font-size: 14px;">Виж като родител</a>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px; padding: 0 16px;">
+        <div>
+          <h1 style="margin: 0; font-size: 24px; line-height: 30px; color: #173F5F;">Шахмат</h1>
+          <p class="meta">Публикувана · Водещ · Група 1</p>
+        </div>
+        <section class="card" aria-labelledby="onpage" style="gap: 2px; padding: 10px 14px;">
+          <h2 id="onpage" class="h3" style="margin-bottom: 2px;">На страницата за родителите</h2>
+          <div class="line"><b>Снимки в галерията</b><span>4</span></div>
+          <div class="line"><b>За дейността</b><span>има текст</span></div>
+          <div class="line"><b>Как протичат заниманията</b><span class="tag warm" style="height: 22px; font-size: 12px;">няма текст</span></div>
+          <div class="line"><b>Въпроси и отговори</b><span>2</span></div>
+          <div class="line"><b>Вашият профил</b><span class="tag warm" style="height: 22px; font-size: 12px;">без снимка</span></div>
+        </section>
+        <a class="btn" href="#form">Предложи промяна</a>
+      </div>
+    </div>
+
+    <p class="lab" style="margin-top: 6px;">5 · След „Изпрати“ — и после известието</p>
+    <div class="phone" style="flex: 1; min-height: 0; gap: 8px; padding: 10px 16px;">
+      <section class="card" aria-label="Предложение — чака преглед" style="border-color: #E8B48F; background: #FFF9F4; gap: 2px; padding: 10px 14px 4px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;"><span class="tag warm">Чака преглед</span><span class="meta">днес, 18:40</span></div>
+        <p style="margin: 2px 0 0; font-size: 16px; line-height: 22px;"><strong style="color: #173F5F;">Шахмат</strong> · 2 снимки, текст, 1 въпрос</p>
+        <p class="small">Родителите виждат старото до одобрението.</p>
+        <div style="display: flex; gap: 14px;"><button type="button" class="lnk">Промени</button><button type="button" class="lnk">Оттегли</button></div>
+      </section>
+      <p class="sub" style="margin: 0;">ПОСЛЕ — ЕДНО ОТ ДВЕТЕ</p>
+      <section class="card" aria-label="Одобрено" style="gap: 2px; padding: 10px 14px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;"><span class="tag ok">✓ Одобрено и публикувано</span><span class="meta">1 ноември</span></div>
+        <p class="small" style="margin-top: 2px;">Елена Димитрова поправи 1 подпис</p>
+      </section>
+      <section class="card" aria-label="Върнато с бележка" style="gap: 0; padding: 10px 14px 4px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;"><span class="tag no">Върнато с бележка</span><span class="meta">1 ноември</span></div>
+        <p style="margin: 4px 0 0; font-size: 15px; line-height: 21px; color: #173F5F;">„Снимка 2 — моля, без лицата на децата.“</p>
+        <button type="button" class="lnk" style="align-self: flex-start;">Поправи и изпрати пак</button>
+      </section>
+    </div>
+  </div>
+
+  <!-- COLUMN 2 · the proposal form -->
+  <div style="display: flex; flex-direction: column; gap: 6px; min-height: 0;">
+    <p class="lab">3 · „Предложи промяна“ — бутонът е долу</p>
+    <div id="form" class="phone" style="flex: 1; min-height: 0;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 56px; padding: 0 8px 0 16px; background: #FFFFFF; border-bottom: 1px solid #E2E6EA;">
+        <span style="display: flex; flex-direction: column;">
+          <h1 style="margin: 0; font-size: 20px; line-height: 24px; color: #173F5F;">Предложение · Шахмат</h1>
+          <span class="small">Чернова · запазено</span>
+        </span>
+        <button type="button" aria-label="Затвори" style="width: 44px; height: 44px; border: 0; border-radius: 10px; background: transparent; color: #173F5F; font: inherit; font-size: 18px;">✕</button>
+      </div>
+      <form style="display: flex; flex-direction: column; gap: 16px; padding: 12px 16px 120px;">
+        <p class="meta" style="margin-bottom: -6px;">Родителите виждат промените след одобрение.</p>
+
+        <fieldset>
+          <legend>Снимки в галерията<span class="tag warm">+2 нови</span></legend>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="thumbs" role="img" aria-label="4 снимки, които вече са на страницата">
+              <span class="ph" style="width: 44px; height: 34px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: 16px; height: 16px;"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg></span>
+              <span class="ph" style="width: 44px; height: 34px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: 16px; height: 16px;"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg></span>
+              <span class="ph" style="width: 44px; height: 34px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: 16px; height: 16px;"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg></span>
+              <span class="ph" style="width: 44px; height: 34px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: 16px; height: 16px;"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg></span>
+            </div>
+            <span class="small">вече са на страницата</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 96px minmax(0, 1fr); column-gap: 12px; align-items: start; padding: 6px 10px 10px; border: 1px solid #E2E6EA; border-radius: 12px; background: #FFFFFF;">
+            <span class="ph ph-new" role="img" aria-label="Нова снимка 1" style="width: 96px; height: 72px; margin-top: 8px;"><span class="tag warm">Нова</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg></span>
+            <span style="display: flex; flex-direction: column; min-width: 0;">
+              <span style="display: flex; align-items: center; justify-content: space-between; gap: 8px;"><span class="f">Какво се вижда</span><button type="button" class="lnk">Махни</button></span>
+              <span id="cap1" class="in" role="textbox" aria-label="Какво се вижда" style="min-height: 44px; font-size: 14px; line-height: 19px; padding: 4px 10px;">Ръце над дъската</span>
+            </span>
+          </div>
+          <div style="display: grid; grid-template-columns: 96px minmax(0, 1fr); column-gap: 12px; align-items: start; padding: 6px 10px 10px; border: 1px solid #E2E6EA; border-radius: 12px; background: #FFFFFF;">
+            <span class="ph ph-new" role="img" aria-label="Нова снимка 2" style="width: 96px; height: 72px; margin-top: 8px;"><span class="tag warm">Нова</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg></span>
+            <span style="display: flex; flex-direction: column; min-width: 0;">
+              <span style="display: flex; align-items: center; justify-content: space-between; gap: 8px;"><span class="f">Какво се вижда</span><button type="button" class="lnk">Махни</button></span>
+              <span id="cap2" class="in" role="textbox" aria-label="Какво се вижда" style="min-height: 44px; font-size: 14px; line-height: 19px; padding: 4px 10px;">Новата дъска в залата</span>
+            </span>
+          </div>
+
+          <button type="button" class="btn2" style="min-height: 48px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Добави снимка
+          </button>
+          <p class="small" style="margin-top: -4px;">Снимка или от телефона · JPG, PNG, WebP · до 5 MB</p>
+
+          <div style="display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; background: #FFF9F4; box-shadow: inset 3px 0 0 #B8561A;">
+            <p style="margin: 0; font-size: 14px; line-height: 20px; color: #344054;"><strong style="color: #173F5F;">Без лица на деца</strong>, ако родителите им не са съгласни. Без имена на деца в подписа.</p>
+            <label class="pick on" style="min-height: 48px; padding: 4px 10px;"><input type="checkbox" checked><b style="font-size: 14px; line-height: 19px;">Имам съгласие на родителите за децата на снимките</b></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>За дейността<span class="tag warm">променено</span></legend>
+          <span class="in ta" style="min-height: 92px; font-size: 14px; line-height: 21px; color: #344054;">Учим шахмат чрез игра: задача на голямата дъска, после партии по двойки. Веднъж в месеца правим малък турнир в клуба.</span>
+        </fieldset>
+
+        <fieldset>
+          <legend>Въпроси и отговори<span class="tag warm">+1</span></legend>
+          <p class="small">Има: „Нужен ли е опит?“, „Колко деца има в група?“</p>
+          <span class="in" style="font-size: 14px;">Трябва ли детето да има своя дъска?</span>
+          <span class="in ta" style="min-height: 66px; font-size: 14px; line-height: 21px; color: #344054;">Не. В клуба има дъски за всички. Вкъщи е полезна, но не е задължителна.</span>
+        </fieldset>
+
+        <a href="#" class="row"><span><b>Как протичат заниманията</b><small>Няма текст · добави</small></span><span aria-hidden="true" style="color: #173F5F; font-weight: 700;">›</span></a>
+        <a href="#" class="row"><span><b>Вашият профил на страницата</b><small>Снимка, „За мен“, квалификации</small></span><span aria-hidden="true" style="color: #173F5F; font-weight: 700;">›</span></a>
+      </form>
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; gap: 6px; padding: 10px 16px 12px; background: #FFFFFF; border-top: 1px solid #E2E6EA;">
+        <p class="small" style="text-align: center;">2 снимки · „За дейността“ · 1 въпрос</p>
+        <button type="button" class="btn" style="width: 100%;">Изпрати за преглед</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- COLUMN 3 · owner -->
+  <div style="display: flex; flex-direction: column; gap: 6px; min-height: 0;">
+    <p class="lab">4 · Собственикът · компютър — панел вдясно (на телефон — на цял екран)</p>
+    <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 14px 18px; border: 1px solid #E2E6EA; border-radius: 16px; background: #F6F4EF; overflow: hidden;">
+      <section aria-labelledby="tasks" style="display: flex; flex-direction: column; gap: 8px;">
+        <h2 id="tasks" class="h2">Какво ви чака</h2>
+        <a href="#review" class="card" aria-current="true" style="flex-direction: row; align-items: center; gap: 12px; padding: 8px 14px; text-decoration: none; border-color: #173F5F; box-shadow: inset 0 0 0 1px #173F5F;">
+          <span class="av" aria-hidden="true" style="width: 40px; height: 40px; font-size: 14px;">ИП</span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column;"><strong style="font-size: 16px; color: #173F5F;">Иван Петров предлага промени</strong><span class="meta">Шахмат · 2 снимки, „За дейността“, 1 въпрос</span></span>
+          <span class="tag no">днес</span>
+        </a>
+      </section>
+
+      <section id="review" class="card" aria-labelledby="review-title" style="flex: 1; min-height: 0; gap: 10px; padding: 12px 18px 14px; overflow: hidden;">
+        <div class="head">
+          <h2 id="review-title" class="h2" style="font-size: 20px;">Промени по „Шахмат“</h2>
+          <span style="display: flex; align-items: center; gap: 12px;"><a class="lnk" href="#">История</a>
+          <button type="button" aria-label="Затвори" style="width: 44px; height: 44px; border: 1px solid #E2E6EA; border-radius: 10px; background: #FFFFFF; color: #173F5F; font: inherit;">✕</button></span>
+        </div>
+        <p style="margin: -6px 0 0; padding: 8px 14px; border-radius: 12px; background: #F2F4F5; font-size: 15px; line-height: 22px;"><strong style="color: #173F5F;">Иван Петров</strong> · водещ на Група 1 · изпратено днес, 18:40</p>
+
+        <div class="cmp" aria-labelledby="c-photos">
+          <div class="cmp-h"><h3 id="c-photos" class="h3">Снимки в галерията</h3><span class="tag warm">+2 нови</span></div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span class="pill p-was">СЕГА</span>
+            <div class="thumbs" role="img" aria-label="4 снимки на страницата сега">
+              <span class="ph" style="width: 52px; height: 40px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: 18px; height: 18px;"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg></span>
+              <span class="ph" style="width: 52px; height: 40px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: 18px; height: 18px;"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg></span>
+              <span class="ph" style="width: 52px; height: 40px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: 18px; height: 18px;"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg></span>
+              <span class="ph" style="width: 52px; height: 40px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: 18px; height: 18px;"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg></span>
+            </div>
+            <span class="small">остават</span>
+          </div>
+          <div style="display: flex; align-items: flex-start; gap: 10px;">
+            <span class="pill p-will" style="margin-top: 2px;">ПРЕДЛОЖЕНО</span>
+            <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; flex: 1; min-width: 0;">
+              <figure style="margin: 0; display: flex; flex-direction: column; gap: 4px;">
+                <span class="ph ph-new" role="img" aria-label="Нова снимка 1" style="width: 100%; height: 76px;"><span class="tag warm">Нова</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg></span>
+                <figcaption style="font-size: 14px; line-height: 19px; color: #173F5F;">Ръце над дъската</figcaption>
+                <span style="display: flex; gap: 14px; margin-top: -6px;"><button type="button" class="lnk">Поправи</button><button type="button" class="lnk">Махни</button></span>
+              </figure>
+              <figure style="margin: 0; display: flex; flex-direction: column; gap: 4px;">
+                <span class="ph ph-new" role="img" aria-label="Нова снимка 2" style="width: 100%; height: 76px;"><span class="tag warm">Нова</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg></span>
+                <figcaption style="font-size: 14px; line-height: 19px; color: #173F5F;">Новата дъска в залата</figcaption>
+                <span style="display: flex; gap: 14px; margin-top: -6px;"><button type="button" class="lnk">Поправи</button><button type="button" class="lnk">Махни</button></span>
+              </figure>
+            </div>
+          </div>
+          <p class="yes">Иван потвърди съгласието на родителите за децата на снимките.</p>
+        </div>
+
+        <div class="cmp" aria-labelledby="c-about" style="padding-top: 8px; border-top: 1px solid #E2E6EA;">
+          <div class="cmp-h"><h3 id="c-about" class="h3">За дейността</h3><button type="button" class="lnk">Поправи текста</button></div>
+          <div class="was"><span class="pill p-was" style="margin-right: 6px;">СЕГА</span>Учим шахмат чрез игра: задача на голямата дъска, после партии по двойки.</div>
+          <div class="will"><span class="pill p-will" style="margin-right: 6px;">ПРЕДЛОЖЕНО</span>Учим шахмат чрез игра: задача на голямата дъска, после партии по двойки. <mark>Веднъж в месеца правим малък турнир в клуба.</mark></div>
+        </div>
+
+        <div class="cmp" aria-labelledby="c-faq" style="padding-top: 8px; border-top: 1px solid #E2E6EA;">
+          <div class="cmp-h"><h3 id="c-faq" class="h3">Въпроси и отговори</h3><span class="tag warm">+1 нов</span></div>
+          <div class="was" style="padding: 6px 12px;"><span class="pill p-was" style="margin-right: 6px;">СЕГА</span>„Нужен ли е опит?“ · „Колко деца има в група?“</div>
+          <div class="will"><span class="pill p-will" style="margin-right: 6px;">ПРЕДЛОЖЕНО</span><mark><strong style="color: #173F5F;">Трябва ли детето да има своя дъска?</strong></mark><br><mark>Не. В клуба има дъски за всички. Вкъщи е полезна, но не е задължителна.</mark></div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 6px; margin-top: auto; padding-top: 8px; border-top: 1px solid #E2E6EA;">
+          <div style="display: grid; grid-template-columns: 3fr 2fr; gap: 10px;">
+            <button type="button" class="btn">Одобри и публикувай</button>
+            <button type="button" class="btn2" style="min-height: 48px;">Върни с бележка</button>
+          </div>
+          <p class="small">Докато не решите, родителите виждат „Сега“. Иван получава известие и имейл.</p>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+</body>
+</html>

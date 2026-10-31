@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Приеми плащане</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#173F5F}a:hover{color:#0F2A40}
+.meta{margin:0;font-size:14px;line-height:20px;color:#5B6878}
+.cap{margin:0;font-size:14px;font-weight:700;color:#173F5F}
+.fee{display:flex;align-items:center;gap:12px;min-height:52px;padding:0 14px;border:1.5px solid #C9D0D6;border-radius:12px;font-size:15px}
+.fee input{width:22px;height:22px;margin:0;accent-color:#173F5F}
+.fee-on{border-color:#173F5F;background:#F5F8FB}
+.way{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:64px;border:1.5px solid #808D99;border-radius:12px;background:#FFFFFF;font:inherit;font-size:16px;font-weight:600;color:#173F5F}
+.way-on{border-color:#173F5F;background:#173F5F;color:#FFFFFF}
+.input{display:flex;align-items:center;height:48px;box-sizing:border-box;padding:0 14px;border:1px solid #808D99;border-radius:10px;font-size:18px;font-weight:600;color:#173F5F;background:#FFFFFF}
+</style>
+</head>
+<body>
+<div style="width: 560px; height: 1060px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; padding: 24px; background: #F6F4EF; font-family: 'Onest', ui-sans-serif, system-ui, sans-serif; color: #344054;">
+  <section role="dialog" aria-labelledby="pay-title" style="display: flex; flex-direction: column; gap: 16px; padding: 22px; border-radius: 18px; background: #FFFFFF; border: 1px solid #E2E6EA;">
+    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;">
+      <div>
+        <h2 id="pay-title" style="margin: 0; font-size: 22px; color: #173F5F;">Приеми плащане</h2>
+        <p class="meta">Семейство Петкови · плаща Елена Петкова</p>
+      </div>
+      <a href="ChildPanel.html" aria-label="Затвори" style="display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #E2E6EA; border-radius: 12px; text-decoration: none;">✕</a>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <p class="cap">1. За какво плащат</p>
+      <label class="fee fee-on"><input type="checkbox" checked><span style="flex: 1;">Октомври · Шахмат · Калоян <span style="color: #8A3E10; font-weight: 600;">· просрочено</span></span><strong style="color: #173F5F;">60,00 €</strong></label>
+      <label class="fee fee-on"><input type="checkbox" checked><span style="flex: 1;">Ноември · Шахмат · Калоян</span><strong style="color: #173F5F;">60,00 €</strong></label>
+      <label class="fee"><input type="checkbox"><span style="flex: 1;">Ноември · Балет · Ива</span><strong style="color: #173F5F;">70,00 €</strong></label>
+      <label class="fee" style="border-style: dashed;"><input type="checkbox" checked><span style="flex: 1;">Вземи от портфейла</span><strong style="color: #1F5A41;">− 10,00 €</strong></label>
+      <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 4px 2px;"><span style="font-size: 16px;">За плащане сега</span><strong style="font-size: 24px; color: #173F5F;">110,00 €</strong></div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <p class="cap">2. Как плащат</p>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;">
+        <button type="button" class="way way-on" aria-pressed="true">В брой</button>
+        <button type="button" class="way" aria-pressed="false">По банка</button>
+        <button type="button" class="way" aria-pressed="false" disabled style="opacity: .55;">С карта<span style="font-size: 12px; font-weight: 400;">по-късно</span></button>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: end;">
+        <label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: #173F5F;">Получени<span class="input">120,00 €</span></label>
+        <div style="display: flex; flex-direction: column; gap: 4px; padding-bottom: 4px;">
+          <span style="font-size: 14px;">Ресто: <strong style="color: #173F5F;">10,00 €</strong></span>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 14px;"><input type="checkbox" style="width: 20px; height: 20px; margin: 0;">Остави рестото в портфейла</label>
+        </div>
+      </div>
+    </div>
+
+    <p role="note" style="margin: 0; padding: 14px; border-radius: 12px; background: #EAF0F6; font-size: 15px; line-height: 22px; color: #173F5F;">Приемате <strong>110,00 € в брой</strong> от Елена Петкова за <strong>октомври и ноември — Шахмат (Калоян)</strong>. 10,00 € се вземат от портфейла. Остават за плащане 70,00 € (Балет, Ива).</p>
+
+    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px;">
+      <a href="ChildPanel.html" style="display: flex; align-items: center; justify-content: center; min-height: 52px; border: 1.5px solid #173F5F; border-radius: 12px; font-size: 16px; font-weight: 600; text-decoration: none;">Назад</a>
+      <button type="button" style="min-height: 52px; border: 0; border-radius: 12px; background: #1F6B4F; color: #FFFFFF; font: inherit; font-size: 16px; font-weight: 600;">Да, приеми плащането</button>
+    </div>
+  </section>
+
+  <section aria-labelledby="done" style="display: flex; flex-direction: column; gap: 10px; padding: 20px 22px; border-radius: 18px; background: #FFFFFF; border: 1.5px solid #1F6B4F;">
+    <p class="meta" style="font-size: 12px; letter-spacing: .06em; text-transform: uppercase;">След потвърждение</p>
+    <h3 id="done" style="margin: 0; font-size: 18px; color: #1F5A41;">✓ Прието 110,00 € в брой · квитанция № 0057</h3>
+    <label style="display: flex; align-items: center; gap: 8px; font-size: 15px;"><input type="checkbox" checked style="width: 20px; height: 20px; margin: 0;">Изпрати квитанцията на elena.petkova@example.test</label>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+      <a href="#" style="display: flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1.5px solid #173F5F; border-radius: 10px; font-size: 15px; font-weight: 600; text-decoration: none;">Отпечатай</a>
+      <a href="#" style="display: flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1.5px solid #9A3B12; border-radius: 10px; color: #9A3B12; font-size: 15px; font-weight: 600; text-decoration: none;">Отмени (до 10 мин.)</a>
+    </div>
+    <p class="meta">Парите са в касата на Елена Маркова до предаването им. След 10 минути плащането не се изтрива — само се анулира с причина.</p>
+  </section>
+</div>
+</body>
+</html>
