@@ -117,15 +117,15 @@ describe('groups', () => {
     expect(groupsMeta([group('Рисуване', 'Група 1'), group('Шахмат', 'Група 1')])).toBe('2 групи в 2 дейности');
   });
 
-  it('opens the children of a group in "Записвания", and the link says so with the visible name in it', () => {
+  it('opens the schedule of a group, and the link says so with the visible name in it', () => {
     const link = groupLink(group('Шахмат', 'Група 2 · 3.–4. клас', { group_id: 'a1b2c3d4-0000-4000-8000-000000000001' }));
     expect(link).toEqual({
-      href: '/dashboard/enrollments?view=groups&group=a1b2c3d4-0000-4000-8000-000000000001',
-      label: 'Децата в Шахмат · Група 2 · 3.–4. клас',
+      href: '/dashboard/schedule?group=a1b2c3d4-0000-4000-8000-000000000001',
+      label: 'Графикът на Шахмат · Група 2 · 3.–4. клас',
     });
     expect(link.label.endsWith('Група 2 · 3.–4. клас')).toBe(true);
     // An id never breaks out of its parameter.
-    expect(groupLink(group('Шахмат', 'Група 1', { group_id: 'x&view=submitted' })).href).toBe('/dashboard/enrollments?view=groups&group=x%26view%3Dsubmitted');
+    expect(groupLink(group('Шахмат', 'Група 1', { group_id: 'x&view=month' })).href).toBe('/dashboard/schedule?group=x%26view%3Dmonth');
   });
 
   it('tells a teacher without groups from someone who does not lead groups', () => {
