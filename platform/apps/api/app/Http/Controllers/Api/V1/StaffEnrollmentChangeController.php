@@ -23,7 +23,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Transfer, pause, end and skip for the organization's team (docs/product/staff-enrollment.md, т. 9).
- * Only owner, administrator and coordinator (enrollment.manage); another organization's records are 404.
+ * Only owner, administrator and coordinator (enrollment.enroll); another organization's records are 404.
  */
 final class StaffEnrollmentChangeController extends Controller
 {
@@ -224,6 +224,6 @@ final class StaffEnrollmentChangeController extends Controller
     private function authorizeManage(Request $request): void
     {
         $organization = Organization::query()->findOrFail($this->context->organizationId());
-        Gate::forUser($request->user())->authorize('enrollment.manage', $organization);
+        Gate::forUser($request->user())->authorize('enrollment.enroll', $organization);
     }
 }

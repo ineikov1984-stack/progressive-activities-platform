@@ -3,6 +3,7 @@
 namespace App\Domain\Catalog\Actions;
 
 use App\Domain\Catalog\Models\Activity;
+use App\Domain\Catalog\Services\TeamAssignments;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
@@ -19,6 +20,7 @@ final readonly class CreateActivityDraft
         private TenantContext $context,
         private SyncPriceOptions $prices,
         private SyncPaymentTermsChoices $paymentTerms,
+        private TeamAssignments $assignments,
     ) {}
 
     /** @param array<string, mixed> $payload */
@@ -26,6 +28,11 @@ final readonly class CreateActivityDraft
     {
         abort_unless($this->context->organizationId() === $organization->getKey(), 404);
         Gate::forUser($actor)->authorize('catalog.manage', $organization);
+        // The lead of an offering teaches all its groups: placing one is an assignment (docs/product/team-rights.md, т. 2.2).
+        $lead = $payload['offering']['lead_instructor_profile_id'] ?? null;
+        if (is_string($lead)) {
+            $this->assignments->assertMayAssign($actor, [$lead]);
+        }
 
         return DB::transaction(function () use ($organization, $payload): Activity {
             Organization::query()->whereKey($organization->getKey())->lockForUpdate()->firstOrFail();

@@ -55,7 +55,7 @@ final class StaffEnrollmentController extends Controller
             'q' => ['sometimes', 'nullable', 'string', 'max:100'],
         ]);
         $status = $validated['status'] ?? 'submitted';
-        $contacts = $this->allows($request, 'enrollment.contacts');
+        $contacts = $this->allows($request, 'contacts.view');
         $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], trim((string) ($validated['q'] ?? ''))).'%';
         $like = fn (string $column): string => "{$column} ".$this->likeOperator()." ? escape '!'";
 
@@ -142,7 +142,7 @@ final class StaffEnrollmentController extends Controller
 
     public function review(Request $request, string $application, ReviewEnrollmentApplication $review, AuditRecorder $audit): JsonResponse
     {
-        $this->authorizeAbility($request, 'enrollment.manage');
+        $this->authorizeAbility($request, 'enrollment.enroll');
         $validated = $request->validate([
             'decision' => ['required', Rule::in(['approve', 'waitlist', 'reject'])],
             'version' => ['required', 'integer', 'min:1'],
@@ -216,7 +216,7 @@ final class StaffEnrollmentController extends Controller
      */
     public function updateApproval(Request $request, string $group, AuditRecorder $audit): JsonResponse
     {
-        $this->authorizeAbility($request, 'enrollment.manage');
+        $this->authorizeAbility($request, 'enrollment.enroll');
         $validated = $request->validate([
             'enrollment_approval_mode' => ['required', Rule::in(['manual', 'automatic'])],
         ], ['required' => 'Изберете как се одобряват заявките.', 'in' => 'Изберете как се одобряват заявките.']);
@@ -252,14 +252,14 @@ final class StaffEnrollmentController extends Controller
         }
 
         $enrollments = $this->rosterEnrollments($record, $today, true);
-        $contacts = $this->allows($request, 'enrollment.contacts');
+        $contacts = $this->allows($request, 'contacts.view');
         $waiting = EnrollmentApplication::query()
             ->where('group_id', $record->id)
             ->where('status', EnrollmentApplicationStatus::Waitlisted->value)
             ->with(['child', ...($contacts ? ['parent'] : [])])
             ->oldest()
             ->get();
-        $canManage = $this->allows($request, 'enrollment.manage');
+        $canManage = $this->allows($request, 'enrollment.enroll');
 
         return response()->json([
             'group' => [

@@ -4,6 +4,7 @@ namespace App\Domain\Catalog\Actions;
 
 use App\Domain\Catalog\Enums\ActivityStatus;
 use App\Domain\Catalog\Models\Activity;
+use App\Domain\Catalog\Services\TeamAssignments;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Tenancy\TenantContext;
@@ -17,6 +18,7 @@ final readonly class UpdateActivityDraft
         private TenantContext $context,
         private SyncPriceOptions $prices,
         private SyncPaymentTermsChoices $paymentTerms,
+        private TeamAssignments $assignments,
     ) {}
 
     /** @param array<string, mixed> $payload */
@@ -26,7 +28,7 @@ final readonly class UpdateActivityDraft
         $organization = Organization::query()->findOrFail($activity->organization_id);
         Gate::forUser($actor)->authorize('catalog.manage', $organization);
 
-        return DB::transaction(function () use ($activity, $expectedVersion, $payload): Activity {
+        return DB::transaction(function () use ($actor, $activity, $expectedVersion, $payload): Activity {
             $locked = Activity::query()->whereKey($activity->getKey())->lockForUpdate()->firstOrFail();
             abort_unless($locked->version === $expectedVersion, 409, 'Activity version conflict.');
             abort_unless($locked->status === ActivityStatus::Draft, 409, 'Only drafts can be edited.');
@@ -42,6 +44,12 @@ final readonly class UpdateActivityDraft
 
             if (array_key_exists('offering', $payload)) {
                 $offering = $locked->offerings()->orderBy('created_at')->lockForUpdate()->firstOrFail();
+                // The lead of an offering teaches all its groups: changing it is an assignment (docs/product/team-rights.md, т. 2.2).
+                if (array_key_exists('lead_instructor_profile_id', $payload['offering'])
+                    && $payload['offering']['lead_instructor_profile_id'] !== $offering->lead_instructor_profile_id) {
+                    $lead = $payload['offering']['lead_instructor_profile_id'];
+                    $this->assignments->assertMayAssign($actor, is_string($lead) ? [$lead] : []);
+                }
                 $offering->fill(Arr::only($payload['offering'], [
                     'location_id', 'lead_instructor_profile_id', 'title', 'description', 'terms',
                     'cancellation_policy', 'contact_email', 'enrollment_instructions',

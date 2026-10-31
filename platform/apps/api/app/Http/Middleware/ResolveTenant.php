@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
+use App\Domain\Organizations\Services\StaffRights;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Closure;
 use Illuminate\Http\JsonResponse;
@@ -13,7 +14,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class ResolveTenant
 {
-    public function __construct(private readonly TenantContext $context) {}
+    public function __construct(private readonly TenantContext $context, private readonly StaffRights $rights) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -57,7 +58,8 @@ class ResolveTenant
                     DB::select("SELECT set_config('app.current_organization_id', ?, true)", [$organizationId]);
                 }
 
-                return $next($request);
+                // The rights of the request's user are read once for the request (docs/product/team-rights.md, т. 4.5).
+                return $this->rights->remembering(fn (): Response => $next($request));
             } finally {
                 $this->context->clear();
             }

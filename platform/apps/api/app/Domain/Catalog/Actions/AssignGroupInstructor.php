@@ -9,6 +9,7 @@ use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\InstructorProfile;
 use App\Domain\Catalog\Services\GroupTeachers;
+use App\Domain\Catalog\Services\TeamAssignments;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\StaffMember;
@@ -27,13 +28,19 @@ use Illuminate\Validation\ValidationException;
  */
 final readonly class AssignGroupInstructor
 {
-    public function __construct(private TenantContext $context, private GroupTeachers $teachers, private AuditRecorder $audit) {}
+    public function __construct(
+        private TenantContext $context,
+        private GroupTeachers $teachers,
+        private TeamAssignments $assignments,
+        private AuditRecorder $audit,
+    ) {}
 
     /** @param array<string, mixed> $payload */
     public function handle(User $actor, Group $group, array $payload): Group
     {
         abort_unless($group->organization_id === $this->context->organizationId(), 404);
-        Gate::forUser($actor)->authorize('catalog.manage', Organization::query()->findOrFail($group->organization_id));
+        // An assignment gives rights: "team.assign", and with it from an added right alone, not oneself (docs/product/team-rights.md, т. 2).
+        Gate::forUser($actor)->authorize('team.assign', Organization::query()->findOrFail($group->organization_id));
         $data = Validator::make($payload, [
             'instructor_profile_id' => ['required', 'uuid', Rule::exists('instructor_profiles', 'id')->where('organization_id', $group->organization_id)],
             'role' => ['sometimes', Rule::in(['lead', 'assistant'])],
@@ -43,6 +50,7 @@ final readonly class AssignGroupInstructor
             'instructor_profile_id.exists' => 'Преподавателят не е намерен.',
             'ends_on.after_or_equal' => 'Краят трябва да е след началото.',
         ])->validate();
+        $this->assignments->assertNotSelf($actor, [(string) $data['instructor_profile_id']]);
 
         return DB::transaction(function () use ($actor, $group, $data): Group {
             // The same order as the schedule editor: the activity, the group, then its sessions.

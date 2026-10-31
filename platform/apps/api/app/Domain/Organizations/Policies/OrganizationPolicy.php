@@ -6,11 +6,17 @@ use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Enums\OrganizationRole;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
+use App\Domain\Organizations\Services\StaffRights;
 use App\Domain\Organizations\Tenancy\TenantContext;
 
+/**
+ * The rights of a person of the team for the whole organization go through `StaffRights` (docs/product/team-rights.md,
+ * т. 2.2): "team.view" is a right of a group and holds here only with the scope "all". The organization's application
+ * to the platform stays by role — it is not a right in the team.
+ */
 class OrganizationPolicy
 {
-    public function __construct(private readonly TenantContext $context) {}
+    public function __construct(private readonly TenantContext $context, private readonly StaffRights $rights) {}
 
     public function create(User $user, Organization $organization): bool
     {
@@ -80,7 +86,12 @@ class OrganizationPolicy
 
     private function allows(User $user, Organization $organization, string $ability): bool
     {
-        return $this->role($user, $organization)?->allows($ability) ?? false;
+        if (! $this->context->hasOrganization()
+            || $this->context->organizationId() !== $organization->getKey()) {
+            return false;
+        }
+
+        return $this->rights->for($user)->allowsAcrossOrganization($ability);
     }
 
     private function role(User $user, Organization $organization): ?OrganizationRole

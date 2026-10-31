@@ -39,6 +39,14 @@ enum AuditAction: string
     case TeamRoleChanged = 'team.role_changed';
     case TeamInvitationSent = 'team.invitation_sent';
     case TeamInvitationAccepted = 'team.invitation_accepted';
+    // Rights in the team (docs/product/team-rights.md, т. 4–6): identifiers and keys only.
+    case TeamAccessGrantAdded = 'team.access_grant_added';
+    case TeamAccessGrantChanged = 'team.access_grant_changed';
+    case TeamAccessGrantRevoked = 'team.access_grant_revoked';
+    case TeamAccessScopeChanged = 'team.access_scope_changed';
+    case TeamAccessGroupAdded = 'team.access_group_added';
+    case TeamAccessGroupRemoved = 'team.access_group_removed';
+    case TeamAccessTemplateChanged = 'team.access_template_changed';
     case EnrollmentApplicationReviewed = 'enrollment.application_reviewed';
     case EnrollmentTransferred = 'enrollment.transferred';
     case EnrollmentPaused = 'enrollment.paused';
