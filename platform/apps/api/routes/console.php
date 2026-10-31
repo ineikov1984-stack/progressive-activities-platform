@@ -1,5 +1,7 @@
 <?php
 
+use App\Domain\Catalog\Actions\SanitizeStoredMedia;
+use App\Domain\Catalog\Services\ImageRejected;
 use App\Domain\Enrollment\Delivery\DeliverEvents;
 use App\Domain\Enrollment\Delivery\MailerCheck;
 use Illuminate\Foundation\Inspiring;
@@ -35,3 +37,26 @@ Artisan::command('enrollment:deliver-events {--budget=50 : Seconds to keep sendi
 
 // The overlap lock lasts 10 minutes, not a day: a killed run must not stop the emails for long.
 Schedule::command('enrollment:deliver-events')->everyMinute()->withoutOverlapping(10)->onOneServer();
+
+// Photos stored before the sanitizer lose the phone's data (docs/product/teacher-content.md, т. 5.2). Run once after
+// PR 1a in the `api` container (the worker mounts the photos read-only); a second run changes nothing. Counts and
+// identifiers only.
+Artisan::command('catalog:sanitize-media', function (SanitizeStoredMedia $sanitize): int {
+    try {
+        $result = $sanitize->run();
+    } catch (ImageRejected) {
+        $this->error('PHP needs gd (with JPEG, PNG and WebP) and exif to clean the photos. Nothing was changed.');
+
+        return 1;
+    }
+    $this->line(sprintf('cleaned %d · already clean %d · could not process %d',
+        $result['sanitized'], $result['skipped'], count($result['failed'])));
+    if ($result['failed'] !== []) {
+        $this->line('Could not process (left as they are; do these by hand):');
+        foreach ($result['failed'] as $failed) {
+            $this->line(sprintf('  organization %s · photo %s', $failed['organization_id'], $failed['media_id']));
+        }
+    }
+
+    return 0;
+})->purpose('Clean the stored catalog photos of EXIF, GPS and other metadata');

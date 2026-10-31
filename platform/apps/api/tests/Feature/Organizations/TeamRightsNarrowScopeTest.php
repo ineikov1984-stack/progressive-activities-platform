@@ -164,6 +164,7 @@ class TeamRightsNarrowScopeTest extends TestCase
             'POST api/v1/catalog/activities' => ['/api/v1/catalog/activities', [], 403],
             'PATCH api/v1/catalog/activities/{activity}' => [$activity, [], 403],
             'POST api/v1/catalog/activities/{activity}/publish' => ["{$activity}/publish", $version, 403],
+            'POST api/v1/catalog/activities/{activity}/gallery/remove' => ["{$activity}/gallery/remove", [], 403],
             'POST api/v1/catalog/activities/{activity}/groups' => ["{$activity}/groups", [], 403],
             'PATCH api/v1/catalog/groups/{group}' => ["/api/v1/catalog/groups/{$tuesday}", [], 403],
             'POST api/v1/catalog/groups/{group}/assignments' => ["/api/v1/catalog/groups/{$tuesday}/assignments", [], 403],

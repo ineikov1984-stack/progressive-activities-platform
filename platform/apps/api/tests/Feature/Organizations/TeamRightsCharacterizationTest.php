@@ -258,6 +258,8 @@ class TeamRightsCharacterizationTest extends TestCase
             'POST api/v1/catalog/activities' => ['POST', '/api/v1/catalog/activities', [], self::CATALOG_MANAGE, 422],
             'PATCH api/v1/catalog/activities/{activity}' => ['PATCH', $activity, [], self::CATALOG_MANAGE, 422],
             'POST api/v1/catalog/activities/{activity}/publish' => ['POST', "{$activity}/publish", $stale, self::CATALOG_PUBLISH, 409],
+            // New (docs/product/teacher-content.md, т. 5.6): a photo out of the gallery of a published activity.
+            'POST api/v1/catalog/activities/{activity}/gallery/remove' => ['POST', "{$activity}/gallery/remove", [], self::CATALOG_MANAGE, 422],
             // The activity is published: its schedule is not edited here.
             'POST api/v1/catalog/activities/{activity}/groups' => ['POST', "{$activity}/groups", [], self::CATALOG_MANAGE, 409],
             'PATCH api/v1/catalog/groups/{group}' => ['PATCH', "/api/v1/catalog/groups/{$tuesday}", [], self::CATALOG_MANAGE, 409],

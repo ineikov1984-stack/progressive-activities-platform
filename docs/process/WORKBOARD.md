@@ -18,6 +18,7 @@
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
 | Учителят обогатява — PR 0: `gd` и `exif` в образа на API (`teacher-content.md`, т. 10) | Claude | `claude/php-image-extensions` | горещи: `platform/apps/api/composer.json`, `composer.lock`, `.github/workflows/ci.yml`; `platform/apps/api/Dockerfile`, `docker/catalog-uploads.ini` | PR #88: ревю по сигурност — одобрено; добавена проверка на паметта в `docker` → CI → merge |
+| Учителят обогатява — PR 1a: изчистени снимки, `catalog:sanitize-media`, „Махни от страницата“ (`teacher-content.md`, т. 5.2, 5.6) — върху PR 0 | Claude | `claude/image-sanitizer` | горещ: `platform/apps/api/routes/api.php`; API: `CatalogMediaStore`, `ImageSanitizer`, `CatalogMediaUsage`, `RemoveGalleryPhoto`, `SanitizeStoredMedia`, `routes/console.php`, `ActivityController::removeGalleryPhoto`, `AuditAction` | PR #89: поправки след ревюто по сигурност (вид по съдържание, 16 MP за PNG и WebP, `shown_as`) → CI → merge след #88 → собственикът пуска `catalog:sanitize-media` веднъж |
 
 ## Опашка (по приоритет)
 

@@ -139,6 +139,8 @@ Route::prefix('v1')->group(function (): void {
                     Route::post('/activities', [ActivityController::class, 'store']);
                     Route::patch('/activities/{activity}', [ActivityController::class, 'update']);
                     Route::post('/activities/{activity}/publish', [ActivityPublicationController::class, 'store']);
+                    // "Махни от страницата", also on a published activity (docs/product/teacher-content.md, т. 5.6).
+                    Route::post('/activities/{activity}/gallery/remove', [ActivityController::class, 'removeGalleryPhoto'])->whereUuid('activity');
                     Route::post('/activities/{activity}/groups', [ActivityGroupController::class, 'store']);
                     Route::patch('/groups/{group}', [ActivityGroupController::class, 'update']);
                     // Who leads or assists a group, also a published one (docs/product/team.md, т. 5).
