@@ -18,6 +18,7 @@
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
 | Учителят обогатява своите дейности — спецификация (DECISIONS 31.10.2026) | Claude | `claude/teacher-content-spec` | `docs/product/teacher-content.md`, `published-activity-changes.md`, `team-rights.md`, `docs/process/DECISIONS.md` | ревю на архитект — поправено → PR 0, 1a, 1b, 2 (среда, изчистени снимки, предложения, уеб) |
+| Учителят обогатява — PR 0: `gd` и `exif` в образа на API (`teacher-content.md`, т. 10) | Claude | `claude/php-image-extensions` | горещи: `platform/apps/api/composer.json`, `composer.lock`, `.github/workflows/ci.yml`; `platform/apps/api/Dockerfile`, `docker/catalog-uploads.ini` | код → CI (`docker`, `api`) → merge |
 | „Моят профил“ (DECISIONS 31.10.2026 „Моят профил и заместник“) | Claude | `claude/my-profile` | API: `AuthController::updateContact`, `UpdateOwnStaffContact`, `OrganizationContextController` (`grants`); уеб: `features/me`, `app/dashboard/me`, `features/dashboard` (обвивка, меню от аватара, „Начало“); e2e `stack-smoke` | код и тестове → CI → проверка на 390/768/1440 px |
 
 ## Опашка (по приоритет)

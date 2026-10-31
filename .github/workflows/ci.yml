@@ -43,8 +43,10 @@ jobs:
         with:
           php-version: "8.4"
           coverage: none
+          # The photo sanitizer needs gd (JPEG, PNG, WebP) and exif, as in the shipped image.
+          extensions: gd, exif
           # Same limits as the shipped image (platform/apps/api/docker/catalog-uploads.ini).
-          ini-values: upload_max_filesize=8M, post_max_size=10M
+          ini-values: upload_max_filesize=8M, post_max_size=10M, memory_limit=256M
       - uses: ramsey/composer-install@v4
         with:
           working-directory: platform/apps/api
@@ -205,7 +207,8 @@ jobs:
         with:
           php-version: "8.4"
           coverage: none
-          ini-values: upload_max_filesize=8M, post_max_size=10M
+          extensions: gd, exif
+          ini-values: upload_max_filesize=8M, post_max_size=10M, memory_limit=256M
       - uses: ramsey/composer-install@v4
         with:
           working-directory: platform/apps/api
