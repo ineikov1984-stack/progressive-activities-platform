@@ -16,6 +16,8 @@ import { MonthView } from './month-view';
 import { CardsView, DayView, ScheduleSkeleton, WeekView } from './schedule-views';
 import { SchedulePreview, usePreview } from './session-preview';
 import { type PanelTarget, SchedulePanel } from './session-panel';
+import { ScheduleChangeDialog } from './change-dialog';
+import { changeSuccess, selectSessions, selectable, type ChangeAction, type ChangeResult, type Selection } from './changes';
 import { NextIcon, PreviousIcon } from './icons';
 import styles from './schedule.module.css';
 
@@ -42,6 +44,11 @@ function rememberedView(userId: string, own: boolean): ScheduleView {
  * can be sent to a colleague; the hours are by Sofia.
  */
 export function SchedulePage() {
+  const { organization } = useDashboardContext();
+  return <ScheduleWorkspace key={organization.id} />;
+}
+
+function ScheduleWorkspace() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, organization } = useDashboardContext();
@@ -148,6 +155,36 @@ export function SchedulePage() {
     else go({ view: 'day', date: moreDay });
   }, [own, openMore, go]);
 
+  const manage = Object.values(dictionary?.abilities ?? {}).some((ability) => ability.manage);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Selection>({});
+  const [announcement, setAnnouncement] = useState('');
+  const [change, setChange] = useState<ChangeAction>();
+  const changeOpener = useRef<HTMLElement | null>(null);
+  const title = useRef<HTMLHeadingElement>(null);
+  const closeChange = () => {
+    setChange(undefined);
+    requestAnimationFrame(() => (changeOpener.current?.isConnected ? changeOpener.current : title.current)?.focus());
+  };
+  const beginChange = (action: ChangeAction, element: HTMLElement) => { closePreview(); changeOpener.current = element; setChange(action); };
+  function changed(result: ChangeResult) {
+    setAnnouncement(changeSuccess(result)); setSelected({}); setSelecting(false); if (change) closeChange(); setAttempt((value) => value + 1);
+  }
+  function chooseSessions(sessions: ScheduleSession[], remove = false) {
+    const allowed = sessions.filter((session) => dictionary?.abilities[session.group_id]?.manage && selectable(session, now));
+    const next = selectSessions(selected, allowed, now, remove);
+    setSelected(next.selected);
+    setAnnouncement(next.limit ? 'Изберете най-много 300 занимания.' : '');
+  }
+  const selection = selecting && manage ? { selected, toggle: (session: ScheduleSession) => chooseSessions([session], !!selected[session.id]),
+    day: (sessions: ScheduleSession[]) => { const eligible = sessions.filter((session) => selectable(session, now)); chooseSessions(eligible, eligible.length > 0 && eligible.every((session) => !!selected[session.id])); } } : undefined;
+  useEffect(() => {
+    if (!selecting) return;
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !document.querySelector('dialog[open]')) { setSelecting(false); setSelected({}); } };
+    document.addEventListener('keydown', escape);
+    return () => document.removeEventListener('keydown', escape);
+  }, [selecting]);
+
   const keys = own ? ownFilterKeys : filterKeys;
   const filtered = hasFilters(address.filters);
   const clearFilters = () => go({ filters: noFilters });
@@ -187,19 +224,19 @@ export function SchedulePage() {
   } else if (view === 'day') {
     // A new day or columns open the grid anew at today's session (the key).
     body = <DayView key={`${query}|${address.by}`} day={day} by={address.by} sessions={board.sessions} dictionary={board} names={names} today={today} now={now}
-      onOpen={openSession} onMore={openMore} preview={preview.handlers} />;
+      onOpen={openSession} onMore={openMore} preview={preview.handlers} selection={selection} />;
   } else if (view === 'week') {
     body = <WeekView key={query} week={period} sessions={board.sessions} activities={board.activities} names={names} today={today} now={now} onOpen={openSession}
-      onMore={weekMore} moreOpensDay={!own} preview={preview.handlers} />;
+      onMore={weekMore} moreOpensDay={!own} preview={preview.handlers} selection={selection} />;
   } else {
-    body = <CardsView week={period} sessions={board.sessions} names={names} today={today} now={now} onOpen={openSession} />;
+    body = <CardsView week={period} sessions={board.sessions} names={names} today={today} now={now} onOpen={openSession} selection={selection} />;
   }
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${selecting ? styles.selectingPage : ''}`}>
       <header className={styles.header}>
         <div className={styles.titleRow}>
-          <h1>{own ? 'Моят график' : 'График'}</h1>
+          <h1 ref={title} tabIndex={-1}>{own ? 'Моят график' : 'График'}</h1>
           <div className={styles.period}>
             <button type="button" className={styles.button} onClick={() => go({ date: today })}>Днес</button>
             <button type="button" className={styles.iconButton} aria-label={steps.previous} onClick={() => go({ date: stepDay(view, day, -1) })}><PreviousIcon /></button>
@@ -207,6 +244,11 @@ export function SchedulePage() {
             <p className={styles.periodLabel} aria-live="polite">{period.label}</p>
           </div>
         </div>
+        {manage ? <div className={styles.changeActions}>
+          <button type="button" className={styles.button} onClick={(e) => beginChange('holiday', e.currentTarget)}>Почивен ден</button>
+          <button type="button" className={styles.button} aria-pressed={selecting} onClick={() => { setSelecting(!selecting); if (selecting) setSelected({}); closePreview(); }}>Избери{selecting ? ' ✓' : ''}</button>
+          <button type="button" className={styles.button} onClick={(e) => beginChange('add', e.currentTarget)}>+ Допълнително занимание</button>
+        </div> : null}
         <div className={styles.switches}>
           {view === 'day' ? (
             <div className={styles.views} role="group" aria-label="Колони">
@@ -227,10 +269,17 @@ export function SchedulePage() {
         chips={dictionary ? filterChips(address.filters, dictionary, chosenChildName) : []} child={child}
         onToggle={(filter, id) => go({ filters: toggleFilter(address.filters, filter, id) })} onClear={clearFilters} />
 
+      <p role="status" aria-live="polite">{announcement}</p>
+      {selecting && manage ? <p className={styles.small}>Изберете заниманията, които искате да промените заедно. Може да изберете и цял ден от заглавието му.{view === 'month' ? ' За избор отворете Ден или Седмица.' : ''}</p> : null}
       {body}
+      {selection && Object.keys(selected).length > 0 ? <section className={styles.selectionBar} role="region" aria-label="Избрани занимания">
+        <p><strong>Избрани {Object.keys(selected).length} занимания · {Object.values(selected).reduce((sum, session) => sum + session.taken, 0)} деца</strong> · <button type="button" onClick={() => setSelected({})}>Изчисти</button></p>
+        <div><button type="button" onClick={(e) => beginChange('change_location', e.currentTarget)}>Смени залата</button><button type="button" onClick={(e) => beginChange('cancel', e.currentTarget)}>Отмени избраните</button></div>
+      </section> : null}
 
-      {preview.shown && !panel ? <SchedulePreview shown={preview.shown} names={names} now={now} onEnter={preview.keep} onLeave={preview.hide} /> : null}
-      {panel ? <SchedulePanel organizationId={organization.id} target={panel} names={names} now={now} withDetails={withDetails} onClose={closePanel} onChildNamed={rememberChild} /> : null}
+      {preview.shown && !panel && !selecting ? <SchedulePreview shown={preview.shown} names={names} now={now} onEnter={preview.keep} onLeave={preview.hide} /> : null}
+      {panel ? <SchedulePanel organizationId={organization.id} target={panel} names={names} now={now} withDetails={withDetails} onClose={closePanel} onChildNamed={rememberChild} board={dictionary ?? emptyBoard} onChanged={changed} selection={selection} /> : null}
+      {change && manage ? <ScheduleChangeDialog organizationId={organization.id} action={change} sessions={Object.values(selected)} board={dictionary ?? emptyBoard} day={day} onClose={closeChange} onApplied={changed} /> : null}
     </div>
   );
 }

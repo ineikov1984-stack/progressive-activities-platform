@@ -71,7 +71,7 @@ final class SchedulePresenter
         $last = $panel['last_change'];
         $actions = [];
         if ($manage && ! $group['archived'] && $session->starts_at->isFuture()) {
-            $actions = $session->status === 'cancelled' ? ['restore'] : ['cancel'];
+            $actions = $session->status === 'cancelled' ? ['restore'] : ['move', 'cancel'];
         }
 
         return [

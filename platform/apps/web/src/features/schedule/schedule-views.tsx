@@ -1,10 +1,11 @@
 'use client';
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
+import { selectable } from './changes';
 import type { ScheduleActivity, ScheduleBoard, ScheduleSession } from './api';
 import {
-  activityColor, blockLines, cardDays, clock, type DayColumns, dayLayout, dayName, fillText, instructorsText, legend, markLabels, openingPoint,
-  type ScheduleNames, sessionMark, startClock, timeRange, waitingText, type Week, type WeekBlock, weekLayout, sofiaMinutes,
+  activityColor, blockLines, cardDays, clock, type DayColumns, dayLayout, dayName, fillText, instructorsText, legend, markLabels, movedFromLabel, openingPoint,
+  type ScheduleNames, sessionMark, startClock, timeRange, waitingText, type Week, type WeekBlock, weekLayout, sofiaMinutes, sofiaDay,
 } from './presentation';
 import { FillBar, type PreviewHandlers } from './session-preview';
 import styles from './schedule.module.css';
@@ -12,7 +13,16 @@ import styles from './schedule.module.css';
 export type OpenSession = (session: ScheduleSession, opener: HTMLElement) => void;
 export type OpenMore = (sessions: ScheduleSession[], opener: HTMLElement) => void;
 
-type ViewProps = { week: Week; sessions: ScheduleSession[]; names: ScheduleNames; today: string; now: Date; onOpen: OpenSession };
+export type SessionSelection = { selected: Record<string, ScheduleSession>; toggle: (session: ScheduleSession) => void; day: (sessions: ScheduleSession[]) => void };
+
+type ViewProps = { week: Week; sessions: ScheduleSession[]; names: ScheduleNames; today: string; now: Date; onOpen: OpenSession; selection?: SessionSelection };
+
+function DaySelect({ selection, sessions, now, label }: { selection: SessionSelection; sessions: ScheduleSession[]; now: Date; label: string }) {
+  const eligible = sessions.filter((session) => selectable(session, now));
+  if (!eligible.length) return null;
+  const checked = eligible.every((session) => !!selection.selected[session.id]);
+  return <button type="button" className={styles.daySelect} aria-label={label} aria-pressed={checked} onClick={() => selection.day(eligible)}>{checked ? '☑' : '☐'}</button>;
+}
 
 export const vars = (values: Record<string, number>) => Object.fromEntries(Object.entries(values).map(([key, value]) => [`--${key}`, value])) as CSSProperties;
 export const colorClass = (activity: ScheduleActivity | undefined) => styles[`cat_${activityColor(activity?.color)}`];
@@ -68,7 +78,7 @@ function TimeGrid({ label, kind, columns, startHour, endHour, now, block, more }
     <div ref={scroller} className={styles.weekScroll} role="region" aria-label={label} tabIndex={0}>
       <div className={`${styles.weekGrid} ${kind === 'day' ? styles.gridDay : ''}`} style={vars({ rows, columns: columns.length })}>
         <span className={styles.corner} aria-hidden="true" />
-        {columns.map((column, index) => <div key={column.key} className={styles.dayHead} data-head={index === 0 ? '' : undefined} aria-hidden="true">{column.head}</div>)}
+        {columns.map((column, index) => <div key={column.key} className={styles.dayHead} data-head={index === 0 ? '' : undefined}>{column.head}</div>)}
         <div className={styles.hours} data-hours="" aria-hidden="true">
           {Array.from({ length: rows }, (_, index) => <span key={index} style={vars({ at: index })}>{clock((startHour + index) * 60)}</span>)}
         </div>
@@ -121,25 +131,28 @@ function useFittedLines(text: string) {
  * A session in the week or the day: the time with "Сега" or "Отменено" on the first line, then the activity, how full
  * and the rest — the lines that fit whole — and the bar of how full at the bottom. On a computer, the quick look.
  */
-function Block({ session, kind, by, names, now, position, onOpen, preview }: {
-  session: ScheduleSession; kind: 'week' | 'day'; by: DayColumns; names: ScheduleNames; now: Date; position: CSSProperties; onOpen: OpenSession; preview: PreviewHandlers;
+function Block({ session, kind, by, names, now, position, onOpen, preview, selection }: {
+  session: ScheduleSession; kind: 'week' | 'day'; by: DayColumns; names: ScheduleNames; now: Date; position: CSSProperties; onOpen: OpenSession; preview: PreviewHandlers; selection?: SessionSelection;
 }) {
+  const choosing = !!selection && selectable(session, now);
+  const checked = !!selection?.selected[session.id];
   const view = blockLines(session, kind, by, names, now);
   const target = { kind: 'session' as const, session };
   const ref = useFittedLines(`${view.mark}|${view.lines.join('|')}`);
   return (
-    <button ref={ref} type="button" style={position} aria-haspopup="dialog" aria-describedby={preview.describedBy(session.id)}
-      onClick={(event) => { preview.close(); onOpen(session, event.currentTarget); }}
+    <button ref={ref} type="button" style={position} data-session-id={session.id} role={choosing ? 'checkbox' : undefined} aria-checked={choosing ? checked : undefined} aria-haspopup={choosing ? undefined : 'dialog'} aria-describedby={choosing ? undefined : preview.describedBy(session.id)}
+      onClick={(event) => { preview.close(); if (choosing) selection?.toggle(session); else onOpen(session, event.currentTarget); }}
       onMouseEnter={(event) => preview.enter(target, event.currentTarget)} onMouseLeave={preview.leave}
       onFocus={(event) => preview.focus(target, event)} onBlur={preview.blur}
-      className={`${styles.event} ${colorClass(names.activity(session.activity_id))} ${view.mark === 'now' ? styles.isNow : ''} ${view.mark === 'cancelled' ? styles.isCancelled : ''}`}>
-      <span className="sr-only">{view.label}</span>
+      className={`${styles.event} ${colorClass(names.activity(session.activity_id))} ${checked && choosing ? styles.eventSelected : ''} ${view.mark === 'now' ? styles.isNow : ''} ${view.mark === 'cancelled' ? styles.isCancelled : ''}`}>
+      <span className="sr-only">{view.label} {movedFromLabel(session)}</span>
       <span className={styles.lines} aria-hidden="true">
         <span className={styles.lineFirst}>
-          <strong>{view.time}</strong>
+          {movedFromLabel(session) ? <span className={styles.small}>{movedFromLabel(session)}</span> : null}
+      <strong>{choosing ? <span className={styles.selectionMark}>{checked ? '☑' : '☐'} </span> : null}{view.time}</strong>
           {view.mark ? <span className={`${styles.mark} ${styles[`mark_${view.mark}`]}`}>{markLabels[view.mark]}</span> : null}
         </span>
-        {view.lines.map((line, index) => <span key={index} data-line="" className={index === 0 ? styles.lineMain : undefined}>{line}</span>)}
+        {[...view.lines, ...(movedFromLabel(session) ? [movedFromLabel(session)!] : [])].map((line, index) => <span key={index} data-line="" className={index === 0 ? styles.lineMain : undefined}>{line}</span>)}
       </span>
       {view.mark === 'cancelled' ? null : <FillBar session={session} className={styles.blockBar} />}
     </button>
@@ -150,7 +163,7 @@ function Block({ session, kind, by, names, now, position, onOpen, preview }: {
  * Седмица (т. 3.1): Monday to Sunday with the hours of the week's sessions. Up to two at the same time stand side by
  * side; with more, the first and "+N още" — the day by places, or for "Моят график" the rest in the panel.
  */
-export function WeekView({ week, sessions, activities, names, today, now, onOpen, onMore, moreOpensDay, preview }: ViewProps & {
+export function WeekView({ week, sessions, activities, names, today, now, onOpen, onMore, moreOpensDay, preview, selection }: ViewProps & {
   activities: ScheduleActivity[]; onMore: (sessions: ScheduleSession[], opener: HTMLElement, day: string) => void; moreOpensDay: boolean; preview: PreviewHandlers;
 }) {
   const layout = weekLayout(sessions, week.days);
@@ -159,14 +172,14 @@ export function WeekView({ week, sessions, activities, names, today, now, onOpen
     const isToday = day === today;
     return {
       key: day, blocks, today: isToday, label: `${name.weekday}, ${name.date}${isToday ? ', днес' : ''}`,
-      head: isToday ? <span className={styles.today}>{name.short} {name.number} · днес</span> : <>{name.short} <strong>{name.number}</strong></>,
+      head: <>{selection ? <DaySelect selection={selection} sessions={sessions.filter((s) => sofiaDay(s.starts_at) === day)} now={now} label={`Избери всички в ${name.short}, ${name.date}`} /> : null}{isToday ? <span className={styles.today}>{name.short} {name.number} · днес</span> : <>{name.short} <strong>{name.number}</strong></>}</>,
     };
   });
   return (
     <section className={styles.week} aria-label="Седмица">
       <Legend activities={legend(sessions, activities)} />
       <TimeGrid label="Седмица по часове" kind="week" columns={columns} startHour={layout.startHour} endHour={layout.endHour} now={now}
-        block={(session, position) => <Block session={session} kind="week" by="rooms" names={names} now={now} position={position} onOpen={onOpen} preview={preview} />}
+        block={(session, position) => <Block session={session} kind="week" by="rooms" names={names} now={now} position={position} onOpen={onOpen} preview={preview} selection={selection} />}
         more={(hidden, position, start, column) => (
           <button type="button" className={styles.more} style={position} aria-haspopup={moreOpensDay ? undefined : 'dialog'}
             onClick={(event) => onMore(hidden, event.currentTarget, column.key)}>
@@ -184,18 +197,19 @@ export function WeekView({ week, sessions, activities, names, today, now, onOpen
  * преподавател" last). A block shows the time from–to, the activity and group, how full, who leads (or the place and
  * "замества …", by people).
  */
-export function DayView({ day, by, sessions, dictionary, names, today, now, onOpen, onMore, preview }: {
+export function DayView({ day, by, sessions, dictionary, names, today, now, onOpen, onMore, preview, selection }: {
   day: string; by: DayColumns; sessions: ScheduleSession[]; dictionary: Pick<ScheduleBoard, 'activities' | 'locations' | 'instructors'>;
-  names: ScheduleNames; today: string; now: Date; onOpen: OpenSession; onMore: OpenMore; preview: PreviewHandlers;
+  names: ScheduleNames; today: string; now: Date; onOpen: OpenSession; onMore: OpenMore; preview: PreviewHandlers; selection?: SessionSelection;
 }) {
   const layout = dayLayout(sessions, day, by, dictionary);
   const name = dayName(day);
   const columns = layout.columns.map((column) => ({ key: column.id, head: column.title, label: column.title, blocks: column.blocks, today: day === today }));
   return (
     <section className={styles.week} aria-label={`${name.weekday}, ${name.date} — ${by === 'rooms' ? 'по зали' : 'по треньори'}`}>
+      {selection ? <button type="button" className={styles.button} onClick={() => selection.day(sessions)}>Избери всички за деня</button> : null}
       <Legend activities={legend(sessions, dictionary.activities)} />
       <TimeGrid label={`${name.weekday} по часове`} kind="day" columns={columns} startHour={layout.startHour} endHour={layout.endHour} now={now}
-        block={(session, position) => <Block session={session} kind="day" by={by} names={names} now={now} position={position} onOpen={onOpen} preview={preview} />}
+        block={(session, position) => <Block session={session} kind="day" by={by} names={names} now={now} position={position} onOpen={onOpen} preview={preview} selection={selection} />}
         more={(hidden, position, start) => (
           <button type="button" className={styles.more} style={position} aria-haspopup="dialog" onClick={(event) => onMore(hidden, event.currentTarget)}>
             +{hidden.length} още<span className="sr-only"> занимания от {clock(start)}</span>
@@ -206,16 +220,19 @@ export function DayView({ day, by, sessions, dictionary, names, today, now, onOp
 }
 
 /** A session as a card (т. 3.4): its state, time, activity and group, place and who leads, how full with the bar. */
-export function SessionCard({ session, names, now, onOpen }: { session: ScheduleSession; names: ScheduleNames; now: Date; onOpen: OpenSession }) {
+export function SessionCard({ session, names, now, onOpen, selection }: { session: ScheduleSession; names: ScheduleNames; now: Date; onOpen: OpenSession; selection?: SessionSelection }) {
+  const choosing = !!selection && selectable(session, now);
+  const checked = !!selection?.selected[session.id];
   const activity = names.activity(session.activity_id);
   const mark = sessionMark(session, now);
   const cancelled = mark === 'cancelled';
   const people = instructorsText(session.instructors);
   return (
-    <button type="button" aria-haspopup="dialog" onClick={(event) => onOpen(session, event.currentTarget)}
-      className={`${styles.card} ${colorClass(activity)} ${mark === 'now' ? styles.cardNow : ''} ${cancelled ? styles.cardCancelled : ''}`}>
+    <button type="button" data-session-id={session.id} role={choosing ? 'checkbox' : undefined} aria-checked={choosing ? checked : undefined} aria-haspopup={choosing ? undefined : 'dialog'} onClick={(event) => { if (choosing) selection?.toggle(session); else onOpen(session, event.currentTarget); }}
+      className={`${styles.card} ${checked && choosing ? styles.eventSelected : ''} ${colorClass(activity)} ${mark === 'now' ? styles.cardNow : ''} ${cancelled ? styles.cardCancelled : ''}`}>
       {mark ? <span className={`${styles.badge} ${styles[`mark_${mark}`]}`}>{markLabels[mark]}</span> : null}
-      <strong>{startClock(session)} · {activity?.title ?? 'Занимание'} · {names.group(session.group_id)?.name ?? 'Група'}</strong>
+      {movedFromLabel(session) ? <span className={styles.small}>{movedFromLabel(session)}</span> : null}
+      <strong>{choosing ? <span className={styles.selectionMark}>{checked ? '☑' : '☐'} </span> : null}{startClock(session)} · {activity?.title ?? 'Занимание'} · {names.group(session.group_id)?.name ?? 'Група'}</strong>
       <span className="sr-only">{timeRange(session)},</span>
       <span className={styles.small}>{[names.location(session.location_id) ?? 'Без зала', people || 'Без преподавател'].join(' · ')}</span>
       {cancelled ? null : (
@@ -232,7 +249,7 @@ export function SessionCard({ session, names, now, onOpen }: { session: Schedule
  * Карти (т. 3.4): the days with sessions, today marked; one column on a phone. When there is room, Monday to Friday
  * in a row, each in its column, Saturday and Sunday after them when they have sessions (UX review).
  */
-export function CardsView({ week, sessions, names, today, now, onOpen }: ViewProps) {
+export function CardsView({ week, sessions, names, today, now, onOpen, selection }: ViewProps) {
   return (
     <div className={styles.cards}>
       {cardDays(sessions, week.days).map(({ day, sessions: daySessions }) => {
@@ -241,11 +258,11 @@ export function CardsView({ week, sessions, names, today, now, onOpen }: ViewPro
         return (
           <section key={day} className={`${styles.cardDay} ${daySessions.length ? '' : styles.cardDayEmpty}`} aria-labelledby={`schedule-day-${day}`}>
             <h2 id={`schedule-day-${day}`} className={`${styles.dayTitle} ${isToday ? styles.dayTitleToday : ''}`}>
-              {name.weekday}{isToday ? ' · днес' : ''} <span>{name.date}</span>
+              {selection ? <DaySelect selection={selection} sessions={daySessions} now={now} label={`Избери всички в ${name.short}, ${name.date}`} /> : null}{name.weekday}{isToday ? ' · днес' : ''} <span>{name.date}</span>
             </h2>
             {daySessions.length ? (
               <ul className={styles.cardList}>
-                {daySessions.map((session) => <li key={session.id}><SessionCard session={session} names={names} now={now} onOpen={onOpen} /></li>)}
+                {daySessions.map((session) => <li key={session.id}><SessionCard session={session} names={names} now={now} onOpen={onOpen} selection={selection} /></li>)}
               </ul>
             ) : <p className={styles.small}>Няма занимания</p>}
           </section>

@@ -17,8 +17,11 @@ export type ScheduleSession = {
   starts_at: string;
   ends_at: string;
   status: 'scheduled' | 'cancelled' | string;
-  /** Always false until "Премести" (PR 4). */
+  /** Whether the session has moved from its original start. */
   moved: boolean;
+  version?: number;
+  moved_from?: string | null;
+  extra?: boolean;
   group_id: string;
   activity_id: string | null;
   location_id: string | null;
@@ -59,6 +62,8 @@ export type SessionPanel = {
   activity: { id: string; title: string };
   location: ScheduleLocation | null;
   abilities: GroupAbilities;
+  actions?: ('move' | 'cancel' | 'restore')[];
+  last_change?: { action: string; at: string; by?: string; reason?: string | null } | null;
 };
 
 /** A child found by the filter "Дете": name and class only — never contacts, health, money or groups. */

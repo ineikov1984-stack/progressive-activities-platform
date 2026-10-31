@@ -253,7 +253,9 @@ test('a person of the team opens "Моят профил" and changes the phone; 
     await expect(adminPage.getByText('Имейлът сменя собственикът на организацията.', { exact: false })).toBeVisible();
     await expect(adminPage.getByRole('heading', { name: 'Какво можете' })).toBeVisible();
     await adminPage.getByRole('button', { name: /^Промени/ }).click();
-    await adminPage.getByLabel('Телефон').fill(typed);
+    // The editor moves focus on the next frame; finish that before filling another field.
+    await expect(adminPage.getByLabel('Име и фамилия', { exact: true })).toBeFocused();
+    await adminPage.getByLabel('Телефон', { exact: true }).fill(typed);
     await adminPage.getByRole('button', { name: 'Запази', exact: true }).click();
     await slow(adminPage.getByText('Данните са запазени. Екипът вижда новия телефон.')).toBeVisible();
     await expect(adminPage.getByText(typed, { exact: true })).toBeVisible();

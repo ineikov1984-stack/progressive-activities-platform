@@ -309,3 +309,16 @@
   .cards { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .cardDayEmpty { display: grid; }
 }
+
+/* Actions and selection from the approved ScheduleBulk/Child mockups. */
+.changeActions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.selectionMark { font-size: 1.15rem; }
+.eventSelected { outline: 2px solid var(--ink); outline-offset: -2px; }
+.daySelect { min-width: 44px; min-height: 44px; border: 0; background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
+.selectionBar { position: sticky; bottom: var(--space-4); z-index: 20; background: var(--ink); color: var(--ink-inverse); padding: var(--space-4); border-radius: var(--radius-md); margin-top: var(--space-4); }
+.selectionBar p { margin: 0 0 var(--space-2); }
+.selectionBar div { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.selectionBar button { min-height: 44px; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; }
+.selectionBar p button { background: transparent; color: var(--ink-inverse); border: 0; text-decoration: underline; }
+.selectionBar button:focus-visible, .daySelect:focus-visible { outline: 3px solid var(--focus-on-dark); outline-offset: 2px; }
+@media (max-width: 899px) { .selectionBar { position: fixed; bottom: 0; left: 0; right: 0; margin: 0; border-radius: var(--radius-md) var(--radius-md) 0 0; padding-bottom: max(var(--space-4), env(safe-area-inset-bottom)); } .selectionBar div { display: grid; grid-template-columns: 1fr 1fr; } .selectingPage { padding-bottom: 180px; } }
