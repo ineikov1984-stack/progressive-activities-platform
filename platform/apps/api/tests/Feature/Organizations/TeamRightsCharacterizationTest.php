@@ -161,7 +161,7 @@ class TeamRightsCharacterizationTest extends TestCase
             'GET api/v1/context/organization' => ['GET', '/api/v1/context/organization', [], self::ALL, 200],
             'POST api/v1/invitations' => ['POST', '/api/v1/invitations', [], self::ALL, 422],
             'GET api/v1/invitations' => ['GET', '/api/v1/invitations', [], self::INVITE, 200],
-            'GET api/v1/audit-events' => ['GET', '/api/v1/audit-events', [], self::ALL, 200],
+            'GET api/v1/audit-events' => ['GET', '/api/v1/audit-events', [], self::TEAM_VIEW, 200], // PR #80: only those who see the team,
 
             'GET api/v1/team' => ['GET', '/api/v1/team', [], self::TEAM_VIEW, 200],
             'GET api/v1/team/members/{member}' => ['GET', $member, [], self::TEAM_VIEW, 200],
