@@ -174,7 +174,7 @@ class TeamInvitationsTest extends TestCase
         $sent = $this->invite($owner, $person)->assertCreated();
         $copy = $this->tokenOf($sent);
         $mailed = $this->mailedToken('petar@example.test');
-        $waiting = ['status' => 'pending', 'expires_at' => $sent->json('invitation.expires_at')];
+        $waiting = ['status' => 'pending', 'expires_at' => $sent->json('invitation.expires_at'), 'role' => 'instructor'];
         $list = $this->actingAs($owner)->getJson('/api/v1/team')->assertOk();
         $this->assertSame($waiting, $this->listed($list, $person)['invitation']);
         $this->actingAs($owner)->getJson('/api/v1/team/members/'.$person->id)->assertOk()->assertJsonPath('member.invitation', $waiting);

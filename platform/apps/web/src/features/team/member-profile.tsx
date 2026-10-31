@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { type FormEvent, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useDashboardContext } from '@/features/dashboard/dashboard-context';
 import { shortDay, sofiaDay } from '@/features/enrollment/presentation';
 import {
@@ -11,49 +11,27 @@ import {
 } from './api';
 import { MemberGroups } from './member-groups';
 import {
-  changeableRoles, focusLater, historySentence, initials, invitableRoles, invitationLine, memberRole, memberStatus, roleAccess, roleLabel, roleLabels,
-  type TeamRole,
+  changeableRoles, focusLater, historyItem, initials, invitableRoles, invitationFold, memberRole, memberStatus, roleLabel, roleLabels, type TeamRole,
 } from './presentation';
+import { RoleAccessList } from './role-access';
 import { SentInvitationNotice } from './sent-invitation';
 import { NoTeamAccess } from './team-page';
 import styles from './team.module.css';
 
-type Tab = 'details' | 'groups' | 'rights' | 'history';
 type Notify = (text: string) => void;
-
-function initialTab(value: string | null): Tab {
-  return value === 'groups' || value === 'rights' || value === 'history' ? value : 'details';
-}
 
 const historyTime = new Intl.DateTimeFormat('bg-BG', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Sofia' });
 const failure = (reason: unknown, fallback: string) => (reason instanceof Error && reason.message ? reason.message : fallback);
-
-function Access({ role }: { role: string }) {
-  const access = roleAccess(role);
-  return (
-    <div className={styles.access}>
-      <p><strong>Ще вижда:</strong> {access.sees}</p>
-      <p><strong>Няма да вижда:</strong> {access.hidden}</p>
-    </div>
-  );
-}
-
-function Chevron({ open }: { open: boolean }) {
-  return (
-    <svg className={`${styles.foldChevron} ${open ? styles.foldChevronOpen : ''}`} viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false">
-      <path d="M5 7.5 10 12.5 15 7.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
+/** History entries shown before "Цялата история". */
+const HISTORY_SHOWN = 5;
 
 /**
- * "Покана за вход" for a person without a login, folded to one line ("Не влиза в системата · Покани да влиза") and
- * open from the start only when the list's "Покани да влиза" led here. After sending, the form folds away; sending
- * again gives new links and the old ones stop working.
+ * "Изпрати покана" for someone without access: folded to a sentence and the button, open from the start only when
+ * the list's button led here. After sending, the form folds away; sending again gives new links and the old ones stop
+ * working.
  */
-function InviteCard({ organizationId, actorRole, member, now, startOpen, toggleRef, onChanged }: {
-  organizationId: string; actorRole: string; member: TeamMember; now: Date; startOpen: boolean;
-  toggleRef: RefObject<HTMLButtonElement | null>; onChanged: () => void;
+function InviteCard({ organizationId, actorRole, member, now, startOpen, onChanged }: {
+  organizationId: string; actorRole: string; member: TeamMember; now: Date; startOpen: boolean; onChanged: () => void;
 }) {
   const roles = invitableRoles(actorRole);
   const [open, setOpen] = useState(startOpen);
@@ -64,9 +42,14 @@ function InviteCard({ organizationId, actorRole, member, now, startOpen, toggleR
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [emailError, setEmailError] = useState('');
-  const line = invitationLine(member, now);
+  const fold = invitationFold(member, now);
   const resending = Boolean(member.invitation || sent);
   const formShown = !sent || again;
+
+  function show(next: boolean) {
+    setOpen(next);
+    focusLater(next ? 'invite-role' : 'invite-open');
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -91,164 +74,68 @@ function InviteCard({ organizationId, actorRole, member, now, startOpen, toggleR
     }
   }
 
-  return (
-    <section id="invite" className={`${styles.card} ${styles.cardWarm} ${styles.foldCard}`} aria-label="Покана за вход">
-      <h2 className={styles.foldHeading}>
-        <button ref={toggleRef} type="button" className={styles.fold} aria-expanded={open} aria-controls="invite-body" onClick={() => setOpen((value) => !value)}>
-          <span className={styles.foldText}>{line.state} <span aria-hidden="true">·</span> <span className={styles.foldAction}>{line.action}</span></span>
-          <Chevron open={open} />
-        </button>
-      </h2>
-      {open ? (
-        <div id="invite-body" className={styles.form}>
-          {sent ? <SentInvitationNotice sent={sent} /> : null}
-          {error ? <p className={styles.error} role="alert">{error}</p> : null}
-          {formShown ? (
-            <form className={styles.form} onSubmit={submit} noValidate>
-              {resending ? null : <p>Без вход профилът също работи — тогава екипът отбелязва вместо него.</p>}
-              <div className={styles.fieldGrid}>
-                <div className={styles.field}>
-                  <label htmlFor="invite-role">Роля</label>
-                  <select id="invite-role" className={styles.input} value={role} onChange={(event) => setRole(event.target.value as TeamRole)}>
-                    {roles.map((option) => <option key={option} value={option}>{roleLabels[option]}</option>)}
-                  </select>
-                </div>
-                <div className={styles.field}>
-                  <label htmlFor="invite-email">Имейл</label>
-                  <input id="invite-email" className={styles.input} type="email" inputMode="email" autoComplete="off" value={email} required
-                    aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? 'invite-email-error' : undefined}
-                    onChange={(event) => { setEmail(event.target.value); setEmailError(''); }} />
-                  {emailError ? <p id="invite-email-error" className={styles.fieldError}>{emailError}</p> : null}
-                </div>
-              </div>
-              <Access role={role} />
-              <div className={styles.actions}>
-                <button type="submit" className={styles.primary} disabled={busy} aria-busy={busy} aria-describedby={resending ? 'invite-again-hint' : undefined}>
-                  {busy ? 'Изпращане…' : resending ? 'Изпрати поканата пак' : 'Изпрати поканата'}
-                </button>
-              </div>
-              {resending ? <p id="invite-again-hint" className={styles.small}>Старото писмо и старата връзка спират да важат.</p> : null}
-            </form>
-          ) : (
-            <div className={styles.form}>
-              <div className={styles.actions}>
-                <button type="button" className={styles.secondary} aria-describedby="invite-again-hint" onClick={() => { setAgain(true); focusLater('invite-email'); }}>
-                  Изпрати поканата пак
-                </button>
-              </div>
-              <p id="invite-again-hint" className={styles.small}>Старото писмо и старата връзка спират да важат.</p>
-            </div>
-          )}
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-/** "Данни": name, phone and e-mail with the version; a stale version says so and offers to load the new data. */
-function DetailsForm({ organizationId, member, onChanged, onNotice }: { organizationId: string; member: TeamMember; onChanged: () => void; onNotice: Notify }) {
-  const [values, setValues] = useState({ full_name: member.full_name, phone: member.phone ?? '', email: member.email ?? '' });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [error, setError] = useState('');
-  const [stale, setStale] = useState(false);
-  const [busy, setBusy] = useState(false);
-  type Field = keyof typeof values;
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const changes: MemberChanges = { version: member.version };
-    if (values.full_name.trim() !== member.full_name) changes.full_name = values.full_name.trim();
-    if (values.phone.trim() !== (member.phone ?? '')) changes.phone = values.phone.trim();
-    if (values.email.trim() !== (member.email ?? '')) changes.email = values.email.trim() === '' ? null : values.email.trim();
-    if (Object.keys(changes).length === 1) {
-      onNotice('Няма промени за запазване.');
-      return;
-    }
-    setBusy(true); setError(''); setErrors({}); setStale(false);
-    try {
-      await updateMember(organizationId, member.id, changes);
-      onNotice('Данните са запазени.');
-      onChanged();
-    } catch (reason) {
-      if (reason instanceof TeamApiError && reason.status === 409) {
-        setStale(true);
-        setError('Някой току-що промени данните на този човек. Заредете новите данни — вашите промени не са запазени.');
-      } else {
-        const fields = reason instanceof TeamApiError ? reason.fieldErrors : {};
-        setErrors(Object.fromEntries(Object.entries(fields).map(([field, messages]) => [field, messages[0] ?? ''])));
-        setError(failure(reason, 'Данните не бяха запазени.'));
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const input = (field: Field, label: string, type: 'text' | 'tel' | 'email') => (
-    <div className={`${styles.field} ${field === 'full_name' ? styles.wide : ''}`}>
-      <label htmlFor={`details-${field}`}>{label}</label>
-      <input id={`details-${field}`} className={styles.input} type={type} autoComplete="off" value={values[field]}
-        aria-invalid={errors[field] ? true : undefined} aria-describedby={errors[field] ? `details-${field}-error` : undefined}
-        onChange={(event) => { const value = event.target.value; setValues((current) => ({ ...current, [field]: value })); }} />
-      {errors[field] ? <p id={`details-${field}-error`} className={styles.fieldError}>{errors[field]}</p> : null}
-    </div>
-  );
-
-  return (
-    <form className={styles.form} onSubmit={submit} noValidate>
-      <div className={styles.fieldGrid}>
-        {input('full_name', 'Име и фамилия', 'text')}
-        {input('phone', 'Телефон', 'tel')}
-        {input('email', 'Имейл (по избор)', 'email')}
-      </div>
-      {error ? <p className={styles.error} role="alert">{error}</p> : null}
-      <div className={styles.actions}>
-        {stale
-          ? <button type="button" className={styles.primary} onClick={onChanged}>Зареди новите данни</button>
-          : <button type="submit" className={styles.primary} disabled={busy} aria-busy={busy}>{busy ? 'Запазване…' : 'Запази промените'}</button>}
-      </div>
-    </form>
-  );
-}
-
-function ArchiveCard({ organizationId, member, onChanged, onNotice }: { organizationId: string; member: TeamMember; onChanged: () => void; onNotice: Notify }) {
-  const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  async function archive() {
-    setBusy(true); setError('');
-    try {
-      await archiveMember(organizationId, member.id, member.version);
-      onNotice(`Записът на ${member.full_name} е архивиран.`);
-      onChanged();
-    } catch (reason) {
-      // The server says what stops it ("Първо приключете назначението в …"), as it is.
-      setError(failure(reason, 'Записът не беше архивиран.'));
-      setConfirming(false);
-      focusLater('archive-button');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className={styles.card} aria-labelledby="archive-title">
-      <h2 id="archive-title">Архивиране</h2>
-      <p className={styles.muted}>Архивираният човек изчезва от списъците и изборите. Ако влиза в системата, входът му в организацията спира. Нищо не се изтрива.</p>
-      {error ? <p className={styles.error} role="alert">{error}</p> : null}
-      {confirming ? (
-        <div className={styles.confirm}>
-          <p>Да архивираме ли {member.full_name}?</p>
-          <div className={styles.actions}>
-            <button id="archive-yes" type="button" className={styles.danger} disabled={busy} aria-busy={busy} onClick={archive}>{busy ? 'Архивиране…' : 'Да, архивирай'}</button>
-            <button type="button" className={styles.secondary} onClick={() => { setConfirming(false); focusLater('archive-button'); }}>Отказ</button>
-          </div>
-        </div>
-      ) : (
+  if (!open) {
+    return (
+      <section className={`${styles.card} ${styles.cardWarm}`} aria-label="Покана за достъп">
+        <p>{fold.sentence}</p>
         <div className={styles.actions}>
-          <button id="archive-button" type="button" className={styles.secondary} onClick={() => { setConfirming(true); setError(''); focusLater('archive-yes'); }}>Архивирай</button>
+          <button id="invite-open" type="button" className={styles.primary} aria-expanded={false} onClick={() => show(true)}>
+            {fold.action}<span aria-hidden="true"> ▾</span>
+          </button>
         </div>
-      )}
+      </section>
+    );
+  }
+
+  return (
+    <section id="invite" className={`${styles.card} ${styles.cardWarm}`} aria-label="Покана за достъп">
+      <div className={styles.cardHead}>
+        <h2>Покана за достъп</h2>
+        <button type="button" className={styles.rowAction} aria-expanded aria-controls="invite-body" onClick={() => show(false)}>
+          Скрий<span aria-hidden="true"> ▴</span>
+        </button>
+      </div>
+      <div id="invite-body" className={styles.form}>
+        {sent ? <SentInvitationNotice sent={sent} /> : null}
+        {error ? <p className={styles.error} role="alert">{error}</p> : null}
+        {formShown ? (
+          <form className={styles.form} onSubmit={submit} noValidate>
+            <div className={styles.fieldGrid}>
+              <div className={styles.field}>
+                <label htmlFor="invite-role">Роля</label>
+                <select id="invite-role" className={styles.input} value={role} onChange={(event) => setRole(event.target.value as TeamRole)}>
+                  {roles.map((option) => <option key={option} value={option}>{roleLabels[option]}</option>)}
+                </select>
+              </div>
+              <div className={styles.field}>
+                <label htmlFor="invite-email">Имейл</label>
+                <input id="invite-email" className={styles.input} type="email" inputMode="email" autoComplete="off" value={email} required
+                  aria-invalid={emailError ? true : undefined} aria-describedby={emailError ? 'invite-email-error' : undefined}
+                  onChange={(event) => { setEmail(event.target.value); setEmailError(''); }} />
+                {emailError ? <p id="invite-email-error" className={styles.fieldError}>{emailError}</p> : null}
+              </div>
+            </div>
+            <RoleAccessList role={role} when="later" />
+            <div className={styles.actions}>
+              <button type="submit" className={styles.primary} disabled={busy} aria-busy={busy} aria-describedby="invite-note">
+                {busy ? 'Изпращане…' : resending ? 'Изпрати поканата отново' : 'Изпрати поканата'}
+              </button>
+            </div>
+            <p id="invite-note" className={styles.small}>
+              {resending ? 'Връзката от предишната покана спира да работи. ' : ''}Ще получи имейл с връзка, която важи 7 дни. От нея създава свой профил и парола.
+            </p>
+          </form>
+        ) : (
+          <div className={styles.form}>
+            <div className={styles.actions}>
+              <button type="button" className={styles.secondary} aria-describedby="invite-again-hint" onClick={() => { setAgain(true); focusLater('invite-email'); }}>
+                Изпрати поканата отново
+              </button>
+            </div>
+            <p id="invite-again-hint" className={styles.small}>Връзката от предишната покана спира да работи.</p>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
@@ -258,16 +145,21 @@ function RightsCard({ organizationId, actorRole, member, canManage, onChanged, o
   organizationId: string; actorRole: string; member: TeamMember; canManage: boolean; onChanged: () => void; onNotice: Notify;
 }) {
   const options = member.state === 'login' && canManage ? changeableRoles(actorRole, member.role) : null;
+  const [changing, setChanging] = useState(false);
   const [next, setNext] = useState(member.role ?? '');
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [stale, setStale] = useState(false);
-  const role = memberRole(member);
 
   function ask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (next && next !== member.role) { setConfirming(true); setError(''); focusLater('rights-yes'); }
+  }
+
+  function stop() {
+    setChanging(false); setConfirming(false); setNext(member.role ?? '');
+    focusLater('rights-change');
   }
 
   async function confirm() {
@@ -288,59 +180,223 @@ function RightsCard({ organizationId, actorRole, member, canManage, onChanged, o
 
   return (
     <section className={styles.card} aria-labelledby="rights-title">
-      <h2 id="rights-title">Права</h2>
+      <div className={styles.cardHead}>
+        <h2 id="rights-title">Права</h2>
+        {options && !changing ? (
+          <button id="rights-change" type="button" className={styles.secondary} onClick={() => { setChanging(true); focusLater('rights-role'); }}>Смени ролята</button>
+        ) : null}
+      </div>
       {member.state === 'login' ? (
         <>
           <p>Роля: <strong>{roleLabel(member.role)}</strong></p>
-          <Access role={member.role ?? ''} />
+          <RoleAccessList role={member.role ?? ''} when="now" />
         </>
       ) : member.state === 'archived' ? (
-        <p>Записът е архивиран — няма вход и права в организацията.</p>
+        <p>Записът е в архива — няма достъп и роля в организацията.</p>
       ) : (
-        <p>Не влиза в системата, затова няма роля и права{role === 'instructor' ? ' — екипът отбелязва вместо него' : ''}. Ролята се избира в поканата за вход.</p>
+        <p>Още няма роля, защото няма достъп. Ролята избирате в поканата.</p>
       )}
       {error ? <p className={styles.error} role="alert">{error}</p> : null}
       {stale ? <div className={styles.actions}><button type="button" className={styles.secondary} onClick={onChanged}>Зареди новите данни</button></div> : null}
-      {member.state === 'login' && canManage ? (
-        options ? (
-          confirming ? (
-            <div className={styles.confirm} role="group" aria-labelledby="rights-confirm">
-              <p id="rights-confirm">Да сменим ли ролята на {member.full_name} от „{roleLabel(member.role)}“ на „{roleLabel(next)}“?</p>
-              <Access role={next} />
-              <div className={styles.actions}>
-                <button id="rights-yes" type="button" className={styles.primary} disabled={busy} aria-busy={busy} onClick={confirm}>{busy ? 'Смяна…' : 'Да, смени ролята'}</button>
-                <button type="button" className={styles.secondary} onClick={() => { setConfirming(false); focusLater('rights-role'); }}>Отказ</button>
-              </div>
+      {member.state === 'login' && canManage && !options ? <p className={styles.muted}>Тази роля може да смени само собственикът.</p> : null}
+      {options && changing ? (
+        confirming ? (
+          <div className={styles.confirm} role="group" aria-labelledby="rights-confirm">
+            <p id="rights-confirm">Да сменим ли ролята на {member.full_name} от „{roleLabel(member.role)}“ на „{roleLabel(next)}“?</p>
+            <RoleAccessList role={next} when="later" />
+            <div className={styles.actions}>
+              <button id="rights-yes" type="button" className={styles.primary} disabled={busy} aria-busy={busy} onClick={confirm}>{busy ? 'Смяна…' : 'Да, смени ролята'}</button>
+              <button type="button" className={styles.secondary} onClick={() => { setConfirming(false); focusLater('rights-role'); }}>Отказ</button>
             </div>
-          ) : (
-            <form className={styles.form} onSubmit={ask}>
-              <div className={styles.field}>
-                <label htmlFor="rights-role">Нова роля</label>
-                <select id="rights-role" className={styles.input} value={next} onChange={(event) => setNext(event.target.value)}>
-                  {options.map((option) => <option key={option} value={option}>{roleLabels[option]}</option>)}
-                </select>
-              </div>
-              <div className={styles.actions}><button type="submit" className={styles.secondary} disabled={!next || next === member.role}>Смени ролята</button></div>
-            </form>
-          )
-        ) : <p className={styles.muted}>Тази роля сменя само собственикът.</p>
+          </div>
+        ) : (
+          <form className={styles.inline} onSubmit={ask}>
+            <div className={styles.field}>
+              <label htmlFor="rights-role">Нова роля</label>
+              <select id="rights-role" className={styles.input} value={next} onChange={(event) => setNext(event.target.value)}>
+                {options.map((option) => <option key={option} value={option}>{roleLabels[option]}</option>)}
+              </select>
+            </div>
+            <div className={styles.actions}>
+              <button type="submit" className={styles.primary} disabled={!next || next === member.role}>Смени ролята</button>
+              <button type="button" className={styles.secondary} onClick={stop}>Отказ</button>
+            </div>
+          </form>
+        )
       ) : null}
     </section>
   );
 }
 
+/** "Данни" for reading; "Промени" opens the fields with "Запази" and "Отказ", sent with the version. */
+function DetailsCard({ organizationId, member, canManage, onChanged, onNotice }: {
+  organizationId: string; member: TeamMember; canManage: boolean; onChanged: () => void; onNotice: Notify;
+}) {
+  const editable = canManage && member.state !== 'archived';
+  const [editing, setEditing] = useState(false);
+  const [values, setValues] = useState({ full_name: member.full_name, phone: member.phone ?? '', email: member.email ?? '' });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [error, setError] = useState('');
+  const [stale, setStale] = useState(false);
+  const [busy, setBusy] = useState(false);
+  type Field = keyof typeof values;
+
+  function start() {
+    setValues({ full_name: member.full_name, phone: member.phone ?? '', email: member.email ?? '' });
+    setErrors({}); setError(''); setStale(false); setEditing(true);
+    focusLater('details-full_name');
+  }
+
+  function cancel() {
+    setEditing(false); setErrors({}); setError(''); setStale(false);
+    focusLater('details-change');
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const changes: MemberChanges = { version: member.version };
+    if (values.full_name.trim() !== member.full_name) changes.full_name = values.full_name.trim();
+    if (values.phone.trim() !== (member.phone ?? '')) changes.phone = values.phone.trim();
+    if (values.email.trim() !== (member.email ?? '')) changes.email = values.email.trim() === '' ? null : values.email.trim();
+    if (Object.keys(changes).length === 1) {
+      onNotice('Нищо не е променено.');
+      setEditing(false);
+      return;
+    }
+    setBusy(true); setError(''); setErrors({}); setStale(false);
+    try {
+      await updateMember(organizationId, member.id, changes);
+      onNotice('Данните са запазени.');
+      setEditing(false);
+      onChanged();
+    } catch (reason) {
+      if (reason instanceof TeamApiError && reason.status === 409) {
+        setStale(true);
+        setError('Някой току-що промени тези данни. Вашите промени не са запазени — заредете новите и опитайте отново.');
+      } else {
+        const fields = reason instanceof TeamApiError ? reason.fieldErrors : {};
+        const shown = Object.fromEntries(Object.entries(fields).map(([field, messages]) => [field, messages[0] ?? '']));
+        setErrors(shown);
+        setError(failure(reason, 'Данните не бяха запазени.'));
+        const first = (['full_name', 'phone', 'email'] as Field[]).find((field) => shown[field]);
+        if (first) focusLater(`details-${first}`);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const input = (field: Field, label: string, type: 'text' | 'tel' | 'email') => (
+    <div className={styles.field}>
+      <label htmlFor={`details-${field}`}>{label}</label>
+      <input id={`details-${field}`} className={styles.input} type={type} autoComplete="off" value={values[field]}
+        aria-invalid={errors[field] ? true : undefined} aria-describedby={errors[field] ? `details-${field}-error` : undefined}
+        onChange={(event) => { const value = event.target.value; setValues((current) => ({ ...current, [field]: value })); }} />
+      {errors[field] ? <p id={`details-${field}-error`} className={styles.fieldError}>{errors[field]}</p> : null}
+    </div>
+  );
+  const notSet = <span className={styles.none}>не е въведен</span>;
+
+  return (
+    <section className={styles.card} aria-labelledby="details-title">
+      <div className={styles.cardHead}>
+        <h2 id="details-title">Данни</h2>
+        {editable && !editing ? <button id="details-change" type="button" className={styles.secondary} onClick={start}>Промени</button> : null}
+      </div>
+      {editing ? (
+        <form className={styles.form} onSubmit={submit} noValidate>
+          {input('full_name', 'Име и фамилия', 'text')}
+          {input('phone', 'Телефон', 'tel')}
+          {input('email', 'Имейл (по избор)', 'email')}
+          {error ? <p className={styles.error} role="alert">{error}</p> : null}
+          <div className={styles.actions}>
+            {stale
+              ? <button type="button" className={styles.primary} onClick={() => { setEditing(false); onChanged(); }}>Зареди новите данни</button>
+              : <button type="submit" className={styles.primary} disabled={busy} aria-busy={busy}>{busy ? 'Запазване…' : 'Запази'}</button>}
+            <button type="button" className={styles.secondary} onClick={cancel}>Отказ</button>
+          </div>
+        </form>
+      ) : (
+        <dl className={styles.facts}>
+          <div><dt>Име и фамилия</dt><dd>{member.full_name}</dd></div>
+          {canManage ? <div><dt>Телефон</dt><dd>{member.phone ?? notSet}</dd></div> : null}
+          {canManage ? <div><dt>Имейл</dt><dd>{member.email ?? notSet}</dd></div> : null}
+          <div><dt>Води групи</dt><dd>{member.instructor_profile_id ? 'Да' : 'Не'}</dd></div>
+        </dl>
+      )}
+      {!canManage ? <p className={styles.small}>Телефоните и имейлите на екипа виждат собственикът и администраторът.</p> : null}
+    </section>
+  );
+}
+
+function ArchiveCard({ organizationId, member, onChanged, onNotice }: { organizationId: string; member: TeamMember; onChanged: () => void; onNotice: Notify }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function archive() {
+    setBusy(true); setError('');
+    try {
+      await archiveMember(organizationId, member.id, member.version);
+      onNotice(`${member.full_name} е в архива.`);
+      onChanged();
+    } catch (reason) {
+      // The server says what stops it ("Първо приключете назначението в …"), as it is.
+      setError(failure(reason, 'Записът не беше архивиран.'));
+      setConfirming(false);
+      focusLater('archive-button');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className={styles.card} aria-labelledby="archive-title">
+      <h2 id="archive-title">Архив</h2>
+      <p className={styles.muted}>Записът се скрива от списъците и изборите, а достъпът до организацията спира. Нищо не се изтрива.</p>
+      {error ? <p className={styles.error} role="alert">{error}</p> : null}
+      {confirming ? (
+        <div className={styles.confirm}>
+          <p>Да преместим ли {member.full_name} в архива?</p>
+          <div className={styles.actions}>
+            <button id="archive-yes" type="button" className={styles.danger} disabled={busy} aria-busy={busy} onClick={archive}>{busy ? 'Архивиране…' : 'Да, архивирай'}</button>
+            <button type="button" className={styles.secondary} onClick={() => { setConfirming(false); focusLater('archive-button'); }}>Отказ</button>
+          </div>
+        </div>
+      ) : (
+        <div className={styles.actions}>
+          <button id="archive-button" type="button" className={styles.secondary} onClick={() => { setConfirming(true); setError(''); focusLater('archive-yes'); }}>Архивирай</button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** "История": what, who and when, as nouns — no grammatical gender. */
 function HistoryCard({ history }: { history: HistoryEntry[] }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? history : history.slice(0, HISTORY_SHOWN);
   return (
     <section className={styles.card} aria-labelledby="history-title">
-      <h2 id="history-title">История</h2>
+      <div className={styles.cardHead}>
+        <h2 id="history-title">История</h2>
+        {history.length > HISTORY_SHOWN ? (
+          <button type="button" className={styles.rowAction} aria-expanded={all} aria-controls="history-list" onClick={() => setAll((value) => !value)}>
+            {all ? 'Само последните' : 'Цялата история'}
+          </button>
+        ) : null}
+      </div>
       {history.length === 0 ? <p className={styles.muted}>Още няма записани промени.</p> : (
-        <ul className={styles.rows}>
-          {history.map((entry, index) => (
-            <li key={`${entry.at}-${index}`}>
-              <span>{historySentence(entry)}</span>
-              {entry.at ? <time className={styles.small} dateTime={entry.at}>{historyTime.format(new Date(entry.at))}</time> : null}
-            </li>
-          ))}
+        <ul id="history-list" className={styles.rows}>
+          {shown.map((entry, index) => {
+            const item = historyItem(entry);
+            return (
+              <li key={`${entry.at}-${index}`}>
+                <span><strong>{item.what}</strong>{item.who ? ` — ${item.who}` : ''}</span>
+                {entry.at ? <time className={styles.small} dateTime={entry.at}>{historyTime.format(new Date(entry.at))}</time> : null}
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
@@ -348,8 +404,9 @@ function HistoryCard({ history }: { history: HistoryEntry[] }) {
 }
 
 /**
- * The profile of a person of the team (docs/product/team.md, т. 10): "Данни", "Групи", "Права", "История", the
- * invitation to log in and archiving. Phones, e-mails and the history only for those who manage the team.
+ * The profile of a person of the team (docs/product/team.md, т. 10; DECISIONS 31.10.2026 „Екип — полиран списък и
+ * профил“): one page without tabs — on a wide screen "Групи" and "История" on the left, "Права", "Данни" and "Архив" on
+ * the right; on a phone one under another, with "Изпрати покана" folded.
  */
 export function MemberProfile({ memberId }: { memberId: string }) {
   const { organization } = useDashboardContext();
@@ -357,25 +414,31 @@ export function MemberProfile({ memberId }: { memberId: string }) {
   const canView = organization.permissions.includes('team.view');
   const canManage = organization.permissions.includes('team.manage');
   const canAssign = organization.permissions.includes('catalog.manage');
-  const [tab, setTab] = useState<Tab>(() => initialTab(searchParams.get('tab')));
   const [attempt, setAttempt] = useState(0);
   const [loaded, setLoaded] = useState<{ memberId: string; details: MemberDetails }>();
   const [failed, setFailed] = useState<{ key: string; text: string; status: number }>();
-  const [notice, setNotice] = useState<{ text: string } | undefined>(() => (searchParams.get('added') === '1' ? { text: 'Човекът е добавен в екипа. Добавете групите, които води.' } : undefined));
+  const [notice, setNotice] = useState<{ text: string }>();
   const [now] = useState(() => new Date());
-  const noticeRef = useRef<HTMLParagraphElement>(null);
-  const inviteToggle = useRef<HTMLButtonElement>(null);
   const [inviteOpen] = useState(() => searchParams.get('invite') === '1');
+  // Right after adding the person the form for the first group opens by itself; "+ Добави група" adds one more.
+  const [addRequest, setAddRequest] = useState(() => (searchParams.get('added') === '1' ? 1 : 0));
+  const addedPending = useRef(searchParams.get('added') === '1');
+  const noticeRef = useRef<HTMLParagraphElement>(null);
   const wantsInvite = useRef(inviteOpen);
-  // After "Добави човека" the form for the first group opens by itself, once.
-  const [addGroupNow, setAddGroupNow] = useState(() => searchParams.get('added') === '1');
   const key = `${organization.id}|${memberId}|${attempt}`;
 
   useEffect(() => {
     if (!canView) return;
     let active = true;
     loadMember(organization.id, memberId)
-      .then((details) => { if (active) setLoaded({ memberId, details }); })
+      .then((details) => {
+        if (!active) return;
+        setLoaded({ memberId, details });
+        if (addedPending.current) {
+          addedPending.current = false;
+          setNotice({ text: `${details.member.full_name} е в екипа. Сега добавете групите, които води.` });
+        }
+      })
       .catch((reason: unknown) => {
         if (active) setFailed({ key, text: failure(reason, 'Профилът не се зареди.'), status: reason instanceof TeamApiError ? reason.status : 0 });
       });
@@ -387,22 +450,19 @@ export function MemberProfile({ memberId }: { memberId: string }) {
   const error = failed?.key === key ? failed : undefined;
   const reload = useCallback(() => setAttempt((value) => value + 1), []);
   const notify = useCallback((text: string) => setNotice({ text }), []);
-  const addGroupOpened = useCallback(() => setAddGroupNow(false), []);
 
-  // A message takes the focus, so it is seen and read; the one after adding waits until the profile is shown.
-  const ready = details !== undefined;
   useEffect(() => {
-    if (!notice || !ready) return;
+    if (!notice) return;
     noticeRef.current?.scrollIntoView({ block: 'nearest' });
     noticeRef.current?.focus();
-  }, [notice, ready]);
+  }, [notice]);
 
-  // "Покани да влиза" in the list opens the profile at the invitation.
+  // The list's "Изпрати покана" opens the profile at the invitation, already open.
   useEffect(() => {
     if (!details || !wantsInvite.current) return;
     wantsInvite.current = false;
-    inviteToggle.current?.scrollIntoView({ block: 'start' });
-    inviteToggle.current?.focus();
+    document.getElementById('invite')?.scrollIntoView({ block: 'start' });
+    focusLater('invite-role');
   }, [details]);
 
   const back = <Link className={styles.back} href="/dashboard/team"><span aria-hidden="true">←&nbsp;</span>Екип</Link>;
@@ -416,8 +476,8 @@ export function MemberProfile({ memberId }: { memberId: string }) {
         {back}
         {error ? (
           <div className={styles.empty} role="alert">
-            <strong>{error.status === 404 ? 'Не намерихме този човек' : error.text}</strong>
-            <p>{error.status === 404 ? 'Може да е в друга организация или връзката да е грешна.' : 'Проверете връзката и опитайте отново.'}</p>
+            <strong>{error.status === 404 ? 'Не намерихме този профил' : error.text}</strong>
+            <p>{error.status === 404 ? 'Може да е в друга организация или връзката да е грешна.' : 'Проверете интернет връзката и опитайте отново.'}</p>
             {error.status === 404 ? <p><Link href="/dashboard/team">Към екипа</Link></p> : <p><button type="button" className={styles.secondary} onClick={reload}>Опитай отново</button></p>}
           </div>
         ) : (
@@ -434,12 +494,10 @@ export function MemberProfile({ memberId }: { memberId: string }) {
   const { member, history } = details;
   const status = memberStatus(member, now);
   const role = memberRole(member);
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'details', label: 'Данни' }, { id: 'groups', label: 'Групи' }, { id: 'rights', label: 'Права' },
-    ...(history ? [{ id: 'history' as const, label: 'История' }] : []),
-  ];
-  const shownTab = tabs.some((item) => item.id === tab) ? tab : 'details';
   const editable = canManage && member.state !== 'archived';
+  const canAddGroups = canAssign && member.state !== 'archived' && member.instructor_profile_id !== null;
+  // With access, "+ Добави група" is the main action in the header; without, "Изпрати покана" is.
+  const addInHeader = canAddGroups && !(canManage && member.state === 'profile_only');
 
   return (
     <div className={styles.page}>
@@ -449,54 +507,39 @@ export function MemberProfile({ memberId }: { memberId: string }) {
         <div className={styles.heading}>
           <h1>{member.full_name}</h1>
           <p className={styles.headLine}>
-            <span>{role ? roleLabel(role) : 'Без роля'}</span>
+            <span className={styles.headRole}>{role ? roleLabel(role) : 'Няма роля'}</span>
             <span className={`${styles.badge} ${styles[`tone_${status.tone}`]}`}>{status.label}</span>
-            {member.phone ? <span>{member.phone}</span> : null}
+            {status.detail ? <span className={styles.small}>{status.detail}</span> : null}
+            {member.phone ? <a className={styles.phone} href={`tel:${member.phone}`}>{member.phone}</a> : null}
           </p>
         </div>
+        {addInHeader ? (
+          <button id="add-group-header" type="button" className={`${styles.primary} ${styles.wideOnly}`} onClick={() => setAddRequest((value) => value + 1)}>+ Добави група</button>
+        ) : null}
       </header>
 
       <p ref={noticeRef} tabIndex={-1} className={notice ? styles.ok : 'sr-only'} role="status">{notice?.text ?? ''}</p>
       {error ? <p className={styles.error} role="alert">{error.text}</p> : null}
       {member.state === 'archived' ? (
-        <p className={styles.info}>Записът е архивиран{member.archived_at ? ` на ${shortDay(sofiaDay(member.archived_at))}` : ''}. Не се показва в списъците и изборите.</p>
+        <p className={styles.info}>В архива{member.archived_at ? ` от ${shortDay(sofiaDay(member.archived_at))}` : ''}. Не се показва в списъците и изборите.</p>
       ) : null}
 
       {canManage && member.state === 'profile_only' ? (
-        <InviteCard key={member.id} organizationId={organization.id} actorRole={organization.role} member={member} now={now} startOpen={inviteOpen} toggleRef={inviteToggle} onChanged={reload} />
+        <InviteCard key={member.id} organizationId={organization.id} actorRole={organization.role} member={member} now={now} startOpen={inviteOpen} onChanged={reload} />
       ) : null}
 
-      <div className={styles.tabs} role="group" aria-label="Раздели на профила">
-        {tabs.map((item) => (
-          <button key={item.id} type="button" aria-pressed={shownTab === item.id} className={`${styles.tab} ${shownTab === item.id ? styles.tabOn : ''}`} onClick={() => setTab(item.id)}>{item.label}</button>
-        ))}
-      </div>
-
-      {shownTab === 'details' ? (
-        <>
-          <section className={styles.card} aria-labelledby="details-title">
-            <h2 id="details-title">Данни</h2>
-            {editable ? <DetailsForm key={`${member.id}-${member.version}`} organizationId={organization.id} member={member} onChanged={reload} onNotice={notify} /> : (
-              <dl className={styles.facts}>
-                <div><dt>Име и фамилия</dt><dd>{member.full_name}</dd></div>
-                {member.phone ? <div><dt>Телефон</dt><dd>{member.phone}</dd></div> : null}
-                {member.email ? <div><dt>Имейл</dt><dd>{member.email}</dd></div> : null}
-                <div><dt>Профил на преподавател</dt><dd>{member.instructor_profile_id ? 'Има' : 'Няма'}</dd></div>
-              </dl>
-            )}
-            {!canManage ? <p className={styles.small}>Телефоните и имейлите на екипа виждат собственикът и администраторът.</p> : null}
-          </section>
+      <div className={styles.columns}>
+        <div className={styles.column}>
+          <MemberGroups organizationId={organization.id} member={member} canAssign={canAssign} canManage={canManage} onChanged={reload}
+            addRequest={addRequest} addInHeader={addInHeader} />
+          {history ? <HistoryCard history={history} /> : null}
+        </div>
+        <div className={styles.column}>
+          <RightsCard key={`rights-${member.version}`} organizationId={organization.id} actorRole={organization.role} member={member} canManage={canManage} onChanged={reload} onNotice={notify} />
+          <DetailsCard key={`details-${member.version}`} organizationId={organization.id} member={member} canManage={canManage} onChanged={reload} onNotice={notify} />
           {editable ? <ArchiveCard key={`archive-${member.version}`} organizationId={organization.id} member={member} onChanged={reload} onNotice={notify} /> : null}
-        </>
-      ) : null}
-      {shownTab === 'groups' ? (
-        <MemberGroups organizationId={organization.id} member={member} canAssign={canAssign} canManage={canManage} onChanged={reload}
-          openAddOnStart={addGroupNow} onAddOpened={addGroupOpened} />
-      ) : null}
-      {shownTab === 'rights' ? (
-        <RightsCard key={`rights-${member.version}`} organizationId={organization.id} actorRole={organization.role} member={member} canManage={canManage} onChanged={reload} onNotice={notify} />
-      ) : null}
-      {shownTab === 'history' && history ? <HistoryCard history={history} /> : null}
+        </div>
+      </div>
     </div>
   );
 }

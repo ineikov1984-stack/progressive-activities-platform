@@ -34,11 +34,12 @@ final readonly class StaffTeaching
     }
 
     /**
-     * The groups of each profile: current and later assignments, or all of them with the ended ones. `version` is the
-     * assignment's, which ending it asks for.
+     * The groups of each profile: current and later assignments, or all of them with the ended ones. `activity` and
+     * `group` are the activity's title and the group's name, for lists sorted by activity; `label` is both together.
+     * `version` is the assignment's, which ending it asks for.
      *
      * @param  list<string>  $profileIds
-     * @return array<string, list<array{group_id: string, label: string, role: string, starts_on: string|null, ends_on: string|null, version: int}>>
+     * @return array<string, list<array{group_id: string, label: string, activity: string, group: string, role: string, starts_on: string|null, ends_on: string|null, version: int}>>
      */
     public function assignments(array $profileIds, bool $withEnded = false): array
     {
@@ -67,6 +68,8 @@ final readonly class StaffTeaching
             $result[(string) $row->instructor_profile_id][] = [
                 'group_id' => (string) $row->group_id,
                 'label' => $row->title.' · '.$row->name,
+                'activity' => (string) $row->title,
+                'group' => (string) $row->name,
                 'role' => (string) $row->role,
                 'starts_on' => $day($row->starts_on),
                 'ends_on' => $day($row->ends_on),

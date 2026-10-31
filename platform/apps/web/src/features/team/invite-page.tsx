@@ -131,7 +131,7 @@ export function InvitePage() {
     if (token.current === null) token.current = takeToken();
     open(token.current)
       .then((next) => { if (active) setView(next); })
-      .catch(() => { if (active) setLoadError('Поканата не се зареди. Проверете връзката и опитайте отново.'); });
+      .catch(() => { if (active) setLoadError('Поканата не се зареди. Проверете интернет връзката и опитайте отново.'); });
     return () => { active = false; };
   }, [attempt]);
 
@@ -174,7 +174,7 @@ export function InvitePage() {
     const password = String(form.get('password') ?? '');
     const confirmation = String(form.get('password_confirmation') ?? '');
     const found: Record<string, string> = {};
-    if (!name) found.name = 'Напишете името си.';
+    if (!name) found.name = 'Въведете името си.';
     if (password.length < 10) found.password = 'Паролата трябва да е поне 10 знака.';
     else if (password !== confirmation) found.password_confirmation = 'Паролите не съвпадат.';
     setError('');
@@ -196,7 +196,7 @@ export function InvitePage() {
         // 403: the inviter's link only joins an existing profile; 409: the address already has one.
         setView({
           ...view, mode: 'login', notice: reason.status === 403
-            ? 'Тази връзка е за човек, който вече има профил. Влезте с имейла, на който е изпратена поканата. Нов профил се създава само от връзката в писмото.'
+            ? 'Тази връзка е за човек, който вече има профил. Влезте с имейла, на който е изпратена поканата. Нов профил създавате само от връзката в писмото.'
             : 'Вече имате профил с този имейл. Влезте, за да приемете поканата.',
         });
         return;
@@ -253,7 +253,7 @@ export function InvitePage() {
       await signOut();
       setView({ kind: 'guest', invitation: view.invitation, mode: 'login', notice: '' });
     } catch (reason) {
-      setError(failure(reason, 'Изходът не беше успешен. Опитайте отново.'));
+      setError(failure(reason, 'Не успяхме да ви изпишем. Опитайте отново.'));
     } finally {
       setBusy(false);
     }
@@ -285,7 +285,7 @@ export function InvitePage() {
       return (
         <>
           <p className={styles.kicker}>Покана</p>
-          {title('Липсва връзката от поканата')}
+          {title('Връзката е непълна или липсва')}
           <p className={styles.text}>Отворете отново връзката от писмото с поканата. Ако сте я копирали, копирайте я цялата.</p>
           {toLogin}
         </>
@@ -303,7 +303,7 @@ export function InvitePage() {
         <>
           <p className={styles.kicker}>Покана</p>
           {title('Поканата вече не важи')}
-          <p className={styles.text}>Изтекла е или е изпратена наново. Поискайте нова покана от организацията, която ви е поканила.</p>
+          <p className={styles.text}>Изтекла е или вместо нея е изпратена нова. Поискайте нова покана от организацията.</p>
           {toLogin}
         </>
       );
@@ -369,7 +369,7 @@ export function InvitePage() {
         {view.notice ? <p className={styles.notice} role="status">{view.notice}</p> : null}
         {fromMail
           ? <p className={styles.text}>Влезте с имейла, на който е изпратена поканата.</p>
-          : <p className={styles.notice}>Тази връзка е за човек, който вече влиза в системата. Ако нямате профил, отворете писмото с поканата.</p>}
+          : <p className={styles.notice}>Тази връзка е за човек, който вече има профил. Ако нямате, отворете писмото с поканата.</p>}
         <form className={styles.form} onSubmit={signInAndAccept} noValidate>
           <Field id="invite-login-email" name="email" label="Имейл" type="email" autoComplete="email" error={fieldErrors.email} defaultValue={invitation.email} />
           <Field id="invite-login-password" name="password" label="Парола" type="password" autoComplete="current-password" error={fieldErrors.password} />

@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, type MouseEvent, type SyntheticEvent, useEffect, useRef, useState } from 'react';
 import { addMember, inviteMember, type SentInvitation, TeamApiError, type TeamMember } from './api';
-import { focusLater, invitableRoles, roleAccess, roleHints, roleLabels, type TeamRole } from './presentation';
+import { focusLater, invitableRoles, roleHints, roleLabels, type TeamRole } from './presentation';
+import { RoleAccessList } from './role-access';
 import { SentInvitationNotice } from './sent-invitation';
 import styles from './team.module.css';
 
@@ -24,7 +25,7 @@ function newRequestKey(): string {
 }
 
 /**
- * "Добави човек" (docs/product/team.md, т. 10): name and phone are required, the e-mail is optional. A teacher may stay
+ * "Добави в екипа" (docs/product/team.md, т. 10): name and phone are required, the e-mail is optional. A teacher may stay
  * a profile without a login; every other role logs in, so for it the invitation is on and the e-mail is required.
  * A modal side panel: the heading takes the focus, Esc and "Затвори" close it.
  */
@@ -44,7 +45,6 @@ export function AddMemberDialog({ organizationId, actorRole, onClose, onAdded }:
   const invites = role !== 'instructor' || inviteTeacher;
   // Something typed would be lost: a click outside the panel or Esc asks first.
   const dirty = !done && Object.values(values).some((value) => value.trim() !== '');
-  const access = roleAccess(role);
 
   useEffect(() => {
     const element = dialog.current;
@@ -83,7 +83,7 @@ export function AddMemberDialog({ organizationId, actorRole, onClose, onAdded }:
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const found: Partial<Record<Field, string>> = {};
-    if (values.full_name.trim() === '') found.full_name = 'Въведете името.';
+    if (values.full_name.trim() === '') found.full_name = 'Въведете име и фамилия.';
     if (values.phone.trim() === '') found.phone = 'Въведете телефон.';
     if (invites && values.email.trim() === '') found.email = 'Въведете имейл, на който да изпратим поканата.';
     const first = (Object.keys(found) as Field[])[0];
@@ -108,7 +108,7 @@ export function AddMemberDialog({ organizationId, actorRole, onClose, onAdded }:
       const shown: Partial<Record<Field, string>> = {};
       for (const field of ['full_name', 'phone', 'email'] as Field[]) if (fields[field]?.[0]) shown[field] = fields[field][0];
       setErrors(shown);
-      setError(reason instanceof Error && reason.message ? reason.message : 'Човекът не беше добавен. Проверете връзката и опитайте отново.');
+      setError(reason instanceof Error && reason.message ? reason.message : 'Записът не беше добавен. Проверете интернет връзката и опитайте отново.');
       const invalid = (Object.keys(shown) as Field[])[0];
       if (invalid) focusField(invalid);
       setBusy(false);
@@ -146,8 +146,8 @@ export function AddMemberDialog({ organizationId, actorRole, onClose, onAdded }:
       <div className={styles.drawerInner}>
         <header className={styles.drawerHead}>
           <div className={styles.heading}>
-            <h2 id="add-member-title" ref={heading} tabIndex={-1}>{done ? `${done.member.full_name} е в екипа` : 'Добави човек в екипа'}</h2>
-            {done ? null : <p className={styles.muted}>Само името и телефонът са задължителни.</p>}
+            <h2 id="add-member-title" ref={heading} tabIndex={-1}>{done ? `${done.member.full_name} е в екипа` : 'Добави в екипа'}</h2>
+            {done ? null : <p className={styles.muted}>Задължителни са името и телефонът, а при покана — и имейлът.</p>}
           </div>
           <button type="button" className={styles.secondary} onClick={() => dialog.current?.close()}>Затвори</button>
         </header>
@@ -155,21 +155,21 @@ export function AddMemberDialog({ organizationId, actorRole, onClose, onAdded }:
         <div className={styles.drawerBody}>
           {leaving ? (
             <div className={styles.confirm} role="group" aria-labelledby="add-leave-title">
-              <p id="add-leave-title">Да откажа ли? Въведеното ще се загуби.</p>
+              <p id="add-leave-title">Да се откажете ли? Въведеното ще се изгуби.</p>
               <div className={styles.actions}>
                 <button id="add-keep" type="button" className={styles.primary} onClick={() => { setLeaving(false); focusField('full_name'); }}>Продължи попълването</button>
-                <button type="button" className={styles.secondary} onClick={() => dialog.current?.close()}>Да, откажи</button>
+                <button type="button" className={styles.secondary} onClick={() => dialog.current?.close()}>Да, затвори</button>
               </div>
             </div>
           ) : null}
           {done ? (
             <>
               {done.sent ? <SentInvitationNotice sent={done.sent} /> : (
-                <p className={styles.error} role="alert">Човекът е добавен, но поканата не тръгна: {done.inviteError} Изпратете я пак от профила.</p>
+                <p className={styles.error} role="alert">{done.member.full_name} е в екипа, но поканата не беше изпратена: {done.inviteError} Изпратете я отново от профила.</p>
               )}
               <div className={styles.actions}>
                 <Link className={styles.primary} href={`/dashboard/team/${encodeURIComponent(done.member.id)}`}>Към профила</Link>
-                <button type="button" className={styles.secondary} onClick={addAnother}>Добави още един</button>
+                <button type="button" className={styles.secondary} onClick={addAnother}>Добави още някого</button>
               </div>
             </>
           ) : (
@@ -207,23 +207,20 @@ export function AddMemberDialog({ organizationId, actorRole, onClose, onAdded }:
 
               <label className={styles.switch}>
                 <input type="checkbox" role="switch" checked={invites} disabled={role !== 'instructor'} onChange={(event) => setInviteTeacher(event.target.checked)} aria-describedby="add-invite-hint" />
-                <span className={styles.choiceText}>Покани да влиза в системата
+                <span className={styles.choiceText}>Изпрати покана за достъп
                   <span id="add-invite-hint">{role === 'instructor'
-                    ? 'Ще получи имейл с връзка. Без вход профилът също работи — тогава екипът отбелязва вместо него.'
-                    : 'Тази роля работи само с вход, затова поканата е задължителна. Ще получи имейл с връзка.'}</span>
+                    ? 'Ще получи имейл с връзка. Без покана всичко работи, но присъствията отбелязвате вие.'
+                    : 'Тази роля изисква достъп, затова поканата е задължителна. Ще получи имейл с връзка.'}</span>
                 </span>
               </label>
 
-              <div className={styles.access} aria-live="polite">
-                <p><strong>Ще вижда:</strong> {access.sees}</p>
-                <p><strong>Няма да вижда:</strong> {access.hidden}</p>
-              </div>
+              <div aria-live="polite"><RoleAccessList role={role} when="later" /></div>
 
               {error ? <p className={styles.error} role="alert">{error}</p> : null}
               <div className={styles.formActions}>
                 <button type="button" className={styles.secondary} onClick={() => dialog.current?.close()}>Отказ</button>
                 <button type="submit" className={styles.primary} disabled={busy} aria-busy={busy}>
-                  {busy ? 'Добавяне…' : invites ? 'Добави и изпрати поканата' : 'Добави човека'}
+                  {busy ? 'Добавяне…' : invites ? 'Добави и изпрати покана' : 'Добави'}
                 </button>
               </div>
             </form>

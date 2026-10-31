@@ -63,7 +63,7 @@ describe('team API', () => {
 
     const stale = await updateMember('org-1', 'member-1', { version: 1, full_name: 'Х' }).catch((reason: unknown) => reason);
     expect((stale as TeamApiError).status).toBe(409);
-    expect((stale as TeamApiError).message).toBe('Някой току-що промени тези данни. Заредете ги отново и опитайте пак.');
+    expect((stale as TeamApiError).message).toBe('Някой току-що промени тези данни. Заредете новите данни и опитайте отново.');
   });
 
   it('knows a guest from a signed-in person', async () => {

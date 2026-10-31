@@ -96,7 +96,12 @@ class TeamMembersTest extends TestCase
             ->assertUnprocessable()->assertJsonPath('errors.member.0', 'Първо приключете назначението в „Шахмат · Вторник“.');
         // The profile gives each assignment its version, which ending it asks for.
         $this->actingAs($owner)->getJson('/api/v1/team/members/'.$person->id)->assertOk()
-            ->assertJsonPath('member.groups.0.group_id', $group)->assertJsonPath('member.groups.0.version', 1);
+            ->assertJsonPath('member.groups.0.group_id', $group)->assertJsonPath('member.groups.0.version', 1)
+            // The activity and the group apart, for the list sorted by activity; the label stays.
+            ->assertJsonPath('member.groups.0.activity', 'Шахмат')->assertJsonPath('member.groups.0.group', 'Вторник')
+            ->assertJsonPath('member.groups.0.label', 'Шахмат · Вторник');
+        $this->actingAs($owner)->getJson('/api/v1/team')->assertOk()
+            ->assertJsonFragment(['group_id' => $group, 'activity' => 'Шахмат', 'group' => 'Вторник']);
         $this->actingAs($owner)->postJson('/api/v1/catalog/groups/'.$group.'/assignments/'.$profile.'/end', ['ends_on' => '2026-10-31', 'version' => 1])->assertOk();
         $this->actingAs($owner)->getJson('/api/v1/team/members/'.$person->id)->assertOk()
             ->assertJsonPath('member.groups.0.ends_on', '2026-10-31')->assertJsonPath('member.groups.0.version', 2);

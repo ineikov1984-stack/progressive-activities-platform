@@ -6,7 +6,7 @@ import styles from './team.module.css';
 
 /**
  * "Изпратихме покана на …" (docs/product/team.md, т. 7.3). The inviter's link for copying joins only an existing
- * profile, so it waits folded under "Колегата вече влиза в системата?": a new colleague opens the e-mail instead.
+ * profile, so it waits folded under "Колегата вече има профил в системата?": a new colleague opens the e-mail instead.
  * The link is shown only here, right after sending.
  */
 export function SentInvitationNotice({ sent }: { sent: SentInvitation }) {
@@ -30,9 +30,9 @@ export function SentInvitationNotice({ sent }: { sent: SentInvitation }) {
     <div className={styles.copy}>
       <p className={styles.ok}>Изпратихме покана на {sent.invitation.email}.</p>
       <details className={styles.more}>
-        <summary>Колегата вече влиза в системата?</summary>
+        <summary>Колегата вече има профил в системата?</summary>
         <div className={styles.moreBody}>
-          <p id={`${id}-hint`} className={styles.muted}>Пратете тази връзка само на човек, който вече влиза в системата. Новият колега трябва да отвори писмото.</p>
+          <p id={`${id}-hint`} className={styles.muted}>Изпратете тази връзка само на колега, който вече има профил. Нов колега трябва да отвори писмото с поканата.</p>
           <label className={styles.label} htmlFor={id}>Връзка за копиране</label>
           <div className={styles.copyRow}>
             <input id={id} ref={input} className={styles.input} value={sent.link} readOnly aria-describedby={`${id}-hint`} onFocus={(event) => event.currentTarget.select()} />

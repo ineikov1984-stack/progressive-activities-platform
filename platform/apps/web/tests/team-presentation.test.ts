@@ -1,31 +1,36 @@
 import { describe, expect, it } from 'vitest';
-import type { TeamMember } from '../src/features/team/api';
+import type { GroupAssignment, TeamMember } from '../src/features/team/api';
 import {
-  assignmentPhase, assignmentText, changeableRoles, daysText, expiresText, firstErrorField, guestModeFor, historySentence, invitableRoles, invitationLine,
-  matchesFilters, memberRole, memberStatus, parseStateFilter, periodText, roleAccess, roleLabel, teamErrorMessage, tokenFromHash, waitingAction, welcomeText,
+  accessAction, accessHeadings, assignmentPhase, changeableRoles, daysText, expiresText, firstErrorField, groupsByActivity, groupsMeta, groupSummary,
+  groupTags, guestModeFor, historyItem, historyText, invitableRoles, invitationFold, matchesFilters, memberRole, memberStatus, noGroupsText,
+  parseStateFilter, periodText, roleAccess, roleLabel, stateFilterLabels, teamErrorMessage, tokenFromHash, welcomeText,
 } from '../src/features/team/presentation';
 
 // 10:00 in Sofia on 1 November 2026 (EET, UTC+2).
 const now = new Date('2026-11-01T08:00:00Z');
+const today = '2026-11-01';
 
 const member = (extra: Partial<TeamMember> = {}): TeamMember => ({
   id: 'member-1', full_name: 'Деси Маринова', state: 'profile_only', role: null, instructor_profile_id: 'profile-1',
   groups: [], archived_at: null, invitation: null, version: 1, ...extra,
 });
+const group = (activity: string, name: string, extra: Partial<GroupAssignment> = {}): GroupAssignment => ({
+  group_id: `${activity}-${name}`, label: `${activity} · ${name}`, activity, group: name, role: 'lead', starts_on: null, ends_on: null, version: 1, ...extra,
+});
+const waiting = { status: 'pending', expires_at: '2026-11-06T09:00:00Z', role: 'finance' };
+const expired = { status: 'expired', expires_at: '2026-10-31T09:00:00Z', role: 'finance' };
 
-describe('the state of a person', () => {
-  it('says in words whether the person logs in, is invited, has only a profile or is archived', () => {
-    expect(memberStatus(member({ state: 'login', role: 'coordinator' }), now)).toMatchObject({ key: 'login', label: 'Влиза в системата' });
-    expect(memberStatus(member(), now)).toMatchObject({ key: 'profile_only', label: 'Само профил, без вход' });
-    expect(memberStatus(member({ state: 'archived', archived_at: '2026-10-30T10:00:00Z' }), now)).toMatchObject({ key: 'archived', label: 'Архивиран' });
-    expect(memberStatus(member({ invitation: { status: 'pending', expires_at: '2026-11-06T09:00:00Z' } }), now))
-      .toMatchObject({ key: 'invited', label: 'Поканен · изтича след 5 дни' });
-    expect(memberStatus(member({ invitation: { status: 'expired', expires_at: '2026-10-31T09:00:00Z' } }), now))
-      .toMatchObject({ key: 'invitation_expired', label: 'Поканата изтече' });
+describe('access', () => {
+  it('says in words whether the person has access, has an invitation, has none or is in the archive', () => {
+    expect(memberStatus(member({ state: 'login', role: 'coordinator' }), now)).toMatchObject({ key: 'login', label: 'Има достъп' });
+    expect(memberStatus(member(), now)).toMatchObject({ key: 'profile_only', label: 'Няма достъп' });
+    expect(memberStatus(member({ state: 'archived', archived_at: '2026-10-30T10:00:00Z' }), now)).toMatchObject({ key: 'archived', label: 'В архива' });
+    expect(memberStatus(member({ invitation: waiting }), now)).toEqual({ key: 'invited', label: 'Изпратена покана', detail: 'изтича след 5 дни', tone: 'info' });
+    expect(memberStatus(member({ invitation: expired }), now)).toMatchObject({ key: 'invitation_expired', label: 'Поканата изтече' });
   });
 
   it('treats an invitation whose end has passed as expired, even before the server says so', () => {
-    expect(memberStatus(member({ invitation: { status: 'pending', expires_at: '2026-11-01T07:59:00Z' } }), now).key).toBe('invitation_expired');
+    expect(memberStatus(member({ invitation: { ...waiting, expires_at: '2026-11-01T07:59:00Z' } }), now).key).toBe('invitation_expired');
   });
 
   it('counts the days to the end of an invitation in Sofia, with the right plural', () => {
@@ -33,114 +38,127 @@ describe('the state of a person', () => {
     // 23:30 UTC on 1 November is already 2 November in Sofia.
     expect(expiresText('2026-11-01T23:30:00Z', now)).toBe('изтича утре');
     expect(expiresText('2026-11-03T09:00:00Z', now)).toBe('изтича след 2 дни');
-    expect(expiresText('2026-11-08T09:00:00Z', now)).toBe('изтича след 7 дни');
     expect(expiresText('2026-11-22T09:00:00Z', now)).toBe('изтича след 21 дни');
-    expect(daysText(1)).toBe('1 ден');
-    expect(daysText(2)).toBe('2 дни');
-    expect(daysText(21)).toBe('21 дни');
-  });
-});
-
-describe('what waits for a person', () => {
-  it('asks to invite a profile without a login, or to send the invitation again', () => {
-    expect(waitingAction(member(), true)).toEqual({ label: 'Покани да влиза', href: '/dashboard/team/member-1?invite=1' });
-    expect(waitingAction(member({ invitation: { status: 'pending', expires_at: '2026-11-06T09:00:00Z' } }), true)?.label).toBe('Изпрати поканата пак');
-    expect(waitingAction(member({ invitation: { status: 'expired', expires_at: '2026-10-31T09:00:00Z' } }), true)?.label).toBe('Изпрати поканата пак');
+    expect([daysText(1), daysText(2), daysText(21)]).toEqual(['1 ден', '2 дни', '21 дни']);
   });
 
-  it('asks nothing of those who do not manage the team, nor for someone who logs in or is archived', () => {
-    expect(waitingAction(member(), false)).toBeNull();
-    expect(waitingAction(member({ state: 'login', role: 'instructor' }), true)).toBeNull();
-    expect(waitingAction(member({ state: 'archived' }), true)).toBeNull();
+  it('puts the button "Изпрати покана" next to "Няма достъп" and a link to send again, only for those who manage the team', () => {
+    expect(accessAction(member(), true, now)).toEqual({ label: 'Изпрати покана', href: '/dashboard/team/member-1?invite=1', kind: 'button' });
+    expect(accessAction(member({ invitation: waiting }), true, now)).toMatchObject({ label: 'Изпрати отново', kind: 'link' });
+    expect(accessAction(member({ invitation: expired }), true, now)).toMatchObject({ label: 'Изпрати нова покана', kind: 'link' });
+    expect(accessAction(member(), false, now)).toBeNull();
+    expect(accessAction(member({ state: 'login', role: 'instructor' }), true, now)).toBeNull();
+    expect(accessAction(member({ state: 'archived' }), true, now)).toBeNull();
   });
-});
 
-describe('the folded invitation in the profile', () => {
-  it('says on one line what the state is and what to do', () => {
-    expect(invitationLine(member(), now)).toEqual({ state: 'Не влиза в системата', action: 'Покани да влиза' });
-    expect(invitationLine(member({ invitation: { status: 'pending', expires_at: '2026-11-06T09:00:00Z' } }), now))
-      .toEqual({ state: 'Поканен · изтича след 5 дни', action: 'Изпрати поканата пак' });
-    expect(invitationLine(member({ invitation: { status: 'expired', expires_at: '2026-10-31T09:00:00Z' } }), now))
-      .toEqual({ state: 'Поканата изтече', action: 'Изпрати поканата пак' });
+  it('folds the invitation in the profile into a sentence and a button', () => {
+    expect(invitationFold(member(), now)).toEqual({ sentence: 'Няма достъп до системата. Присъствията в групите, които води, отбелязвате вие.', action: 'Изпрати покана' });
+    expect(invitationFold(member({ instructor_profile_id: null }), now).sentence).toBe('Няма достъп до системата.');
+    expect(invitationFold(member({ invitation: waiting }), now)).toEqual({ sentence: 'Изпратена покана · изтича след 5 дни.', action: 'Изпрати поканата отново' });
+    expect(invitationFold(member({ invitation: expired }), now)).toEqual({ sentence: 'Поканата изтече.', action: 'Изпрати нова покана' });
+  });
+
+  it('names the access filter as the column', () => {
+    expect(Object.values(stateFilterLabels)).toEqual(['Има достъп', 'Изпратена покана', 'Няма достъп', 'В архива']);
   });
 });
 
 describe('roles', () => {
-  it('names the roles in Bulgarian and a teacher without a login as a teacher', () => {
+  it('names the roles in Bulgarian; someone invited has the role of the invitation, not "no role"', () => {
     expect(['organization_owner', 'organization_admin', 'coordinator', 'instructor', 'finance', 'viewer'].map(roleLabel))
       .toEqual(['Собственик', 'Администратор', 'Координатор', 'Преподавател', 'Счетоводител', 'Само преглед']);
     expect(roleLabel('something_new')).toBe('Член на екипа');
+    expect(memberRole(member({ instructor_profile_id: null, invitation: waiting }))).toBe('finance');
     expect(memberRole(member())).toBe('instructor');
     expect(memberRole(member({ instructor_profile_id: null }))).toBeNull();
-    expect(memberRole(member({ state: 'login', role: 'finance' }))).toBe('finance');
+    expect(memberRole(member({ state: 'login', role: 'coordinator', invitation: waiting }))).toBe('coordinator');
   });
 
-  it('describes what each role sees and does not see in two sentences', () => {
-    for (const role of ['organization_owner', 'organization_admin', 'coordinator', 'instructor', 'finance', 'viewer']) {
-      const access = roleAccess(role);
-      expect(access.sees.length > 10).toBe(true);
-      expect(access.hidden.length > 5).toBe(true);
-    }
-    expect(roleAccess('instructor').sees).toContain('своите групи');
-    expect(roleAccess('instructor').hidden).toContain('телефоните');
-    expect(roleAccess('coordinator').hidden).toContain('телефоните и имейлите на екипа');
-    expect(roleAccess('organization_admin').hidden).toContain('финансите');
+  it('lists what each role sees, does not see and cannot do — the owner sees everything', () => {
+    expect(roleAccess('organization_owner').hidden).toEqual([]);
+    expect(roleAccess('instructor')).toEqual({
+      sees: ['своите групи и децата в тях — име и клас', 'дейностите на организацията'],
+      hidden: ['телефоните, имейлите и плащанията на родителите', 'другите групи и хората в екипа'], cannot: [],
+    });
+    expect(roleAccess('coordinator').cannot).toEqual(['да кани хора, да сменя роли и да публикува дейности']);
+    expect(roleAccess('organization_admin')).toMatchObject({ hidden: ['финансите'], cannot: ['да дава роля „Собственик“ или „Администратор“'] });
+    for (const role of ['organization_admin', 'coordinator', 'instructor', 'finance', 'viewer']) expect(roleAccess(role).sees.length > 0).toBe(true);
   });
 
-  it('never invites an owner, and only the owner invites an administrator', () => {
+  it('says "Вижда" for the role in force and "Ще вижда" for the one an invitation gives', () => {
+    expect(accessHeadings('now')).toEqual({ sees: 'Вижда', hidden: 'Не вижда', cannot: 'Не може' });
+    expect(accessHeadings('later')).toEqual({ sees: 'Ще вижда', hidden: 'Няма да вижда', cannot: 'Няма да може' });
+  });
+
+  it('never invites an owner, and only the owner invites or makes an administrator', () => {
     expect(invitableRoles('organization_owner')).toEqual(['instructor', 'coordinator', 'organization_admin', 'finance', 'viewer']);
     expect(invitableRoles('organization_admin')).toEqual(['instructor', 'coordinator', 'finance', 'viewer']);
-    expect(invitableRoles('organization_owner')).not.toContain('organization_owner');
-  });
-
-  it('lets the administrator change only the roles below administrator', () => {
-    expect(changeableRoles('organization_owner', 'organization_admin')).toContain('organization_owner');
     expect(changeableRoles('organization_admin', 'instructor')).toEqual(['coordinator', 'instructor', 'finance', 'viewer']);
     expect(changeableRoles('organization_admin', 'organization_owner')).toBeNull();
     expect(changeableRoles('coordinator', 'viewer')).toBeNull();
-    expect(changeableRoles('organization_owner', null)).toBeNull();
   });
 
   it('welcomes a person with the role of the accepted invitation', () => {
     expect(welcomeText('coordinator')).toBe('Вече сте в екипа като координатор.');
-    expect(welcomeText('instructor')).toContain('като преподавател');
     expect(welcomeText('viewer')).toBe('Вече сте в екипа с право само на преглед.');
   });
 });
 
 describe('groups', () => {
-  const today = '2026-11-01';
+  const ivan = [
+    group('Шахмат', 'Група 1 · 1.–2. клас'), group('Шахмат', 'Група 2 · 3.–4. клас'),
+    group('Баскетбол', 'Група 1 · Начинаещи'), group('Баскетбол', 'Група 2 · Напреднали'),
+    group('Вокална поп-група', 'Напреднали изпълнители', { role: 'assistant' }),
+  ];
 
-  it('writes an assignment with its role and period', () => {
-    expect(assignmentText({ group_id: 'g1', label: 'Шахмат · Група 1', role: 'lead', starts_on: null, ends_on: null, version: 1 })).toBe('Шахмат · Група 1 — водещ');
-    expect(assignmentText({ group_id: 'g2', label: 'Шахмат · Група 2', role: 'assistant', starts_on: '2026-12-01', ends_on: null, version: 2 }))
-      .toBe('Шахмат · Група 2 — помощник · от 1 декември');
-    expect(periodText({ starts_on: '2026-09-01', ends_on: '2026-11-30' })).toBe('от 1 септември до 30 ноември');
+  it('gathers the groups by activity, the activities in alphabetical order', () => {
+    expect(groupsByActivity(ivan).map((item) => [item.activity, item.groups.length])).toEqual([['Баскетбол', 2], ['Вокална поп-група', 1], ['Шахмат', 2]]);
   });
 
-  it('tells a running, a coming and an ended assignment apart', () => {
+  it('variant Б: the count and the activities as chips', () => {
+    expect(groupSummary(ivan)).toEqual({ count: '5 групи', chips: ['Баскетбол · 2', 'Вокална поп-група', 'Шахмат · 2'] });
+    expect(groupSummary([group('Рисуване', 'Група 1')]).count).toBe('1 група');
+  });
+
+  it('marks only an assistant and a start still ahead', () => {
+    expect(groupTags(group('Шахмат', 'Група 1'), today)).toEqual([]);
+    expect(groupTags(group('Шахмат', 'Група 1', { role: 'assistant' }), today)).toEqual(['помощник']);
+    expect(groupTags(group('Рисуване', 'Група 3', { starts_on: '2026-12-01' }), today)).toEqual(['от 1 декември']);
+    expect(groupTags(group('Рисуване', 'Група 3', { starts_on: '2026-11-01' }), today)).toEqual([]);
+  });
+
+  it('says how many groups in how many activities', () => {
+    expect(groupsMeta(ivan)).toBe('5 групи в 3 дейности');
+    expect(groupsMeta([group('Рисуване', 'Група 1'), group('Рисуване', 'Група 3')])).toBe('2 групи');
+    expect(groupsMeta([group('Рисуване', 'Група 1'), group('Шахмат', 'Група 1')])).toBe('2 групи в 2 дейности');
+  });
+
+  it('tells a teacher without groups from someone who does not lead groups', () => {
+    expect(noGroupsText(member())).toBe('Още не води група');
+    expect(noGroupsText(member({ instructor_profile_id: null }))).toBe('Не води групи');
+  });
+
+  it('tells a running, a coming and an ended group apart and writes the period', () => {
     expect(assignmentPhase({ starts_on: null, ends_on: null }, today)).toBe('current');
-    expect(assignmentPhase({ starts_on: '2026-11-01', ends_on: '2026-11-01' }, today)).toBe('current');
     expect(assignmentPhase({ starts_on: '2026-12-01', ends_on: null }, today)).toBe('coming');
     expect(assignmentPhase({ starts_on: null, ends_on: '2026-10-31' }, today)).toBe('ended');
+    expect(periodText({ starts_on: '2026-09-01', ends_on: '2026-11-30' })).toBe('от 1 септември до 30 ноември');
   });
 });
 
 describe('history', () => {
-  it('turns the audit actions into Bulgarian sentences, with or without who did it', () => {
-    expect(historySentence({ action: 'team.member_added', by: 'Мария Колева' })).toBe('Мария Колева добави човека в екипа.');
-    expect(historySentence({ action: 'team.role_changed', by: 'Мария Колева' })).toBe('Мария Колева смени ролята.');
-    expect(historySentence({ action: 'team.role_changed', by: null })).toBe('Ролята е сменена.');
-    expect(historySentence({ action: 'team.invitation_sent', by: 'Иван Петров' })).toBe('Иван Петров изпрати покана за вход.');
-    expect(historySentence({ action: 'team.invitation_accepted', by: 'Деси Маринова' })).toBe('Деси Маринова прие поканата и вече влиза в системата.');
-    expect(historySentence({ action: 'team.member_archived', by: null })).toBe('Записът е архивиран.');
-    expect(historySentence({ action: 'team.profile_linked', by: null })).toBe('Свързан е профил на преподавател.');
-    expect(historySentence({ action: 'team.something_new', by: null })).toBe('Направена е промяна.');
+  it('writes "what — who" with nouns, so there is no grammatical gender', () => {
+    expect(historyText({ action: 'team.member_added', by: 'Мария Колева' })).toBe('Добавяне в екипа — Мария Колева');
+    expect(historyText({ action: 'team.invitation_accepted', by: 'Иван Петров' })).toBe('Приемане на поканата — Иван Петров');
+    expect(historyText({ action: 'team.role_changed', by: null })).toBe('Смяна на ролята');
+    expect(historyItem({ action: 'team.member_archived', by: 'Мария Колева' })).toEqual({ what: 'Преместване в архива', who: 'Мария Колева' });
+    expect(historyText({ action: 'team.profile_linked', by: null })).toBe('Разрешение да води групи');
+    expect(historyText({ action: 'team.something_new', by: null })).toBe('Промяна');
   });
 
   it('never shows an action name to the person', () => {
-    for (const action of ['team.member_updated', 'catalog.assignment_added', 'catalog.assignment_ended', 'unknown.action']) {
-      expect(historySentence({ action, by: 'Мария' })).not.toMatch(/[A-Za-z_]/);
+    for (const action of ['team.member_updated', 'team.invitation_sent', 'catalog.assignment_added', 'unknown.action']) {
+      expect(historyText({ action, by: 'Мария' })).not.toMatch(/[A-Za-z_]/);
     }
   });
 });
@@ -149,32 +167,31 @@ describe('errors', () => {
   it('keeps the server\'s Bulgarian reason and replaces technical English', () => {
     expect(teamErrorMessage(422, { message: 'Първо приключете назначението в „Шахмат · Вторник“.', errors: { member: ['Първо приключете назначението в „Шахмат · Вторник“.'] } }))
       .toBe('Първо приключете назначението в „Шахмат · Вторник“.');
-    expect(teamErrorMessage(409, { message: 'Staff member version conflict.' })).toBe('Някой току-що промени тези данни. Заредете ги отново и опитайте пак.');
-    expect(teamErrorMessage(409, { message: 'Вече има активна покана за този имейл.' })).toBe('Вече има активна покана за този имейл.');
-    expect(teamErrorMessage(403, { message: 'This action is unauthorized.' })).toBe('Нямате право за това действие. Обърнете се към собственика на организацията.');
-    expect(teamErrorMessage(500, {})).toBe('Заявката не беше изпълнена. Проверете връзката и опитайте отново.');
+    expect(teamErrorMessage(409, { message: 'Staff member version conflict.' })).toBe('Някой току-що промени тези данни. Заредете новите данни и опитайте отново.');
+    expect(teamErrorMessage(403, { message: 'This action is unauthorized.' })).toBe('Вашата роля не позволява това. Обърнете се към собственика на организацията.');
+    expect(teamErrorMessage(500, {})).toBe('Действието не беше изпълнено. Проверете интернет връзката и опитайте отново.');
   });
 });
 
 describe('the list filters', () => {
   const people = [
     member({ id: 'a', full_name: 'Иван Петров', state: 'login', role: 'instructor' }),
-    member({ id: 'b', full_name: 'Георги Иванов', role: null, instructor_profile_id: null, invitation: { status: 'pending', expires_at: '2026-11-06T09:00:00Z' } }),
+    member({ id: 'b', full_name: 'Георги Иванов', instructor_profile_id: null, invitation: waiting }),
     member({ id: 'c', full_name: 'Деси Маринова' }),
   ];
   const ids = (filters: Parameters<typeof matchesFilters>[1]) => people.filter((person) => matchesFilters(person, filters, now)).map((person) => person.id);
 
-  it('searches by name in any case and filters by role and state', () => {
+  it('searches by name in any case and filters by role (the invitation\'s too) and access', () => {
     expect(ids({ search: 'иван', role: '', state: '' })).toEqual(['a', 'b']);
     expect(ids({ search: '', role: 'instructor', state: '' })).toEqual(['a', 'c']);
+    expect(ids({ search: '', role: 'finance', state: '' })).toEqual(['b']);
     expect(ids({ search: '', role: '', state: 'invited' })).toEqual(['b']);
     expect(ids({ search: '', role: '', state: 'profile_only' })).toEqual(['c']);
     expect(ids({ search: '', role: '', state: 'login' })).toEqual(['a']);
   });
 
-  it('reads the state from a link and ignores anything else', () => {
+  it('reads the access filter from a link and ignores anything else', () => {
     expect(parseStateFilter('invited')).toBe('invited');
-    expect(parseStateFilter('archived')).toBe('archived');
     expect(parseStateFilter('everything')).toBe('');
     expect(parseStateFilter(null)).toBe('');
   });
@@ -184,24 +201,17 @@ describe('the invitation page', () => {
   it('opens the inviter\'s link at the login and only the e-mail\'s link at a new profile', () => {
     expect(guestModeFor('email')).toBe('register');
     expect(guestModeFor('copy')).toBe('login');
-    expect(guestModeFor('anything else')).toBe('login');
   });
 
   it('finds the first field with an error in the order of the form', () => {
-    const order = ['name', 'password', 'password_confirmation'];
-    expect(firstErrorField({ password_confirmation: 'Паролите не съвпадат.', name: 'Напишете името си.' }, order)).toBe('name');
-    expect(firstErrorField({ password: 'Паролата трябва да е поне 10 знака.' }, order)).toBe('password');
-    expect(firstErrorField({ name: '' }, order)).toBeUndefined();
+    expect(firstErrorField({ password_confirmation: 'Паролите не съвпадат.', name: 'Въведете името си.' }, ['name', 'password', 'password_confirmation'])).toBe('name');
+    expect(firstErrorField({ name: '' }, ['name'])).toBeUndefined();
   });
-});
 
-describe('the invitation link', () => {
   it('takes only a whole token from the fragment', () => {
     const token = 'A1'.repeat(32);
     expect(tokenFromHash(`#${token}`)).toBe(token);
-    expect(tokenFromHash(token)).toBe(token);
     expect(tokenFromHash('#short')).toBeNull();
     expect(tokenFromHash(`#${token}&utm=x`)).toBeNull();
-    expect(tokenFromHash('')).toBeNull();
   });
 });

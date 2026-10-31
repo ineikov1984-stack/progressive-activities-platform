@@ -159,7 +159,7 @@ class TeamController extends Controller
         // The latest invitation not yet accepted, for "Поканен · изтича след N дни" and "Изпрати поканата пак" (т. 10):
         // its state and end only, never the address or a token.
         $invitations = Invitation::query()->whereIn('staff_member_id', $ids)->whereNull('accepted_at')
-            ->orderByDesc('expires_at')->orderByDesc('created_at')->get(['id', 'staff_member_id', 'expires_at', 'accepted_at', 'created_at'])
+            ->orderByDesc('expires_at')->orderByDesc('created_at')->get(['id', 'staff_member_id', 'role', 'expires_at', 'accepted_at', 'created_at'])
             ->unique('staff_member_id')->keyBy('staff_member_id');
 
         return $members->map(function (StaffMember $member) use ($contacts, $profiles, $groups, $roles, $invitations): array {
@@ -183,6 +183,8 @@ class TeamController extends Controller
                 // Only someone who does not log in yet waits for an invitation; an older one left unaccepted does not count.
                 'invitation' => $invitation === null || $state !== 'profile_only' ? null : [
                     'status' => $invitation->status(), 'expires_at' => $invitation->expires_at->toIso8601String(),
+                    // The role the invitation gives, so the list says it instead of "no role".
+                    'role' => $invitation->role->value,
                 ],
                 'version' => $member->version,
                 ...($contacts ? ['phone' => $member->phone, 'email' => $member->email] : []),

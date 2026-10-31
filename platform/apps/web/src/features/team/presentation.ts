@@ -20,40 +20,63 @@ export function roleLabel(role: string | null | undefined): string {
   return isTeamRole(role) ? roleLabels[role] : 'Член на екипа';
 }
 
-/** What the person does: the role of the login, or "Преподавател" for a teacher without a login. */
-export function memberRole(member: Pick<TeamMember, 'role' | 'instructor_profile_id'>): TeamRole | null {
+/**
+ * What the person does: the role of the login; for someone invited, the role of the invitation; for a teacher
+ * without access, "Преподавател".
+ */
+export function memberRole(member: Pick<TeamMember, 'role' | 'instructor_profile_id'> & Partial<Pick<TeamMember, 'state' | 'invitation'>>): TeamRole | null {
   if (isTeamRole(member.role)) return member.role;
+  const invited = member.state === 'profile_only' ? member.invitation?.role : undefined;
+  if (isTeamRole(invited)) return invited;
   return member.instructor_profile_id ? 'instructor' : null;
 }
 
 /** The short line under each choice of "Какво ще прави". */
 export const roleHints: Record<TeamRole, string> = {
   organization_owner: 'Всичко, включително правата на екипа',
-  organization_admin: 'Всичко без финансите',
-  coordinator: 'Записвания и график',
-  instructor: 'Своите групи',
+  organization_admin: 'Всичко освен финансите',
+  coordinator: 'Записвания и групи',
+  instructor: 'Само своите групи',
   finance: 'Записвания и финанси',
-  viewer: 'Само чете, без промени',
+  viewer: 'Само гледа, без да променя',
 };
 
-/** "Ще вижда / няма да вижда" — two sentences for a role, from what it allows (OrganizationRole::abilities). */
-export function roleAccess(role: string): { sees: string; hidden: string } {
+/** What a role sees, does not see and cannot do, as short items (from OrganizationRole::abilities). */
+export type RoleAccess = { sees: string[]; hidden: string[]; cannot: string[] };
+
+export function roleAccess(role: string): RoleAccess {
   switch (role) {
     case 'organization_owner':
-      return { sees: 'всичко в организацията — дейности, записвания, контакти на родителите, финанси и правата на екипа.', hidden: 'няма ограничения в организацията.' };
+      return { sees: ['всичко в организацията — дейностите, записванията, контактите на родителите, финансите и правата на екипа'], hidden: [], cannot: [] };
     case 'organization_admin':
-      return { sees: 'дейностите, записванията, контактите на родителите, условията за такси и екипа, който добавя и кани.', hidden: 'финансите. Не дава роля „Собственик“ или „Администратор“.' };
+      return {
+        sees: ['дейностите и записванията', 'контактите на родителите и условията за такси', 'екипа — добавя и кани хора'],
+        hidden: ['финансите'], cannot: ['да дава роля „Собственик“ или „Администратор“'],
+      };
     case 'coordinator':
-      return { sees: 'дейностите и групите, записванията и контактите на родителите, кой е в екипа.', hidden: 'телефоните и имейлите на екипа. Не кани хора, не сменя роли и не публикува дейности.' };
+      return {
+        sees: ['дейностите и групите', 'записванията и контактите на родителите', 'кой е в екипа'],
+        hidden: ['телефоните и имейлите на екипа'], cannot: ['да кани хора, да сменя роли и да публикува дейности'],
+      };
     case 'instructor':
-      return { sees: 'своите групи и децата в тях (име и клас), дейностите на организацията.', hidden: 'телефоните, имейлите и плащанията на родителите, другите групи и екипа.' };
+      return {
+        sees: ['своите групи и децата в тях — име и клас', 'дейностите на организацията'],
+        hidden: ['телефоните, имейлите и плащанията на родителите', 'другите групи и хората в екипа'], cannot: [],
+      };
     case 'finance':
-      return { sees: 'записванията по групи, финансите и кой е в екипа.', hidden: 'контактите на родителите и на екипа. Не променя дейности и записвания.' };
+      return { sees: ['записванията по групи', 'финансите', 'кой е в екипа'], hidden: ['контактите на родителите и на екипа'], cannot: ['да променя дейности и записвания'] };
     case 'viewer':
-      return { sees: 'дейностите, записванията и кой е в екипа — само за четене.', hidden: 'контактите на родителите и на екипа. Не променя нищо.' };
+      return { sees: ['дейностите', 'записванията', 'кой е в екипа'], hidden: ['контактите на родителите и на екипа'], cannot: ['да променя каквото и да е'] };
     default:
-      return { sees: 'това, което позволява ролята му.', hidden: 'нищо извън ролята му.' };
+      return { sees: ['това, което позволява ролята'], hidden: ['нищо извън ролята'], cannot: [] };
   }
+}
+
+/** The headings of the lists: the role in force ("Вижда") or the one an invitation will give ("Ще вижда"). */
+export function accessHeadings(when: 'now' | 'later'): { sees: string; hidden: string; cannot: string } {
+  return when === 'now'
+    ? { sees: 'Вижда', hidden: 'Не вижда', cannot: 'Не може' }
+    : { sees: 'Ще вижда', hidden: 'Няма да вижда', cannot: 'Няма да може' };
 }
 
 /** Who may be invited with which role (TeamRoles::assertMayInvite): never the owner; an administrator only by the owner. */
@@ -103,37 +126,44 @@ export function expiresText(expiresAt: string, now: Date): string {
 }
 
 export type StatusKey = 'login' | 'invited' | 'invitation_expired' | 'profile_only' | 'archived';
-/** The state in words; the tone only colours it. */
-export type MemberStatus = { key: StatusKey; label: string; tone: 'ok' | 'info' | 'warn' | 'muted' };
+/** The access in words ("Има достъп"); `detail` is the end of a waiting invitation; the tone only colours it. */
+export type MemberStatus = { key: StatusKey; label: string; detail?: string; tone: 'ok' | 'info' | 'warn' | 'muted' };
 
 function invitationOpen(invitation: MemberInvitation | null | undefined, now: Date): boolean {
   return invitation?.status === 'pending' && Date.parse(invitation.expires_at) > now.getTime();
 }
 
 export function memberStatus(member: Pick<TeamMember, 'state' | 'invitation'>, now: Date): MemberStatus {
-  if (member.state === 'archived') return { key: 'archived', label: 'Архивиран', tone: 'muted' };
-  if (member.state === 'login') return { key: 'login', label: 'Влиза в системата', tone: 'ok' };
+  if (member.state === 'archived') return { key: 'archived', label: 'В архива', tone: 'muted' };
+  if (member.state === 'login') return { key: 'login', label: 'Има достъп', tone: 'ok' };
   if (member.invitation && invitationOpen(member.invitation, now)) {
-    return { key: 'invited', label: `Поканен · ${expiresText(member.invitation.expires_at, now)}`, tone: 'info' };
+    return { key: 'invited', label: 'Изпратена покана', detail: expiresText(member.invitation.expires_at, now), tone: 'info' };
   }
   if (member.invitation) return { key: 'invitation_expired', label: 'Поканата изтече', tone: 'warn' };
-  return { key: 'profile_only', label: 'Само профил, без вход', tone: 'muted' };
+  return { key: 'profile_only', label: 'Няма достъп', tone: 'muted' };
 }
 
-/** The folded "Покана за вход" in the profile, on one line: the state, then what to do ("Не влиза в системата · Покани да влиза"). */
-export function invitationLine(member: Pick<TeamMember, 'invitation'>, now: Date): { state: string; action: string } {
-  if (!member.invitation) return { state: 'Не влиза в системата', action: 'Покани да влиза' };
-  if (invitationOpen(member.invitation, now)) return { state: `Поканен · ${expiresText(member.invitation.expires_at, now)}`, action: 'Изпрати поканата пак' };
-  return { state: 'Поканата изтече', action: 'Изпрати поканата пак' };
+/** "Изпрати покана" folded in the profile: a sentence and the button that opens the form. */
+export function invitationFold(member: Pick<TeamMember, 'invitation' | 'instructor_profile_id'>, now: Date): { sentence: string; action: string } {
+  if (!member.invitation) {
+    return {
+      sentence: member.instructor_profile_id ? 'Няма достъп до системата. Присъствията в групите, които води, отбелязвате вие.' : 'Няма достъп до системата.',
+      action: 'Изпрати покана',
+    };
+  }
+  if (invitationOpen(member.invitation, now)) return { sentence: `Изпратена покана · ${expiresText(member.invitation.expires_at, now)}.`, action: 'Изпрати поканата отново' };
+  return { sentence: 'Поканата изтече.', action: 'Изпрати нова покана' };
 }
 
-/** What waits for the person in "Чака": only for those who manage the team, and only for a profile without a login. */
-export function waitingAction(member: Pick<TeamMember, 'id' | 'state' | 'invitation'>, canManage: boolean): { label: string; href: string } | null {
+/**
+ * The action next to the access in the list, only for those who manage the team and only without access: a button
+ * "Изпрати покана", or a link to send a waiting or expired invitation again.
+ */
+export function accessAction(member: Pick<TeamMember, 'id' | 'state' | 'invitation'>, canManage: boolean, now: Date): { label: string; href: string; kind: 'button' | 'link' } | null {
   if (!canManage || member.state !== 'profile_only') return null;
-  return {
-    label: member.invitation ? 'Изпрати поканата пак' : 'Покани да влиза',
-    href: `/dashboard/team/${encodeURIComponent(member.id)}?invite=1`,
-  };
+  const href = `/dashboard/team/${encodeURIComponent(member.id)}?invite=1`;
+  if (!member.invitation) return { label: 'Изпрати покана', href, kind: 'button' };
+  return { label: invitationOpen(member.invitation, now) ? 'Изпрати отново' : 'Изпрати нова покана', href, kind: 'link' };
 }
 
 export const assignmentRoles: Record<'lead' | 'assistant', string> = { lead: 'водещ', assistant: 'помощник' };
@@ -156,29 +186,69 @@ export function periodText(assignment: Pick<GroupAssignment, 'starts_on' | 'ends
   return [from, to].filter(Boolean).join(' ');
 }
 
-/** "Шахмат · Група 1 — водещ · от 1 декември". */
-export function assignmentText(assignment: GroupAssignment): string {
-  const period = periodText(assignment);
-  return `${assignment.label} — ${assignmentRole(assignment.role)}${period ? ` · ${period}` : ''}`;
+/** Only what differs from the usual is marked in the list: "помощник" and a start still ahead ("от 1 декември"). */
+export function groupTags(assignment: Pick<GroupAssignment, 'role' | 'starts_on'>, today: string): string[] {
+  return [
+    ...(assignment.role === 'assistant' ? ['помощник'] : []),
+    ...(assignment.starts_on !== null && assignment.starts_on > today ? [`от ${shortDay(assignment.starts_on)}`] : []),
+  ];
 }
 
-const historyWords: Record<string, { done: string; happened: string }> = {
-  'team.member_added': { done: 'добави човека в екипа', happened: 'Човекът е добавен в екипа' },
-  'team.member_updated': { done: 'промени данните', happened: 'Данните са променени' },
-  'team.member_archived': { done: 'архивира записа', happened: 'Записът е архивиран' },
-  'team.role_changed': { done: 'смени ролята', happened: 'Ролята е сменена' },
-  'team.invitation_sent': { done: 'изпрати покана за вход', happened: 'Изпратена е покана за вход' },
-  'team.invitation_accepted': { done: 'прие поканата и вече влиза в системата', happened: 'Поканата е приета' },
-  'team.profile_linked': { done: 'свърза човека с профил на преподавател', happened: 'Свързан е профил на преподавател' },
-  'catalog.assignment_added': { done: 'добави назначение в група', happened: 'Добавено е назначение в група' },
-  'catalog.assignment_ended': { done: 'приключи назначение в група', happened: 'Приключено е назначение в група' },
-  'catalog.assignment_removed': { done: 'махна назначение в група', happened: 'Махнато е назначение в група' },
+export type ActivityGroups = { activity: string; groups: GroupAssignment[] };
+
+/** The groups by activity, the activities in alphabetical order, the groups as they came. */
+export function groupsByActivity(groups: GroupAssignment[]): ActivityGroups[] {
+  const byActivity = new Map<string, GroupAssignment[]>();
+  for (const group of groups) byActivity.set(group.activity, [...(byActivity.get(group.activity) ?? []), group]);
+  return [...byActivity].map(([activity, items]) => ({ activity, groups: items })).sort((a, b) => a.activity.localeCompare(b.activity, 'bg'));
+}
+
+export const groupCount = (count: number) => `${count} ${count === 1 ? 'група' : 'групи'}`;
+export const activityCount = (count: number) => `${count} ${count === 1 ? 'дейност' : 'дейности'}`;
+
+/** Up to this many groups the list shows them; from one more, a button with the count opens them (variant Б). */
+export const GROUPS_SHOWN = 2;
+
+/** The button of variant Б: "5 групи" and the activities as chips ("Шахмат · 2"). */
+export function groupSummary(groups: GroupAssignment[]): { count: string; chips: string[] } {
+  return {
+    count: groupCount(groups.length),
+    chips: groupsByActivity(groups).map((item) => (item.groups.length > 1 ? `${item.activity} · ${item.groups.length}` : item.activity)),
+  };
+}
+
+/** "5 групи в 3 дейности"; with one activity, only "2 групи". */
+export function groupsMeta(groups: GroupAssignment[]): string {
+  const activities = groupsByActivity(groups).length;
+  return activities > 1 ? `${groupCount(groups.length)} в ${activityCount(activities)}` : groupCount(groups.length);
+}
+
+/** The empty "Групи": a teacher without groups yet, or someone who does not lead groups. */
+export function noGroupsText(member: Pick<TeamMember, 'instructor_profile_id'>): string {
+  return member.instructor_profile_id ? 'Още не води група' : 'Не води групи';
+}
+
+const historyWhat: Record<string, string> = {
+  'team.member_added': 'Добавяне в екипа',
+  'team.member_updated': 'Промяна на данните',
+  'team.member_archived': 'Преместване в архива',
+  'team.role_changed': 'Смяна на ролята',
+  'team.invitation_sent': 'Изпращане на покана',
+  'team.invitation_accepted': 'Приемане на поканата',
+  'team.profile_linked': 'Разрешение да води групи',
+  'catalog.assignment_added': 'Добавяне в група',
+  'catalog.assignment_ended': 'Край на работата в група',
+  'catalog.assignment_removed': 'Премахване от група',
 };
 
-/** A history entry as a sentence: "Мария Колева смени ролята." or "Ролята е сменена." */
-export function historySentence(entry: Pick<HistoryEntry, 'action' | 'by'>): string {
-  const words = historyWords[entry.action] ?? { done: 'направи промяна', happened: 'Направена е промяна' };
-  return entry.by ? `${entry.by} ${words.done}.` : `${words.happened}.`;
+/** A history entry as "what — who", with nouns, so no grammatical gender: "Смяна на ролята — Мария Колева". */
+export function historyItem(entry: Pick<HistoryEntry, 'action' | 'by'>): { what: string; who: string | null } {
+  return { what: historyWhat[entry.action] ?? 'Промяна', who: entry.by };
+}
+
+export function historyText(entry: Pick<HistoryEntry, 'action' | 'by'>): string {
+  const { what, who } = historyItem(entry);
+  return who ? `${what} — ${who}` : what;
 }
 
 export type ErrorBody = { message?: unknown; errors?: Record<string, string[]> };
@@ -194,23 +264,23 @@ export function teamErrorMessage(status: number, body: ErrorBody): string {
   if (typeof first === 'string' && cyrillic.test(first)) return first;
   if (typeof body.message === 'string' && cyrillic.test(body.message)) return body.message;
   if (status === 401) return 'Влезте отново, за да продължите.';
-  if (status === 403) return 'Нямате право за това действие. Обърнете се към собственика на организацията.';
-  if (status === 404) return 'Не намерихме този запис. Може да е архивиран или да е в друга организация.';
-  if (status === 409) return 'Някой току-що промени тези данни. Заредете ги отново и опитайте пак.';
+  if (status === 403) return 'Вашата роля не позволява това. Обърнете се към собственика на организацията.';
+  if (status === 404) return 'Не намерихме този запис. Може да е в архива или в друга организация.';
+  if (status === 409) return 'Някой току-що промени тези данни. Заредете новите данни и опитайте отново.';
   if (status === 422) return 'Проверете отбелязаните полета.';
-  if (status === 429) return 'Твърде много опити. Изчакайте минута и опитайте отново.';
-  return 'Заявката не беше изпълнена. Проверете връзката и опитайте отново.';
+  if (status === 429) return 'Твърде много опити. Изчакайте една минута и опитайте отново.';
+  return 'Действието не беше изпълнено. Проверете интернет връзката и опитайте отново.';
 }
 
-/** The filters of the list; "Архивирани" loads another list from the server. */
+/** The filters of the list ("Достъп"); "В архива" loads another list from the server. */
 export type StateFilter = '' | 'login' | 'invited' | 'profile_only' | 'archived';
 export type TeamFilters = { search: string; role: '' | TeamRole; state: StateFilter };
 
 export const stateFilterLabels: Record<Exclude<StateFilter, ''>, string> = {
-  login: 'Влизат в системата',
-  invited: 'Поканени',
-  profile_only: 'Само профил, без вход',
-  archived: 'Архивирани',
+  login: 'Има достъп',
+  invited: 'Изпратена покана',
+  profile_only: 'Няма достъп',
+  archived: 'В архива',
 };
 
 export function parseStateFilter(value: string | null): StateFilter {
@@ -246,6 +316,11 @@ export function tokenFromHash(hash: string): string | null {
 /** After a part of the page is replaced (a form opens or closes), the focus goes to the given field or button. */
 export function focusLater(id: string): void {
   requestAnimationFrame(() => document.getElementById(id)?.focus());
+}
+
+/** The first of these that is on screen takes the focus (a button may be hidden on this width). */
+export function focusVisible(ids: string[]): void {
+  requestAnimationFrame(() => ids.map((id) => document.getElementById(id)).find((element) => element !== null && element.offsetParent !== null)?.focus());
 }
 
 /** "Иван Петров" → "ИП". */
