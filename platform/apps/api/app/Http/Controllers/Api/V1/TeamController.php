@@ -180,7 +180,8 @@ class TeamController extends Controller
                 'instructor_profile_id' => $profile,
                 'groups' => $profile === null ? [] : ($groups[$profile] ?? []),
                 'archived_at' => $member->archived_at?->toIso8601String(),
-                'invitation' => $invitation === null ? null : [
+                // Only someone who does not log in yet waits for an invitation; an older one left unaccepted does not count.
+                'invitation' => $invitation === null || $state !== 'profile_only' ? null : [
                     'status' => $invitation->status(), 'expires_at' => $invitation->expires_at->toIso8601String(),
                 ],
                 'version' => $member->version,
