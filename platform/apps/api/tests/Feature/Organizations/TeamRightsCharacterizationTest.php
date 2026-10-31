@@ -17,7 +17,10 @@ use Tests\TestCase;
  * Rights in the team do not change what any role may do today (docs/product/team-rights.md, т. 2.1, 11): every role
  * against every route of a selected organization answers with the same status as before the rights. The requests are
  * built to stop right after the check of the right — at the validation, a stale version or a missing record — so that
- * nothing changes on the way. A new route of an organization fails this test until it is added here.
+ * nothing changes on the way. A new route of an organization fails this test until it is added here. The approved
+ * changes since: the contacts (PR 2, т. 6) and the owner's decision of 31.10.2026 — the teacher has no catalog, the
+ * payment terms are read by the owner, the administrator, the coordinator and the accountant, and the approval of a
+ * group is a setting of the catalog.
  */
 #[TestGroup('authorization')]
 class TeamRightsCharacterizationTest extends TestCase
@@ -41,13 +44,17 @@ class TeamRightsCharacterizationTest extends TestCase
     /** Who sees the parents' contacts: the owner at once, the administrator and the coordinator with "Покажи телефона". */
     private const CONTACTS = ['organization_owner', 'organization_admin', 'coordinator'];
 
-    private const CATALOG_VIEW = ['platform_admin', 'organization_owner', 'organization_admin', 'coordinator', 'instructor', 'viewer'];
+    /** 31.10.2026: no longer the teacher. */
+    private const CATALOG_VIEW = ['platform_admin', 'organization_owner', 'organization_admin', 'coordinator', 'viewer'];
 
     private const CATALOG_MANAGE = ['platform_admin', 'organization_owner', 'organization_admin', 'coordinator'];
 
     private const CATALOG_PUBLISH = ['platform_admin', 'organization_owner', 'organization_admin'];
 
     private const INVITE = ['platform_admin', 'organization_owner', 'organization_admin'];
+
+    /** 31.10.2026: no longer the teacher and the viewer; the operator keeps them for the activities it edits. */
+    private const TERMS_VIEW = ['platform_admin', 'organization_owner', 'organization_admin', 'coordinator', 'finance'];
 
     private const TERMS_MANAGE = ['organization_owner', 'organization_admin'];
 
@@ -63,7 +70,8 @@ class TeamRightsCharacterizationTest extends TestCase
         'organization_owner' => ['create', 'update', 'invite', 'finance', 'view', 'catalog.view', 'catalog.manage', 'catalog.publish', 'enrollment.view', 'enrollment.manage', 'enrollment.contacts', 'terms.manage', 'team.view', 'team.manage'],
         'organization_admin' => ['create', 'update', 'invite', 'view', 'catalog.view', 'catalog.manage', 'catalog.publish', 'enrollment.view', 'enrollment.manage', 'enrollment.contacts', 'terms.manage', 'team.view', 'team.manage'],
         'coordinator' => ['create', 'update', 'view', 'catalog.view', 'catalog.manage', 'enrollment.view', 'enrollment.manage', 'enrollment.contacts', 'team.view'],
-        'instructor' => ['view', 'catalog.view', 'enrollment.view_own'],
+        // 31.10.2026: without "catalog.view".
+        'instructor' => ['view', 'enrollment.view_own'],
         'finance' => ['finance', 'view', 'enrollment.view', 'team.view'],
         'viewer' => ['view', 'catalog.view', 'enrollment.view', 'team.view'],
     ];
@@ -222,7 +230,8 @@ class TeamRightsCharacterizationTest extends TestCase
             'POST api/v1/enrollment/applications/{application}/contact/reveal' => ['POST', "{$application}/contact/reveal", [], self::CONTACTS, 200],
             'POST api/v1/enrollment/enrollments/{enrollment}/contact/reveal' => ['POST', "{$enrollment}/contact/reveal", [], self::CONTACTS, 200],
             'POST api/v1/enrollment/applications/{application}/review' => ['POST', "{$application}/review", [], self::ENROLLMENT_MANAGE, 422],
-            'PATCH api/v1/enrollment/groups/{group}/approval' => ['PATCH', "/api/v1/enrollment/groups/{$tuesday}/approval", [], self::ENROLLMENT_MANAGE, 422],
+            // 31.10.2026: "catalog.manage" in the group instead of "enrollment.enroll" — the same roles.
+            'PATCH api/v1/enrollment/groups/{group}/approval' => ['PATCH', "/api/v1/enrollment/groups/{$tuesday}/approval", [], self::CATALOG_MANAGE, 422],
             'POST api/v1/enrollment/enrollments/{enrollment}/transfer' => ['POST', "{$enrollment}/transfer", [], self::ENROLLMENT_MANAGE, 422],
             'POST api/v1/enrollment/enrollments/{enrollment}/pauses' => ['POST', "{$enrollment}/pauses", [], self::ENROLLMENT_MANAGE, 422],
             'POST api/v1/enrollment/enrollments/{enrollment}/pauses/{pause}/end' => ['POST', "{$enrollment}/pauses/{$missing}/end", [], self::ENROLLMENT_MANAGE, 422],
@@ -231,7 +240,7 @@ class TeamRightsCharacterizationTest extends TestCase
             'POST api/v1/enrollment/enrollments/{enrollment}/skipped-sessions' => ['POST', "{$enrollment}/skipped-sessions", [], self::ENROLLMENT_MANAGE, 422],
             'DELETE api/v1/enrollment/enrollments/{enrollment}/skipped-sessions/{session}' => ['DELETE', "{$enrollment}/skipped-sessions/{$f['session']->id}", [], self::ENROLLMENT_MANAGE, 422],
 
-            'GET api/v1/payment-terms' => ['GET', '/api/v1/payment-terms', [], self::ALL, 200],
+            'GET api/v1/payment-terms' => ['GET', '/api/v1/payment-terms', [], self::TERMS_VIEW, 200],
             'POST api/v1/payment-terms' => ['POST', '/api/v1/payment-terms', [], self::TERMS_MANAGE, 422],
             'PATCH api/v1/payment-terms/{terms}' => ['PATCH', "/api/v1/payment-terms/{$missing}", [], self::TERMS_MANAGE, 404],
 

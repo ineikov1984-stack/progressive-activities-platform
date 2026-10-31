@@ -229,16 +229,18 @@ final class StaffEnrollmentController extends Controller
     /**
      * How the group's applications are decided: by the team, or at once when there is a place
      * (a full group puts the application on the waiting list). An operational setting, so it can
-     * change on a published group too; it applies to applications from now on.
+     * change on a published group too; it applies to applications from now on. A setting of the group: it is changed by
+     * whoever changes the activities (the owner, the administrator, the coordinator), not by "Записва деца", which
+     * decides the applications (DECISIONS 31.10.2026).
      */
     public function updateApproval(Request $request, string $group, AuditRecorder $audit): JsonResponse
     {
-        $user = $this->requireRight($request, 'enrollment.enroll');
+        $user = $this->requireRight($request, 'catalog.manage');
         $validated = $request->validate([
             'enrollment_approval_mode' => ['required', Rule::in(['manual', 'automatic'])],
         ], ['required' => 'Изберете как се одобряват заявките.', 'in' => 'Изберете как се одобряват заявките.']);
         $record = Group::query()->findOrFail($group);
-        $this->requireGroup($user, 'enrollment.enroll', $record->id);
+        $this->requireGroup($user, 'catalog.manage', $record->id);
         $record->forceFill(['enrollment_approval_mode' => $validated['enrollment_approval_mode']])->save();
         // Identifiers and the new mode only.
         $audit->record(AuditAction::EnrollmentGroupApprovalChanged, new AuditableReference('activity_group', $record->id), [

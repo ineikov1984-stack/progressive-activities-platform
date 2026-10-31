@@ -29,19 +29,20 @@ class PaymentTermsApiTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** @return iterable<string, array{string, bool}> */
+    /** @return iterable<string, array{string, bool, bool}> */
     public static function roles(): iterable
     {
-        yield 'owner' => ['organization_owner', true];
-        yield 'administrator' => ['organization_admin', true];
-        yield 'coordinator' => ['coordinator', false];
-        yield 'instructor' => ['instructor', false];
-        yield 'viewer' => ['viewer', false];
-        yield 'finance' => ['finance', false];
+        yield 'owner' => ['organization_owner', true, true];
+        yield 'administrator' => ['organization_admin', true, true];
+        yield 'coordinator' => ['coordinator', true, false];
+        yield 'finance' => ['finance', true, false];
+        // DECISIONS 31.10.2026: the teacher and the viewer do not see the payment terms.
+        yield 'instructor' => ['instructor', false, false];
+        yield 'viewer' => ['viewer', false, false];
     }
 
     #[DataProvider('roles')]
-    public function test_the_team_reads_and_only_the_owner_and_the_administrator_change(string $role, bool $canManage): void
+    public function test_the_owner_the_administrator_the_coordinator_and_the_accountant_read_and_the_first_two_change(string $role, bool $canRead, bool $canManage): void
     {
         $organization = $this->organization();
         $owner = $this->member($organization, 'organization_owner');
@@ -49,13 +50,17 @@ class PaymentTermsApiTest extends TestCase
         $id = $this->as($owner, $organization)->postJson('/api/v1/payment-terms', $this->body(BillingKind::Monthly))
             ->assertCreated()->json('payment_terms.id');
 
-        $this->as($member, $organization)->getJson('/api/v1/payment-terms')
-            ->assertOk()
-            ->assertJsonPath('can_manage', $canManage)
-            ->assertJsonPath('payment_terms.0.id', $id)
-            ->assertJsonPath('billing_kinds.0.value', 'monthly')
-            ->assertJsonPath('billing_kinds.0.label', 'Месечна такса')
-            ->assertJsonPath('billing_kinds.0.presets.standard.label', 'Стандартни');
+        $read = $this->as($member, $organization)->getJson('/api/v1/payment-terms');
+        if (! $canRead) {
+            $read->assertForbidden()->assertJsonMissingPath('payment_terms');
+        } else {
+            $read->assertOk()
+                ->assertJsonPath('can_manage', $canManage)
+                ->assertJsonPath('payment_terms.0.id', $id)
+                ->assertJsonPath('billing_kinds.0.value', 'monthly')
+                ->assertJsonPath('billing_kinds.0.label', 'Месечна такса')
+                ->assertJsonPath('billing_kinds.0.presets.standard.label', 'Стандартни');
+        }
         $this->as($member, $organization)->postJson('/api/v1/payment-terms', $this->body(BillingKind::Visit))
             ->assertStatus($canManage ? 201 : 403);
         $this->as($member, $organization)->patchJson("/api/v1/payment-terms/{$id}", ['version' => 1, 'name' => 'Нови'])
