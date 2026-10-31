@@ -10,8 +10,8 @@ import {
 import { changeableRoles, focusLater, initials, memberStatus, roleLabel, roleLabels } from './presentation';
 import {
   accessSummary, applyPartner, cardAreas, defaultScope, draftFromCard, financeLock, firstName, type PickerGroup, payloadFromDraft, rightRows,
-  type RightsDraft, type RightsErrors, rightsErrors, rightsHeadline, rightsHistoryText, roleChangeLines, sameDraft, selectionSummary, templateLabel,
-  touchesFinance, withEnd, withRight, withScope,
+  losesFinance, type RightsDraft, type RightsErrors, rightsErrors, rightsHeadline, rightsHistoryText, roleChangeLines, sameDraft, scopeDrops,
+  selectionSummary, templateLabel, touchesFinance, withEnd, withRight, withScope,
 } from './rights';
 import { GroupPicker, RightAreas, RightItems, RightsLegend, ScopeField } from './rights-editor';
 import { AccessLists } from './role-access';
@@ -160,7 +160,8 @@ function RightsForm({ organizationId, actorRole, member, card, onSaved, onReload
   const [error, setError] = useState('');
   const [stale, setStale] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [asking, setAsking] = useState(false);
+  // Finance is confirmed before saving: given ("Да, давам достъп") or taken away by a narrower scope.
+  const [asking, setAsking] = useState<'give' | 'lose' | null>(null);
   const [wide] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 48rem)').matches);
   const errorRef = useRef<HTMLParagraphElement>(null);
   const dirty = !sameDraft(draft, initial);
@@ -189,6 +190,15 @@ function RightsForm({ organizationId, actorRole, member, card, onSaved, onReload
   const holdsFinance = Object.keys(draft.grants).some((key) => key.startsWith('finance.'));
   const narrowLock = !actorIsOwner && holdsFinance ? 'Това би отнело достъпа до финансите — може само собственикът.' : null;
   const summary = accessSummary({ role, scope: draft.scope, grants: draft.grants, teaches, selected: draft.targets.length });
+  const drops = scopeDrops(draft);
+  // Twice in the page, one shown at a time (CSS): beside the card when there is room, before the rights otherwise.
+  const will = (id: string) => (
+    <>
+      <h2 id={id}>Какво ще може {name}</h2>
+      <AccessLists summary={summary} when="now" />
+      {role === 'instructor' ? <p className={styles.small}>Своите групи — където е водещ, помощник или заместник; добавят се в профила.</p> : null}
+    </>
+  );
   const change = (next: RightsDraft) => { setDraft(next); setErrors({ rights: {} }); setError(''); };
 
   async function save(confirmed: boolean) {
@@ -198,13 +208,18 @@ function RightsForm({ organizationId, actorRole, member, card, onSaved, onReload
       focusLater('rights-groups-open');
       return;
     }
-    const finance = touchesFinance(draft, initial);
-    if (finance && !confirmed) {
-      setAsking(true);
+    if (losesFinance(draft, initial) && !confirmed) {
+      setAsking('lose');
       focusLater('finance-yes');
       return;
     }
-    setAsking(false); setBusy(true); setError(''); setStale(false);
+    const finance = touchesFinance(draft, initial);
+    if (finance && !confirmed) {
+      setAsking('give');
+      focusLater('finance-yes');
+      return;
+    }
+    setAsking(null); setBusy(true); setError(''); setStale(false);
     const payload = payloadFromDraft(role, draft, finance);
     try {
       const saved = await saveAccess(organizationId, member.id, payload, card.version);
@@ -244,6 +259,10 @@ function RightsForm({ organizationId, actorRole, member, card, onSaved, onReload
               <ScopeField idPrefix="rights" allowed={card.allowed_scopes} value={draft.scope} lock={narrowLock} error={errors.scope}
                 onChange={(scope) => { change(withScope(role, draft, scope)); if (scope === 'groups' && draft.targets.length === 0) setPicking(true); }} />
             ) : <p className={styles.muted}>За кои групи: <strong className={styles.strong}>{draft.scope === 'own' ? 'Своите групи' : draft.scope === 'groups' ? 'Избрани групи' : 'Цялата организация'}</strong></p>}
+            {/* Never silently: what the narrower scope takes away, and that it comes back. */}
+            <p className={drops ? styles.dropNote : 'sr-only'} role="status">
+              {drops ? `${drops} Връщат се, ако изберете отново „Цялата организация“.` : ''}
+            </p>
             {draft.scope === 'groups' ? (
               <div className={styles.selection}>
                 {selection.count > 0 ? (
@@ -268,18 +287,21 @@ function RightsForm({ organizationId, actorRole, member, card, onSaved, onReload
             ) : null}
             {role === 'viewer' && editable ? (
               draft.template ? (
-                <p className={styles.small}><span className={`${styles.badge} ${styles.tone_info}`}>{templateLabel(draft.template)}</span> „Само преглед“ с избрани групи, записване и присъствия. Без финанси.</p>
+                <p id="partner-done" tabIndex={-1} className={styles.small}><span className={`${styles.badge} ${styles.tone_info}`}>{templateLabel(draft.template)}</span> „Само преглед“ с избрани групи, записване и присъствия. Без финанси.</p>
               ) : (
                 <div className={styles.actions}>
                   <button type="button" className={styles.secondary} aria-describedby="partner-hint"
                     disabled={!grantable.includes('enrollment.enroll') || !grantable.includes('attendance.mark')}
-                    onClick={() => { change(applyPartner(draft)); setPicking(true); }}>Попълни като „Партньор от училище“</button>
+                    onClick={() => { change(applyPartner(draft)); setPicking(true); focusLater('partner-done'); }}>Попълни като „Партньор от училище“</button>
                   <p id="partner-hint" className={styles.small}>Избрани групи, „Записва деца“ и „Отбелязва присъствия“. Без финанси.</p>
                 </div>
               )
             ) : null}
             {errors.template ? <p className={styles.fieldError}>{errors.template}</p> : null}
           </div>
+
+          {/* On a phone and a tablet what the person will be able to do comes before the rights; beside them when there is room. */}
+          <section className={`${styles.card} ${styles.narrowOnly}`} aria-labelledby="rights-will">{will('rights-will')}</section>
 
           <section className={styles.card} aria-labelledby="rights-extra">
             <div className={styles.cardHead}>
@@ -300,10 +322,14 @@ function RightsForm({ organizationId, actorRole, member, card, onSaved, onReload
             <p className={styles.small}>Дава ги само собственикът, след потвърждение.</p>
             {asking ? (
               <div className={styles.confirm} role="group" aria-labelledby="finance-confirm">
-                <p id="finance-confirm">Давате на {member.full_name} достъп до таксите и плащанията на цялата организация.</p>
+                <p id="finance-confirm">{asking === 'give'
+                  ? `Давате на ${member.full_name} достъп до таксите и плащанията на цялата организация.`
+                  : `С „${draft.scope === 'own' ? 'Своите групи' : 'Избрани групи'}“ ${member.full_name} губи достъпа до таксите и плащанията. Да го махнем ли?`}</p>
                 <div className={styles.actions}>
-                  <button id="finance-yes" type="button" className={styles.primary} disabled={busy} onClick={() => void save(true)}>Да, давам достъп</button>
-                  <button type="button" className={styles.secondary} onClick={() => setAsking(false)}>Отказ</button>
+                  <button id="finance-yes" type="button" className={styles.primary} disabled={busy} onClick={() => void save(true)}>
+                    {asking === 'give' ? 'Да, давам достъп' : 'Да, махни финансите'}
+                  </button>
+                  <button type="button" className={styles.secondary} onClick={() => setAsking(null)}>Отказ</button>
                 </div>
               </div>
             ) : null}
@@ -327,12 +353,8 @@ function RightsForm({ organizationId, actorRole, member, card, onSaved, onReload
         </form>
       </div>
 
-      <aside className={styles.rightsAside} aria-labelledby="rights-will">
-        <section className={styles.card}>
-          <h2 id="rights-will">Какво ще може {name}</h2>
-          <AccessLists summary={summary} when="now" />
-          {role === 'instructor' ? <p className={styles.small}>Своите групи — където е водещ, помощник или заместник; добавят се в профила.</p> : null}
-        </section>
+      <aside className={`${styles.rightsAside} ${styles.wideOnlyBlock}`} aria-labelledby="rights-will-wide">
+        <section className={styles.card}>{will('rights-will-wide')}</section>
       </aside>
     </div>
   );

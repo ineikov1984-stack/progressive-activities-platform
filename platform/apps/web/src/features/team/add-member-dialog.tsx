@@ -8,7 +8,7 @@ import { addMember, type SentInvitation, TeamApiError, type TeamMember } from '.
 import { focusLater, invitableRoles, roleHints, roleLabels, type TeamRole } from './presentation';
 import {
   accessSummary, allowedScopes, applyPartner, cardAreas, emptyDraft, grantableFor, type PickerGroup, payloadFromDraft, rightRows, type RightsDraft,
-  type RightsErrors, rightsErrors, roleAs, sameDraft, selectionSummary, withEnd, withRight, withScope,
+  type RightsErrors, rightsErrors, roleAs, sameDraft, scopeDrops, selectionSummary, withEnd, withRight, withScope,
 } from './rights';
 import { GroupPicker, RightAreas, ScopeField } from './rights-editor';
 import { AccessLists } from './role-access';
@@ -61,6 +61,7 @@ export function AddMemberDialog({ organizationId, actorRole, onClose, onAdded }:
   const grantable = grantableFor(actorRole, role);
   const rowsInput = { role, draft, grantable, teaches: role === 'instructor', actorIsOwner: actorRole === 'organization_owner' };
   const selection = selectionSummary(draft.targets, groups, {});
+  const drops = scopeDrops(draft);
 
   useEffect(() => {
     const element = dialog.current;
@@ -270,19 +271,29 @@ export function AddMemberDialog({ organizationId, actorRole, onClose, onAdded }:
                     <summary aria-describedby="add-extras-hint">Допълнителни права (по избор)</summary>
                     <div className={styles.moreBody}>
                       {extrasOpen ? <p id="add-extras-hint" className={styles.small}>Например да вижда телефона на родителя, ако трябва спешно да се обади.</p> : null}
+                      {/* The template fills the scope and two rights: first, so the groups to choose come after it. */}
+                      {role === 'viewer' && grantable.includes('enrollment.enroll') && grantable.includes('attendance.mark') ? (
+                        draft.template ? (
+                          <p id="add-partner-done" tabIndex={-1} className={styles.info}>Попълнено: Записва деца, Отбелязва присъствия — изберете групите.</p>
+                        ) : (
+                          <div className={styles.actions}>
+                            <button type="button" className={styles.secondary} aria-describedby="add-partner-hint"
+                              onClick={() => { changeDraft(applyPartner(draft)); focusLater('add-partner-done'); }}>Попълни като „Партньор от училище“</button>
+                            <p id="add-partner-hint" className={styles.small}>Избрани групи, „Записва деца“ и „Отбелязва присъствия“. Без финанси.</p>
+                          </div>
+                        )
+                      ) : null}
                       <ScopeField idPrefix="add" allowed={allowedScopes(role)} value={draft.scope} error={extrasErrors.scope}
                         onChange={(scope) => changeDraft(withScope(role, draft, scope))} />
+                      <p className={drops ? styles.dropNote : 'sr-only'} role="status">
+                        {drops ? `${drops} Връщат се, ако изберете отново „Цялата организация“.` : ''}
+                      </p>
                       {draft.scope === 'groups' ? (
                         <div id="add-groups" tabIndex={-1} className={styles.selection} role="group" aria-label="Избрани групи">
                           {selection.count > 0 ? <p className={styles.small}>Избрани: {selection.text}</p> : null}
                           {extrasErrors.groups ? <p className={styles.fieldError}>{extrasErrors.groups}</p> : null}
                           {groups ? <GroupPicker idPrefix="add" groups={groups} selected={draft.targets} onChange={(targets) => changeDraft({ ...draft, targets })} />
                             : <span className={styles.skeleton} aria-label="Зареждане на групите" />}
-                        </div>
-                      ) : null}
-                      {role === 'viewer' && grantable.includes('enrollment.enroll') && grantable.includes('attendance.mark') ? (
-                        <div className={styles.actions}>
-                          <button type="button" className={styles.secondary} onClick={() => changeDraft(applyPartner(draft))}>Попълни като „Партньор от училище“</button>
                         </div>
                       ) : null}
                       <RightAreas idPrefix="add" areas={cardAreas.map((area) => ({ area, rows: rightRows(area, rowsInput) }))} errors={extrasErrors.rights} startOpen={false}

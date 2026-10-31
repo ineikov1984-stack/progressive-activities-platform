@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { AccessCard } from '../src/features/team/api';
 import {
   accessHeadings, accessSummary, addsFinance, applyPartner, areaSummary, draftFromCard, emptyDraft, endLimits, financeLock, firstName, grantableFor,
-  groupPlaces, lastDayOf, longDay, partnerFits, payloadFromDraft, rightRows, rightsErrors, rightsHeadline, rightsHistoryText, rightsOfRole, rightTexts,
-  roleAs, roleChangeLines, sameDraft, selectionSummary, templateLabel, touchesFinance, withEnd, withRight, withScope,
+  groupPlaces, lastDayOf, longDay, losesFinance, partnerFits, payloadFromDraft, rightRows, rightsErrors, rightsHeadline, rightsHistoryText, rightsOfRole, rightTexts,
+  roleAs, roleChangeLines, sameDraft, scopeDrops, selectionSummary, templateLabel, touchesFinance, withEnd, withRight, withScope,
 } from '../src/features/team/rights';
 
 const card = (extra: Partial<AccessCard> = {}): AccessCard => ({
@@ -43,6 +43,7 @@ describe('team rights', () => {
     const draft = draftFromCard(card());
     expect(draft).toEqual({
       scope: 'groups', targets: ['group:g-1', 'activity:a-2'], grants: { 'enrollment.enroll': null, 'attendance.mark': '2027-06-30' }, template: 'school_partner',
+      parked: {},
     });
     expect(draftFromCard(card({ scope: null, role: 'instructor' })).scope).toBe('own');
     // What another right brings along is not sent back as an added right.
@@ -60,9 +61,27 @@ describe('team rights', () => {
     expect(payloadFromDraft('viewer', draft, true).confirm_finance).toBe(true);
   });
 
+  it('says what a narrower scope takes away, keeps it aside and brings it back with the whole organization', () => {
+    const wide = { ...emptyDraft('viewer'), grants: { 'schedule.manage': '2027-01-31', 'team.assign': null, 'finance.view': null, 'contacts.view': null } };
+    const narrow = withScope('viewer', wide, 'groups');
+    expect(narrow.grants).toEqual({ 'contacts.view': null });
+    expect(scopeDrops(narrow)).toBe('Ще отпаднат: Променя графика, Слага учители в групите, Вижда таксите и плащанията — дават се само с „Цялата организация“.');
+    // Never sent: the body holds only what stays.
+    expect(payloadFromDraft('viewer', narrow).grants).toEqual([{ ability: 'contacts.view', expires_on: null }]);
+    // Finance the person has is asked about before saving; one added only in this draft is not.
+    expect(losesFinance(narrow, wide)).toBe(true);
+    expect(losesFinance(narrow, emptyDraft('viewer'))).toBe(false);
+    const back = withScope('viewer', narrow, 'all');
+    expect(back.grants).toEqual(wide.grants);
+    expect(scopeDrops(back)).toBeNull();
+    expect(sameDraft(back, wide)).toBe(true);
+    expect(sameDraft(narrow, { ...narrow, parked: {} })).toBe(true);
+  });
+
   it('drops what is given only for the whole organization when the scope narrows, and the label when it no longer fits', () => {
     const wide = { ...emptyDraft('viewer'), grants: { 'schedule.manage': null, 'contacts.view': null } };
     expect(withScope('viewer', wide, 'groups').grants).toEqual({ 'contacts.view': null });
+    expect(applyPartner(wide).parked).toEqual({ 'schedule.manage': null });
     const partner = applyPartner(emptyDraft('viewer'));
     expect(partner).toMatchObject({ scope: 'groups', grants: { 'enrollment.enroll': null, 'attendance.mark': null }, template: 'school_partner' });
     expect(partnerFits('viewer', partner)).toBe(true);

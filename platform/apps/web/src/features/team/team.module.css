@@ -223,6 +223,11 @@
 .rightsColumn, .rightsMain, .rightsAside { display: grid; gap: var(--space-4); align-content: start; min-width: 0; }
 .saveError { display: grid; gap: var(--space-2); }
 /* "Отказ" / "Запази промените" stay at the bottom of the screen while the card is long. */
+/* Only one of the two "Какво ще може" cards is shown: before the rights on a phone and a tablet, beside them wider. */
+.wideOnlyBlock { display: none; }
+.dropNote { margin: 0; padding: var(--space-2) var(--space-3); border-left: 4px solid var(--status-limited); border-radius: var(--radius-sm); color: var(--ink); background: var(--status-limited-soft); font-size: 14px; line-height: 20px; }
+/* WCAG 2.4.11: the sticky bar never hides what has the focus — the page scrolls it above the bar. */
+.rightsMain :is(input, select, textarea, button, a, summary, [tabindex="-1"]) { scroll-margin-bottom: calc(var(--control-height) + var(--space-3) * 2 + var(--space-4)); }
 .saveBar { position: sticky; bottom: 0; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-2); padding: var(--space-3) 0; border-top: 1px solid var(--border); background: var(--surface-page); }
 
 @container team (min-width: 560px) {
@@ -249,6 +254,8 @@
   /* "Какво ще може" stays in view beside the card. */
   .rightsLayout { grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr); }
   .rightsAside { position: sticky; top: var(--space-6); }
+  .wideOnlyBlock { display: grid; }
+  .narrowOnly { display: none; }
 }
 
 @container team (min-width: 720px) {

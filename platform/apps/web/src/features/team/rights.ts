@@ -129,9 +129,13 @@ export function grantableFor(actorRole: string, role: string): string[] {
 
 /*
  * The draft of the card: the scope, the selected groups ("group:<id>" or "activity:<id>"), the added rights with
- * their last day and the template's label.
+ * their last day and the template's label. `parked` holds what a narrower scope took away, with its end, so that
+ * "Цялата организация" chosen again brings it back; it is never sent.
  */
-export type RightsDraft = { scope: AccessScope; targets: string[]; grants: Record<string, string | null>; template: string | null };
+export type RightsDraft = {
+  scope: AccessScope; targets: string[]; grants: Record<string, string | null>; template: string | null;
+  parked: Record<string, string | null>;
+};
 
 export const groupTarget = (id: string) => `group:${id}`;
 export const activityTarget = (id: string) => `activity:${id}`;
@@ -144,10 +148,11 @@ export function draftFromCard(card: Pick<AccessCard, 'role' | 'scope' | 'groups'
     targets: [...card.groups.map((group) => groupTarget(group.group_id)), ...card.activities.map((activity) => activityTarget(activity.activity_id))],
     grants,
     template: card.template,
+    parked: {},
   };
 }
 
-export const emptyDraft = (role: string): RightsDraft => ({ scope: defaultScope(role), targets: [], grants: {}, template: null });
+export const emptyDraft = (role: string): RightsDraft => ({ scope: defaultScope(role), targets: [], grants: {}, template: null, parked: {} });
 
 /** "Партньор от училище": "Само преглед" with selected groups, enrolling and attendance (SaveStaffAccess::template). */
 export function partnerFits(role: string | null | undefined, draft: Pick<RightsDraft, 'scope' | 'grants'>): boolean {
@@ -155,20 +160,43 @@ export function partnerFits(role: string | null | undefined, draft: Pick<RightsD
 }
 
 export function applyPartner(draft: RightsDraft): RightsDraft {
-  const grants = { ...draft.grants };
+  const narrowed = withScope('viewer', draft, 'groups');
+  const grants = { ...narrowed.grants };
   for (const key of SCHOOL_PARTNER) if (!(key in grants)) grants[key] = null;
-  return { ...draft, scope: 'groups', grants, template: SCHOOL_PARTNER_TEMPLATE };
+  return { ...narrowed, grants, template: SCHOOL_PARTNER_TEMPLATE };
 }
 
 /**
- * A new scope. A narrow one takes away what is given only for the whole organization; the template's label stays
- * only while it still fits.
+ * A new scope. A narrow one takes away what is given only for the whole organization and keeps it aside
+ * ("Ще отпаднат: …"); "Цялата организация" brings it back. The template's label stays only while it still fits.
  */
 export function withScope(role: string | null | undefined, draft: RightsDraft, scope: AccessScope): RightsDraft {
-  const grants = scope === 'all' ? { ...draft.grants }
-    : Object.fromEntries(Object.entries(draft.grants).filter(([key]) => !WHOLE_ORGANIZATION.includes(key)));
-  const next = { ...draft, scope, grants };
+  let grants: Record<string, string | null>;
+  let parked: Record<string, string | null>;
+  if (scope === 'all') {
+    grants = { ...draft.parked, ...draft.grants };
+    parked = {};
+  } else {
+    grants = {};
+    parked = { ...draft.parked };
+    for (const [key, end] of Object.entries(draft.grants)) {
+      if (WHOLE_ORGANIZATION.includes(key)) parked[key] = end;
+      else grants[key] = end;
+    }
+  }
+  const next = { ...draft, scope, grants, parked };
   return { ...next, template: next.template && partnerFits(role, next) ? next.template : null };
+}
+
+/** "Ще отпаднат: Променя графика, Приема плащания" — what the narrower scope takes away; null when nothing. */
+export function scopeDrops(draft: Pick<RightsDraft, 'parked'>): string | null {
+  const keys = Object.keys(draft.parked);
+  return keys.length > 0 ? `Ще отпаднат: ${keys.map(rightLabel).join(', ')} — дават се само с „Цялата организация“.` : null;
+}
+
+/** The narrower scope takes away finance the person has: that is asked first, as a change of role is. */
+export function losesFinance(draft: Pick<RightsDraft, 'parked'>, before: Pick<RightsDraft, 'grants'>): boolean {
+  return FINANCE.some((key) => key in draft.parked && key in before.grants);
 }
 
 export function withRight(role: string | null | undefined, draft: RightsDraft, key: string, on: boolean): RightsDraft {
