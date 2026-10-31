@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
+use App\Domain\Organizations\Services\MembershipActivity;
 use App\Domain\Organizations\Services\StaffRights;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Closure;
@@ -14,7 +15,11 @@ use Symfony\Component\HttpFoundation\Response;
 
 class ResolveTenant
 {
-    public function __construct(private readonly TenantContext $context, private readonly StaffRights $rights) {}
+    public function __construct(
+        private readonly TenantContext $context,
+        private readonly StaffRights $rights,
+        private readonly MembershipActivity $activity,
+    ) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -35,19 +40,20 @@ class ResolveTenant
                 DB::select("SELECT set_config('app.current_user_id', ?, true)", [$userId]);
             }
 
-            $membershipExists = OrganizationMembership::query()
+            // The same check as before; it also reads when the person was last seen here.
+            $membership = OrganizationMembership::query()
                 ->withoutGlobalScopes()
                 ->where('organization_id', $organizationId)
                 ->where('user_id', $userId)
                 ->where('status', 'active')
-                ->exists();
+                ->first(['id', 'last_seen_at']);
 
             $organization = Organization::query()
                 ->withoutGlobalScopes()
                 ->whereKey($organizationId)
                 ->first();
 
-            if (! $membershipExists || $organization === null) {
+            if ($membership === null || $organization === null) {
                 return new JsonResponse(['message' => 'Организацията не е намерена.'], Response::HTTP_NOT_FOUND);
             }
 
@@ -57,6 +63,8 @@ class ResolveTenant
                 if (DB::getDriverName() === 'pgsql') {
                     DB::select("SELECT set_config('app.current_organization_id', ?, true)", [$organizationId]);
                 }
+                // "Последна активност", at most once in five minutes (with the organization selected, as RLS requires).
+                $this->activity->seen((string) $membership->getKey(), $membership->last_seen_at);
 
                 // The rights of the request's user are read once for the request (docs/product/team-rights.md, т. 4.5).
                 return $this->rights->remembering(fn (): Response => $next($request));
