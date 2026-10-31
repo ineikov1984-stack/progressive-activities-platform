@@ -27,11 +27,19 @@ final class TeamAbilities
     /** Given only by the owner, with an explicit confirmation, and only once the stage of finance is on (т. 5). */
     public const FINANCE = ['finance.view', 'finance.collect', 'finance.pay_view'];
 
-    /** Given together, in the same scope, so that a right is never given that cannot be used (т. 2). */
+    /**
+     * What an added right brings along, in the same scope, so that a right is never given that cannot be used (т. 2).
+     * The settings, the assignments and the schedule need the catalog for reading — the accountant has none by role.
+     * Only the added rights: the roles are complete sets by themselves.
+     *
+     * @var array<string, list<string>>
+     */
     public const IMPLIES = [
-        'enrollment.enroll' => 'enrollment.view',
-        'team.assign' => 'team.view',
-        'catalog.publish' => 'catalog.manage',
+        'enrollment.enroll' => ['enrollment.view'],
+        'team.assign' => ['team.view', 'catalog.view'],
+        'catalog.manage' => ['catalog.view'],
+        'catalog.publish' => ['catalog.manage', 'catalog.view'],
+        'schedule.manage' => ['catalog.view'],
     ];
 
     /** The keys from before, kept in the Gate and in `GET /organizations` until the web moves to the new ones (т. 2.1). */
@@ -110,8 +118,8 @@ final class TeamAbilities
     {
         $result = $abilities;
         foreach ($abilities as $ability) {
-            if (isset(self::IMPLIES[$ability])) {
-                $result[] = self::IMPLIES[$ability];
+            foreach (self::IMPLIES[$ability] ?? [] as $implied) {
+                $result[] = $implied;
             }
         }
 

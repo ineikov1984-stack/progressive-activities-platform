@@ -92,7 +92,7 @@ class TeamRightsArchitectureTest extends TestCase
             if ($role->isTeam()) {
                 foreach (TeamAbilities::IMPLIES as $right => $implied) {
                     if (in_array($right, $abilities, true)) {
-                        $this->assertContains($implied, $abilities, "{$role->value}: {$right}");
+                        $this->assertSame([], array_values(array_diff($implied, $abilities)), "{$role->value}: {$right}");
                     }
                 }
             }

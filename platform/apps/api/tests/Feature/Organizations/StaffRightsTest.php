@@ -68,6 +68,30 @@ class StaffRightsTest extends TestCase
         });
     }
 
+    public function test_the_settings_the_assignments_and_the_schedule_bring_the_catalog_along_for_the_accountant(): void
+    {
+        $f = $this->rightsFixture();
+        $accountant = $this->memberOf($f['organization'], 'finance');
+        $person = $this->personFor($f['organization'], $accountant);
+        // By role the accountant still has no catalog, as before.
+        $this->assertFalse($this->rightsOf($f['organization'], $accountant)->has('catalog.view'));
+        $this->signInTo($accountant, $f['organization'])->getJson('/api/v1/catalog/activities')->assertForbidden();
+
+        foreach (['catalog.manage', 'catalog.publish', 'team.assign', 'schedule.manage'] as $ability) {
+            $grant = $this->grant($f, $person, $ability);
+            $access = $this->rightsOf($f['organization'], $accountant);
+            $this->assertTrue($access->has('catalog.view'), $ability);
+            $this->assertFalse($access->fromRole('catalog.view'), $ability);
+            $this->inTenant($f['organization'], fn () => $this->assertTrue(Gate::forUser($accountant)->allows('catalog.view', $f['organization']), $ability));
+            $this->inTenant($f['organization'], fn () => $grant->forceFill([
+                'revoked_at' => now(), 'revoked_by' => $f['owner']->id, 'revoked_reason' => 'removed',
+            ])->save());
+        }
+
+        $this->grant($f, $person, 'catalog.manage');
+        $this->signInTo($accountant, $f['organization'])->getJson('/api/v1/catalog/activities')->assertOk();
+    }
+
     public function test_the_platform_operator_keeps_its_set_and_does_not_see_the_team(): void
     {
         $f = $this->rightsFixture();

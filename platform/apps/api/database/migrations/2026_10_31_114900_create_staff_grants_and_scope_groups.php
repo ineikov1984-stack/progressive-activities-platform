@@ -22,13 +22,7 @@ return new class extends Migration
 
     public function up(): void
     {
-        // Migrations run as the database owner (docs/process/DECISIONS.md, "Миграции с ролята-собственик").
-        if (DB::getDriverName() === 'pgsql') {
-            $role = DB::selectOne('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user');
-            if ($role !== null && ! $role->rolsuper && ! $role->rolbypassrls) {
-                throw new RuntimeException('Run migrations as the database owner: php artisan migrate --database=pgsql_admin --force');
-            }
-        }
+        $this->assertOwner();
 
         Schema::table('staff_members', function (Blueprint $table): void {
             $table->string('access_scope', 16)->nullable();
@@ -86,6 +80,10 @@ return new class extends Migration
             ALTER TABLE staff_grants ADD CONSTRAINT staff_grants_ability_valid CHECK (ability IN ({$abilities}));
             ALTER TABLE staff_grants ADD CONSTRAINT staff_grants_expiry_valid CHECK (expires_at IS NULL OR expires_at > granted_at);
             ALTER TABLE staff_grants ADD CONSTRAINT staff_grants_revocation_valid CHECK ((revoked_at IS NULL) = (revoked_reason IS NULL));
+            -- Who revoked is kept; only an expired right may be closed without anyone (by the system).
+            ALTER TABLE staff_grants ADD CONSTRAINT staff_grants_revoked_by_valid CHECK (
+                (revoked_at IS NULL AND revoked_by IS NULL)
+                OR (revoked_at IS NOT NULL AND (revoked_by IS NOT NULL OR revoked_reason = 'expired')));
             ALTER TABLE staff_grants ADD CONSTRAINT staff_grants_revoked_reason_valid
                 CHECK (revoked_reason IN ('removed', 'role_changed', 'scope_changed', 'archived', 'expired'));
             ALTER TABLE staff_grants ENABLE ROW LEVEL SECURITY;
@@ -101,6 +99,7 @@ return new class extends Migration
             ALTER TABLE staff_scope_groups ADD CONSTRAINT staff_scope_groups_activity_tenant_fk
                 FOREIGN KEY (activity_id, organization_id) REFERENCES activities (id, organization_id);
             ALTER TABLE staff_scope_groups ADD CONSTRAINT staff_scope_groups_one_target CHECK (num_nonnulls(group_id, activity_id) = 1);
+            ALTER TABLE staff_scope_groups ADD CONSTRAINT staff_scope_groups_removal_valid CHECK ((removed_at IS NULL) = (removed_by IS NULL));
             ALTER TABLE staff_scope_groups ENABLE ROW LEVEL SECURITY;
             ALTER TABLE staff_scope_groups FORCE ROW LEVEL SECURITY;
             CREATE POLICY staff_scope_groups_tenant_policy ON staff_scope_groups
@@ -108,7 +107,7 @@ return new class extends Migration
                 WITH CHECK (organization_id = NULLIF(current_setting('app.current_organization_id', true), '')::uuid);
 
             -- Also for the owner role, which the rights per column do not bind: who, what and when it was given stay;
-            -- a closed row stays closed; an expired right keeps its end and may only be closed.
+            -- a closed row stays closed; an expired right keeps its end and may only be closed as expired.
             CREATE FUNCTION protect_staff_grants() RETURNS trigger LANGUAGE plpgsql AS \$\$
             BEGIN
                 IF NEW.id IS DISTINCT FROM OLD.id OR NEW.organization_id IS DISTINCT FROM OLD.organization_id
@@ -122,6 +121,10 @@ return new class extends Migration
                 END IF;
                 IF OLD.expires_at IS NOT NULL AND OLD.expires_at <= now() AND NEW.expires_at IS DISTINCT FROM OLD.expires_at THEN
                     RAISE EXCEPTION 'an expired right keeps its end' USING ERRCODE = 'check_violation';
+                END IF;
+                IF OLD.expires_at IS NOT NULL AND OLD.expires_at <= now() AND NEW.revoked_at IS NOT NULL
+                    AND NEW.revoked_reason IS DISTINCT FROM 'expired' THEN
+                    RAISE EXCEPTION 'an expired right is closed as expired' USING ERRCODE = 'check_violation';
                 END IF;
                 RETURN NEW;
             END \$\$;
@@ -158,6 +161,7 @@ return new class extends Migration
 
     public function down(): void
     {
+        $this->assertOwner();
         // The history of rights is never dropped quietly (т. 11).
         if (DB::table('staff_grants')->exists() || DB::table('staff_scope_groups')->exists()
             || DB::table('staff_members')->whereNotNull('access_scope')->orWhereNotNull('access_template')->exists()) {
@@ -179,5 +183,16 @@ return new class extends Migration
         Schema::table('staff_members', function (Blueprint $table): void {
             $table->dropColumn(['access_scope', 'access_template']);
         });
+    }
+
+    /** Migrations run as the database owner (docs/process/DECISIONS.md, "Миграции с ролята-собственик"), both ways. */
+    private function assertOwner(): void
+    {
+        if (DB::getDriverName() === 'pgsql') {
+            $role = DB::selectOne('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user');
+            if ($role !== null && ! $role->rolsuper && ! $role->rolbypassrls) {
+                throw new RuntimeException('Run migrations as the database owner: php artisan migrate --database=pgsql_admin --force');
+            }
+        }
     }
 };

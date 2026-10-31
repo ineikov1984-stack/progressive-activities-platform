@@ -4,6 +4,7 @@ namespace App\Domain\Catalog\Services;
 
 use App\Domain\Identity\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Str;
 
 /**
  * An assignment gives rights (docs/product/team-rights.md, т. 2, 8): who leads or assists a group, teaches a session or
@@ -25,11 +26,18 @@ final readonly class TeamAssignments
         $this->assertNotSelf($actor, $placed);
     }
 
-    /** @param  list<string>  $placed */
+    /**
+     * The identifiers are compared in lower case: PostgreSQL finds a profile by its UUID in any case.
+     *
+     * @param  list<string>  $placed
+     */
     public function assertNotSelf(User $actor, array $placed): void
     {
-        if ($placed !== [] && $this->scope->access($actor)->grantedOnly('team.assign')
-            && array_intersect($placed, $this->teaching->profilesFor($actor)) !== []) {
+        if ($placed === [] || ! $this->scope->access($actor)->grantedOnly('team.assign')) {
+            return;
+        }
+        $own = array_map(Str::lower(...), $this->teaching->profilesFor($actor));
+        if (array_intersect(array_map(Str::lower(...), $placed), $own) !== []) {
             throw new AuthorizationException('Не можете да се назначите сами.');
         }
     }

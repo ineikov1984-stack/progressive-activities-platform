@@ -124,15 +124,16 @@ final class StaffRights
      */
     private function access(OrganizationRole $role, ?string $personId, StaffScope $scope, array $roleAbilities, array $grants, array $groupIds, array $activityIds): StaffAccess
     {
-        // What the added rights bring along; the roles are complete sets by themselves — the platform operator places
-        // teachers without seeing the team, as before (т. 2.1).
-        $abilities = array_values(array_unique([...$roleAbilities, ...TeamAbilities::withImplied(array_keys($grants))]));
+        // With a narrower scope the rights for the whole organization only fall away first, so that what they would
+        // bring along does not stay behind them.
         if ($scope !== StaffScope::All) {
             $whole = fn (string $ability): bool => TeamAbilities::kind($ability) === AbilityKind::WholeOrganization;
-            $abilities = array_values(array_filter($abilities, fn (string $ability): bool => ! $whole($ability)));
             $roleAbilities = array_values(array_filter($roleAbilities, fn (string $ability): bool => ! $whole($ability)));
             $grants = array_filter($grants, fn (string $ability): bool => ! $whole($ability), ARRAY_FILTER_USE_KEY);
         }
+        // What the added rights bring along; the roles are complete sets by themselves — the platform operator places
+        // teachers without seeing the team, the accountant has no catalog, as before (т. 2.1).
+        $abilities = array_values(array_unique([...$roleAbilities, ...TeamAbilities::withImplied(array_keys($grants))]));
 
         return new StaffAccess($role, $personId, $scope, $abilities, $roleAbilities, $grants, $groupIds, $activityIds);
     }

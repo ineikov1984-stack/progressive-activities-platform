@@ -51,6 +51,9 @@ class TeamRightsCharacterizationTest extends TestCase
     /** The organization's application to the platform: by role, not a right in the team. */
     private const APPLICATION = ['organization_owner', 'organization_admin'];
 
+    /** Only the owner sends the application for review. */
+    private const SUBMIT = ['organization_owner'];
+
     /** The rights each role had before the rights in the team; `GET /organizations` keeps giving them to the web. */
     private const PERMISSIONS_BEFORE = [
         'platform_admin' => ['create', 'update', 'invite', 'finance', 'view', 'catalog.view', 'catalog.manage', 'catalog.publish', 'enrollment.view', 'enrollment.manage'],
@@ -159,7 +162,8 @@ class TeamRightsCharacterizationTest extends TestCase
             'GET api/v1/me/teaching' => ['GET', '/api/v1/me/teaching', [], self::ALL, 200],
             'POST api/v1/enrollments/{enrollment}/visit-outcome' => ['POST', "/api/v1/enrollments/{$f['visit']->id}/visit-outcome", ['outcome' => 'attended'], self::VISIT_STAFF, 422],
             'GET api/v1/context/organization' => ['GET', '/api/v1/context/organization', [], self::ALL, 200],
-            'POST api/v1/invitations' => ['POST', '/api/v1/invitations', [], self::ALL, 422],
+            // The old form: a valid invitation reaches the check of the right; who may, invites.
+            'POST api/v1/invitations' => ['POST', '/api/v1/invitations', ['email' => 'new-teacher@example.test', 'role' => 'instructor'], self::INVITE, 201],
             'GET api/v1/invitations' => ['GET', '/api/v1/invitations', [], self::INVITE, 200],
             'GET api/v1/audit-events' => ['GET', '/api/v1/audit-events', [], self::TEAM_VIEW, 200], // PR #80: only those who see the team,
 
@@ -231,7 +235,7 @@ class TeamRightsCharacterizationTest extends TestCase
             // An active organization's application is no longer edited.
             'GET api/v1/organization-application' => ['GET', '/api/v1/organization-application', [], self::APPLICATION, 200],
             'PATCH api/v1/organization-application' => ['PATCH', '/api/v1/organization-application', [], self::APPLICATION, 409],
-            'POST api/v1/organization-application/submit' => ['POST', '/api/v1/organization-application/submit', [], self::ALL, 422],
+            'POST api/v1/organization-application/submit' => ['POST', '/api/v1/organization-application/submit', ['review_version' => 1], self::SUBMIT, 409],
         ];
     }
 }

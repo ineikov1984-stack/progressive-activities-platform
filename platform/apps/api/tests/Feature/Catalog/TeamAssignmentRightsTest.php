@@ -2,16 +2,26 @@
 
 namespace Tests\Feature\Catalog;
 
+use App\Domain\Catalog\Actions\AssignGroupInstructor;
+use App\Domain\Catalog\Actions\CreateActivityDraft;
+use App\Domain\Catalog\Actions\SaveGroupSchedule;
+use App\Domain\Catalog\Actions\UpdateActivityDraft;
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\InstructorProfile;
+use App\Domain\Catalog\Services\TeamAssignments;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\StaffGrant;
 use App\Domain\Organizations\Models\StaffMember;
+use App\Domain\Organizations\Tenancy\TenantContext;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\Group as TestGroup;
 use Tests\Support\TeamRightsFixture;
 use Tests\TestCase;
 
@@ -90,6 +100,70 @@ class TeamAssignmentRightsTest extends TestCase
     }
 
     /**
+     * PostgreSQL finds a profile by its UUID in any case: an identifier in capitals is still the person's own
+     * (the security review of PR #81).
+     */
+    #[TestGroup('tenant-isolation')]
+    public function test_an_identifier_in_capitals_is_still_ones_own_profile(): void
+    {
+        if (! $this->postgresIsAvailable()) {
+            $this->markTestSkipped('PostgreSQL is required: SQLite compares identifiers by their letters.');
+        }
+
+        Artisan::call('migrate', ['--database' => 'pgsql_admin', '--force' => true]);
+        $original = DB::getDefaultConnection();
+        DB::setDefaultConnection('pgsql_admin');
+        DB::beginTransaction();
+
+        try {
+            // Only the catalog and the team: the rest of the fixture is not needed here.
+            $organization = Organization::query()->withoutGlobalScopes()->create(['name' => 'Школа', 'slug' => 'school-'.Str::random(12), 'status' => 'active']);
+            $f = ['organization' => $organization, 'owner' => $this->memberOf($organization, 'organization_owner')];
+            $f['tuesday'] = $this->inTenant($organization, fn (): Group => Activity::query()->create([
+                'slug' => 'chess-'.Str::random(8), 'title' => 'Шах', 'category' => 'Наука', 'summary' => 'Описание', 'age_label' => '7+', 'status' => 'published',
+            ])->offerings()->create([])->groups()->create(['name' => 'Вторник', 'status' => 'published', 'capacity_max' => 10]));
+            [$editor, $person] = $this->viewerWith($f, ['catalog.manage', 'team.assign'], teaches: true);
+            $own = Str::upper((string) $this->profileOf($f['organization'], $person)->id);
+            ['activity' => $draft, 'group' => $group] = $this->draft($f, null);
+            $this->actingAs($editor);
+            app(TenantContext::class)->select($f['organization']);
+            DB::select("SELECT set_config('app.current_organization_id', ?, true)", [$f['organization']->id]);
+
+            $refusals = [];
+            foreach ([
+                'assignment' => fn () => app(AssignGroupInstructor::class)->handle($editor, Group::query()->findOrFail($f['tuesday']->id), ['instructor_profile_id' => $own]),
+                'teachers of a group' => fn () => app(SaveGroupSchedule::class)->handle(Activity::query()->findOrFail($draft), ['id' => $group, 'version' => 1, 'instructor_ids' => [$own]]),
+                'lead of an offering' => fn () => app(UpdateActivityDraft::class)->handle($editor, Activity::query()->findOrFail($draft), 1, ['offering' => ['lead_instructor_profile_id' => $own]]),
+                'lead of a new activity' => fn () => app(CreateActivityDraft::class)->handle($editor, $f['organization'], [...$this->activityBody(), 'offering' => ['lead_instructor_profile_id' => $own]]),
+            ] as $what => $attempt) {
+                try {
+                    $attempt();
+                    $refusals[$what] = 'accepted';
+                } catch (AuthorizationException $exception) {
+                    $refusals[$what] = $exception->getMessage();
+                }
+            }
+
+            $this->assertSame(array_fill_keys(['assignment', 'teachers of a group', 'lead of an offering', 'lead of a new activity'], 'Не можете да се назначите сами.'), $refusals);
+            $this->assertSame(0, DB::table('activity_group_instructors')->whereRaw('lower(instructor_profile_id::text) = ?', [Str::lower($own)])->count());
+        } finally {
+            DB::rollBack();
+            DB::setDefaultConnection($original);
+            app(TenantContext::class)->clear();
+        }
+    }
+
+    public function test_capitals_in_an_identifier_do_not_hide_ones_own_profile(): void
+    {
+        $f = $this->rightsFixture();
+        [$editor, $person] = $this->viewerWith($f, ['catalog.manage', 'team.assign'], teaches: true);
+        $own = Str::upper((string) $this->profileOf($f['organization'], $person)->id);
+
+        $this->expectException(AuthorizationException::class);
+        $this->inTenant($f['organization'], fn () => app(TeamAssignments::class)->assertMayAssign($editor, [$own]));
+    }
+
+    /**
      * A viewer with the whole organization and the added rights.
      *
      * @param  array{organization: Organization, owner: User}  $f
@@ -144,6 +218,17 @@ class TeamAssignmentRightsTest extends TestCase
 
             return ['activity' => (string) $activity->id, 'group' => (string) $group->id, 'session' => (string) $session->id];
         });
+    }
+
+    private function postgresIsAvailable(): bool
+    {
+        try {
+            DB::connection('pgsql_admin')->getPdo();
+
+            return true;
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     /** @return array<string, string> */

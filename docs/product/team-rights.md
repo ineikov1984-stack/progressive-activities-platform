@@ -62,7 +62,7 @@
 
 **Назначенията дават права.** Затова `team.assign` и `schedule.manage` са само с „Цялата организация“. Човек, който има `team.assign` само от добавка, не назначава себе си — нито в група, нито като заместник, нито като водещ на предлагането (403 „Не можете да се назначите сами.“). Собственикът, администраторът и координаторът назначават, както днес. Всяко назначение е и в историята на правата на човека (т. 10).
 
-**Следствия** — в същия обхват, за да не се даде право, което не може да се ползва: `enrollment.enroll` ⇒ `enrollment.view`; `team.assign` ⇒ `team.view`; `catalog.publish` ⇒ `catalog.manage`.
+**Следствия** — в същия обхват, за да не се даде право, което не може да се ползва: `enrollment.enroll` ⇒ `enrollment.view`; `team.assign` ⇒ `team.view` и `catalog.view`; `catalog.manage` ⇒ `catalog.view`; `catalog.publish` ⇒ `catalog.manage` и `catalog.view`; `schedule.manage` ⇒ `catalog.view`. Важат само за добавките: ролите са пълни комплекти сами по себе си (операторът назначава, без да вижда екипа, както днес).
 
 **Кои ключове се дават като добавки** — точно този списък е в `CHECK` на `staff_grants.ability` (т. 4.3): `enrollment.enroll`, `attendance.mark`, `attendance.view_month`, `schedule.view_all`, `schedule.manage`, `contacts.view`, `contacts.message`, `team.view`, `team.assign`, `finance.view`, `finance.collect`, `finance.pay_view`, `catalog.manage`, `catalog.publish`.
 
@@ -70,7 +70,7 @@
 - `enrollment.view` — с ролята или чрез `enrollment.enroll`;
 - `enrollment.view_own` — от назначението;
 - `attendance.correct_late`, `team.manage`, `terms.manage` — само с ролята;
-- `view`, `catalog.view` — базови, на всяка роля;
+- `view`, `catalog.view` — базови, на всяка роля — освен `catalog.view` на счетоводителя: той и днес няма каталога и не го получава по роля (поведението не се сменя); получава го само като следствие от добавка за настройките, назначенията или графика;
 - `create`, `update`, `invite`, `finance` — стари ключове. Остават в ролите без промяна. Днес никой маршрут не проверява `create`, `update` и `finance`, а `invite` е за старата форма „Покани колега“. Махат се заедно с нея, в отделен PR;
 - `enrollment.manage`, `enrollment.contacts` — синоними до PR 3 (т. 2.1).
 
@@ -97,7 +97,7 @@
 
 | Проверка днес | Къде | След |
 |---|---|---|
-| `catalog.view` → `CatalogPolicy::view` | каталогът за четене: дейности и групите им, места, профили на преподаватели, предложения за посещения, отворени врати, профилът на организацията, снимки | `catalog.view` — база за всяка роля, без обхват; каталогът е и на сайта. Графикът по обхват — с етапа „График“ |
+| `catalog.view` → `CatalogPolicy::view` | каталогът за четене: дейности и групите им, места, профили на преподаватели, предложения за посещения, отворени врати, профилът на организацията, снимки | `catalog.view` — база за всяка роля без счетоводителя (той и днес няма каталога), без обхват; каталогът е и на сайта. Добавка `catalog.manage`, `catalog.publish`, `team.assign` или `schedule.manage` носи и `catalog.view`. Графикът по обхват — с етапа „График“ |
 | `catalog.manage` → `CatalogPolicy::manage` | `CreateActivityDraft`, `UpdateActivityDraft`, `SaveGroupSchedule`, `SaveVisitOffer`, `PublishVisitOffer` (без публикуване), `SaveOpenDayCampaign`, места, профили на преподаватели, снимки, профилът на организацията | `catalog.manage`; полетата, които назначават, искат и `team.assign` — виж по-долу |
 | `catalog.manage` в `AssignGroupInstructor`, `EndGroupAssignment` | `POST /catalog/groups/{group}/assignments`, `…/{instructor}/end` | `team.assign`; добавка — без себе си |
 | `catalog.publish` → `CatalogPolicy::publish` | `PublishActivityInternally`, `PublishVisitOffer` (публикуване), `SaveOpenDayCampaign` (публикуване), `PATCH /catalog/profile` с `is_published` | `catalog.publish` |

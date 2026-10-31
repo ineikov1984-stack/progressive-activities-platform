@@ -28,6 +28,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -161,8 +162,9 @@ final readonly class SaveGroupSchedule
      */
     private function assertTeachers(array $current, mixed $wanted): void
     {
-        $wanted = array_values(array_unique(array_map(fn (mixed $id): string => (string) $id, is_array($wanted) ? $wanted : [])));
-        $current = array_values(array_unique($current));
+        // In lower case: PostgreSQL finds a profile by its UUID in any case.
+        $wanted = array_values(array_unique(array_map(fn (mixed $id): string => Str::lower((string) $id), is_array($wanted) ? $wanted : [])));
+        $current = array_values(array_unique(array_map(Str::lower(...), $current)));
         sort($wanted);
         sort($current);
         if ($wanted === $current) {

@@ -31,7 +31,8 @@ final readonly class CreateActivityDraft
         // The lead of an offering teaches all its groups: placing one is an assignment (docs/product/team-rights.md, т. 2.2).
         $lead = $payload['offering']['lead_instructor_profile_id'] ?? null;
         if (is_string($lead)) {
-            $this->assignments->assertMayAssign($actor, [$lead]);
+            // In lower case: PostgreSQL finds a profile by its UUID in any case.
+            $this->assignments->assertMayAssign($actor, [Str::lower($lead)]);
         }
 
         return DB::transaction(function () use ($organization, $payload): Activity {

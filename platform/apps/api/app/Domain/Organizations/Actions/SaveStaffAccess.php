@@ -24,6 +24,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -314,16 +315,16 @@ final readonly class SaveStaffAccess
      */
     private function saveGroups(User $actor, StaffMember $member, array $targets, CarbonImmutable $now, AuditableReference $subject): int
     {
+        // In lower case: PostgreSQL keeps a UUID in lower case whatever was sent.
         $wanted = [];
         foreach ($targets as $target) {
-            $key = isset($target['group_id']) ? 'group:'.$target['group_id'] : 'activity:'.$target['activity_id'];
-            $wanted[$key] = isset($target['group_id'])
-                ? ['group_id' => (string) $target['group_id'], 'activity_id' => null]
-                : ['group_id' => null, 'activity_id' => (string) $target['activity_id']];
+            $group = isset($target['group_id']) ? Str::lower((string) $target['group_id']) : null;
+            $activity = $group === null ? Str::lower((string) $target['activity_id']) : null;
+            $wanted[$group !== null ? 'group:'.$group : 'activity:'.$activity] = ['group_id' => $group, 'activity_id' => $activity];
         }
         $changes = 0;
         foreach (StaffScopeGroup::query()->where('staff_member_id', $member->id)->whereNull('removed_at')->get() as $row) {
-            $key = $row->group_id !== null ? 'group:'.$row->group_id : 'activity:'.$row->activity_id;
+            $key = $row->group_id !== null ? 'group:'.Str::lower($row->group_id) : 'activity:'.Str::lower((string) $row->activity_id);
             if (isset($wanted[$key])) {
                 unset($wanted[$key]);
 

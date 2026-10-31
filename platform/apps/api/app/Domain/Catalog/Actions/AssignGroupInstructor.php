@@ -50,13 +50,14 @@ final readonly class AssignGroupInstructor
             'instructor_profile_id.exists' => 'Преподавателят не е намерен.',
             'ends_on.after_or_equal' => 'Краят трябва да е след началото.',
         ])->validate();
-        $this->assignments->assertNotSelf($actor, [(string) $data['instructor_profile_id']]);
 
         return DB::transaction(function () use ($actor, $group, $data): Group {
             // The same order as the schedule editor: the activity, the group, then its sessions.
             Activity::query()->whereKey($group->offering()->value('activity_id'))->lockForUpdate()->firstOrFail();
             $group = Group::query()->whereKey($group->id)->lockForUpdate()->firstOrFail();
             $profile = InstructorProfile::query()->findOrFail($data['instructor_profile_id']);
+            // The profile as loaded, whatever the case of the identifier sent.
+            $this->assignments->assertNotSelf($actor, [(string) $profile->id]);
             // Under a lock: archiving the person at the same moment waits, then sees this assignment (т. 6).
             $person = $profile->getAttribute('staff_member_id') === null ? null
                 : StaffMember::query()->lockForUpdate()->find($profile->getAttribute('staff_member_id'));

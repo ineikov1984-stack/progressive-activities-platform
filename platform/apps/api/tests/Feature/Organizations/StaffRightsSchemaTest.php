@@ -12,8 +12,9 @@ use Tests\TestCase;
 /**
  * The database itself keeps the rights in a team inside their organization and their history whole
  * (docs/product/team-rights.md, т. 4.2, 4.3, 11): another organization's rows are neither read, written nor changed;
- * nothing is deleted; who, what and when never change; a closed row stays closed; an expired right keeps its end but
- * may be closed; a selected group or activity of another organization is refused; a user who acted is not deleted.
+ * nothing is deleted; who, what and when never change; a closed row stays closed; an expired right keeps its end and
+ * is closed only as expired; who closed a row is kept; a selected group or activity of another organization is refused;
+ * a user who acted is not deleted; row level security binds the owner of the tables too.
  */
 class StaffRightsSchemaTest extends TestCase
 {
@@ -31,6 +32,12 @@ class StaffRightsSchemaTest extends TestCase
         $pdo->beginTransaction();
 
         try {
+            // Row level security is on and binds the owner of the tables too.
+            $this->assertSame(['staff_grants', 'staff_scope_groups'], $pdo->query(
+                "SELECT relname FROM pg_class WHERE relname IN ('staff_grants', 'staff_scope_groups') AND relkind = 'r' "
+                .'AND relrowsecurity AND relforcerowsecurity ORDER BY relname',
+            )->fetchAll(\PDO::FETCH_COLUMN));
+
             $first = $this->organization($pdo);
             $second = $this->organization($pdo);
             $grant = $this->insertGrant($pdo, $first, 'contacts.view', null);
@@ -52,6 +59,10 @@ class StaffRightsSchemaTest extends TestCase
             $this->refused($pdo, fn () => $this->insertGrant($pdo, $first, 'team.manage', null), '23514');
             $this->refused($pdo, fn () => $this->insertGrant($pdo, $first, 'contacts.view', null), '23505');
             $this->refused($pdo, fn () => $pdo->exec("UPDATE staff_grants SET revoked_at = NOW() WHERE id = '{$grant}'"), '23514');
+            // Who revoked or removed is kept; only an expired right is closed without anyone, and only as expired.
+            $this->refused($pdo, fn () => $pdo->exec("UPDATE staff_grants SET revoked_at = NOW(), revoked_reason = 'removed' WHERE id = '{$grant}'"), '23514');
+            $this->refused($pdo, fn () => $pdo->exec("UPDATE staff_grants SET revoked_at = NOW(), revoked_by = '{$first['user']}', revoked_reason = 'removed' WHERE id = '{$expired}'"), '23514');
+            $this->refused($pdo, fn () => $pdo->exec("UPDATE staff_scope_groups SET removed_at = NOW() WHERE id = '{$scope}'"), '23514');
             $this->refused($pdo, fn () => $this->insertScopeGroup($pdo, $first, $first['group'], $first['activity']), '23514');
             // A selected group or activity, and the person, of another organization.
             $this->refused($pdo, fn () => $this->insertScopeGroup($pdo, $first, $second['group'], null), '23503');
@@ -83,7 +94,8 @@ class StaffRightsSchemaTest extends TestCase
             // What the application does: a new end, revoking, closing an expired right, removing a group, adding.
             $this->assertSame(1, $pdo->exec("UPDATE staff_grants SET expires_at = NOW() + INTERVAL '30 days', updated_at = NOW() WHERE id = '{$grant}'"));
             $this->assertSame(1, $pdo->exec("UPDATE staff_grants SET revoked_at = NOW(), revoked_by = '{$first['user']}', revoked_reason = 'removed', updated_at = NOW() WHERE id = '{$grant}'"));
-            $this->assertSame(1, $pdo->exec("UPDATE staff_grants SET revoked_at = NOW(), revoked_by = '{$first['user']}', revoked_reason = 'expired', updated_at = NOW() WHERE id = '{$expired}'"));
+            $this->refused($pdo, fn () => $pdo->exec("UPDATE staff_grants SET revoked_at = NOW(), revoked_by = '{$first['user']}', revoked_reason = 'role_changed', updated_at = NOW() WHERE id = '{$expired}'"), '23514');
+            $this->assertSame(1, $pdo->exec("UPDATE staff_grants SET revoked_at = NOW(), revoked_reason = 'expired', updated_at = NOW() WHERE id = '{$expired}'"));
             $this->assertSame(1, $pdo->exec("UPDATE staff_scope_groups SET removed_at = NOW(), removed_by = '{$first['user']}', updated_at = NOW() WHERE id = '{$scope}'"));
             $this->refused($pdo, fn () => $pdo->exec("UPDATE staff_scope_groups SET removed_by = NULL WHERE id = '{$scope}'"), '23514');
             $this->insertGrant($pdo, $first, 'contacts.view', "NOW() + INTERVAL '7 days'");

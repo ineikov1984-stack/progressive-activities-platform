@@ -11,6 +11,7 @@ use App\Domain\Organizations\Tenancy\TenantContext;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 
 final readonly class UpdateActivityDraft
 {
@@ -45,10 +46,12 @@ final readonly class UpdateActivityDraft
             if (array_key_exists('offering', $payload)) {
                 $offering = $locked->offerings()->orderBy('created_at')->lockForUpdate()->firstOrFail();
                 // The lead of an offering teaches all its groups: changing it is an assignment (docs/product/team-rights.md, т. 2.2).
-                if (array_key_exists('lead_instructor_profile_id', $payload['offering'])
-                    && $payload['offering']['lead_instructor_profile_id'] !== $offering->lead_instructor_profile_id) {
-                    $lead = $payload['offering']['lead_instructor_profile_id'];
-                    $this->assignments->assertMayAssign($actor, is_string($lead) ? [$lead] : []);
+                // In lower case: PostgreSQL finds a profile by its UUID in any case.
+                $lead = $payload['offering']['lead_instructor_profile_id'] ?? null;
+                $lead = is_string($lead) ? Str::lower($lead) : null;
+                $current = $offering->lead_instructor_profile_id === null ? null : Str::lower((string) $offering->lead_instructor_profile_id);
+                if (array_key_exists('lead_instructor_profile_id', $payload['offering']) && $lead !== $current) {
+                    $this->assignments->assertMayAssign($actor, $lead === null ? [] : [$lead]);
                 }
                 $offering->fill(Arr::only($payload['offering'], [
                     'location_id', 'lead_instructor_profile_id', 'title', 'description', 'terms',
