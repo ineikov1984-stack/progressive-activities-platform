@@ -78,7 +78,7 @@ final class StaffEnrollmentDetailsController extends Controller
             ],
             ...$this->childAndParent($record, $access['contacts'], $contact, null, $access['owner']),
             'records' => $this->records($record->child_id, $record->id, $enrollmentId, $access['visible']),
-            'history' => $access['manage'] ? $this->history([$record->id], $enrollmentId === null ? [] : [$enrollmentId], $contact) : null,
+            'history' => $access['manage'] ? $this->history([$record->id], $enrollmentId === null ? [] : [$enrollmentId], $contact, $access['visible']) : null,
             'contact_reveals' => $access['team'] ? $this->reveals(['enrollment_application' => [$record->id], 'enrollment' => $enrollmentId === null ? [] : [$enrollmentId]]) : null,
         ];
         if ($contact) {
@@ -105,10 +105,10 @@ final class StaffEnrollmentDetailsController extends Controller
 
         $body = [
             'kind' => 'enrollment',
-            'enrollment' => $this->presentEnrollment($record, $access['manage']),
+            'enrollment' => $this->presentEnrollment($record, $access['manage'], $access['visible']),
             ...$this->childAndParent($application, $access['contacts'], $contact, $record->child, $access['owner']),
             'records' => $this->records($record->child_id, $record->application_id, $record->id, $access['visible']),
-            'history' => $access['manage'] ? $this->history([$record->application_id], [$record->id], $contact) : null,
+            'history' => $access['manage'] ? $this->history([$record->application_id], [$record->id], $contact, $access['visible']) : null,
             'contact_reveals' => $access['team'] ? $this->reveals(['enrollment' => [$record->id], 'enrollment_application' => [$record->application_id]]) : null,
         ];
         if ($contact) {
@@ -153,21 +153,33 @@ final class StaffEnrollmentDetailsController extends Controller
         ];
     }
 
-    /** A → B cancelled → C: the child moves to C. */
-    private function movedTo(Enrollment $enrollment): ?Enrollment
+    /**
+     * A → B cancelled → C: the destination is C, but only if its group is visible.
+     *
+     * @param  list<string>|null  $visible
+     */
+    private function movedTo(Enrollment $enrollment, ?array $visible): ?Enrollment
     {
-        return $enrollment->transferredTo ?? ($enrollment->status === EnrollmentStatus::Ended ? $this->chain->next($enrollment) : null);
+        $next = $enrollment->transferredTo ?? ($enrollment->status === EnrollmentStatus::Ended ? $this->chain->next($enrollment) : null);
+
+        return $next !== null && ($visible === null || in_array($next->group_id, $visible, true)) ? $next : null;
     }
 
-    /** @return array<string, mixed> */
-    private function presentEnrollment(Enrollment $enrollment, bool $manage): array
+    /**
+     * @param  list<string>|null  $visible
+     * @return array<string, mixed>
+     */
+    private function presentEnrollment(Enrollment $enrollment, bool $manage, ?array $visible): array
     {
         $today = CarbonImmutable::now(SessionApplicability::timezone($enrollment))->toDateString();
         $application = $enrollment->application;
         $activity = $enrollment->group?->offering?->activity;
         $pauses = $enrollment->pauses->filter(fn (EnrollmentPause $pause): bool => $pause->ends_on->toDateString() >= $today)->values();
-        $next = $this->movedTo($enrollment);
+        $next = $this->movedTo($enrollment, $visible);
         $previous = $enrollment->transferredFrom;
+        if ($previous !== null && $visible !== null && ! in_array($previous->group_id, $visible, true)) {
+            $previous = null;
+        }
 
         return [
             'id' => $enrollment->id,
@@ -248,12 +260,12 @@ final class StaffEnrollmentDetailsController extends Controller
             ->get();
 
         return [
-            ...$enrollments->map(function (Enrollment $enrollment): array {
+            ...$enrollments->map(function (Enrollment $enrollment) use ($visible): array {
                 $today = CarbonImmutable::now(SessionApplicability::timezone($enrollment))->toDateString();
                 $pauses = $enrollment->pauses->filter(fn (EnrollmentPause $pause): bool => $pause->ends_on->toDateString() >= $today);
                 $current = $pauses->first(fn (EnrollmentPause $pause): bool => $pause->starts_on->toDateString() <= $today);
                 $coming = $pauses->first(fn (EnrollmentPause $pause): bool => $pause->starts_on->toDateString() > $today);
-                $next = $this->movedTo($enrollment);
+                $next = $this->movedTo($enrollment, $visible);
 
                 return [
                     'kind' => 'enrollment',
@@ -298,9 +310,10 @@ final class StaffEnrollmentDetailsController extends Controller
      *
      * @param  list<string>  $applicationIds
      * @param  list<string>  $enrollmentIds
+     * @param  list<string>|null  $visible
      * @return list<array<string, mixed>>
      */
-    private function history(array $applicationIds, array $enrollmentIds, bool $parentWords): array
+    private function history(array $applicationIds, array $enrollmentIds, bool $parentWords, ?array $visible): array
     {
         $events = EnrollmentEvent::query()
             ->where(fn ($query) => $query->whereIn('application_id', $applicationIds)->orWhereIn('enrollment_id', $enrollmentIds))
@@ -322,7 +335,9 @@ final class StaffEnrollmentDetailsController extends Controller
         $actorIds = $transitions->pluck('actor_user_id')->filter()->unique()->values()->all();
         $names = User::query()->whereKey($actorIds)->pluck('name', 'id');
         $sessions = Session::query()->whereKey($payloadIds('session_id'))->get()->keyBy('id');
-        $previous = Enrollment::query()->with('group')->whereKey($payloadIds('transferred_from_id'))->get()->keyBy('id');
+        $previous = Enrollment::query()->with('group')->whereKey($payloadIds('transferred_from_id'))
+            ->when($visible !== null, fn ($query) => $query->whereIn('group_id', $visible ?? []))
+            ->get()->keyBy('id');
 
         return $events->map(function (EnrollmentEvent $event) use ($transitions, $parents, $names, $sessions, $previous, $parentWords): array {
             $payload = $event->payload;

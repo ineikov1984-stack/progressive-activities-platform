@@ -353,6 +353,7 @@ final class StaffEnrollmentController extends Controller
             ->oldest()
             ->get();
         $canManage = $this->scope->allows($user, 'enrollment.enroll', $record->id);
+        $visible = $this->scope->groups($user, 'enrollment.view');
 
         return response()->json([
             'group' => [
@@ -366,7 +367,7 @@ final class StaffEnrollmentController extends Controller
                 'waitlist_enabled' => $record->waitlist_enabled,
                 'enrollment_approval_mode' => $record->enrollment_approval_mode,
             ],
-            'enrollments' => $enrollments->map(fn (Enrollment $enrollment): array => $this->presentRosterEnrollment($enrollment, $today, $canManage))->all(),
+            'enrollments' => $enrollments->map(fn (Enrollment $enrollment): array => $this->presentRosterEnrollment($enrollment, $today, $canManage, $visible))->all(),
             'waitlist' => $waiting->map(fn (EnrollmentApplication $application): array => StaffEnrollmentPresenter::application($application, null, $contacts))->all(),
             'upcoming_sessions' => $canManage ? Session::query()->where('group_id', $record->id)->where('status', 'scheduled')
                 ->where('starts_at', '>', now())->orderBy('starts_at')->limit(12)->get()
@@ -391,7 +392,7 @@ final class StaffEnrollmentController extends Controller
                 'child',
                 'pauses' => fn ($query) => $query->whereNull('cancelled_at')->whereDate('ends_on', '>=', $today)->orderBy('starts_on'),
                 'sessionExceptions' => fn ($query) => $query->where('kind', 'excluded')->with('session'),
-                ...($withMoves ? ['transferredTo' => fn ($query) => $query->where('status', '!=', EnrollmentStatus::Cancelled->value)->with('group')] : []),
+                ...($withMoves ? ['transferredFrom', 'transferredTo' => fn ($query) => $query->where('status', '!=', EnrollmentStatus::Cancelled->value)->with('group')] : []),
             ])
             ->orderBy('starts_on')
             ->get();
@@ -401,12 +402,18 @@ final class StaffEnrollmentController extends Controller
      * What the team needs on a roster row: no reasons or notes. The pause category (it can say
      * "health") only for those who manage enrollments, not for finance or viewers.
      *
+     * @param  list<string>|null  $visible
      * @return array<string, mixed>
      */
-    private function presentRosterEnrollment(Enrollment $enrollment, string $today, bool $canManage): array
+    private function presentRosterEnrollment(Enrollment $enrollment, string $today, bool $canManage, ?array $visible): array
     {
         // A → B cancelled → C: the child moves to C.
         $next = $enrollment->transferredTo ?? ($enrollment->status === EnrollmentStatus::Ended ? $this->chain->next($enrollment) : null);
+        if ($next !== null && $visible !== null && ! in_array($next->group_id, $visible, true)) {
+            $next = null;
+        }
+        $previous = $enrollment->transferredFrom;
+        $seesPrevious = $previous !== null && ($visible === null || in_array($previous->group_id, $visible, true));
 
         return [
             'id' => $enrollment->id,
@@ -416,7 +423,7 @@ final class StaffEnrollmentController extends Controller
             'starts_on' => $enrollment->starts_on->format('Y-m-d'),
             'ends_on' => $enrollment->ends_on?->format('Y-m-d'),
             'version' => $enrollment->version,
-            'transferred_from_id' => $enrollment->transferred_from_id,
+            'transferred_from_id' => $seesPrevious ? $previous->id : null,
             'moves_to' => $next === null ? null : [
                 'group_id' => $next->group_id, 'group_name' => $next->group?->name, 'starts_on' => $next->starts_on->format('Y-m-d'),
             ],
