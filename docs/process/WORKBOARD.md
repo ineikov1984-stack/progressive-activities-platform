@@ -24,7 +24,8 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| График — PR 4: спецификация „Промени на занимания“ (`docs/product/schedule-changes.md`) — строга, само документи | Claude | `claude/schedule-changes-spec` | `docs/product/schedule-changes.md` (нов), `docs/product/schedule.md` (т. 1, 4, 5, 7, 8), `docs/process/DECISIONS.md`, този файл. Без код и без горещи файлове | PR #95; ревюто на архитекта и отговорите на собственика са в спецификацията (т. 12–13) → merge. После 4а (миграция и `routes/api.php` — горещи) |
+| График — филтър „Дете“ (`docs/product/schedule.md`, т. 3.5, 6.5) — стандартна | Claude | `claude/schedule-child-filter` | уеб: `features/schedule/**` (нов `child-filter.tsx`); тестове `schedule-presentation`, `schedule-api`. Без горещи файлове и без промени в API-то | код и тестове → screenshot-и 390/1440 → CI → merge; след него — картата на детето (`claude/schedule-child-card`) |
+| График — картата на детето (`docs/product/schedule.md`, т. 4.1) — строга, върху `claude/schedule-child-filter` | Claude | `claude/schedule-child-card` | горещ: `platform/apps/api/routes/api.php`; API: нов `ChildCard` (Enrollment), `StaffEnrollmentController::child`, `child_id` в `SessionRoster`; уеб: `features/schedule/**` (нов `child-card.tsx`), `skipSession` в `features/enrollment/api.ts`; тестове `ChildCardTest`, `ScheduleApiTest`, `TeamRightsCharacterizationTest`, `TeamRightsNarrowScopeTest`, `schedule-*`. Без миграции | спецификация → TDD → уеб → screenshot-и 390/768/1440 → ревю по сигурност → CI → merge след филтъра |
 
 ## Опашка (по приоритет)
 
@@ -70,6 +71,7 @@
 
 ## Наскоро завършено
 
+- 31.10.2026 — PR #95: спецификация „Промени на занимания“ (`docs/product/schedule-changes.md`) — Премести, Отмени, Възстанови, масови, почивен ден; ревю на архитект; решения 1–9 на собственика (Claude).
 - 31.10.2026 — PR #93: „График“, PR 3 — Месец и Ден (по зали и по треньори), поправките от UX ревюто, колко е пълна групата и бърз преглед (Claude).
 - 31.10.2026 — PR #94: търсене на записаните деца за филтъра „Дете“ в графика (`GET /enrollment/children`), само в групите с `enrollment.view`; ревю по сигурност (Claude).
 - 31.10.2026 — PR #92: „График“ — уеб: Седмица, Карти, филтри, панел на заниманието, „Моят график“ за учителя, група в „Екип“ води към графика (Claude).

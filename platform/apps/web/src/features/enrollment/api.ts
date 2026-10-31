@@ -187,11 +187,14 @@ export type ChildDetailsResponse = ApplicationDetails | EnrollmentDetails;
 export const loadDetails = (organizationId: string, target: DetailsTarget) =>
   request<ChildDetailsResponse>(organizationId, `/${target.kind === 'application' ? 'applications' : 'enrollments'}/${target.id}`);
 
+/** Where the phone was shown, for the audit log: "Подробности", the list of a group, or the card of a child in "График". */
+export type RevealFrom = 'details' | 'roster' | 'schedule';
+
 /**
  * "Покажи телефона": a POST, because every reveal is recorded; the answer is not cached. 429 — too many reveals in a
  * short time.
  */
-export const revealContact = (organizationId: string, target: DetailsTarget, from: 'details' | 'roster') =>
+export const revealContact = (organizationId: string, target: DetailsTarget, from: RevealFrom) =>
   request<{ contact: RevealedContact }>(organizationId, `/${target.kind === 'application' ? 'applications' : 'enrollments'}/${target.id}/contact/reveal`, {
     method: 'POST', body: JSON.stringify({ from }), cache: 'no-store',
   }).then((x) => x.contact);
@@ -224,7 +227,10 @@ export const loadStaffGroups = (organizationId: string) =>
 export const loadTransferOptions = (organizationId: string, enrollmentId: string) =>
   request<{ groups: TransferOption[] }>(organizationId, `/enrollments/${enrollmentId}/transfer-options`).then((x) => x.groups);
 
-function change<T>(organizationId: string, enrollment: RosterEnrollment, path: string, body: Record<string, unknown>, method = 'POST'): Promise<T> {
+/** What a change needs of an enrollment: which one, and the version the person saw (409 when it is older). */
+type ChangedEnrollment = Pick<RosterEnrollment, 'id' | 'version'>;
+
+function change<T>(organizationId: string, enrollment: ChangedEnrollment, path: string, body: Record<string, unknown>, method = 'POST'): Promise<T> {
   const payload = { ...body, version: enrollment.version };
   if (method === 'DELETE') {
     return request<T>(organizationId, `/enrollments/${enrollment.id}${path}?version=${enrollment.version}`, { method });
@@ -251,7 +257,8 @@ export const endEnrollment = (organizationId: string, enrollment: RosterEnrollme
 export const reopenEnrollment = (organizationId: string, enrollment: RosterEnrollment) =>
   change(organizationId, enrollment, '/reopen', {});
 
-export const skipSession = (organizationId: string, enrollment: RosterEnrollment, input: { sessionId: string; reason: string }) =>
+/** Also from the card of a child in "График" (docs/product/schedule.md, т. 4.1), with the card's version. */
+export const skipSession = (organizationId: string, enrollment: ChangedEnrollment, input: { sessionId: string; reason: string }) =>
   change(organizationId, enrollment, '/skipped-sessions', { session_id: input.sessionId, reason: input.reason.trim() });
 
 export const restoreSession = (organizationId: string, enrollment: RosterEnrollment, sessionId: string) =>

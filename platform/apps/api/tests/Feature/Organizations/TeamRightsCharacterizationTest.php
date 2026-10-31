@@ -151,7 +151,9 @@ class TeamRightsCharacterizationTest extends TestCase
     /**
      * "График" (docs/product/schedule.md, т. 2): the roles of the whole organization see every session, the teacher the
      * group they lead; the children of it every role — through "enrollment.view" or as their own group; the reason for a
-     * change and the changes only with "schedule.manage"; the search of a child and by a child only with "enrollment.view".
+     * change and the changes only with "schedule.manage"; the search of a child and by a child only with "enrollment.view";
+     * the card of a child to every role, with the phone only for those who see contacts and "Пропусни" and "Пауза" only
+     * for those who enrol (т. 4.1).
      */
     #[DataProvider('roles')]
     public function test_the_schedule_shows_each_role_the_sessions_of_its_scope(string $role): void
@@ -186,6 +188,10 @@ class TeamRightsCharacterizationTest extends TestCase
             $search->assertForbidden();
             $byChild->assertForbidden();
         }
+        $enrols = in_array($role, self::ENROLLMENT_MANAGE, true);
+        $this->getJson("/api/v1/enrollment/children/{$f['enrollment']->child_id}")->assertOk()->assertJsonCount(1, 'groups')
+            ->assertJsonPath('groups.0.group_id', $f['tuesday']->id)
+            ->assertJsonPath('groups.0.abilities', ['contacts' => in_array($role, self::CONTACTS, true), 'skip' => $enrols, 'pause' => $enrols]);
     }
 
     #[DataProvider('roles')]
@@ -263,6 +269,9 @@ class TeamRightsCharacterizationTest extends TestCase
             'GET api/v1/enrollment/applications' => ['GET', '/api/v1/enrollment/applications', [], self::ENROLLMENT_VIEW, 200],
             // New with "График" (docs/product/schedule.md, т. 3.5): the enrolled children by name, for the filter "Дете".
             'GET api/v1/enrollment/children' => ['GET', '/api/v1/enrollment/children?q='.urlencode('Ани'), [], self::ENROLLMENT_VIEW, 200],
+            // New with the card of a child (docs/product/schedule.md, т. 4.1): every role that sees the children of the
+            // group — the teacher as their own group. Without them it is 404, never 403 (asserted in ChildCardTest).
+            'GET api/v1/enrollment/children/{child}' => ['GET', "/api/v1/enrollment/children/{$f['enrollment']->child_id}", [], self::ALL, 200],
             'GET api/v1/enrollment/groups' => ['GET', '/api/v1/enrollment/groups', [], self::ALL, 200],
             'GET api/v1/enrollment/groups/{group}/roster' => ['GET', "/api/v1/enrollment/groups/{$tuesday}/roster", [], self::ALL, 200],
             'GET api/v1/enrollment/enrollments/{enrollment}/transfer-options' => ['GET', "{$enrollment}/transfer-options", [], self::ENROLLMENT_MANAGE, 200],

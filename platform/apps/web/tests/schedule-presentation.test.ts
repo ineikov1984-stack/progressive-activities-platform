@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { ScheduleSession } from '../src/features/schedule/api';
+import type { ChildCard, ChildCardGroup, ScheduleSession } from '../src/features/schedule/api';
 import {
-  activityColor, activityColorToken, addDays, blockLines, cardDays, childLink, childMarks, childrenHeading, clock, dayBlockDetail, fillOf, fillText,
-  openingPoint, dayLayout, dayName, defaultView, emptyText, filterChips,
+  activityColor, activityColorToken, addDays, ageText, blockLines, canSkipSession, cardDays, cardGroupState, cardGroupTitle, childCardMeta,
+  contactsGroupOf, initials, pauseGroupOf, pauseLink, profileLink, sessionGroupOf, CHILD_SEARCH_DELAY_MS, CHILD_SEARCH_HINT, childChipLabel, childFilterAllowed, childLink,
+  childMarks, childOptionLabel, childrenHeading, childResultsText, childSearchText, chooseChild, clock, dayBlockDetail, fillOf, fillText, hasFilters, moveActive,
+  NO_CHILDREN_FOUND, openingPoint, dayLayout, dayName, defaultView, emptyText, filterChips,
   filterOptions, groupTitle, instructorLabel, instructorsText, isDay, legend, monthGrid, monthLayout, monthLine, moreChildrenText, NO_COLUMN, noFilters,
   parseScheduleAddress, parseStoredView, periodLabel, periodOf, placesText, scheduleAddress, scheduleNames, scheduleQuery, scheduleViewStorageKey,
   sessionMark, sessionsByDay, sessionsCount, sessionWhen, shortGroupName, sofiaDay, sofiaMinutes, startClock, stepDay, stepsOf, timeRange, toggleFilter,
@@ -14,6 +16,7 @@ const B = '0a000000-0000-4000-8000-000000000002';
 const G = '0b000000-0000-4000-8000-000000000001';
 const L = '0c000000-0000-4000-8000-000000000001';
 const P = '0d000000-0000-4000-8000-000000000001';
+const C = '0e000000-0000-4000-8000-000000000001';
 
 let next = 0;
 /** A session by Sofia's wall clock in November (UTC+2): `at('2026-11-18', '17:30', 60)`. */
@@ -157,7 +160,7 @@ describe('schedule — the week as a calendar', () => {
 describe('schedule — the address', () => {
   it('reads the view, the day and the filters, and leaves out what is broken', () => {
     const address = parseScheduleAddress(`?view=week&date=2026-11-18&activity=${A}&activity=${A.toUpperCase()}&group=${G}&instructor=nope&location=${L}`);
-    expect(address).toEqual({ view: 'week', date: '2026-11-18', by: 'rooms', filters: { activity: [A], group: [G], instructor: [], location: [L] } });
+    expect(address).toEqual({ view: 'week', date: '2026-11-18', by: 'rooms', filters: { activity: [A], group: [G], instructor: [], location: [L], child: null } });
     // An unknown view and a wrong day fall back to the defaults.
     expect(parseScheduleAddress('?view=year&date=2026-02-30')).toEqual({ view: null, date: null, by: 'rooms', filters: noFilters });
     expect(parseScheduleAddress(new URLSearchParams({ view: 'cards' })).view).toBe('cards');
@@ -189,7 +192,7 @@ describe('schedule — the address', () => {
   });
 
   it('writes the state back in a stable order, and the address reads the same state again', () => {
-    const state = { view: 'cards' as const, date: '2026-11-18', by: 'rooms' as const, filters: { activity: [A, B], group: [], instructor: [P], location: [L] } };
+    const state = { view: 'cards' as const, date: '2026-11-18', by: 'rooms' as const, filters: { activity: [A, B], group: [], instructor: [P], location: [L], child: null } };
     const search = scheduleAddress(state);
     expect(search).toBe(`?view=cards&date=2026-11-18&activity=${A}&activity=${B}&instructor=${P}&location=${L}`);
     expect(parseScheduleAddress(search)).toEqual(state);
@@ -297,9 +300,92 @@ describe('schedule — words and colours', () => {
       instructors: [{ id: P, name: 'Мария Колева' }],
     };
     expect(filterOptions(board).group).toEqual([{ id: G, label: 'Група 1 · 1.–2. клас', section: 'Шахмат' }]);
-    expect(filterChips({ activity: [A], group: [G, B], instructor: [P], location: [L] }, board).map((chip) => chip.label)).toEqual([
+    expect(filterChips({ activity: [A], group: [G, B], instructor: [P], location: [L], child: null }, board).map((chip) => chip.label)).toEqual([
       'Дейност: Шахмат', 'Група: Шахмат · Група 1 · 1.–2. клас', 'Група: не е във вашия график', 'Треньор: Мария Колева', 'Място: Двор',
     ]);
+  });
+});
+
+describe('schedule — the filter "Дете"', () => {
+  const board = { activities: [], groups: [], locations: [], instructors: [] };
+
+  it('keeps only the child\'s identifier in the address and in the request, never the name', () => {
+    const state = { view: 'week' as const, date: '2026-11-18', by: 'rooms' as const, filters: { ...noFilters, group: [G], child: C } };
+    const search = scheduleAddress(state);
+    expect(search).toBe(`?view=week&date=2026-11-18&group=${G}&child=${C}`);
+    expect(parseScheduleAddress(search)).toEqual(state);
+    expect(parseScheduleAddress(`?child=${C.toUpperCase()}`).filters.child).toBe(C);
+    const query = new URLSearchParams(scheduleQuery(weekOf('2026-11-18'), { ...noFilters, child: C }));
+    expect(query.get('child')).toBe(C);
+    expect(query.has('child[]')).toBe(false);
+    expect(new URLSearchParams(scheduleQuery(weekOf('2026-11-18'), noFilters)).has('child')).toBe(false);
+  });
+
+  it('drops a broken child, and one from a link where the person may not filter by a child', () => {
+    expect(parseScheduleAddress('?child=Ана Иванова').filters.child).toBeNull();
+    expect(parseScheduleAddress(`?child=${C}`, { own: true }).filters.child).toBeNull();
+    expect(parseScheduleAddress(`?child=${C}`, { children: false }).filters.child).toBeNull();
+    expect(parseScheduleAddress(`?child=${C}`, { children: true }).filters.child).toBe(C);
+  });
+
+  it('is one child at a time, counts as a filter and goes with "Изчисти филтрите"', () => {
+    const chosen = chooseChild(noFilters, C);
+    expect(chosen.child).toBe(C);
+    expect(chooseChild(chosen, A).child).toBe(A);
+    expect(chooseChild(chosen, null).child).toBeNull();
+    expect(noFilters.child).toBeNull();
+    expect(hasFilters(chosen)).toBe(true);
+    expect(hasFilters(noFilters)).toBe(false);
+    expect(emptyText('week', hasFilters(chosen))).toBe('Няма занимания по избраните филтри.');
+  });
+
+  it('labels the chosen child with the name from this page\'s memory, else "Избрано дете"', () => {
+    expect(filterChips({ ...noFilters, child: C }, board, 'Ана Иванова')).toEqual([{ key: 'child', id: C, label: 'Дете: Ана Иванова' }]);
+    expect(filterChips({ ...noFilters, child: C }, board)).toEqual([{ key: 'child', id: C, label: 'Избрано дете' }]);
+    expect(childChipLabel('')).toBe('Избрано дете');
+  });
+
+  it('is only for who sees the enrollments, by the rights read from the API, and never in "Моят график"', () => {
+    const office = { permissions: ['view'], access: { abilities: ['view', 'enrollment.view'] } };
+    expect(childFilterAllowed(false, office)).toBe(true);
+    expect(childFilterAllowed(true, office)).toBe(false);
+    // A teacher sees the children of their groups, but does not search the organization's.
+    expect(childFilterAllowed(false, { permissions: ['view', 'enrollment.view_own'], access: { abilities: ['view', 'enrollment.view_own'] } })).toBe(false);
+    // The rights read win over the role's; without them, the role's.
+    expect(childFilterAllowed(false, { permissions: ['enrollment.view'], access: { abilities: ['view'] } })).toBe(false);
+    expect(childFilterAllowed(false, { permissions: ['enrollment.view'] })).toBe(true);
+  });
+
+  it('searches from two letters, without the spaces around, up to 80, after about 250 ms', () => {
+    expect(childSearchText('')).toBeNull();
+    expect(childSearchText(' А ')).toBeNull();
+    expect(childSearchText('  Ан ')).toBe('Ан');
+    expect(childSearchText('ана иванова')).toBe('ана иванова');
+    expect(childSearchText('я'.repeat(90))).toHaveLength(80);
+    expect(CHILD_SEARCH_DELAY_MS).toBe(250);
+    expect(CHILD_SEARCH_HINT).toBe('Напишете поне 2 букви от името.');
+  });
+
+  it('shows the name and the class, and says how many were found or that none were', () => {
+    expect(childOptionLabel({ name: 'Ана Иванова', class: '3. клас' })).toBe('Ана Иванова · 3. клас');
+    expect(childOptionLabel({ name: 'Ана Иванова', class: null })).toBe('Ана Иванова');
+    expect(childResultsText(0)).toBe(NO_CHILDREN_FOUND);
+    expect(NO_CHILDREN_FOUND).toBe('Няма намерени деца в групите, които виждате.');
+    expect(childResultsText(1)).toBe('Намерено 1 дете');
+    expect(childResultsText(5)).toBe('Намерени 5 деца');
+  });
+
+  it('moves through the names with the arrows, round at either end', () => {
+    expect(moveActive(-1, 3, 'ArrowDown')).toBe(0);
+    expect(moveActive(0, 3, 'ArrowDown')).toBe(1);
+    expect(moveActive(2, 3, 'ArrowDown')).toBe(0);
+    expect(moveActive(-1, 3, 'ArrowUp')).toBe(2);
+    expect(moveActive(0, 3, 'ArrowUp')).toBe(2);
+    expect(moveActive(2, 3, 'ArrowUp')).toBe(1);
+    // A name from an older, longer list.
+    expect(moveActive(7, 3, 'ArrowDown')).toBe(0);
+    expect(moveActive(7, 3, 'ArrowUp')).toBe(2);
+    expect(moveActive(0, 0, 'ArrowDown')).toBe(-1);
   });
 });
 
@@ -525,5 +611,81 @@ describe('schedule — after the UX review', () => {
     const sessions = [at('2026-11-20', '15:00', 60, { location_id: L }), at('2026-11-20', '16:00', 60, { location_id: null })];
     expect(openingPoint('day', columns(sessions, true), now)).toEqual({ column: 1, minute: 16 * 60 });
     expect(openingPoint('day', columns(sessions, false), now)).toEqual({ column: 0, minute: 15 * 60 });
+  });
+});
+
+describe('schedule — the card of a child', () => {
+  const group = (extra: Partial<ChildCardGroup>): ChildCardGroup => ({
+    enrollment_id: 'e-1', group_id: G, activity: 'Шах', group: 'Вторник', version: 3, state: 'active', paused_until: null, ended_on: null,
+    abilities: { contacts: false, skip: false, pause: false }, ...extra,
+  });
+  const everything = { contacts: true, skip: true, pause: true };
+  const now = new Date('2026-11-20T16:20:00+02:00');
+  const ahead = { starts_at: '2026-11-20T16:00:00Z', status: 'scheduled', group_id: G };
+
+  it('says the class and the age, and the initials for the circle', () => {
+    expect(childCardMeta({ class: '3. клас', age: 9 })).toBe('3. клас · 9 години');
+    expect(childCardMeta({ class: null, age: 1 })).toBe('1 година');
+    expect(childCardMeta({ class: '1. клас', age: null })).toBe('1. клас');
+    expect(childCardMeta({ class: null, age: null })).toBe('');
+    expect(ageText(0)).toBe('0 години');
+    expect(ageText(-1)).toBeNull();
+    expect(ageText(2.5)).toBeNull();
+    expect(initials('Ана Иванова')).toBe('АИ');
+    expect(initials('  ана  мария иванова ')).toBe('АМ');
+    expect(initials('Ана')).toBe('А');
+  });
+
+  it('names each group and says its state in words', () => {
+    expect(cardGroupTitle(group({}))).toBe('Шах · Вторник');
+    expect(cardGroupTitle(group({ activity: null, group: null }))).toBe('Група');
+    expect(cardGroupState(group({}))).toEqual({ text: 'Записано', tone: 'active' });
+    expect(cardGroupState(group({ state: 'paused', paused_until: '2026-11-30' }))).toEqual({ text: 'Пауза до 30 ноември', tone: 'paused' });
+    expect(cardGroupState(group({ state: 'paused' }))).toEqual({ text: 'Пауза', tone: 'paused' });
+    expect(cardGroupState(group({ state: 'trial' }))).toEqual({ text: 'Пробно', tone: 'visit' });
+    expect(cardGroupState(group({ state: 'single' }))).toEqual({ text: 'Еднократно', tone: 'visit' });
+    expect(cardGroupState(group({ state: 'ended', ended_on: '2026-10-15' }))).toEqual({ text: 'Приключи на 15 октомври', tone: 'ended' });
+  });
+
+  it('finds the session\'s group by the enrollment, else by the group', () => {
+    const card: Pick<ChildCard, 'groups'> = { groups: [group({ enrollment_id: 'e-2', group_id: 'g-2' }), group({ enrollment_id: 'e-1' })] };
+    expect(sessionGroupOf(card, { session: ahead, child: { enrollment_id: 'e-1', state: 'active' } })?.enrollment_id).toBe('e-1');
+    expect(sessionGroupOf(card, { session: { ...ahead, group_id: 'g-2' }, child: { enrollment_id: 'e-9', state: 'active' } })?.enrollment_id).toBe('e-2');
+    expect(sessionGroupOf(card, { session: { ...ahead, group_id: 'g-9' }, child: { enrollment_id: 'e-9', state: 'active' } })).toBeUndefined();
+  });
+
+  it('offers "Пропусни" only with the right, for a session ahead that the child comes to', () => {
+    const context = { session: ahead, child: { enrollment_id: 'e-1', state: 'active' } };
+    // 16:00 UTC is 18:00 in Sofia: ahead of 16:20.
+    expect(canSkipSession({ groups: [group({ abilities: everything })] }, context, now)).toBe(true);
+    expect(canSkipSession({ groups: [group({})] }, context, now)).toBe(false);
+    expect(canSkipSession({ groups: [group({ abilities: everything })] }, { ...context, session: { ...ahead, starts_at: '2026-11-20T14:00:00Z' } }, now)).toBe(false);
+    expect(canSkipSession({ groups: [group({ abilities: everything })] }, { ...context, session: { ...ahead, status: 'cancelled' } }, now)).toBe(false);
+    expect(canSkipSession({ groups: [group({ abilities: everything })] }, { ...context, child: { enrollment_id: 'e-1', state: 'skipped' } }, now)).toBe(false);
+    expect(canSkipSession({ groups: [group({ abilities: everything })] }, { ...context, child: { enrollment_id: 'e-1', state: 'paused' } }, now)).toBe(false);
+    expect(canSkipSession({ groups: [group({ abilities: everything, state: 'ended' })] }, context, now)).toBe(false);
+    expect(canSkipSession({ groups: [] }, context, now)).toBe(false);
+  });
+
+  it('leads "Пауза" to an enrollment for the period that runs, the session\'s first', () => {
+    const context = { session: ahead, child: { enrollment_id: 'e-1', state: 'active' } };
+    const other = group({ enrollment_id: 'e-2', group_id: 'g-2', abilities: everything });
+    expect(pauseGroupOf({ groups: [other, group({ abilities: everything })] }, context)?.enrollment_id).toBe('e-1');
+    expect(pauseGroupOf({ groups: [other, group({ abilities: everything, state: 'trial' })] }, context)?.enrollment_id).toBe('e-2');
+    expect(pauseGroupOf({ groups: [group({ abilities: everything, state: 'paused' })] }, context)?.enrollment_id).toBe('e-1');
+    expect(pauseGroupOf({ groups: [group({ abilities: everything, state: 'ended' })] }, context)).toBeUndefined();
+    expect(pauseGroupOf({ groups: [group({})] }, context)).toBeUndefined();
+    expect(pauseLink(group({}))).toBe(`/dashboard/enrollments?view=groups&group=${G}&enrollment=e-1`);
+  });
+
+  it('shows the phone through a group where the person sees contacts, and the profile only to who sees the enrollments', () => {
+    const context = { session: ahead, child: { enrollment_id: 'e-1', state: 'active' } };
+    const seen = group({ enrollment_id: 'e-2', group_id: 'g-2', abilities: { contacts: true, skip: false, pause: false } });
+    expect(contactsGroupOf({ groups: [group({}), seen] }, context)?.enrollment_id).toBe('e-2');
+    expect(contactsGroupOf({ groups: [group({ abilities: everything }), seen] }, context)?.enrollment_id).toBe('e-1');
+    expect(contactsGroupOf({ groups: [group({})] }, context)).toBeUndefined();
+    expect(profileLink({ groups: [seen, group({})] }, context, true)).toBe(`/dashboard/enrollments?view=groups&group=${G}&enrollment=e-1`);
+    expect(profileLink({ groups: [group({})] }, context, false)).toBeNull();
+    expect(profileLink({ groups: [] }, context, true)).toBeNull();
   });
 });

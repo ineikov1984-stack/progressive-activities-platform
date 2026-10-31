@@ -55,7 +55,7 @@ final class SchedulePresenter
      * @param  array{session: Session, teachers: list<SessionTeacher>, group: ScheduleGroup, location: array{id: string, name: string}|null}  $panel
      * @param  array<string, int>  $taken
      * @param  array<string, int>  $waiting
-     * @param  list<array{enrollment_id: string, name: string, class: string|null, state: string, scope: string}>|null  $children  null — not to be seen
+     * @param  list<array{enrollment_id: string, child_id?: string, name: string, class: string|null, state: string, scope: string}>|null  $children  null — not to be seen
      * @return array<string, mixed>
      */
     public static function panel(array $panel, array $taken, array $waiting, ?array $children, bool $manage): array
