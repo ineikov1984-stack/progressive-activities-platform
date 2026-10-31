@@ -79,7 +79,9 @@ jobs:
         run: |
           php artisan config:clear --ansi
           status=0
-          php artisan test --log-junit junit.xml || status=$?
+          set -o pipefail
+          php artisan test --log-junit junit.xml 2>&1 | tee test-output.txt || status=$?
+          if [ "$status" != 0 ]; then tail -c 6000 test-output.txt | grep -v '^\s*$' | tail -60 | while IFS= read -r line; do echo "::error title=tail::${line:0:300}"; done; fi
           php -r '
             if (! is_file("junit.xml")) { exit(0); }
             $xml = simplexml_load_file("junit.xml");
