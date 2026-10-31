@@ -8,6 +8,7 @@ use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\StaffGrant;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\RateLimiter;
 use PHPUnit\Framework\Attributes\Group as TestGroup;
 use Tests\Support\TeamRightsFixture;
 use Tests\TestCase;
@@ -100,6 +101,25 @@ class ContactRevealTest extends TestCase
         $this->postJson($path)->assertOk();
     }
 
+    public function test_more_than_a_hundred_a_day_waits_too(): void
+    {
+        $f = $this->rightsFixture();
+        $coordinator = $this->memberOf($f['organization'], 'coordinator');
+        // A hundred already shown today, within the hours' limits.
+        for ($i = 0; $i < 100; $i++) {
+            RateLimiter::hit('contact-reveal:day:'.$f['organization']->id.':'.$coordinator->id, 86400);
+        }
+        $path = "/api/v1/enrollment/applications/{$f['waiting']->id}/contact/reveal";
+
+        $this->signInTo($coordinator, $f['organization'])->postJson($path)->assertStatus(429)
+            ->assertJsonPath('message', 'Показахте много контакти за кратко време. Опитайте по-късно.');
+        $this->assertSame(0, AuditEvent::query()->where('action', 'enrollment.contact_revealed')->count());
+
+        $this->travelTo('2026-11-03 10:00:01');
+        $this->postJson($path)->assertOk();
+    }
+
+    #[TestGroup('tenant-isolation')]
     public function test_without_the_right_outside_the_window_and_in_another_organization(): void
     {
         $f = $this->rightsFixture();
@@ -143,11 +163,16 @@ class ContactRevealTest extends TestCase
             AuditEvent::query()->where('action', 'enrollment.contact_revealed')->sole()->metadata, array_flip(['role', 'grant_id', 'from']),
         )));
 
-        // Another group of the organization: refused; the waiting list of their group is not theirs either.
+        // An application, even waiting for the teacher's own group: a teacher sees the enrolled children, not the
+        // applications, without "enrollment.view" there.
+        $this->postJson("/api/v1/enrollment/applications/{$f['waiting']->id}/contact/reveal")->assertForbidden()
+            ->assertJsonPath('message', 'Нямате право да виждате контактите на родителите в тази група.');
+        // Another group of the organization: refused.
         $outside = $this->inTenant($f['organization'], fn () => $this->rightsApplication(
             $f['owner'], $f['owner']->children()->create(['first_name' => 'Дани', 'last_name' => 'Колев'])->id, $f['thursday']->id, $f['price']->id, 'waitlisted',
         ));
         $this->postJson("/api/v1/enrollment/applications/{$outside->id}/contact/reveal")->assertForbidden();
+        $this->assertSame(1, AuditEvent::query()->where('action', 'enrollment.contact_revealed')->count());
     }
 
     public function test_the_lists_never_carry_a_phone_or_an_e_mail_and_the_events_stay_with_the_team_managers(): void

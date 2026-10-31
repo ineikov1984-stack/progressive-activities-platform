@@ -6,6 +6,7 @@ use App\Domain\Audit\Enums\AuditAction;
 use App\Domain\Audit\Models\AuditEvent;
 use App\Domain\Catalog\Services\AccessScope;
 use App\Domain\Catalog\Services\StaffTeaching;
+use App\Domain\Catalog\Services\TeamVisibility;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Actions\ReconcileStaffAccess;
 use App\Domain\Organizations\Actions\SaveStaffAccess;
@@ -43,6 +44,7 @@ final readonly class StaffAccessCard
         private ReconcileStaffAccess $reconcile,
         private StaffTeaching $teaching,
         private AccessScope $scope,
+        private TeamVisibility $visibility,
     ) {}
 
     /** @return array<string, mixed> */
@@ -55,8 +57,12 @@ final readonly class StaffAccessCard
         $profile = $this->teaching->profilesFor([(string) $member->id])[(string) $member->id] ?? null;
         $teaches = $profile !== null && ($this->teaching->assignments([$profile])[$profile] ?? []) !== [];
         $refusal = $this->save->refusal($user, $member, $organization);
-        $labels = $this->teaching->groupLabels($access->groupIds);
-        $titles = $this->teaching->activityTitles($access->activityIds);
+        // Of the person's selected groups and activities only those in the viewer's own scope, as on the team page.
+        $visible = $this->visibility->groups($user);
+        $groupIds = $visible === null ? $access->groupIds : array_values(array_intersect($access->groupIds, $visible));
+        $activityIds = $visible === null ? $access->activityIds : array_values(array_intersect($access->activityIds, $this->teaching->activitiesOf($visible)));
+        $labels = $this->teaching->groupLabels($groupIds);
+        $titles = $this->teaching->activityTitles($activityIds);
 
         $body = [
             'member_id' => $member->id,
@@ -64,8 +70,8 @@ final readonly class StaffAccessCard
             'role' => $role?->value,
             'scope' => $role === null ? null : $access->scope->value,
             'allowed_scopes' => $role === null ? [] : array_map(fn (StaffScope $scope): string => $scope->value, $role->allowedScopes()),
-            'groups' => array_map(fn (string $id): array => ['group_id' => $id, 'label' => $labels[$id] ?? null], $access->groupIds),
-            'activities' => array_map(fn (string $id): array => ['activity_id' => $id, 'title' => $titles[$id] ?? null], $access->activityIds),
+            'groups' => array_map(fn (string $id): array => ['group_id' => $id, 'label' => $labels[$id] ?? null], $groupIds),
+            'activities' => array_map(fn (string $id): array => ['activity_id' => $id, 'title' => $titles[$id] ?? null], $activityIds),
             'rights' => $this->rightsOf($access, $teaches),
             'template' => $member->access_template,
             'version' => $member->version,
@@ -170,7 +176,7 @@ final readonly class StaffAccessCard
         $labels = $this->teaching->groupLabels($groupIds);
 
         return $events->map(function (AuditEvent $event) use ($names, $labels): array {
-            $metadata = is_array($event->metadata) ? $event->metadata : [];
+            $metadata = $event->metadata;
             $group = $event->subject_type === 'group' ? $event->subject_id : ($metadata['group_id'] ?? null);
 
             return [

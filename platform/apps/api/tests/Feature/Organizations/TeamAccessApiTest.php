@@ -12,6 +12,7 @@ use App\Domain\Organizations\Models\StaffMember;
 use App\Domain\Organizations\Models\StaffScopeGroup;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Group as TestGroup;
 use Tests\Support\TeamRightsFixture;
@@ -236,6 +237,30 @@ class TeamAccessApiTest extends TestCase
         $this->postJson("/api/v1/team/members/{$member}/archive", ['version' => $assigned])->assertOk();
         $this->inTenant($f['organization'], fn () => $this->assertSame(['archived'], StaffGrant::query()->where('staff_member_id', $member)
             ->where('ability', 'contacts.view')->pluck('revoked_reason')->all()));
+    }
+
+    public function test_adding_with_an_invitation_and_refused_rights_adds_nobody_and_sends_nothing(): void
+    {
+        Mail::fake();
+        $f = $this->rightsFixture();
+        $other = $this->rightsFixture();
+        $admin = $this->memberOf($f['organization'], 'organization_admin');
+        $this->signInTo($admin, $f['organization']);
+        $person = ['full_name' => 'Нов човек', 'phone' => '0888 333 444', 'invitation' => ['role' => 'viewer', 'email' => 'new-person@example.test']];
+
+        // Finance is the owner's; a group of another organization is "not found".
+        $this->postJson('/api/v1/team/members', [...$person, 'access' => ['scope' => null, 'grants' => [['ability' => 'finance.view']]]])
+            ->assertForbidden()->assertJsonPath('message', 'Финансите дава само собственикът.');
+        $this->postJson('/api/v1/team/members', [...$person, 'access' => ['scope' => 'groups', 'groups' => [['group_id' => $other['tuesday']->id]], 'grants' => []]])
+            ->assertUnprocessable()->assertJsonPath('errors', ['groups.0.group_id' => ['Групата не е намерена.']]);
+
+        $this->inTenant($f['organization'], function (): void {
+            $this->assertSame(0, StaffMember::query()->where('full_name', 'Нов човек')->count());
+            $this->assertSame(0, Invitation::query()->where('email', 'new-person@example.test')->count());
+            $this->assertSame(0, StaffGrant::query()->count());
+        });
+        $this->assertSame(0, AuditEvent::query()->where('action', 'team.invitation_sent')->count());
+        Mail::assertNothingSent();
     }
 
     /**

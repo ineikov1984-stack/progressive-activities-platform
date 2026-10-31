@@ -194,7 +194,8 @@ final class StaffEnrollmentController extends Controller
      */
     public function groups(Request $request, TeachingScope $teaching): JsonResponse
     {
-        [$visible, $teacher] = $this->visibleGroups($request, $teaching);
+        ['team' => $team, 'own' => $own] = $this->visibleGroups($request, $teaching);
+        $visible = $team === null ? null : array_values(array_unique([...$team, ...$own]));
         $groups = Group::query()->with(['offering.activity', 'offering.location', 'location'])->where('status', '!=', 'archived')
             ->whereHas('offering.activity', fn ($query) => $query->where('status', '!=', ActivityStatus::Archived->value))
             ->when($visible !== null, fn ($query) => $query->whereKey($visible ?? []))
@@ -202,29 +203,26 @@ final class StaffEnrollmentController extends Controller
             ->sortBy(fn (Group $group): string => ($group->offering->activity->title ?? '').'|'.$group->name)
             ->values();
         $taken = $this->placesTakenByGroup($visible);
-        if ($teacher) {
-            return response()->json([
-                'groups' => $groups->map(fn (Group $group): array => TeacherRosterPresenter::group($group, (int) ($taken[$group->id] ?? 0)))->all(),
-            ]);
-        }
         $waiting = EnrollmentApplication::query()->where('status', EnrollmentApplicationStatus::Waitlisted->value)
             ->selectRaw('group_id, count(*) as aggregate')->groupBy('group_id')->pluck('aggregate', 'group_id');
 
+        // The groups the user teaches through the teacher's presenter; any other the team's (docs/product/team.md, т. 8).
         return response()->json([
-            'groups' => $groups->map(fn (Group $group): array => [
-                'id' => $group->id,
-                'name' => $group->name,
-                'status' => $group->status,
-                'capacity_max' => $group->capacity_max,
-                'activity_id' => $group->offering?->activity?->id,
-                'activity_title' => $group->offering?->activity?->title,
-                'activity_category' => $group->offering?->activity?->category,
-                'enrollment_approval_mode' => $group->enrollment_approval_mode,
-                'schedule' => $group->weeklySlots(),
-                'location_name' => $group->location->name ?? $group->offering?->location?->name,
-                'enrolled_for_period' => (int) ($taken[$group->id] ?? 0),
-                'waitlist_count' => (int) ($waiting[$group->id] ?? 0),
-            ])->all(),
+            'groups' => $groups->map(fn (Group $group): array => in_array($group->id, $own, true)
+                ? TeacherRosterPresenter::group($group, (int) ($taken[$group->id] ?? 0)) : [
+                    'id' => $group->id,
+                    'name' => $group->name,
+                    'status' => $group->status,
+                    'capacity_max' => $group->capacity_max,
+                    'activity_id' => $group->offering?->activity?->id,
+                    'activity_title' => $group->offering?->activity?->title,
+                    'activity_category' => $group->offering?->activity?->category,
+                    'enrollment_approval_mode' => $group->enrollment_approval_mode,
+                    'schedule' => $group->weeklySlots(),
+                    'location_name' => $group->location->name ?? $group->offering?->location?->name,
+                    'enrolled_for_period' => (int) ($taken[$group->id] ?? 0),
+                    'waitlist_count' => (int) ($waiting[$group->id] ?? 0),
+                ])->values()->all(),
         ]);
     }
 
@@ -258,16 +256,18 @@ final class StaffEnrollmentController extends Controller
     {
         /** @var User $user */
         $user = $request->user();
-        $viewer = $this->scope->access($user)->has('enrollment.view');
+        $access = $this->scope->access($user);
+        $viewer = $access->has('enrollment.view');
         if (! $viewer) {
             $this->authorizeAbility($request, 'enrollment.view_own');
         }
         $record = Group::query()->with('offering.activity')->findOrFail($group);
         $timezone = $record->schedule_pattern['timezone'] ?? 'Europe/Sofia';
         $today = CarbonImmutable::now($timezone)->toDateString();
-        // The team's roster in the groups of the user's scope (docs/product/team-rights.md, т. 9); otherwise the
-        // teacher's, of a group they teach.
-        if (! $viewer || ! $this->scope->allows($user, 'enrollment.view', $record->id)) {
+        // A teacher's own group through the teacher's roster, also with "enrollment.view" added; the team's roster in
+        // the other groups of the user's scope (docs/product/team-rights.md, т. 9).
+        $teachersOwn = ! $access->fromRole('enrollment.view') && $this->allows($request, 'enrollment.view_own') && $teaching->includes($user, $record->id);
+        if ($teachersOwn || ! $viewer || ! $this->scope->allows($user, 'enrollment.view', $record->id)) {
             abort_unless($this->allows($request, 'enrollment.view_own') && $teaching->includes($user, $record->id), 403, 'Нямате достъп до тази група.');
 
             // With "sees the phone" added in the group, each row offers to show the parent's contact (т. 6).
@@ -372,21 +372,30 @@ final class StaffEnrollmentController extends Controller
     }
 
     /**
-     * The groups the user sees: with "enrollment.view" those of the scope (null — every group, as before); otherwise
-     * only the user's own groups for the teacher (enrollment.view_own). Neither → 403.
+     * The groups the user sees, and which of them through the teacher's presenter:
+     * - "enrollment.view" from the role — those of the scope (null — every group, as before), all the team's way;
+     * - a teacher (enrollment.view_own) — their own groups, current and coming, the teacher's way; with
+     *   "enrollment.view" added, also the other groups of the scope, the team's way;
+     * - neither → 403.
      *
-     * @return array{list<string>|null, bool} the groups, and whether the teacher's list is shown
+     * @return array{team: list<string>|null, own: list<string>} `team` null — every group
      */
     private function visibleGroups(Request $request, TeachingScope $teaching): array
     {
         /** @var User $user */
         $user = $request->user();
-        if ($this->scope->access($user)->has('enrollment.view')) {
-            return [$this->scope->groups($user, 'enrollment.view'), false];
+        $access = $this->scope->access($user);
+        if ($access->fromRole('enrollment.view')) {
+            return ['team' => $this->scope->groups($user, 'enrollment.view'), 'own' => []];
         }
         $this->authorizeAbility($request, 'enrollment.view_own');
+        $own = $teaching->groupsFor($user);
+        if (! $access->has('enrollment.view')) {
+            return ['team' => [], 'own' => $own];
+        }
+        $added = $this->scope->groups($user, 'enrollment.view');
 
-        return [$teaching->groupsFor($user), true];
+        return ['team' => $added === null ? null : array_values(array_diff($added, $own)), 'own' => $own];
     }
 
     /** The user has the right somewhere — otherwise 403 before anything is read, as the Gate refuses. */

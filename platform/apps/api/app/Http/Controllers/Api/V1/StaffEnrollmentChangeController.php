@@ -13,7 +13,6 @@ use App\Domain\Enrollment\Models\EnrollmentPause;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
 use App\Domain\Enrollment\Services\SessionApplicability;
 use App\Domain\Identity\Models\User;
-use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -39,7 +38,7 @@ final class StaffEnrollmentChangeController extends Controller
         'min' => 'Презаредете страницата и опитайте отново.',
     ];
 
-    public function __construct(private readonly TenantContext $context, private readonly AccessScope $scope) {}
+    public function __construct(private readonly AccessScope $scope) {}
 
     public function transferOptions(Request $request, string $enrollment, EnrollmentCapacity $capacity): JsonResponse
     {
