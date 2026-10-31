@@ -114,7 +114,7 @@ class AuthController extends Controller
                 // Which fields changed, never their values.
                 $auditRecorder->record(AuditAction::IdentityContactUpdated, new AuditableReference('user', $user->id), ['fields' => $changed]);
             }
-            if ($member && is_string($organizationId)) {
+            if ($member) {
                 $team->handle($user, $organizationId, $changes);
             }
 
