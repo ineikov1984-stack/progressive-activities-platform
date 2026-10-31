@@ -194,6 +194,8 @@ class StaffEnrollmentApiTest extends TestCase
             ->assertJsonPath('facets.groups.1', ['id' => $group->id, 'name' => 'Група 1', 'activity_id' => $activityId, 'count' => 2]);
         $this->getJson('/api/v1/enrollment/applications?group_id=not-a-uuid')->assertUnprocessable();
         $this->getJson('/api/v1/enrollment/applications?q='.str_repeat('а', 101))->assertUnprocessable();
+        // A text that is not UTF-8 is refused before the database.
+        $this->getJson('/api/v1/enrollment/applications?q=%FF%FF')->assertUnprocessable()->assertJsonValidationErrors('q');
     }
 
     public function test_group_list_shows_the_activity_days_and_place(): void

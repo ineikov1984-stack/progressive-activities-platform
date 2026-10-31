@@ -151,7 +151,7 @@ class TeamRightsCharacterizationTest extends TestCase
     /**
      * "График" (docs/product/schedule.md, т. 2): the roles of the whole organization see every session, the teacher the
      * group they lead; the children of it every role — through "enrollment.view" or as their own group; the reason for a
-     * change and the changes only with "schedule.manage"; the search by a child only with "enrollment.view".
+     * change and the changes only with "schedule.manage"; the search of a child and by a child only with "enrollment.view".
      */
     #[DataProvider('roles')]
     public function test_the_schedule_shows_each_role_the_sessions_of_its_scope(string $role): void
@@ -176,10 +176,14 @@ class TeamRightsCharacterizationTest extends TestCase
         } else {
             $panel->assertJsonMissingPath('session.change_reason');
         }
+        // The child for the filter comes from the search of the enrolled children (т. 3.5).
+        $search = $this->getJson('/api/v1/enrollment/children?q='.urlencode('Ани'));
         $byChild = $this->getJson("/api/v1/schedule?from=2026-11-02&to=2026-11-29&child={$f['enrollment']->child_id}");
         if (in_array($role, self::ENROLLMENT_VIEW, true)) {
+            $search->assertOk()->assertJsonPath('children', [['id' => $f['enrollment']->child_id, 'name' => 'Ани Иванова', 'class' => '3 клас']]);
             $byChild->assertOk()->assertJsonCount(4, 'sessions');
         } else {
+            $search->assertForbidden();
             $byChild->assertForbidden();
         }
     }
@@ -257,6 +261,8 @@ class TeamRightsCharacterizationTest extends TestCase
             'POST api/v1/team/members/{member}/invitation' => ['POST', "{$member}/invitation", [], self::TEAM_MANAGE, 422],
 
             'GET api/v1/enrollment/applications' => ['GET', '/api/v1/enrollment/applications', [], self::ENROLLMENT_VIEW, 200],
+            // New with "График" (docs/product/schedule.md, т. 3.5): the enrolled children by name, for the filter "Дете".
+            'GET api/v1/enrollment/children' => ['GET', '/api/v1/enrollment/children?q='.urlencode('Ани'), [], self::ENROLLMENT_VIEW, 200],
             'GET api/v1/enrollment/groups' => ['GET', '/api/v1/enrollment/groups', [], self::ALL, 200],
             'GET api/v1/enrollment/groups/{group}/roster' => ['GET', "/api/v1/enrollment/groups/{$tuesday}/roster", [], self::ALL, 200],
             'GET api/v1/enrollment/enrollments/{enrollment}/transfer-options' => ['GET', "{$enrollment}/transfer-options", [], self::ENROLLMENT_MANAGE, 200],
