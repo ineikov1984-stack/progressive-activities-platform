@@ -10,6 +10,7 @@ use App\Domain\Organizations\Actions\ArchiveStaffMember;
 use App\Domain\Organizations\Actions\ChangeStaffRole;
 use App\Domain\Organizations\Actions\InviteStaffMember;
 use App\Domain\Organizations\Actions\SaveStaffMember;
+use App\Domain\Organizations\Models\Invitation;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
 use App\Domain\Organizations\Models\StaffMember;
@@ -155,10 +156,16 @@ class TeamController extends Controller
             ->where('organization_id', $this->context->organizationId())
             ->whereIn('user_id', $members->pluck('user_id')->filter()->values()->all())
             ->get(['user_id', 'role', 'status'])->keyBy('user_id');
+        // The latest invitation not yet accepted, for "Поканен · изтича след N дни" and "Изпрати поканата пак" (т. 10):
+        // its state and end only, never the address or a token.
+        $invitations = Invitation::query()->whereIn('staff_member_id', $ids)->whereNull('accepted_at')
+            ->orderByDesc('expires_at')->orderByDesc('created_at')->get(['id', 'staff_member_id', 'expires_at', 'accepted_at', 'created_at'])
+            ->unique('staff_member_id')->keyBy('staff_member_id');
 
-        return $members->map(function (StaffMember $member) use ($contacts, $profiles, $groups, $roles): array {
+        return $members->map(function (StaffMember $member) use ($contacts, $profiles, $groups, $roles, $invitations): array {
             $membership = $member->user_id === null ? null : $roles->get($member->user_id);
             $profile = $profiles[$member->id] ?? null;
+            $invitation = $invitations->get($member->id);
             $state = match (true) {
                 $member->archived_at !== null => 'archived',
                 $membership !== null && $membership->getAttribute('status') === 'active' => 'login',
@@ -173,6 +180,9 @@ class TeamController extends Controller
                 'instructor_profile_id' => $profile,
                 'groups' => $profile === null ? [] : ($groups[$profile] ?? []),
                 'archived_at' => $member->archived_at?->toIso8601String(),
+                'invitation' => $invitation === null ? null : [
+                    'status' => $invitation->status(), 'expires_at' => $invitation->expires_at->toIso8601String(),
+                ],
                 'version' => $member->version,
                 ...($contacts ? ['phone' => $member->phone, 'email' => $member->email] : []),
             ];
