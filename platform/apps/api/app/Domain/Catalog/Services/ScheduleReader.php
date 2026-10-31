@@ -3,7 +3,9 @@
 namespace App\Domain\Catalog\Services;
 
 use App\Domain\Catalog\Enums\ActivityStatus;
+use App\Domain\Catalog\Models\ScheduleChange;
 use App\Domain\Catalog\Models\Session;
+use App\Domain\Catalog\Models\SessionChange;
 use App\Domain\Catalog\ValueObjects\ScheduleScope;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Carbon\CarbonImmutable;
@@ -19,10 +21,11 @@ use Illuminate\Support\Facades\DB;
  *
  * @phpstan-import-type SessionTeacher from SessionRoles
  *
- * @phpstan-type ScheduleGroup array{id: string, name: string, age_label: string|null, activity_id: string, activity_title: string, activity_current: bool, location_id: string|null, capacity_max: int|null, lead_profile_id: string|null, lead_name: string|null}
+ * @phpstan-type ScheduleGroup array{id: string, name: string, age_label: string|null, activity_id: string, activity_title: string, activity_current: bool, location_id: string|null, capacity_max: int|null, lead_profile_id: string|null, lead_name: string|null, archived: bool}
  * @phpstan-type ScheduleDictionary array{activities: list<array{id: string, title: string, color: int}>, groups: list<array{id: string, name: string, activity_id: string, age_label: string|null}>, locations: list<array{id: string, name: string}>, instructors: list<array{id: string, name: string}>}
  * @phpstan-type Assignment array{profile_id: string, name: string, role: string, starts_on: string|null, ends_on: string|null}
  * @phpstan-type Teacher array{profile_id: string, name: string}
+ * @phpstan-type LastChange array{action: string, at: string, by: string|null, reason: string|null}
  */
 final readonly class ScheduleReader
 {
@@ -73,10 +76,11 @@ final readonly class ScheduleReader
     }
 
     /**
-     * One session the person sees, for its panel (т. 6.2): the session, who teaches it, its group and its place. Null —
-     * a session of another organization, outside the person's sessions, or of a draft.
+     * One session the person sees, for its panel (т. 6.2): the session, who teaches it, its group, its place and its
+     * latest change from the schedule (docs/product/schedule-changes.md, т. 7.5) — none for a session cancelled in the
+     * draft's editor. Null — a session of another organization, outside the person's sessions, or of a draft.
      *
-     * @return array{session: Session, teachers: list<SessionTeacher>, group: ScheduleGroup, location: array{id: string, name: string}|null}|null
+     * @return array{session: Session, teachers: list<SessionTeacher>, group: ScheduleGroup, location: array{id: string, name: string}|null, last_change: LastChange|null}|null
      */
     public function panel(ScheduleScope $scope, string $sessionId): ?array
     {
@@ -97,6 +101,32 @@ final readonly class ScheduleReader
             'teachers' => $teachers[(string) $session->id] ?? [],
             'group' => $group,
             'location' => $location[0] ?? null,
+            'last_change' => $this->lastChange((string) $session->id),
+        ];
+    }
+
+    /**
+     * The latest change of the session (the identifiers of the changes are time-ordered) and who made it — the name of
+     * their person of the team, else of the account.
+     *
+     * @return LastChange|null
+     */
+    private function lastChange(string $sessionId): ?array
+    {
+        $last = SessionChange::query()->where('session_id', $sessionId)->orderByDesc('schedule_change_id')->first(['schedule_change_id']);
+        $change = $last === null ? null : ScheduleChange::query()->find($last->schedule_change_id);
+        if ($change === null) {
+            return null;
+        }
+        $by = DB::table('staff_members')->where('organization_id', $this->context->organizationId())
+            ->where('user_id', $change->actor_user_id)->whereNull('archived_at')->value('full_name')
+            ?? DB::table('users')->where('id', $change->actor_user_id)->value('name');
+
+        return [
+            'action' => $change->action,
+            'at' => $change->created_at->utc()->toIso8601String(),
+            'by' => is_string($by) && $by !== '' ? $by : null,
+            'reason' => $change->reason,
         ];
     }
 
@@ -143,7 +173,7 @@ final readonly class ScheduleReader
                 ->orWhereIn('activity_groups.id', $withSessions))
             ->get([
                 'activity_groups.id', 'activity_groups.name', 'activity_groups.age_label', 'activity_groups.location_id',
-                'activity_groups.capacity_max', 'activities.id as activity_id', 'activities.title',
+                'activity_groups.capacity_max', 'activity_groups.status as group_status', 'activities.id as activity_id', 'activities.title',
                 'activities.age_label as activity_age_label', 'activities.status as activity_status',
                 'offerings.lead_instructor_profile_id', 'leads.public_name as lead_name',
             ]);
@@ -162,6 +192,8 @@ final readonly class ScheduleReader
                 'capacity_max' => $row->capacity_max === null ? null : (int) $row->capacity_max,
                 'lead_profile_id' => self::text($row->lead_instructor_profile_id),
                 'lead_name' => self::text($row->lead_name),
+                // Seen with its sessions of the period; none of them is changed (т. 4.1).
+                'archived' => $row->group_status === 'archived',
             ];
         }
 

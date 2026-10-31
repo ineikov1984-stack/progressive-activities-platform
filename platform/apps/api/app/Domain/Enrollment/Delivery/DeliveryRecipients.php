@@ -2,9 +2,11 @@
 
 namespace App\Domain\Enrollment\Delivery;
 
+use App\Domain\Catalog\Services\TeacherRecipients;
 use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Enrollment\Models\EnrollmentEvent;
 use App\Domain\Enrollment\Models\EnrollmentTransition;
+use App\Domain\Enrollment\Services\ScheduleChangeEffects;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
@@ -35,6 +37,14 @@ final class DeliveryRecipients
      */
     public function for(EnrollmentEvent $event): array
     {
+        // A change of the schedule: one letter per family and per teacher, the person named in the event
+        // (docs/product/schedule-changes.md, т. 6.1). The team that made the change hears nothing.
+        if ($event->type === ScheduleChangeEffects::LETTER) {
+            return $this->familyOf($event);
+        }
+        if ($event->type === ScheduleChangeEffects::TEACHER_LETTER) {
+            return $this->teacherOf($event);
+        }
         $parentEmail = in_array($event->type, self::PARENT, true);
         $teamEmail = in_array($event->type, self::TEAM, true) || in_array($event->type, self::TEAM_IF_PARENT, true);
         if (! $parentEmail && ! $teamEmail) {
@@ -68,6 +78,43 @@ final class DeliveryRecipients
         $actor = is_string($transitionId) ? EnrollmentTransition::query()->whereKey($transitionId)->value('actor_user_id') : null;
 
         return $actor !== null && $actor === $application->parent_user_id;
+    }
+
+    /** @return list<array{audience: string, recipient_kind: string, recipient_key: string, recipient_user_id: string|null, status: string, skipped_reason: string|null}> */
+    private function familyOf(EnrollmentEvent $event): array
+    {
+        $userId = $event->payload['parent_user_id'] ?? null;
+        $parent = is_string($userId) ? User::query()->find($userId) : null;
+        if ($parent === null) {
+            return [];
+        }
+
+        return [self::row('parent', (string) $parent->id, $parent->hasVerifiedEmail())];
+    }
+
+    /**
+     * A teacher still of the team here, with an active account (decision 6); without a confirmed address, nothing is sent.
+     *
+     * @return list<array{audience: string, recipient_kind: string, recipient_key: string, recipient_user_id: string|null, status: string, skipped_reason: string|null}>
+     */
+    private function teacherOf(EnrollmentEvent $event): array
+    {
+        $userId = $event->payload['user_id'] ?? null;
+        $teacher = is_string($userId) ? User::query()->where('is_active', true)->find($userId) : null;
+        if ($teacher === null || TeacherRecipients::team((string) $event->organization_id, [(string) $teacher->id]) === []) {
+            return [];
+        }
+
+        return [self::row('team', (string) $teacher->id, $teacher->hasVerifiedEmail())];
+    }
+
+    /** @return array{audience: string, recipient_kind: string, recipient_key: string, recipient_user_id: string|null, status: string, skipped_reason: string|null} */
+    private static function row(string $audience, string $userId, bool $verified): array
+    {
+        return [
+            'audience' => $audience, 'recipient_kind' => 'user', 'recipient_key' => 'user:'.$userId, 'recipient_user_id' => $userId,
+            'status' => $verified ? 'pending' : 'skipped', 'skipped_reason' => $verified ? null : 'unverified_email',
+        ];
     }
 
     /** @return array{audience: string, recipient_kind: string, recipient_key: string, recipient_user_id: string|null, status: string, skipped_reason: string|null} */

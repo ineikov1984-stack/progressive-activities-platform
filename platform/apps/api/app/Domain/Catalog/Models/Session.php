@@ -17,6 +17,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * @property CarbonImmutable $starts_at
  * @property CarbonImmutable $ends_at
+ * @property CarbonImmutable|null $original_starts_at the start by the group's schedule before the first move; null — not moved
+ * @property bool $extra added from the schedule for the whole group (docs/product/schedule-changes.md, т. 4.7)
  */
 #[Fillable([
     'group_id',
@@ -27,6 +29,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'status',
     'change_reason',
     'version',
+    'original_starts_at',
+    'extra',
 ])]
 class Session extends Model
 {
@@ -83,6 +87,8 @@ class Session extends Model
         return [
             'starts_at' => 'immutable_datetime',
             'ends_at' => 'immutable_datetime',
+            'original_starts_at' => 'immutable_datetime',
+            'extra' => 'boolean',
             'capacity' => 'integer',
             'version' => 'integer',
         ];

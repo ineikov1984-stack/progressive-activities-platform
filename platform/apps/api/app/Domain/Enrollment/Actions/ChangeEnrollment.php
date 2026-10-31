@@ -173,6 +173,9 @@ final class ChangeEnrollment
                 'status' => EnrollmentStatus::Active,
                 // From the first session in the new group on or after the day (decision of 30.10.2026).
                 'starts_on' => $this->applicability->firstSessionDay($target, $date->toDateString()) ?? $date->toDateString(),
+                // A change of the schedule works the start out again, never before the chosen day: otherwise a session
+                // would count in both groups (docs/product/schedule-changes.md, т. 3.3а, 5.4).
+                'starts_not_before' => $date->toDateString(),
                 'transferred_from_id' => $current->id,
             ]);
             $transition = $this->transition($actor, $moved, null, EnrollmentStatus::Active->value, $reason, ['transferred_from_id' => $current->id]);
