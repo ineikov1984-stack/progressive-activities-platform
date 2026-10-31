@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { ScheduleSession } from '../src/features/schedule/api';
+import type { ChildCard, ChildCardGroup, ScheduleSession } from '../src/features/schedule/api';
 import {
-  activityColor, activityColorToken, addDays, blockLines, cardDays, CHILD_SEARCH_DELAY_MS, CHILD_SEARCH_HINT, childChipLabel, childFilterAllowed, childLink,
+  activityColor, activityColorToken, addDays, ageText, blockLines, canSkipSession, cardDays, cardGroupState, cardGroupTitle, childCardMeta,
+  contactsGroupOf, initials, pauseGroupOf, pauseLink, profileLink, sessionGroupOf, CHILD_SEARCH_DELAY_MS, CHILD_SEARCH_HINT, childChipLabel, childFilterAllowed, childLink,
   childMarks, childOptionLabel, childrenHeading, childResultsText, childSearchText, chooseChild, clock, dayBlockDetail, fillOf, fillText, hasFilters, moveActive,
   NO_CHILDREN_FOUND, openingPoint, dayLayout, dayName, defaultView, emptyText, filterChips,
   filterOptions, groupTitle, instructorLabel, instructorsText, isDay, legend, monthGrid, monthLayout, monthLine, moreChildrenText, NO_COLUMN, noFilters,
@@ -610,5 +611,81 @@ describe('schedule — after the UX review', () => {
     const sessions = [at('2026-11-20', '15:00', 60, { location_id: L }), at('2026-11-20', '16:00', 60, { location_id: null })];
     expect(openingPoint('day', columns(sessions, true), now)).toEqual({ column: 1, minute: 16 * 60 });
     expect(openingPoint('day', columns(sessions, false), now)).toEqual({ column: 0, minute: 15 * 60 });
+  });
+});
+
+describe('schedule — the card of a child', () => {
+  const group = (extra: Partial<ChildCardGroup>): ChildCardGroup => ({
+    enrollment_id: 'e-1', group_id: G, activity: 'Шах', group: 'Вторник', version: 3, state: 'active', paused_until: null, ended_on: null,
+    abilities: { contacts: false, skip: false, pause: false }, ...extra,
+  });
+  const everything = { contacts: true, skip: true, pause: true };
+  const now = new Date('2026-11-20T16:20:00+02:00');
+  const ahead = { starts_at: '2026-11-20T16:00:00Z', status: 'scheduled', group_id: G };
+
+  it('says the class and the age, and the initials for the circle', () => {
+    expect(childCardMeta({ class: '3. клас', age: 9 })).toBe('3. клас · 9 години');
+    expect(childCardMeta({ class: null, age: 1 })).toBe('1 година');
+    expect(childCardMeta({ class: '1. клас', age: null })).toBe('1. клас');
+    expect(childCardMeta({ class: null, age: null })).toBe('');
+    expect(ageText(0)).toBe('0 години');
+    expect(ageText(-1)).toBeNull();
+    expect(ageText(2.5)).toBeNull();
+    expect(initials('Ана Иванова')).toBe('АИ');
+    expect(initials('  ана  мария иванова ')).toBe('АМ');
+    expect(initials('Ана')).toBe('А');
+  });
+
+  it('names each group and says its state in words', () => {
+    expect(cardGroupTitle(group({}))).toBe('Шах · Вторник');
+    expect(cardGroupTitle(group({ activity: null, group: null }))).toBe('Група');
+    expect(cardGroupState(group({}))).toEqual({ text: 'Записано', tone: 'active' });
+    expect(cardGroupState(group({ state: 'paused', paused_until: '2026-11-30' }))).toEqual({ text: 'Пауза до 30 ноември', tone: 'paused' });
+    expect(cardGroupState(group({ state: 'paused' }))).toEqual({ text: 'Пауза', tone: 'paused' });
+    expect(cardGroupState(group({ state: 'trial' }))).toEqual({ text: 'Пробно', tone: 'visit' });
+    expect(cardGroupState(group({ state: 'single' }))).toEqual({ text: 'Еднократно', tone: 'visit' });
+    expect(cardGroupState(group({ state: 'ended', ended_on: '2026-10-15' }))).toEqual({ text: 'Приключи на 15 октомври', tone: 'ended' });
+  });
+
+  it('finds the session\'s group by the enrollment, else by the group', () => {
+    const card: Pick<ChildCard, 'groups'> = { groups: [group({ enrollment_id: 'e-2', group_id: 'g-2' }), group({ enrollment_id: 'e-1' })] };
+    expect(sessionGroupOf(card, { session: ahead, child: { enrollment_id: 'e-1', state: 'active' } })?.enrollment_id).toBe('e-1');
+    expect(sessionGroupOf(card, { session: { ...ahead, group_id: 'g-2' }, child: { enrollment_id: 'e-9', state: 'active' } })?.enrollment_id).toBe('e-2');
+    expect(sessionGroupOf(card, { session: { ...ahead, group_id: 'g-9' }, child: { enrollment_id: 'e-9', state: 'active' } })).toBeUndefined();
+  });
+
+  it('offers "Пропусни" only with the right, for a session ahead that the child comes to', () => {
+    const context = { session: ahead, child: { enrollment_id: 'e-1', state: 'active' } };
+    // 16:00 UTC is 18:00 in Sofia: ahead of 16:20.
+    expect(canSkipSession({ groups: [group({ abilities: everything })] }, context, now)).toBe(true);
+    expect(canSkipSession({ groups: [group({})] }, context, now)).toBe(false);
+    expect(canSkipSession({ groups: [group({ abilities: everything })] }, { ...context, session: { ...ahead, starts_at: '2026-11-20T14:00:00Z' } }, now)).toBe(false);
+    expect(canSkipSession({ groups: [group({ abilities: everything })] }, { ...context, session: { ...ahead, status: 'cancelled' } }, now)).toBe(false);
+    expect(canSkipSession({ groups: [group({ abilities: everything })] }, { ...context, child: { enrollment_id: 'e-1', state: 'skipped' } }, now)).toBe(false);
+    expect(canSkipSession({ groups: [group({ abilities: everything })] }, { ...context, child: { enrollment_id: 'e-1', state: 'paused' } }, now)).toBe(false);
+    expect(canSkipSession({ groups: [group({ abilities: everything, state: 'ended' })] }, context, now)).toBe(false);
+    expect(canSkipSession({ groups: [] }, context, now)).toBe(false);
+  });
+
+  it('leads "Пауза" to an enrollment for the period that runs, the session\'s first', () => {
+    const context = { session: ahead, child: { enrollment_id: 'e-1', state: 'active' } };
+    const other = group({ enrollment_id: 'e-2', group_id: 'g-2', abilities: everything });
+    expect(pauseGroupOf({ groups: [other, group({ abilities: everything })] }, context)?.enrollment_id).toBe('e-1');
+    expect(pauseGroupOf({ groups: [other, group({ abilities: everything, state: 'trial' })] }, context)?.enrollment_id).toBe('e-2');
+    expect(pauseGroupOf({ groups: [group({ abilities: everything, state: 'paused' })] }, context)?.enrollment_id).toBe('e-1');
+    expect(pauseGroupOf({ groups: [group({ abilities: everything, state: 'ended' })] }, context)).toBeUndefined();
+    expect(pauseGroupOf({ groups: [group({})] }, context)).toBeUndefined();
+    expect(pauseLink(group({}))).toBe(`/dashboard/enrollments?view=groups&group=${G}&enrollment=e-1`);
+  });
+
+  it('shows the phone through a group where the person sees contacts, and the profile only to who sees the enrollments', () => {
+    const context = { session: ahead, child: { enrollment_id: 'e-1', state: 'active' } };
+    const seen = group({ enrollment_id: 'e-2', group_id: 'g-2', abilities: { contacts: true, skip: false, pause: false } });
+    expect(contactsGroupOf({ groups: [group({}), seen] }, context)?.enrollment_id).toBe('e-2');
+    expect(contactsGroupOf({ groups: [group({ abilities: everything }), seen] }, context)?.enrollment_id).toBe('e-1');
+    expect(contactsGroupOf({ groups: [group({})] }, context)).toBeUndefined();
+    expect(profileLink({ groups: [seen, group({})] }, context, true)).toBe(`/dashboard/enrollments?view=groups&group=${G}&enrollment=e-1`);
+    expect(profileLink({ groups: [group({})] }, context, false)).toBeNull();
+    expect(profileLink({ groups: [] }, context, true)).toBeNull();
   });
 });

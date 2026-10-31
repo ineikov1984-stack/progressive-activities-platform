@@ -43,9 +43,10 @@ export type ScheduleBoard = {
   instructors: SchedulePerson[];
   abilities: Record<string, GroupAbilities>;
 };
-/** Name and class only — never contacts, health or money. */
+/** Name and class only — never contacts, health or money. `child_id` opens the card of the child (т. 4.1). */
 export type SessionChild = {
   enrollment_id: string;
+  child_id?: string;
   name: string;
   class: string | null;
   state: 'active' | 'paused' | 'skipped' | string;
@@ -62,6 +63,26 @@ export type SessionPanel = {
 
 /** A child found by the filter "Дете": name and class only — never contacts, health, money or groups. */
 export type FoundChild = { id: string; name: string; class: string | null };
+
+/** What the person may do in a group of the child: show the parent's phone, skip a session, pause (т. 4.1). */
+export type ChildCardAbilities = { contacts: boolean; skip: boolean; pause: boolean };
+export type ChildCardGroup = {
+  enrollment_id: string;
+  group_id: string;
+  activity: string | null;
+  group: string | null;
+  /** For "Пропусни": a change is refused on an older version. */
+  version: number;
+  state: 'active' | 'paused' | 'trial' | 'single' | 'ended' | string;
+  paused_until: string | null;
+  ended_on: string | null;
+  abilities: ChildCardAbilities;
+};
+/**
+ * The card of a child (`GET /enrollment/children/{child}`, т. 4.1): name, class, the age in full years and the groups
+ * the person sees — never the birth date, contacts, money or health.
+ */
+export type ChildCard = { id: string; name: string; class: string | null; age: number | null; groups: ChildCardGroup[] };
 
 export class ScheduleApiError extends Error {
   constructor(message: string, public status: number) { super(message); }
@@ -122,6 +143,25 @@ export async function loadSchedule(organizationId: string, query: string): Promi
 
 export function loadSessionPanel(organizationId: string, sessionId: string): Promise<SessionPanel> {
   return request<SessionPanel>(organizationId, `/schedule/sessions/${encodeURIComponent(sessionId)}`);
+}
+
+/** A message for the card of a child: 404 also when the person does not see the child (т. 4.1). */
+export function childCardErrorMessage(status: number): string {
+  if (status === 401) return 'Влезте отново, за да продължите.';
+  if (status === 404 || status === 403) return 'Картата на детето не е достъпна — детето не е в групите, в които виждате децата.';
+  if (status === 429) return 'Твърде много заявки. Изчакайте минута и опитайте пак.';
+  return 'Картата не се зареди. Проверете връзката и опитайте пак.';
+}
+
+export async function loadChildCard(organizationId: string, childId: string): Promise<ChildCard> {
+  const card = await request<Partial<ChildCard>>(organizationId, `/enrollment/children/${encodeURIComponent(childId)}`, (status) => childCardErrorMessage(status));
+  return {
+    id: card.id ?? childId,
+    name: card.name ?? '',
+    class: card.class ?? null,
+    age: typeof card.age === 'number' ? card.age : null,
+    groups: Array.isArray(card.groups) ? card.groups : [],
+  };
 }
 
 /**

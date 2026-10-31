@@ -1,4 +1,4 @@
-import type { ScheduleActivity, ScheduleBoard, ScheduleGroup, ScheduleInstructor, ScheduleSession, SessionChild } from './api';
+import type { ChildCard, ChildCardGroup, ScheduleActivity, ScheduleBoard, ScheduleGroup, ScheduleInstructor, ScheduleSession, SessionChild } from './api';
 
 /*
  * "График" (docs/product/schedule.md, т. 3–4): what the page shows, without React — the days and hours by Sofia, the
@@ -786,4 +786,91 @@ export function moveActive(active: number, count: number, key: 'ArrowDown' | 'Ar
   const current = active >= count ? -1 : active;
   if (key === 'ArrowDown') return current < 0 || current === count - 1 ? 0 : current + 1;
   return current <= 0 ? count - 1 : current - 1;
+}
+
+// ---- The card of a child (т. 4.1) ----------------------------------------------------------------------------------
+
+/** "1 година", "9 години"; nothing without an age. */
+export function ageText(age: number | null | undefined): string | null {
+  if (typeof age !== 'number' || !Number.isInteger(age) || age < 0) return null;
+  return age === 1 ? '1 година' : `${age} години`;
+}
+
+/** Under the name: "3. клас · 9 години", or the one that is known. */
+export function childCardMeta(card: Pick<ChildCard, 'class' | 'age'>): string {
+  return [card.class, ageText(card.age)].filter(Boolean).join(' · ');
+}
+
+/** "АИ" — the first letters of the first two names, for the circle next to the name (hidden from screen readers). */
+export function initials(name: string): string {
+  return name.trim().split(/\s+/u).filter(Boolean).slice(0, 2).map((part) => ([...part][0] ?? '').toLocaleUpperCase('bg')).join('');
+}
+
+/** "Шах · Вторник". */
+export function cardGroupTitle(group: Pick<ChildCardGroup, 'activity' | 'group'>): string {
+  return [group.activity, group.group].filter(Boolean).join(' · ') || 'Група';
+}
+
+export type CardStateTone = 'active' | 'paused' | 'visit' | 'ended';
+
+/**
+ * The state of a group in words, never the colour alone: "Записано", "Пауза до 30 ноември", "Пробно", "Еднократно",
+ * "Приключи на 15 октомври".
+ */
+export function cardGroupState(group: Pick<ChildCardGroup, 'state' | 'paused_until' | 'ended_on'>): { text: string; tone: CardStateTone } {
+  if (group.state === 'paused') return { text: isDay(group.paused_until) ? `Пауза до ${dayName(group.paused_until).date}` : 'Пауза', tone: 'paused' };
+  if (group.state === 'trial') return { text: 'Пробно', tone: 'visit' };
+  if (group.state === 'single') return { text: 'Еднократно', tone: 'visit' };
+  if (group.state === 'ended') return { text: isDay(group.ended_on) ? `Приключи на ${dayName(group.ended_on).date}` : 'Приключи', tone: 'ended' };
+  return { text: 'Записано', tone: 'active' };
+}
+
+/** Where the card was opened: the session and the child's row in its panel. */
+export type CardContext = {
+  session: Pick<ScheduleSession, 'starts_at' | 'status' | 'group_id'>;
+  child: Pick<SessionChild, 'enrollment_id' | 'state'>;
+};
+
+/** The group of the card for the session it was opened from: the same enrollment, else the same group. */
+export function sessionGroupOf(card: Pick<ChildCard, 'groups'>, context: CardContext): ChildCardGroup | undefined {
+  return card.groups.find((group) => group.enrollment_id === context.child.enrollment_id)
+    ?? card.groups.find((group) => group.group_id === context.session.group_id);
+}
+
+/**
+ * "Пропусни това занимание" (т. 4.1): with "Записва деца" in the session's group, for a session still ahead and not
+ * cancelled that the child comes to — not one already skipped or in a pause, and not after the enrollment ended.
+ */
+export function canSkipSession(card: Pick<ChildCard, 'groups'>, context: CardContext, now: Date): boolean {
+  const group = sessionGroupOf(card, context);
+  if (!group || !group.abilities.skip || group.state === 'ended') return false;
+  return context.child.state === 'active' && context.session.status !== 'cancelled' && Date.parse(context.session.starts_at) > now.getTime();
+}
+
+/** "Пауза" (т. 4.1): with "Записва деца", for an enrollment for the period that runs — the session's group first. */
+export function pauseGroupOf(card: Pick<ChildCard, 'groups'>, context: CardContext): ChildCardGroup | undefined {
+  const pausable = (group: ChildCardGroup) => group.abilities.pause && (group.state === 'active' || group.state === 'paused');
+  const own = sessionGroupOf(card, context);
+  return own && pausable(own) ? own : card.groups.find(pausable);
+}
+
+/** "Покажи телефона" (т. 4.1): through the session's group when the person sees contacts there, else another group. */
+export function contactsGroupOf(card: Pick<ChildCard, 'groups'>, context: CardContext): ChildCardGroup | undefined {
+  const own = sessionGroupOf(card, context);
+  return own?.abilities.contacts ? own : card.groups.find((group) => group.abilities.contacts);
+}
+
+/**
+ * "Профил на детето →" — until the stage "Профил на детето", the enrollment in "Записвания" (`?enrollment=`), for those
+ * who see the enrollments; the session's group first.
+ */
+export function profileLink(card: Pick<ChildCard, 'groups'>, context: CardContext, withDetails: boolean): string | null {
+  if (!withDetails) return null;
+  const group = sessionGroupOf(card, context) ?? card.groups[0];
+  return group ? childLink(group.group_id, group.enrollment_id, true) : null;
+}
+
+/** "Пауза" leads to the enrollment: the dialog for a pause is there, with the group's coming sessions. */
+export function pauseLink(group: Pick<ChildCardGroup, 'group_id' | 'enrollment_id'>): string {
+  return childLink(group.group_id, group.enrollment_id, true);
 }

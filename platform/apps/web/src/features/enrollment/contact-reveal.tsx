@@ -40,6 +40,8 @@ type Props = {
   hasEmail: boolean;
   /** The list of a group says it once, above the children, not under each one. */
   showNote?: boolean;
+  /** The parent's name with the contact — where it was not on the screen before (the card of a child in "График"). */
+  showName?: boolean;
 };
 
 /** The words for a reveal being recorded (the glossary). */
@@ -50,7 +52,7 @@ export const REVEAL_NOTE = 'Ще остане отбелязано, че сте 
  * only after the button, and every reveal is recorded. The answer stays in this component's memory only — never in
  * the browser's storage, the address or a log — and is gone when the panel or the row closes.
  */
-export function ContactReveal({ organizationId, target, from, childName, hasPhone, hasEmail, showNote = true }: Props) {
+export function ContactReveal({ organizationId, target, from, childName, hasPhone, hasEmail, showNote = true, showName = false }: Props) {
   const hint = useId();
   const shown = useRef<HTMLDivElement>(null);
   const failed = useRef<HTMLParagraphElement>(null);
@@ -88,6 +90,7 @@ export function ContactReveal({ organizationId, target, from, childName, hasPhon
       <p className={styles.srOnly} role="status">{contact ? (contact.phone ? 'Телефонът е показан.' : 'Имейлът е показан.') : ''}</p>
       {contact ? (
         <div ref={shown} tabIndex={-1} className={styles.reveal} role="group" aria-label={`Контакт на родителя на ${childName}`}>
+          {showName && contact.name ? <p className={styles.contactName}>{contact.name}</p> : null}
           <ContactFacts contact={contact} childName={childName} />
           {showNote ? <p className={styles.small}>{REVEAL_NOTE}</p> : null}
         </div>

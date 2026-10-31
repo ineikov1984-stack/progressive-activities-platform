@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadSchedule, loadSessionPanel, ScheduleApiError, searchChildren } from '../src/features/schedule/api';
+import { loadChildCard, loadSchedule, loadSessionPanel, ScheduleApiError, searchChildren } from '../src/features/schedule/api';
 
 const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -71,5 +71,31 @@ describe('schedule API', () => {
     expect((await failure(() => searchChildren('org-1', 'Ан'))).message).toBe('Търсихте много пъти за кратко. Изчакайте минута и опитайте пак.');
     // An answer of another shape finds no one, rather than breaking the filter.
     expect(await searchChildren('org-1', 'Ан')).toEqual([]);
+  });
+
+  it('reads the card of a child in the selected organization, and keeps its shape', async () => {
+    const group = { enrollment_id: 'e-1', group_id: 'g-1', activity: 'Шах', group: 'Вторник', version: 2, state: 'active', paused_until: null, ended_on: null, abilities: { contacts: true, skip: false, pause: false } };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ id: 'c-1', name: 'Ана Иванова', class: '3. клас', age: 9, groups: [group] }))
+      .mockResolvedValueOnce(jsonResponse({ id: 'c-1', name: 'Ана Иванова', class: null, groups: 'nope' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(await loadChildCard('org-1', 'c-1')).toEqual({ id: 'c-1', name: 'Ана Иванова', class: '3. клас', age: 9, groups: [group] });
+    expect(fetchMock).toHaveBeenCalledWith('/backend/api/v1/enrollment/children/c-1', expect.objectContaining({
+      credentials: 'include', headers: expect.objectContaining({ 'X-Organization-Id': 'org-1' }),
+    }));
+    expect(await loadChildCard('org-1', 'c-1')).toEqual({ id: 'c-1', name: 'Ана Иванова', class: null, age: null, groups: [] });
+  });
+
+  it('says a card that is not seen is not there, without telling more', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ message: 'Детето не е намерено.' }, 404))
+      .mockResolvedValueOnce(new Response('oops', { status: 500 })));
+
+    const failure = async (run: () => Promise<unknown>) => { try { await run(); } catch (error) { return error as ScheduleApiError; } throw new Error('no error'); };
+    const missing = await failure(() => loadChildCard('org-1', 'c-x'));
+    expect(missing.status).toBe(404);
+    expect(missing.message).toBe('Картата на детето не е достъпна — детето не е в групите, в които виждате децата.');
+    expect((await failure(() => loadChildCard('org-1', 'c-1'))).message).toBe('Картата не се зареди. Проверете връзката и опитайте пак.');
   });
 });

@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDashboardContext } from '../dashboard/dashboard-context';
 import { ownScheduleOnly } from '../dashboard/navigation';
-import { loadSchedule, ScheduleApiError, type ScheduleBoard, type ScheduleSession } from './api';
+import { loadChildCard, loadSchedule, ScheduleApiError, type ScheduleBoard, type ScheduleSession } from './api';
 import {
   childChipLabel, childFilterAllowed, chooseChild, dayColumnChoices, defaultView, emptyText, type FilterKey, filterChips, filterKeys, filterOptions, hasFilters,
   noFilters, parseScheduleAddress, parseStoredView, periodOf, type ScheduleAddress, scheduleAddress, scheduleNames, scheduleQuery, type ScheduleView,
@@ -52,6 +52,20 @@ export function SchedulePage() {
   const address = useMemo(() => parseScheduleAddress(search, { own, children: childFilter }), [search, own, childFilter]);
   // The names of the children chosen on this page, by identifier: the address holds only the identifier (т. 3.5).
   const [childNames, setChildNames] = useState<Record<string, string>>({});
+  const rememberChild = useCallback((id: string, name: string) => {
+    const key = id.toLowerCase();
+    setChildNames((known) => (known[key] === name ? known : { ...known, [key]: name }));
+  }, []);
+  // A child from the address whose name this page does not know: the name from the child's card (т. 4.1), once.
+  const asked = useRef(new Set<string>());
+  const unnamedChild = childFilter && address.filters.child && !childNames[address.filters.child] ? address.filters.child : null;
+  useEffect(() => {
+    if (!unnamedChild || asked.current.has(unnamedChild)) return;
+    asked.current.add(unnamedChild);
+    loadChildCard(organization.id, unnamedChild).then((card) => rememberChild(unnamedChild, card.name)).catch(() => {
+      // Not seen any more, or no connection: the label stays "Избрано дете".
+    });
+  }, [organization.id, unnamedChild, rememberChild]);
 
   // "Сега" and today follow the clock.
   const [now, setNow] = useState(() => new Date());
@@ -144,9 +158,8 @@ export function SchedulePage() {
     chosen: chosenChild,
     chosenLabel: childChipLabel(chosenChildName),
     onChoose: (found) => {
-      const id = found.id.toLowerCase();
-      setChildNames((known) => ({ ...known, [id]: found.name }));
-      go({ filters: chooseChild(address.filters, id) });
+      rememberChild(found.id, found.name);
+      go({ filters: chooseChild(address.filters, found.id.toLowerCase()) });
     },
     onRemove: () => go({ filters: chooseChild(address.filters, null) }),
   } : undefined;
@@ -217,7 +230,7 @@ export function SchedulePage() {
       {body}
 
       {preview.shown && !panel ? <SchedulePreview shown={preview.shown} names={names} now={now} onEnter={preview.keep} onLeave={preview.hide} /> : null}
-      {panel ? <SchedulePanel organizationId={organization.id} target={panel} names={names} now={now} withDetails={withDetails} onClose={closePanel} /> : null}
+      {panel ? <SchedulePanel organizationId={organization.id} target={panel} names={names} now={now} withDetails={withDetails} onClose={closePanel} onChildNamed={rememberChild} /> : null}
     </div>
   );
 }
