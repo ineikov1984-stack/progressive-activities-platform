@@ -58,7 +58,7 @@ final class SchedulePresenter
      * @param  array{session: Session, teachers: list<SessionTeacher>, group: ScheduleGroup, location: array{id: string, name: string}|null, last_change: LastChange|null}  $panel
      * @param  array<string, int>  $taken
      * @param  array<string, int>  $waiting
-     * @param  list<array{enrollment_id: string, name: string, class: string|null, state: string, scope: string}>|null  $children  null — not to be seen
+     * @param  list<array{enrollment_id: string, child_id?: string, name: string, class: string|null, state: string, scope: string}>|null  $children  null — not to be seen
      * @param  bool  $reasons  "schedule.manage" for the whole organization: why and who
      * @param  bool  $manage  and a person of the team: the actions
      * @return array<string, mixed>

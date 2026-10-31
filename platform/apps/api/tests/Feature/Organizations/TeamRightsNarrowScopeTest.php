@@ -49,13 +49,15 @@ class TeamRightsNarrowScopeTest extends TestCase
             $f['owner'], $f['owner']->children()->create(['first_name' => 'Дани', 'last_name' => 'Колев'])->id, $f['thursday']->id, $f['price']->id, 'waitlisted',
         ));
         // A child enrolled in another group.
-        $this->inTenant($f['organization'], function () use ($f): void {
+        $outsideChild = $this->inTenant($f['organization'], function () use ($f): string {
             $childId = $f['owner']->children()->create(['first_name' => 'Ана', 'last_name' => 'Колева'])->id;
             $application = $this->rightsApplication($f['owner'], $childId, $f['thursday']->id, $f['price']->id, 'approved');
             Enrollment::query()->create([
                 'application_id' => $application->id, 'child_id' => $childId, 'group_id' => $f['thursday']->id,
                 'price_option_id' => $f['price']->id, 'scope' => 'full_period', 'status' => 'active', 'starts_on' => '2026-11-05',
             ]);
+
+            return $childId;
         });
         $viewer = $this->memberOf($f['organization'], 'viewer');
         $person = $this->personFor($f['organization'], $viewer);
@@ -104,6 +106,11 @@ class TeamRightsNarrowScopeTest extends TestCase
         $this->assertSame([$f['tuesday']->id], array_values(array_unique(array_column(array_column($waiting, 'group'), 'id'))));
         // The search of the schedule's filter finds the children enrolled in the group, not Ана in "Четвъртък".
         $this->assertSame(['Ани Иванова'], array_column($this->getJson('/api/v1/enrollment/children?q='.urlencode('Ан'))->assertOk()->json('children'), 'name'));
+        // The card: the group with every added right in it; Ана in "Четвъртък" is not found.
+        $this->getJson("/api/v1/enrollment/children/{$f['enrollment']->child_id}")->assertOk()->assertJsonCount(1, 'groups')
+            ->assertJsonPath('groups.0.group_id', $f['tuesday']->id)
+            ->assertJsonPath('groups.0.abilities', ['contacts' => true, 'skip' => true, 'pause' => true]);
+        $this->getJson("/api/v1/enrollment/children/{$outsideChild}")->assertNotFound();
         $this->assertSame([$person->id], array_column($this->getJson('/api/v1/team')->assertOk()->json('members'), 'id'));
         $this->assertSame([], $this->getJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/transfer-options")->assertOk()->json('groups'));
         // Outside the group: refused.
@@ -170,6 +177,8 @@ class TeamRightsNarrowScopeTest extends TestCase
             'GET api/v1/enrollment/applications' => ['/api/v1/enrollment/applications', [], 200],
             // Only the children of the group (asserted below).
             'GET api/v1/enrollment/children' => ['/api/v1/enrollment/children?q='.urlencode('Ани'), [], 200],
+            // The card of a child of the group: only the group (asserted below).
+            'GET api/v1/enrollment/children/{child}' => ["/api/v1/enrollment/children/{$f['enrollment']->child_id}", [], 200],
             'GET api/v1/enrollment/groups' => ['/api/v1/enrollment/groups', [], 200],
             'GET api/v1/enrollment/groups/{group}/roster' => ["/api/v1/enrollment/groups/{$tuesday}/roster", [], 200],
             'GET api/v1/enrollment/enrollments/{enrollment}/transfer-options' => ["{$enrollment}/transfer-options", [], 200],

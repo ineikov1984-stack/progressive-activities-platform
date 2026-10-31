@@ -1,6 +1,7 @@
 'use client';
 
 import { type FocusEvent, type MouseEvent, useEffect, useId, useRef, useState } from 'react';
+import { type ChildFilter, ChildFilterMenu, ChildFilterSection } from './child-filter';
 import { type FilterChip, type FilterKey, filterLabels, type FilterOption, type ScheduleFilters } from './presentation';
 import { ChevronIcon, CloseIcon } from './icons';
 import styles from './schedule.module.css';
@@ -11,15 +12,18 @@ type Props = {
   options: Record<FilterKey, FilterOption[]>;
   filters: ScheduleFilters;
   chips: FilterChip[];
+  /** "Дете" — only for who sees the enrollments, never in "Моят график" (`childFilterAllowed`). */
+  child?: ChildFilter;
   onToggle: (key: FilterKey, id: string) => void;
   onClear: () => void;
 };
 
 /**
- * Дейност, група, треньор, място — several in each (т. 3.5). A button with a list for each when there is room; on a
- * phone "Филтри ▾" opens them in a panel. The chosen ones are labels with ✕, and "Изчисти филтрите".
+ * Дейност, група, треньор, място — several in each — and one child, found by name (т. 3.5). A button with a list for
+ * each when there is room; on a phone "Филтри ▾" opens them in a panel. The chosen ones are labels with ✕, and
+ * "Изчисти филтрите".
  */
-export function ScheduleFilterBar({ keys, options, filters, chips, onToggle, onClear }: Props) {
+export function ScheduleFilterBar({ keys, options, filters, chips, child, onToggle, onClear }: Props) {
   const shown = keys.filter((key) => options[key].length > 0 || filters[key].length > 0);
   const [panelOpen, setPanelOpen] = useState(false);
   const opener = useRef<HTMLButtonElement>(null);
@@ -30,13 +34,14 @@ export function ScheduleFilterBar({ keys, options, filters, chips, onToggle, onC
     requestAnimationFrame(() => opener.current?.focus());
   }
 
-  if (shown.length === 0 && count === 0) return null;
+  if (shown.length === 0 && !child && count === 0) return null;
   return (
     <div className={styles.filters}>
       <div className={styles.filterBar}>
         {shown.map((key) => (
           <FilterMenu key={key} label={filterLabels[key]} options={options[key]} chosen={filters[key]} onToggle={(id) => onToggle(key, id)} />
         ))}
+        {child ? <ChildFilterMenu filter={child} /> : null}
       </div>
       <button ref={opener} type="button" className={`${count ? styles.filterOn : styles.filter} ${styles.filtersButton}`} aria-haspopup="dialog" onClick={() => setPanelOpen(true)}>
         Филтри{count ? ` · ${count}` : ''}<ChevronIcon className={styles.chevron} />
@@ -45,7 +50,7 @@ export function ScheduleFilterBar({ keys, options, filters, chips, onToggle, onC
         <ul className={styles.chips} aria-label="Избрани филтри">
           {chips.map((chip) => (
             <li key={`${chip.key}-${chip.id}`}>
-              <button type="button" className={styles.chip} aria-label={`Премахни филтъра „${chip.label}“`} onClick={() => onToggle(chip.key, chip.id)}>
+              <button type="button" className={styles.chip} aria-label={`Премахни филтъра „${chip.label}“`} onClick={() => (chip.key === 'child' ? child?.onRemove() : onToggle(chip.key, chip.id))}>
                 <span>{chip.label}</span><CloseIcon size={16} />
               </button>
             </li>
@@ -53,7 +58,7 @@ export function ScheduleFilterBar({ keys, options, filters, chips, onToggle, onC
           <li><button type="button" className={styles.clear} onClick={onClear}>Изчисти филтрите</button></li>
         </ul>
       ) : null}
-      {panelOpen ? <FiltersPanel keys={shown} options={options} filters={filters} count={count} onToggle={onToggle} onClear={onClear} onClose={closePanel} /> : null}
+      {panelOpen ? <FiltersPanel keys={shown} options={options} filters={filters} count={count} child={child} onToggle={onToggle} onClear={onClear} onClose={closePanel} /> : null}
     </div>
   );
 }
@@ -114,8 +119,8 @@ function FilterMenu({ label, options, chosen, onToggle }: { label: string; optio
 }
 
 /** On a phone: all the filters in a panel over the page. The choices apply at once; "Готово" closes it. */
-function FiltersPanel({ keys, options, filters, count, onToggle, onClear, onClose }: {
-  keys: FilterKey[]; options: Record<FilterKey, FilterOption[]>; filters: ScheduleFilters; count: number;
+function FiltersPanel({ keys, options, filters, count, child, onToggle, onClear, onClose }: {
+  keys: FilterKey[]; options: Record<FilterKey, FilterOption[]>; filters: ScheduleFilters; count: number; child?: ChildFilter;
   onToggle: (key: FilterKey, id: string) => void; onClear: () => void; onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -148,6 +153,7 @@ function FiltersPanel({ keys, options, filters, count, onToggle, onClear, onClos
               <Options legend={filterLabels[key]} options={options[key]} chosen={filters[key]} onToggle={(id) => onToggle(key, id)} />
             </section>
           ))}
+          {child ? <ChildFilterSection filter={child} /> : null}
           <div className={styles.drawerFoot}>
             <button type="button" className={styles.button} onClick={() => dialog.current?.close()}>Готово</button>
             {count ? <button type="button" className={styles.clear} onClick={onClear}>Изчисти филтрите</button> : null}

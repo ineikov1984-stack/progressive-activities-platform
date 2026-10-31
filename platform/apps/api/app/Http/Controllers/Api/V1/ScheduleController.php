@@ -99,7 +99,12 @@ final class ScheduleController extends Controller
         }
         $record = $panel['session'];
         $groupId = (string) $record->group_id;
-        $children = $this->scope->scheduleChildrenAt($user, $visible, $record) ? $this->roster->children($record) : null;
+        // The card of a child (т. 4.1) is seen in the groups of `scheduleChildren`: not where the person only stands in for
+        // the day, so those rows have no `child_id`.
+        $cards = $this->scope->scheduleChildren($user);
+        $children = $this->scope->scheduleChildrenAt($user, $visible, $record)
+            ? $this->roster->children($record, $cards === null || in_array($groupId, $cards, true))
+            : null;
 
         return response()->json(SchedulePresenter::panel(
             $panel,

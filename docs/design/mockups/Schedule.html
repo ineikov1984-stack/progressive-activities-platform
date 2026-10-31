@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>График — седмица</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#173F5F}a:hover{color:#0F2A40}
+.nav{display:flex;align-items:center;gap:10px;min-height:40px;padding:0 12px;border-radius:10px;font-size:14px;color:#D5DEE7;text-decoration:none}
+.nav-on{background:#24527A;color:#FFFFFF;font-weight:600}
+.meta{margin:0;font-size:14px;line-height:20px;color:#5B6878}
+.day{display:flex;flex-direction:column;gap:10px;min-width:0}
+.dayh{display:flex;flex-direction:column;padding:10px 12px;border-radius:12px;background:#FFFFFF;border:1px solid #E2E6EA}
+.dayh strong{font-size:15px;color:#173F5F}
+.block{display:flex;flex-direction:column;gap:4px;padding:12px;border:1px solid #E2E6EA;border-radius:12px;background:#FFFFFF;text-decoration:none;color:#344054}
+.block strong{font-size:14px;color:#173F5F}
+.small{font-size:13px;line-height:18px;color:#5B6878}
+.state{display:inline-flex;align-self:flex-start;align-items:center;height:22px;padding:0 8px;border-radius:999px;font-size:12px;font-weight:600}
+.done{background:#E3F1EA;color:#1F5A41}
+.wait{background:#B8561A;color:#FFFFFF}
+.now{background:#173F5F;color:#FFFFFF}
+.later{background:#EEF1F4;color:#4A5767}
+.select{display:flex;align-items:center;justify-content:space-between;height:40px;padding:0 12px;border:1px solid #808D99;border-radius:8px;background:#FFFFFF;font-size:14px;color:#173F5F}
+</style>
+</head>
+<body>
+<div style="width: 1280px; height: 860px; box-sizing: border-box; display: flex; background: #F6F4EF; font-family: 'Onest', ui-sans-serif, system-ui, sans-serif; color: #344054;">
+  <nav aria-label="Основно меню" style="width: 220px; flex: none; display: flex; flex-direction: column; gap: 4px; padding: 20px 12px; background: #173F5F;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 8px 16px;">
+      <span aria-hidden="true" style="display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: #B8561A; color: #FFFFFF; font-weight: 700; font-size: 13px;">PA</span>
+      <strong style="color: #FFFFFF; font-size: 15px;">Progressive</strong>
+    </div>
+    <span style="padding: 8px 12px 4px; font-size: 11px; letter-spacing: .08em; color: #AFC0D0;">УПРАВЛЕНИЕ</span>
+    <a class="nav" href="#">Начало</a>
+    <a class="nav" href="#">Дейности</a>
+    <a class="nav" href="#">Записвания</a>
+    <a class="nav" href="Admin.html">Присъствия</a>
+    <a class="nav nav-on" href="#" aria-current="page">График</a>
+    <a class="nav" href="#">Отворени врати</a>
+    <span style="padding: 12px 12px 4px; font-size: 11px; letter-spacing: .08em; color: #AFC0D0;">ОРГАНИЗАЦИЯ</span>
+    <a class="nav" href="Team.html">Екип</a>
+    <a class="nav" href="#">Такси, отсъствия и отказ</a>
+  </nav>
+
+  <main style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 18px; padding: 28px 32px;">
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px;">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <h1 style="margin: 0; font-size: 28px; line-height: 34px; color: #173F5F;">График</h1>
+        <p class="meta">16–20 ноември · натиснете занимание, за да видите децата и присъствията</p>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <div role="group" aria-label="Изглед" style="display: flex; border: 1px solid #808D99; border-radius: 10px; overflow: hidden;"><a href="ScheduleMonth.html" style="display: flex; align-items: center; min-height: 38px; padding: 0 12px; font-size: 14px; font-weight: 600; text-decoration: none; background: #FFFFFF; border-right: 1px solid #C9D0D6;">Месец</a><a href="ScheduleWeek.html" style="display: flex; align-items: center; min-height: 38px; padding: 0 12px; font-size: 14px; font-weight: 600; text-decoration: none; background: #FFFFFF; border-right: 1px solid #C9D0D6;">Седмица</a><a href="ScheduleRooms.html" style="display: flex; align-items: center; min-height: 38px; padding: 0 12px; font-size: 14px; font-weight: 600; text-decoration: none; background: #FFFFFF; border-right: 1px solid #C9D0D6;">Ден по зали</a><a href="#" aria-current="true" style="display: flex; align-items: center; min-height: 38px; padding: 0 12px; font-size: 14px; font-weight: 600; text-decoration: none; background: #173F5F; color: #FFFFFF;">Карти</a></div>
+        <button type="button" aria-label="Предишна седмица" style="width: 40px; height: 40px; border: 1px solid #808D99; border-radius: 8px; background: #FFFFFF; color: #173F5F; font: inherit; font-size: 16px;">‹</button>
+        <button type="button" aria-label="Следваща седмица" style="width: 40px; height: 40px; border: 1px solid #808D99; border-radius: 8px; background: #FFFFFF; color: #173F5F; font: inherit; font-size: 16px;">›</button>
+        <span class="select" style="width: 120px;">Филтри ▾</span>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; align-items: start;">
+      <div class="day">
+        <div class="dayh"><strong>Понеделник</strong><span class="small">16 ноември</span></div>
+        <a class="block" href="History.html"><span class="state done">✓ Отбелязано</span><strong>16:00 · Шахмат · Група 1</strong><span class="small">Зала „Слънце“ · Иван Петров</span><span class="small">10/12 места · 9 присъстваха</span></a>
+        <a class="block" href="History.html"><span class="state done">✓ Отбелязано</span><strong>17:30 · Шахмат · Група 2</strong><span class="small">Зала „Слънце“ · Мария Колева, Иван Петров</span><span class="small">8/10 места · 6 присъстваха</span></a>
+      </div>
+      <div class="day">
+        <div class="dayh"><strong>Вторник</strong><span class="small">17 ноември</span></div>
+        <a class="block" href="History.html"><span class="state done">✓ Отбелязано</span><strong>16:00 · Футбол · Група 1</strong><span class="small">Двор · Петър Стоянов</span><span class="small">14/16 места · 13 присъстваха</span></a>
+        <a class="block" href="History.html"><span class="state done">✓ Отбелязано</span><strong>17:00 · Рисуване · Група 3</strong><span class="small">Ателие · Деси Маринова</span><span class="small">9/10 места · 8 присъстваха</span></a>
+      </div>
+      <div class="day">
+        <div class="dayh"><strong>Сряда</strong><span class="small">18 ноември</span></div>
+        <a class="block" href="MarkA.html" style="border-color: #E8B48F; background: #FFF9F4;"><span class="state wait">Чака отбелязване</span><strong>16:00 · Футбол · Група 1</strong><span class="small">Двор · Петър Стоянов</span><span class="small">14/16 места</span></a>
+        <a class="block" href="History.html"><span class="state done">✓ Отбелязано</span><strong>17:30 · Шахмат · Група 2</strong><span class="small">Зала „Слънце“ · Мария Колева, Иван Петров</span><span class="small">8/10 места · 6 присъстваха</span></a>
+      </div>
+      <div class="day">
+        <div class="dayh"><strong>Четвъртък</strong><span class="small">19 ноември</span></div>
+        <a class="block" href="MarkA.html" style="border-color: #E8B48F; background: #FFF9F4;"><span class="state wait">Чака отбелязване</span><strong>17:00 · Рисуване · Група 3</strong><span class="small">Ателие · Деси Маринова</span><span class="small">9/10 места</span></a>
+      </div>
+      <div class="day">
+        <div class="dayh" style="border-color: #173F5F; box-shadow: inset 0 0 0 1px #173F5F;"><strong>Петък · днес</strong><span class="small">20 ноември</span></div>
+        <a class="block" href="MarkA.html" style="border-color: #173F5F;"><span class="state now">Сега</span><strong>16:00 · Футбол · Група 1</strong><span class="small">Двор · Петър Стоянов</span><span class="small">14/16 места · 2 чакат за място</span></a>
+        <a class="block" href="#"><span class="state later">По-късно</span><strong>18:00 · Шахмат · Група 1</strong><span class="small">Зала „Слънце“ · Иван Петров</span><span class="small">10/12 места</span></a>
+      </div>
+    </div>
+
+  </main>
+</div>
+</body>
+</html>

@@ -69,6 +69,25 @@ class ContactRevealTest extends TestCase
             ->assertJsonPath('access.history.0.action', 'enrollment.contact_revealed')->assertJsonPath('access.history.0.group_label', 'Шах · Вторник');
     }
 
+    public function test_the_card_of_a_child_in_the_schedule_says_where_the_phone_was_shown(): void
+    {
+        $f = $this->rightsFixture();
+        $admin = $this->memberOf($f['organization'], 'organization_admin');
+        $this->parentOf($f);
+        $this->signInTo($admin, $f['organization']);
+
+        // From the card of a child (docs/product/schedule.md, т. 4.1); anything else unknown counts as "details".
+        $this->postJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/contact/reveal", ['from' => 'schedule'])->assertOk();
+        $this->postJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}/contact/reveal", ['from' => 'somewhere'])->assertOk();
+
+        // Both at the same moment: the order does not matter.
+        $this->assertEqualsCanonicalizing(['schedule', 'details'], AuditEvent::query()->where('action', 'enrollment.contact_revealed')
+            ->get()->map(fn (AuditEvent $event): mixed => $event->metadata['from'] ?? null)->all());
+        $this->assertEqualsCanonicalizing(['schedule', 'details'], array_column(
+            $this->getJson("/api/v1/enrollment/enrollments/{$f['enrollment']->id}")->assertOk()->json('contact_reveals'), 'from',
+        ));
+    }
+
     public function test_the_owner_sees_the_contact_at_once_and_is_not_counted(): void
     {
         $f = $this->rightsFixture();

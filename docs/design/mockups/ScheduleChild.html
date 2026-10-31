@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>График — панел с действия и карта на детето</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#173F5F}
+.lab{margin:0 0 8px;font-size:14px;font-weight:700;color:#5B6878}
+.card{display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid #E2E6EA;border-radius:16px;background:#FFFFFF}
+.meta{margin:0;font-size:14px;line-height:20px;color:#5B6878}
+.chip{padding:4px 10px;border-radius:999px;font-size:13px;font-weight:600}
+.btn{display:flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:0 12px;border:1.5px solid #173F5F;border-radius:10px;background:#FFFFFF;color:#173F5F;font-size:14px;font-weight:600;text-decoration:none}
+.pri{background:#173F5F;color:#FFFFFF}
+.warn{border-color:#9A3B12;color:#9A3B12}
+.soon{display:block;font-size:11px;font-weight:400;opacity:.8}
+.kid{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;border-bottom:1px solid #E2E6EA;font-size:14px}
+.eye{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;color:#173F5F}
+.sel{background:#EAF0F6;border-radius:10px;padding:0 6px;border-bottom-color:transparent}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;font-size:14px}
+.h3{margin:0;font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#5B6878}
+.link{display:inline-flex;align-items:center;min-height:40px;padding:0 10px;border:1px solid #808D99;border-radius:999px;font-size:13px;font-weight:600;color:#173F5F;background:#FFFFFF}
+</style>
+</head>
+<body>
+<div style="width: 1280px; height: 900px; box-sizing: border-box; display: grid; grid-template-columns: 380px 380px 390px; gap: 24px; padding: 28px; background: #F6F4EF; font-family: 'Onest', ui-sans-serif, system-ui, sans-serif; color: #344054;">
+
+  <div>
+    <p class="lab">1 · Панелът на заниманието — бутоните според правата</p>
+    <aside class="card" aria-labelledby="s1">
+      <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <span style="align-self: flex-start; padding: 2px 8px; border-radius: 999px; background: #DCE7F3; color: #173F5F; font-size: 12px; font-weight: 600;">Шахмат</span>
+          <h2 id="s1" style="margin: 4px 0 0; font-size: 18px; color: #173F5F;">Група 2 · 3.–4. клас</h2>
+          <p class="meta">Сряда, 18 ноември · 17:30–18:30</p>
+          <p class="meta">Зала „Слънце“ · Мария Колева, Иван Петров (помощник)</p>
+        </div>
+        <button type="button" aria-label="Затвори" style="width: 40px; height: 40px; border: 1px solid #E2E6EA; border-radius: 10px; background: #FFFFFF; color: #173F5F; font: inherit;">✕</button>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <span class="chip" style="background: #EEF1F4; color: #4A5767;">8 от 10 места</span>
+        <span class="chip" style="background: #FFF1E6; color: #8A3E10;">2 чакат за място в групата</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+        <a href="#" class="btn pri">Присъствия</a>
+        <a href="Substitute.html" class="btn">Замести учител</a>
+        <a href="ScheduleNew.html" class="btn">Премести</a>
+        <a href="ScheduleNew.html" class="btn warn">Отмени</a>
+        <a href="#" class="btn">+ Дете за това занимание</a>
+        <a href="#" class="btn">Съобщение до родителите</a>
+      </div>
+      <div style="display: flex; flex-direction: column;">
+        <div class="kid sel"><span><strong style="color: #173F5F;">Ана Иванова</strong> · 3. клас</span><a class="eye" href="#" aria-label="Виж Ана Иванова" aria-expanded="true" style="background: #173F5F; color: #FFFFFF;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></a></div>
+        <div class="kid"><span>Борис Георгиев · 4. клас</span><a class="eye" href="#" aria-label="Виж Борис Георгиев"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></a></div>
+        <div class="kid"><span>Виктория Николова · 3. клас <span style="color: #5B6878;">· пробно</span></span><a class="eye" href="#" aria-label="Виж Виктория Николова"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></a></div>
+        <div class="kid"><span>Калоян Петков · 4. клас <span style="color: #5B6878;">· в пауза</span></span><a class="eye" href="#" aria-label="Виж Калоян Петков"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></a></div>
+        <a href="#" style="display: flex; align-items: center; min-height: 44px; font-size: 14px; font-weight: 600;">Още 4 деца →</a>
+      </div>
+      <p class="meta" style="font-size: 13px;">„Присъствия“ — с етап „Присъствия“. „Замести учител“ — с „Търся заместник“. „+ Дете“ — след „Записвания от екипа“. Учителят вижда само „Присъствия“.</p>
+    </aside>
+  </div>
+
+  <div>
+    <p class="lab">2 · Окото отваря картата на детето до панела</p>
+    <section class="card" aria-labelledby="c1" style="box-shadow: 0 12px 32px rgba(23,63,95,.16); border-color: #173F5F;">
+      <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span aria-hidden="true" style="display: grid; place-items: center; width: 48px; height: 48px; border-radius: 999px; background: #EAF0F6; color: #173F5F; font-weight: 700;">АИ</span>
+          <div>
+            <h2 id="c1" style="margin: 0; font-size: 20px; color: #173F5F;">Ана Иванова</h2>
+            <p class="meta">3. клас · 9 години</p>
+          </div>
+        </div>
+        <button type="button" aria-label="Затвори картата на Ана Иванова" style="width: 40px; height: 40px; border: 1px solid #E2E6EA; border-radius: 10px; background: #FFFFFF; color: #173F5F; font: inherit;">✕</button>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <p class="h3">Групи</p>
+        <div class="row"><span>Шахмат · Група 2</span><span class="chip" style="background: #E3F1EA; color: #1F5A41;">Записана</span></div>
+        <div class="row"><span>Рисуване · Група 1</span><span class="chip" style="background: #FFF1E6; color: #8A3E10;">Пауза до 30 ноември</span></div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <p class="h3">Родители</p>
+        <div class="row"><span>Мария Иванова <span style="color: #5B6878;">· майка</span></span><button type="button" class="link">Покажи телефона</button></div>
+        <div class="row"><span>Петър Иванов <span style="color: #5B6878;">· баща</span></span><span style="font-size: 14px; font-weight: 600; color: #173F5F;">0888 000 111</span></div>
+        <p class="meta" style="font-size: 13px;">Всяко показване на телефон се записва.</p>
+      </div>
+
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-radius: 12px; background: #FFF6EC;">
+        <span style="font-size: 14px; color: #7A3A12;"><strong>Има здравна бележка</strong></span>
+        <button type="button" class="link">Виж бележката</button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+        <a href="#" class="btn">Пропусни това занимание</a>
+        <a href="#" class="btn">Пауза</a>
+      </div>
+      <a href="ChildPanel.html" class="btn pri">Профил на детето →</a>
+      <p class="meta" style="font-size: 13px;">До етап „Профил на детето“ бутонът отваря записването в „Записвания“. Телефоните и бележката — само за хората с право; учителят вижда групите и бележката за своите групи.</p>
+    </section>
+  </div>
+
+  <div>
+    <p class="lab">3 · На телефон — картата излиза отдолу</p>
+    <div style="position: relative; width: 390px; height: 780px; overflow: hidden; border: 1px solid #E2E6EA; border-radius: 24px; background: #F6F4EF;">
+      <div style="padding: 16px; opacity: .45;">
+        <p style="margin: 0 0 8px; font-size: 20px; font-weight: 700; color: #173F5F;">Шахмат · Група 2</p>
+        <div class="kid">Ана Иванова · 3. клас</div>
+        <div class="kid">Борис Георгиев · 4. клас</div>
+        <div class="kid">Виктория Николова · 3. клас</div>
+      </div>
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 20px; border-radius: 20px 20px 0 0; background: #FFFFFF; box-shadow: 0 -12px 32px rgba(23,63,95,.18);">
+        <span aria-hidden="true" style="align-self: center; width: 40px; height: 4px; border-radius: 999px; background: #C9D0D6;"></span>
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <div><h2 style="margin: 0; font-size: 19px; color: #173F5F;">Ана Иванова</h2><p class="meta">3. клас · 9 години</p></div>
+          <button type="button" aria-label="Затвори" style="width: 44px; height: 44px; border: 1px solid #E2E6EA; border-radius: 10px; background: #FFFFFF; color: #173F5F; font: inherit;">✕</button>
+        </div>
+        <div class="row"><span>Шахмат · Група 2</span><span class="chip" style="background: #E3F1EA; color: #1F5A41;">Записана</span></div>
+        <div class="row"><span>Рисуване · Група 1</span><span class="chip" style="background: #FFF1E6; color: #8A3E10;">Пауза</span></div>
+        <div class="row"><span>Мария Иванова · майка</span><button type="button" class="link">Покажи телефона</button></div>
+        <div style="padding: 10px 12px; border-radius: 12px; background: #FFF6EC; font-size: 14px; color: #7A3A12;"><strong>Има здравна бележка</strong> · <a href="#" style="color: #7A3A12;">виж</a></div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <a href="#" class="btn">Пропусни</a>
+          <a href="#" class="btn">Пауза</a>
+        </div>
+        <a href="ChildPanel.html" class="btn pri">Профил на детето →</a>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

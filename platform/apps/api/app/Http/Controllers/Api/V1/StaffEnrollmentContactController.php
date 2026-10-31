@@ -91,7 +91,8 @@ final class StaffEnrollmentContactController extends Controller
             'role' => $access->role?->value,
             // The right from an added one, so the history tells which.
             'grant_id' => $access->fromRole('contacts.view') ? null : $access->grantId('contacts.view'),
-            'from' => in_array($from, ['details', 'roster'], true) ? $from : 'details',
+            // "schedule" — the card of a child in the schedule (docs/product/schedule.md, т. 4.1).
+            'from' => in_array($from, ['details', 'roster', 'schedule'], true) ? $from : 'details',
         ]);
 
         return response()->json(['contact' => ParentContactPresenter::full($parent)])

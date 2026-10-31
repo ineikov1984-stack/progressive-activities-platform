@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>График — ден по зали</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#173F5F}a:hover{color:#0F2A40}
+.nav{display:flex;align-items:center;gap:10px;min-height:40px;padding:0 12px;border-radius:10px;font-size:14px;color:#D5DEE7;text-decoration:none}
+.nav-on{background:#24527A;color:#FFFFFF;font-weight:600}
+.seg{display:flex;border:1px solid #808D99;border-radius:10px;overflow:hidden}
+.seg a{display:flex;align-items:center;min-height:38px;padding:0 14px;font-size:14px;font-weight:600;color:#173F5F;text-decoration:none;border-right:1px solid #C9D0D6;background:#FFFFFF}
+.seg a:last-child{border-right:0}
+.seg .on{background:#173F5F;color:#FFFFFF}
+.fbtn{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid #808D99;border-radius:999px;background:#FFFFFF;font:inherit;font-size:14px;color:#173F5F}
+.col{position:relative;height:400px;border-left:1px solid #E2E6EA;background-image:linear-gradient(#E2E6EA 1px,transparent 1px);background-size:100% 80px}
+.ev{position:absolute;left:4px;right:4px;box-sizing:border-box;display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-radius:8px;font-size:13px;line-height:17px;overflow:hidden;text-decoration:none}
+.chess{background:#DCE7F3;color:#173F5F}
+.foot{background:#DDF0E6;color:#1F5A41}
+.art{background:#FBE6D6;color:#7A3A12}
+.ballet{background:#F2E1F0;color:#6B2A63}
+.hr{height:80px;box-sizing:border-box;padding-top:2px;font-size:12px;color:#5B6878;text-align:right;padding-right:6px}
+.room{display:flex;flex-direction:column;align-items:center;padding:6px 4px;font-size:13px;font-weight:600;color:#173F5F;text-align:center}
+.room span{font-size:12px;font-weight:400;color:#5B6878}
+</style>
+</head>
+<body>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; display: flex; background: #F6F4EF; font-family: 'Onest', ui-sans-serif, system-ui, sans-serif; color: #344054;">
+  <nav aria-label="Основно меню" style="width: 220px; flex: none; display: flex; flex-direction: column; gap: 4px; padding: 20px 12px; background: #173F5F;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 8px 16px;">
+      <span aria-hidden="true" style="display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: #B8561A; color: #FFFFFF; font-weight: 700; font-size: 13px;">PA</span>
+      <strong style="color: #FFFFFF; font-size: 15px;">Progressive</strong>
+    </div>
+    <span style="padding: 8px 12px 4px; font-size: 11px; letter-spacing: .08em; color: #AFC0D0;">УПРАВЛЕНИЕ</span>
+    <a class="nav" href="#">Начало</a>
+    <a class="nav nav-on" href="#" aria-current="page">График</a>
+    <a class="nav" href="Admin.html">Присъствия</a>
+    <a class="nav" href="#">Дейности</a>
+    <a class="nav" href="#">Записвания</a>
+    <a class="nav" href="ChildPanel.html">Деца и родители</a>
+    <a class="nav" href="Payment.html">Плащания</a>
+    <span style="padding: 12px 12px 4px; font-size: 11px; letter-spacing: .08em; color: #AFC0D0;">ОРГАНИЗАЦИЯ</span>
+    <a class="nav" href="TeamList.html">Екип</a>
+    <a class="nav" href="#">Такси, отсъствия и отказ</a>
+  </nav>
+
+  <main style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 24px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <h1 style="margin: 0; font-size: 26px; color: #173F5F;">График</h1>
+        <button type="button" class="fbtn">Днес</button>
+        <button type="button" class="fbtn" aria-label="Предишен ден">‹</button>
+        <button type="button" class="fbtn" aria-label="Следващ ден">›</button>
+        <strong style="font-size: 16px; color: #173F5F;">Сряда, 18 ноември 2026</strong>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <div class="seg" role="group" aria-label="Колони">
+          <a class="on" href="#" aria-current="true">По зали</a>
+          <a href="#">По треньори</a>
+        </div>
+        <div class="seg" role="group" aria-label="Изглед">
+          <a href="ScheduleMonth.html">Месец</a>
+          <a href="ScheduleWeek.html">Седмица</a>
+          <a class="on" href="#" aria-current="true">Ден по зали</a>
+          <a href="Schedule.html">Карти</a>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+      <button type="button" class="fbtn">Дейност ▾</button>
+      <button type="button" class="fbtn">Група ▾</button>
+      <button type="button" class="fbtn">Треньор ▾</button>
+      <button type="button" class="fbtn">Място ▾</button>
+      <button type="button" class="fbtn">Дете ▾</button>
+    </div>
+
+    <section aria-label="Сряда по зали" style="padding: 12px 12px 16px 0; border: 1px solid #E2E6EA; border-radius: 16px; background: #FFFFFF;">
+      <div style="display: grid; grid-template-columns: 52px repeat(5, minmax(0, 1fr)); padding-bottom: 6px;">
+        <span></span>
+        <div class="room">Зала „Слънце“<span>до 12 деца</span></div>
+        <div class="room">Двор<span>до 20 деца</span></div>
+        <div class="room">Голяма зала<span>до 16 деца</span></div>
+        <div class="room">Ателие<span>до 10 деца</span></div>
+        <div class="room">Без зала<span>не е посочена</span></div>
+      </div>
+      <div style="display: grid; grid-template-columns: 52px repeat(5, minmax(0, 1fr));">
+        <div><div class="hr">15:00</div><div class="hr">16:00</div><div class="hr">17:00</div><div class="hr">18:00</div><div class="hr">19:00</div></div>
+        <div class="col">
+          <a class="ev chess" href="ScheduleWeek.html" style="top: 202px; height: 76px;"><strong>17:30–18:30 Шахмат · Гр. 2</strong><span>Мария Колева, Иван Петров</span><span>✓ отбелязано · 8/10</span></a>
+        </div>
+        <div class="col">
+          <a class="ev foot" href="MarkA.html" style="top: 82px; height: 76px; outline: 2px dashed #B8561A; outline-offset: -2px;"><strong>16:00–17:00 Футбол · Гр. 1</strong><span>Петър Стоянов</span><span>! чака отбелязване · 14/16</span></a>
+          <a class="ev foot" href="#" style="top: 282px; height: 76px;"><strong>18:30–19:30 Футбол · Гр. 2</strong><span>Петър Стоянов</span><span>12/16</span></a>
+        </div>
+        <div class="col">
+          <a class="ev ballet" href="#" style="top: 122px; height: 76px;"><strong>16:30–17:30 Балет · Гр. 2</strong><span>Деси Маринова · замества Ани Петрова</span><span>✓ отбелязано · 10/14</span></a>
+        </div>
+        <div class="col">
+          <a class="ev art" href="#" style="top: 242px; height: 76px;"><strong>18:00–19:00 Рисуване · Гр. 1</strong><span>Деси Маринова</span><span>✓ отбелязано · 9/10</span></a>
+        </div>
+        <div class="col" style="background-color: #FBFAF6;"></div>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

@@ -98,6 +98,9 @@ Route::prefix('v1')->group(function (): void {
                     // The enrolled children by name, for the filter "Дете" of the schedule (docs/product/schedule.md, т. 3.5);
                     // its own counter, not shared with the schedule and the details.
                     Route::get('/children', [StaffEnrollmentController::class, 'children'])->middleware('throttle:60,1,child-search');
+                    // The card of a child in the schedule (docs/product/schedule.md, т. 4.1): through the enrollments in the
+                    // groups where the person sees the children, else 404; its own counter, no audit.
+                    Route::get('/children/{child}', [StaffEnrollmentController::class, 'child'])->whereUuid('child')->middleware('throttle:120,1,child-card');
                     Route::get('/groups', [StaffEnrollmentController::class, 'groups']);
                     Route::get('/groups/{group}/roster', [StaffEnrollmentController::class, 'roster'])->whereUuid('group');
                     Route::get('/enrollments/{enrollment}/transfer-options', [StaffEnrollmentChangeController::class, 'transferOptions'])->whereUuid('enrollment');
