@@ -317,7 +317,7 @@
 
 **Подробностите** (`GET /enrollment/applications/{id}`, `/enrollments/{id}`):
 - за собственика — както днес: `contact_status: shown` и одит `enrollment.contact_viewed`;
-- за другите с `contacts.view` в прозореца — `contact_status: hidden` и `contact: { source, name, has_phone, has_email }`, без телефон и имейл. Името на родителя и бележката остават, както днес (решението е за телефона и имейла), с `enrollment.contact_viewed`;
+- за другите с `contacts.view` в прозореца — `contact_status: hidden` и `contact: { source, name, has_phone, has_email }`, без телефон и имейл. Името на родителя и бележката остават, както днес (решението е за телефона и имейла), с `enrollment.contact_viewed`. До PR 3 скритият контакт пази и полетата `phone`, `phone_display`, `email` (празни) и `email_verified`, плюс `hidden: true` и `can_reveal: true` — сегашният екран не показва нищо празно, а PR 3 ползва флаговете;
 - без право или извън прозореца — както днес.
 
 **Списъците** никога не носят телефон и имейл. Името на родителя и търсенето по него — само с `contacts.view` в групата (т. 3.2 там).
@@ -344,7 +344,7 @@ POST, защото записва — не се кешира и не се зар
 
 Показването се вижда:
 - в историята на човека — събитията, в които той е действал („Показан телефон на родител · Шахмат · Група 1“);
-- в историята в „Подробности“ на детето („Телефонът е показан на {име}“) — само за `team.manage`.
+- в историята в „Подробности“ на детето („Телефонът е показан на {име}“) — само за `team.manage` (`contact_reveals: [{ by, at, from }]`).
 
 **`GET /audit-events`** днес дава последните 50 събития с метаданните на всяка роля (`view`). Новите събития — за правата и показванията — не се връщат на роли без `team.manage`. Сегашните остават както са. Цялостната поправка е отделна задача по сигурността (WORKBOARD).
 
@@ -385,7 +385,7 @@ POST, защото записва — не се кешира и не се зар
 | `GET /context/organization` | вход и членство | + `access`: правата (ключове) и обхватът на влезлия — за менюто и бутоните. `GET /organizations` остава с правата на ролята: там няма избрана организация, а `staff_grants` е под RLS |
 | `GET /team/members/{id}/access` | `team.view`, човекът е в обхвата | роля (т. 4.1 — и от поканата), обхват, избрани групи (с имената), правата по области с източник (`role` / `grant` / `assignment`) и крайна дата, шаблон, `version`, `editable` и причината, ако не е. С `team.manage` — и какво може да даде влезлият (`grantable`) и историята на правата. С `?role=` — какво ще отпадне при смяна на ролята |
 | `PUT /team/members/{id}/access` | `team.manage` | `{ scope, groups: [{ group_id } \| { activity_id }], grants: [{ ability, expires_on }], template, confirm_finance, version }` — цялата карта; разликата се записва в една транзакция (`SaveStaffAccess`); 200 с новото състояние; до 30 в минута |
-| `POST /team/members` | `team.manage` | + `access` по избор, само заедно с покана — същата форма без `version` |
+| `POST /team/members` | `team.manage` | + `invitation: { role, email }` (поканата в същата транзакция) и `access` по избор, само заедно с покана — същата форма без `version`; без покана → 422 и никой не се добавя |
 | `POST /team/members/{id}/role` | `team.manage` | + `ReconcileStaffAccess` (т. 4.6) |
 | `POST /team/members/{id}/invitation` | `team.manage` | + `ReconcileStaffAccess`, ако ролята е друга |
 | `POST /invitations/join`, `POST /invitations/register` | т. 7.4 на `team.md` | + `ReconcileStaffAccess` при приемането |
