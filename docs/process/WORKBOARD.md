@@ -25,6 +25,7 @@
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
 | График — PR 2: уеб (`docs/product/schedule.md`, т. 3.1, 3.4, 3.5, 4) — стандартна | Claude | `claude/schedule-web` | уеб: нов `features/schedule/**`, `app/dashboard/schedule`; менюто (`features/dashboard/navigation.ts`, `dashboard-shell.tsx`); връзката от група в „Екип“ (`features/team/presentation.ts`, `team-page.tsx`, `member-groups.tsx`, `member-profile.tsx`); `?enrollment=` в `features/enrollment/enrollments-page.tsx`; тестове `schedule-*`, `dashboard-navigation`, `team-presentation`. Без горещи файлове и без промени в API-то | код и тестове → UX ревю веднъж → CI → merge. Филтърът „Дете“ чака търсене на записаните деца — въпрос в PR-а |
+| График — търсене на записаните деца за филтъра „Дете“ (`docs/product/schedule.md`, т. 3.5) — строга | Claude | `claude/schedule-child-search` | горещ: `platform/apps/api/routes/api.php`; API: нов `EnrolledChildSearch` (Enrollment), `StaffEnrollmentController::children`; тестове `EnrolledChildSearchTest`, `TeamRightsCharacterizationTest` | код и тестове (TDD) → CI → merge |
 
 ## Опашка (по приоритет)
 
