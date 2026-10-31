@@ -1,12 +1,18 @@
 FROM composer:2 AS vendor
 WORKDIR /app
 COPY composer.json composer.lock* ./
-RUN composer install --no-interaction --prefer-dist --no-scripts
+# The composer image has no gd or exif; the runtime image below has both and checks them.
+RUN composer install --no-interaction --prefer-dist --no-scripts \
+    --ignore-platform-req=ext-gd --ignore-platform-req=ext-exif
 
 FROM php:8.4-cli-alpine AS development
 # pcntl: `schedule:work` in the worker container hears `docker compose stop` and lets a running send finish.
-RUN apk add --no-cache icu-dev libzip-dev postgresql-dev \
-    && docker-php-ext-install intl pcntl pdo_pgsql zip
+# gd (JPEG, PNG, WebP) and exif: catalog photos are decoded and encoded again without the phone's metadata
+# (docs/product/teacher-content.md, 5.2). The build stops if any of them is missing.
+RUN apk add --no-cache icu-dev libjpeg-turbo-dev libpng-dev libwebp-dev libzip-dev postgresql-dev \
+    && docker-php-ext-configure gd --with-jpeg --with-webp \
+    && docker-php-ext-install exif gd intl pcntl pdo_pgsql zip \
+    && php -r '$g = gd_info(); exit(function_exists("exif_read_data") && $g["JPEG Support"] && $g["PNG Support"] && $g["WebP Support"] ? 0 : 1);'
 COPY docker/catalog-uploads.ini /usr/local/etc/php/conf.d/catalog-uploads.ini
 WORKDIR /app
 COPY --from=vendor /usr/bin/composer /usr/local/bin/composer

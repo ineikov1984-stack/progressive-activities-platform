@@ -43,8 +43,10 @@ jobs:
         with:
           php-version: "8.4"
           coverage: none
+          # The photo sanitizer needs gd (JPEG, PNG, WebP) and exif, as in the shipped image.
+          extensions: gd, exif
           # Same limits as the shipped image (platform/apps/api/docker/catalog-uploads.ini).
-          ini-values: upload_max_filesize=8M, post_max_size=10M
+          ini-values: upload_max_filesize=8M, post_max_size=10M, memory_limit=256M
       - uses: ramsey/composer-install@v4
         with:
           working-directory: platform/apps/api
@@ -205,7 +207,8 @@ jobs:
         with:
           php-version: "8.4"
           coverage: none
-          ini-values: upload_max_filesize=8M, post_max_size=10M
+          extensions: gd, exif
+          ini-values: upload_max_filesize=8M, post_max_size=10M, memory_limit=256M
       - uses: ramsey/composer-install@v4
         with:
           working-directory: platform/apps/api
@@ -261,6 +264,38 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build API image
         run: docker build --target development -t progressive-api platform/apps/api
+      # gd is bundled in the image, so a decoded picture counts against memory_limit (docker/catalog-uploads.ini).
+      # The largest photos the sanitizer takes must decode next to 64 MB held for the framework: a 16-megapixel RGBA
+      # PNG (the limit for PNG and WebP; gd holds the rows and the picture while it reads) and a 24-megapixel JPEG.
+      - name: Largest photos decode within the image's memory limit
+        run: |
+          docker run --rm progressive-api php -r '
+            if (! str_contains((string) gd_info()["GD Version"], "bundled")) {
+                fwrite(STDERR, "gd is not bundled: its memory would not count against memory_limit.\n");
+                exit(1);
+            }
+            $limit = ini_parse_quantity((string) ini_get("memory_limit"));
+            foreach (["png" => [4000, 4000], "jpeg" => [6000, 4000]] as $format => [$width, $height]) {
+                $source = imagecreatetruecolor($width, $height);
+                imagealphablending($source, false);
+                imagesavealpha($source, true);
+                imagefilledrectangle($source, 0, 0, $width - 1, $height - 1, imagecolorallocatealpha($source, 30, 120, 90, 40));
+                ob_start();
+                $written = $format === "png" ? imagepng($source) : imagejpeg($source, null, 85);
+                $bytes = (string) ob_get_clean();
+                unset($source);
+                $framework = str_repeat("x", 64 * 1024 * 1024);
+                memory_reset_peak_usage();
+                $image = imagecreatefromstring($bytes);
+                if (! $written || ! $image instanceof GdImage || imagesx($image) !== $width) {
+                    fwrite(STDERR, "The {$format} test picture did not decode.\n");
+                    exit(1);
+                }
+                printf("%s %dx%d: peak %d MB of %d MB, with 64 MB for the framework\n", $format, $width, $height,
+                    intdiv(memory_get_peak_usage(), 1048576), intdiv($limit, 1048576));
+                unset($image, $framework, $bytes);
+            }
+          '
       - name: Build web image
         run: docker build --target development -f platform/apps/web/Dockerfile -t progressive-web platform
 
