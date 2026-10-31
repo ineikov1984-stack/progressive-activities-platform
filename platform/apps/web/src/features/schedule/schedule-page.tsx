@@ -6,10 +6,11 @@ import { useDashboardContext } from '../dashboard/dashboard-context';
 import { ownScheduleOnly } from '../dashboard/navigation';
 import { loadSchedule, ScheduleApiError, type ScheduleBoard, type ScheduleSession } from './api';
 import {
-  dayColumnChoices, defaultView, emptyText, type FilterKey, filterChips, filterKeys, filterOptions, hasFilters, noFilters, parseScheduleAddress,
-  parseStoredView, periodOf, type ScheduleAddress, scheduleAddress, scheduleNames, scheduleQuery, type ScheduleView, scheduleViewStorageKey, sofiaDay,
-  stepDay, stepsOf, toggleFilter, viewsFor,
+  childChipLabel, childFilterAllowed, chooseChild, dayColumnChoices, defaultView, emptyText, type FilterKey, filterChips, filterKeys, filterOptions, hasFilters,
+  noFilters, parseScheduleAddress, parseStoredView, periodOf, type ScheduleAddress, scheduleAddress, scheduleNames, scheduleQuery, type ScheduleView,
+  scheduleViewStorageKey, sofiaDay, stepDay, stepsOf, toggleFilter, viewsFor,
 } from './presentation';
+import type { ChildFilter } from './child-filter';
 import { ScheduleFilterBar } from './schedule-filters';
 import { MonthView } from './month-view';
 import { CardsView, DayView, ScheduleSkeleton, WeekView } from './schedule-views';
@@ -19,7 +20,7 @@ import { NextIcon, PreviousIcon } from './icons';
 import styles from './schedule.module.css';
 
 const emptyBoard: ScheduleBoard = { sessions: [], activities: [], groups: [], locations: [], instructors: [], abilities: {} };
-/** "Моят график" has no filter by teacher (т. 2); the filter by child waits for a search of the enrolled children. */
+/** "Моят график" has no filter by teacher and none by child (т. 2). */
 const ownFilterKeys: FilterKey[] = ['activity', 'group', 'location'];
 
 /** The view the person chose before, in this browser; without one — by the width of the screen. */
@@ -46,8 +47,11 @@ export function SchedulePage() {
   const { user, organization } = useDashboardContext();
   const own = ownScheduleOnly(organization);
   const withDetails = organization.permissions.includes('enrollment.view');
+  const childFilter = childFilterAllowed(own, organization);
   const search = searchParams.toString();
-  const address = useMemo(() => parseScheduleAddress(search, { own }), [search, own]);
+  const address = useMemo(() => parseScheduleAddress(search, { own, children: childFilter }), [search, own, childFilter]);
+  // The names of the children chosen on this page, by identifier: the address holds only the identifier (т. 3.5).
+  const [childNames, setChildNames] = useState<Record<string, string>>({});
 
   // "Сега" and today follow the clock.
   const [now, setNow] = useState(() => new Date());
@@ -133,6 +137,19 @@ export function SchedulePage() {
   const keys = own ? ownFilterKeys : filterKeys;
   const filtered = hasFilters(address.filters);
   const clearFilters = () => go({ filters: noFilters });
+  const chosenChild = address.filters.child;
+  const chosenChildName = chosenChild ? childNames[chosenChild] : undefined;
+  const child: ChildFilter | undefined = childFilter ? {
+    organizationId: organization.id,
+    chosen: chosenChild,
+    chosenLabel: childChipLabel(chosenChildName),
+    onChoose: (found) => {
+      const id = found.id.toLowerCase();
+      setChildNames((known) => ({ ...known, [id]: found.name }));
+      go({ filters: chooseChild(address.filters, id) });
+    },
+    onRemove: () => go({ filters: chooseChild(address.filters, null) }),
+  } : undefined;
 
   let body;
   if (current?.error) {
@@ -194,7 +211,7 @@ export function SchedulePage() {
       </header>
 
       <ScheduleFilterBar keys={keys} options={filterOptions(dictionary ?? emptyBoard)} filters={address.filters}
-        chips={dictionary ? filterChips(address.filters, dictionary) : []}
+        chips={dictionary ? filterChips(address.filters, dictionary, chosenChildName) : []} child={child}
         onToggle={(filter, id) => go({ filters: toggleFilter(address.filters, filter, id) })} onClear={clearFilters} />
 
       {body}

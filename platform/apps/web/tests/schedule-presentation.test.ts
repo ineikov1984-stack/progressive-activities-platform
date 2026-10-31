@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { ScheduleSession } from '../src/features/schedule/api';
 import {
-  activityColor, activityColorToken, addDays, blockLines, cardDays, childLink, childMarks, childrenHeading, clock, dayBlockDetail, fillOf, fillText,
-  openingPoint, dayLayout, dayName, defaultView, emptyText, filterChips,
+  activityColor, activityColorToken, addDays, blockLines, cardDays, CHILD_SEARCH_DELAY_MS, CHILD_SEARCH_HINT, childChipLabel, childFilterAllowed, childLink,
+  childMarks, childOptionLabel, childrenHeading, childResultsText, childSearchText, chooseChild, clock, dayBlockDetail, fillOf, fillText, hasFilters, moveActive,
+  NO_CHILDREN_FOUND, openingPoint, dayLayout, dayName, defaultView, emptyText, filterChips,
   filterOptions, groupTitle, instructorLabel, instructorsText, isDay, legend, monthGrid, monthLayout, monthLine, moreChildrenText, NO_COLUMN, noFilters,
   parseScheduleAddress, parseStoredView, periodLabel, periodOf, placesText, scheduleAddress, scheduleNames, scheduleQuery, scheduleViewStorageKey,
   sessionMark, sessionsByDay, sessionsCount, sessionWhen, shortGroupName, sofiaDay, sofiaMinutes, startClock, stepDay, stepsOf, timeRange, toggleFilter,
@@ -14,6 +15,7 @@ const B = '0a000000-0000-4000-8000-000000000002';
 const G = '0b000000-0000-4000-8000-000000000001';
 const L = '0c000000-0000-4000-8000-000000000001';
 const P = '0d000000-0000-4000-8000-000000000001';
+const C = '0e000000-0000-4000-8000-000000000001';
 
 let next = 0;
 /** A session by Sofia's wall clock in November (UTC+2): `at('2026-11-18', '17:30', 60)`. */
@@ -157,7 +159,7 @@ describe('schedule — the week as a calendar', () => {
 describe('schedule — the address', () => {
   it('reads the view, the day and the filters, and leaves out what is broken', () => {
     const address = parseScheduleAddress(`?view=week&date=2026-11-18&activity=${A}&activity=${A.toUpperCase()}&group=${G}&instructor=nope&location=${L}`);
-    expect(address).toEqual({ view: 'week', date: '2026-11-18', by: 'rooms', filters: { activity: [A], group: [G], instructor: [], location: [L] } });
+    expect(address).toEqual({ view: 'week', date: '2026-11-18', by: 'rooms', filters: { activity: [A], group: [G], instructor: [], location: [L], child: null } });
     // An unknown view and a wrong day fall back to the defaults.
     expect(parseScheduleAddress('?view=year&date=2026-02-30')).toEqual({ view: null, date: null, by: 'rooms', filters: noFilters });
     expect(parseScheduleAddress(new URLSearchParams({ view: 'cards' })).view).toBe('cards');
@@ -189,7 +191,7 @@ describe('schedule — the address', () => {
   });
 
   it('writes the state back in a stable order, and the address reads the same state again', () => {
-    const state = { view: 'cards' as const, date: '2026-11-18', by: 'rooms' as const, filters: { activity: [A, B], group: [], instructor: [P], location: [L] } };
+    const state = { view: 'cards' as const, date: '2026-11-18', by: 'rooms' as const, filters: { activity: [A, B], group: [], instructor: [P], location: [L], child: null } };
     const search = scheduleAddress(state);
     expect(search).toBe(`?view=cards&date=2026-11-18&activity=${A}&activity=${B}&instructor=${P}&location=${L}`);
     expect(parseScheduleAddress(search)).toEqual(state);
@@ -297,9 +299,92 @@ describe('schedule — words and colours', () => {
       instructors: [{ id: P, name: 'Мария Колева' }],
     };
     expect(filterOptions(board).group).toEqual([{ id: G, label: 'Група 1 · 1.–2. клас', section: 'Шахмат' }]);
-    expect(filterChips({ activity: [A], group: [G, B], instructor: [P], location: [L] }, board).map((chip) => chip.label)).toEqual([
+    expect(filterChips({ activity: [A], group: [G, B], instructor: [P], location: [L], child: null }, board).map((chip) => chip.label)).toEqual([
       'Дейност: Шахмат', 'Група: Шахмат · Група 1 · 1.–2. клас', 'Група: не е във вашия график', 'Треньор: Мария Колева', 'Място: Двор',
     ]);
+  });
+});
+
+describe('schedule — the filter "Дете"', () => {
+  const board = { activities: [], groups: [], locations: [], instructors: [] };
+
+  it('keeps only the child\'s identifier in the address and in the request, never the name', () => {
+    const state = { view: 'week' as const, date: '2026-11-18', by: 'rooms' as const, filters: { ...noFilters, group: [G], child: C } };
+    const search = scheduleAddress(state);
+    expect(search).toBe(`?view=week&date=2026-11-18&group=${G}&child=${C}`);
+    expect(parseScheduleAddress(search)).toEqual(state);
+    expect(parseScheduleAddress(`?child=${C.toUpperCase()}`).filters.child).toBe(C);
+    const query = new URLSearchParams(scheduleQuery(weekOf('2026-11-18'), { ...noFilters, child: C }));
+    expect(query.get('child')).toBe(C);
+    expect(query.has('child[]')).toBe(false);
+    expect(new URLSearchParams(scheduleQuery(weekOf('2026-11-18'), noFilters)).has('child')).toBe(false);
+  });
+
+  it('drops a broken child, and one from a link where the person may not filter by a child', () => {
+    expect(parseScheduleAddress('?child=Ана Иванова').filters.child).toBeNull();
+    expect(parseScheduleAddress(`?child=${C}`, { own: true }).filters.child).toBeNull();
+    expect(parseScheduleAddress(`?child=${C}`, { children: false }).filters.child).toBeNull();
+    expect(parseScheduleAddress(`?child=${C}`, { children: true }).filters.child).toBe(C);
+  });
+
+  it('is one child at a time, counts as a filter and goes with "Изчисти филтрите"', () => {
+    const chosen = chooseChild(noFilters, C);
+    expect(chosen.child).toBe(C);
+    expect(chooseChild(chosen, A).child).toBe(A);
+    expect(chooseChild(chosen, null).child).toBeNull();
+    expect(noFilters.child).toBeNull();
+    expect(hasFilters(chosen)).toBe(true);
+    expect(hasFilters(noFilters)).toBe(false);
+    expect(emptyText('week', hasFilters(chosen))).toBe('Няма занимания по избраните филтри.');
+  });
+
+  it('labels the chosen child with the name from this page\'s memory, else "Избрано дете"', () => {
+    expect(filterChips({ ...noFilters, child: C }, board, 'Ана Иванова')).toEqual([{ key: 'child', id: C, label: 'Дете: Ана Иванова' }]);
+    expect(filterChips({ ...noFilters, child: C }, board)).toEqual([{ key: 'child', id: C, label: 'Избрано дете' }]);
+    expect(childChipLabel('')).toBe('Избрано дете');
+  });
+
+  it('is only for who sees the enrollments, by the rights read from the API, and never in "Моят график"', () => {
+    const office = { permissions: ['view'], access: { abilities: ['view', 'enrollment.view'] } };
+    expect(childFilterAllowed(false, office)).toBe(true);
+    expect(childFilterAllowed(true, office)).toBe(false);
+    // A teacher sees the children of their groups, but does not search the organization's.
+    expect(childFilterAllowed(false, { permissions: ['view', 'enrollment.view_own'], access: { abilities: ['view', 'enrollment.view_own'] } })).toBe(false);
+    // The rights read win over the role's; without them, the role's.
+    expect(childFilterAllowed(false, { permissions: ['enrollment.view'], access: { abilities: ['view'] } })).toBe(false);
+    expect(childFilterAllowed(false, { permissions: ['enrollment.view'] })).toBe(true);
+  });
+
+  it('searches from two letters, without the spaces around, up to 80, after about 250 ms', () => {
+    expect(childSearchText('')).toBeNull();
+    expect(childSearchText(' А ')).toBeNull();
+    expect(childSearchText('  Ан ')).toBe('Ан');
+    expect(childSearchText('ана иванова')).toBe('ана иванова');
+    expect(childSearchText('я'.repeat(90))).toHaveLength(80);
+    expect(CHILD_SEARCH_DELAY_MS).toBe(250);
+    expect(CHILD_SEARCH_HINT).toBe('Напишете поне 2 букви от името.');
+  });
+
+  it('shows the name and the class, and says how many were found or that none were', () => {
+    expect(childOptionLabel({ name: 'Ана Иванова', class: '3. клас' })).toBe('Ана Иванова · 3. клас');
+    expect(childOptionLabel({ name: 'Ана Иванова', class: null })).toBe('Ана Иванова');
+    expect(childResultsText(0)).toBe(NO_CHILDREN_FOUND);
+    expect(NO_CHILDREN_FOUND).toBe('Няма намерени деца в групите, които виждате.');
+    expect(childResultsText(1)).toBe('Намерено 1 дете');
+    expect(childResultsText(5)).toBe('Намерени 5 деца');
+  });
+
+  it('moves through the names with the arrows, round at either end', () => {
+    expect(moveActive(-1, 3, 'ArrowDown')).toBe(0);
+    expect(moveActive(0, 3, 'ArrowDown')).toBe(1);
+    expect(moveActive(2, 3, 'ArrowDown')).toBe(0);
+    expect(moveActive(-1, 3, 'ArrowUp')).toBe(2);
+    expect(moveActive(0, 3, 'ArrowUp')).toBe(2);
+    expect(moveActive(2, 3, 'ArrowUp')).toBe(1);
+    // A name from an older, longer list.
+    expect(moveActive(7, 3, 'ArrowDown')).toBe(0);
+    expect(moveActive(7, 3, 'ArrowUp')).toBe(2);
+    expect(moveActive(0, 0, 'ArrowDown')).toBe(-1);
   });
 });
 

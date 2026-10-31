@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadSchedule, loadSessionPanel, ScheduleApiError } from '../src/features/schedule/api';
+import { loadSchedule, loadSessionPanel, ScheduleApiError, searchChildren } from '../src/features/schedule/api';
 
 const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -43,5 +43,33 @@ describe('schedule API', () => {
     expect(tooLong.status).toBe(422);
     expect((await failure(() => loadSessionPanel('org-1', 's-x'))).message).toBe('Заниманието не е намерено. Може да е преместено или да не е във вашия график.');
     expect((await failure(() => loadSchedule('org-1', 'from=2026-11-16&to=2026-11-22'))).message).toBe('Графикът не се зареди. Проверете връзката и опитайте пак.');
+  });
+
+  it('searches the enrolled children by name in the selected organization', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({ children: [{ id: 'c-1', name: 'Ана Иванова', class: '3. клас' }] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const children = await searchChildren('org-1', 'Ана И');
+
+    expect(children).toEqual([{ id: 'c-1', name: 'Ана Иванова', class: '3. клас' }]);
+    expect(fetchMock).toHaveBeenCalledWith('/backend/api/v1/enrollment/children?q=%D0%90%D0%BD%D0%B0+%D0%98', expect.objectContaining({
+      credentials: 'include',
+      headers: expect.objectContaining({ Accept: 'application/json', 'X-Organization-Id': 'org-1' }),
+    }));
+  });
+
+  it('says why the search found nothing to show, in Bulgarian', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ message: 'The q field…', errors: { q: ['Напишете поне 2 букви от името.'] } }, 422))
+      .mockResolvedValueOnce(jsonResponse({ message: 'This action is unauthorized.' }, 403))
+      .mockResolvedValueOnce(jsonResponse({ message: 'Too Many Attempts.' }, 429))
+      .mockResolvedValueOnce(jsonResponse({ children: 'nope' })));
+
+    const failure = async (run: () => Promise<unknown>) => { try { await run(); } catch (error) { return error as ScheduleApiError; } throw new Error('no error'); };
+    expect((await failure(() => searchChildren('org-1', 'А'))).message).toBe('Напишете поне 2 букви от името.');
+    expect((await failure(() => searchChildren('org-1', 'Ан'))).message).toBe('Нямате достъп до децата в графика.');
+    expect((await failure(() => searchChildren('org-1', 'Ан'))).message).toBe('Търсихте много пъти за кратко. Изчакайте минута и опитайте пак.');
+    // An answer of another shape finds no one, rather than breaking the filter.
+    expect(await searchChildren('org-1', 'Ан')).toEqual([]);
   });
 });

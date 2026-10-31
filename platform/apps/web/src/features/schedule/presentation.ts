@@ -185,12 +185,17 @@ export function emptyText(view: ScheduleView, filtered = false): string {
 
 // ---- The address of the page --------------------------------------------------------------------------------------
 
+/** The filters with several choices each (т. 3.5). */
 export type FilterKey = 'activity' | 'group' | 'instructor' | 'location';
 export const filterKeys: FilterKey[] = ['activity', 'group', 'instructor', 'location'];
-export type ScheduleFilters = Record<FilterKey, string[]>;
-export const noFilters: ScheduleFilters = { activity: [], group: [], instructor: [], location: [] };
+/**
+ * The chosen filters. `child` is one child at a time, found by name (т. 3.5, 6.5): only its identifier — the name of a
+ * child is never put in an address.
+ */
+export type ScheduleFilters = Record<FilterKey, string[]> & { child: string | null };
+export const noFilters: ScheduleFilters = { activity: [], group: [], instructor: [], location: [], child: null };
 
-/** What the address holds: `?view=day&date=2026-11-18&by=teachers&activity=…&group=…` (т. 3). */
+/** What the address holds: `?view=day&date=2026-11-18&by=teachers&activity=…&group=…&child=…` (т. 3). */
 export type ScheduleAddress = { view: ScheduleView | null; date: string | null; by: DayColumns; filters: ScheduleFilters };
 
 /** As many as the API takes in one filter. */
@@ -199,10 +204,11 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Reads the address. Anything that is not a known view, a real day or an identifier is left out, so that a broken
- * link opens the schedule instead of an error. "Моят график" has no filter by teacher and only the week and the cards:
- * those from a colleague's link are dropped, so that no filter works unseen.
+ * link opens the schedule instead of an error. "Моят график" has no filter by teacher or by child and only the week
+ * and the cards: those from a colleague's link are dropped, so that no filter works unseen. `children: false` — the
+ * person may not filter by a child (`childFilterAllowed`), so a `child=` from a link is dropped too.
  */
-export function parseScheduleAddress(search: string | URLSearchParams, options: { own?: boolean } = {}): ScheduleAddress {
+export function parseScheduleAddress(search: string | URLSearchParams, options: { own?: boolean; children?: boolean } = {}): ScheduleAddress {
   const params = typeof search === 'string' ? new URLSearchParams(search) : search;
   const view = params.get('view');
   const date = params.get('date');
@@ -211,6 +217,8 @@ export function parseScheduleAddress(search: string | URLSearchParams, options: 
     if (key === 'instructor' && options.own) continue;
     filters[key] = [...new Set(params.getAll(key).filter((value) => uuid.test(value)).map((value) => value.toLowerCase()))].slice(0, MAX_CHOICES);
   }
+  const child = params.get('child');
+  filters.child = !options.own && options.children !== false && child && uuid.test(child) ? child.toLowerCase() : null;
   return {
     view: viewsFor(Boolean(options.own)).find((item) => item.id === view)?.id ?? null,
     date: isDay(date) ? date : null,
@@ -226,19 +234,26 @@ export function scheduleAddress(address: ScheduleAddress): string {
   if (address.date) params.set('date', address.date);
   if (address.by === 'teachers') params.set('by', 'teachers');
   for (const key of filterKeys) for (const id of address.filters[key]) params.append(key, id);
+  if (address.filters.child) params.set('child', address.filters.child);
   const query = params.toString();
   return query ? `?${query}` : '';
 }
 
-/** The request for the period: `from`, `to` and `activity[]`, … as the API reads them (т. 6.1). */
+/** The request for the period: `from`, `to`, `activity[]`, … and `child` as the API reads them (т. 6.1). */
 export function scheduleQuery(period: Pick<Week, 'from' | 'to'>, filters: ScheduleFilters): string {
   const params = new URLSearchParams({ from: period.from, to: period.to });
   for (const key of filterKeys) for (const id of filters[key]) params.append(`${key}[]`, id);
+  if (filters.child) params.set('child', filters.child);
   return params.toString();
 }
 
 export function hasFilters(filters: ScheduleFilters): boolean {
-  return filterKeys.some((key) => filters[key].length > 0);
+  return filterKeys.some((key) => filters[key].length > 0) || filters.child !== null;
+}
+
+/** One child at a time: a new choice takes the place of the old one; null takes it away. */
+export function chooseChild(filters: ScheduleFilters, childId: string | null): ScheduleFilters {
+  return { ...filters, child: childId };
 }
 
 export function toggleFilter(filters: ScheduleFilters, key: FilterKey, id: string): ScheduleFilters {
@@ -698,17 +713,77 @@ export function filterOptions(board: Pick<ScheduleBoard, 'activities' | 'groups'
   };
 }
 
-export type FilterChip = { key: FilterKey; id: string; label: string };
+export type FilterChip = { key: FilterKey | 'child'; id: string; label: string };
 
 /**
- * The chosen filters as labels with ✕: "Място: Двор", "Група: Шахмат · Група 1". A choice that is not among the
- * person's groups still narrows the list, so it is shown too.
+ * The chosen filters as labels with ✕: "Място: Двор", "Група: Шахмат · Група 1", "Дете: Ана Иванова". A choice that is
+ * not among the person's groups still narrows the list, so it is shown too. The child's name only from this page's
+ * memory (`childName`) — the address has only the identifier, so after a reload the label says "Избрано дете".
  */
-export function filterChips(filters: ScheduleFilters, board: Pick<ScheduleBoard, 'activities' | 'groups' | 'locations' | 'instructors'>): FilterChip[] {
+export function filterChips(filters: ScheduleFilters, board: Pick<ScheduleBoard, 'activities' | 'groups' | 'locations' | 'instructors'>, childName?: string): FilterChip[] {
   const options = filterOptions(board);
-  return filterKeys.flatMap((key) => filters[key].map((id) => {
+  const chips: FilterChip[] = filterKeys.flatMap((key) => filters[key].map((id) => {
     const option = options[key].find((item) => item.id === id);
     const text = option ? (key === 'group' && option.section ? `${option.section} · ${option.label}` : option.label) : 'не е във вашия график';
     return { key, id, label: `${filterLabels[key]}: ${text}` };
   }));
+  if (filters.child) chips.push({ key: 'child', id: filters.child, label: childChipLabel(childName) });
+  return chips;
+}
+
+// ---- The filter "Дете" (т. 3.5, 6.5) -------------------------------------------------------------------------------
+
+export const CHILD_FILTER_LABEL = 'Дете';
+/** The search starts from two letters and waits this long after the last one (т. 6.5). */
+export const CHILD_SEARCH_MIN = 2;
+export const CHILD_SEARCH_MAX = 80;
+export const CHILD_SEARCH_DELAY_MS = 250;
+export const CHILD_SEARCH_HINT = 'Напишете поне 2 букви от името.';
+export const NO_CHILDREN_FOUND = 'Няма намерени деца в групите, които виждате.';
+
+/**
+ * The filter "Дете" — only for who sees the enrollments (the API's `enrollment.view`, т. 3.5): the rights read from the
+ * API (`access.abilities`), else the role's. Never in "Моят график" (т. 2).
+ */
+export function childFilterAllowed(own: boolean, organization: { permissions: string[]; access?: { abilities: string[] } }): boolean {
+  if (own) return false;
+  return (organization.access ? organization.access.abilities : organization.permissions).includes('enrollment.view');
+}
+
+/**
+ * The text to search with: without the spaces around it, from two letters (counted as the API counts them, by
+ * character); null — not yet.
+ */
+export function childSearchText(text: string): string | null {
+  const letters = [...text.trim()];
+  if (letters.length < CHILD_SEARCH_MIN) return null;
+  return letters.slice(0, CHILD_SEARCH_MAX).join('');
+}
+
+/** "Ана Иванова · 3. клас"; the name alone without a class. */
+export function childOptionLabel(child: { name: string; class: string | null }): string {
+  return child.class ? `${child.name} · ${child.class}` : child.name;
+}
+
+/** "Дете: Ана Иванова"; "Избрано дете" when the name is not in this page's memory. */
+export function childChipLabel(name?: string | null): string {
+  return name ? `${CHILD_FILTER_LABEL}: ${name}` : 'Избрано дете';
+}
+
+/** What the search says to a screen reader: "Намерено 1 дете", "Намерени 5 деца", or that there is none. */
+export function childResultsText(count: number): string {
+  if (count === 0) return NO_CHILDREN_FOUND;
+  return count === 1 ? 'Намерено 1 дете' : `Намерени ${count} деца`;
+}
+
+/**
+ * The option the arrows move to in the list (ARIA APG combobox): down from none to the first, up from none to the last,
+ * and round at either end; none without options.
+ */
+export function moveActive(active: number, count: number, key: 'ArrowDown' | 'ArrowUp'): number {
+  if (count <= 0) return -1;
+  // An option from an older list counts as none.
+  const current = active >= count ? -1 : active;
+  if (key === 'ArrowDown') return current < 0 || current === count - 1 ? 0 : current + 1;
+  return current <= 0 ? count - 1 : current - 1;
 }

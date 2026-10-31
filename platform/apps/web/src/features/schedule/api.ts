@@ -60,6 +60,9 @@ export type SessionPanel = {
   abilities: GroupAbilities;
 };
 
+/** A child found by the filter "Дете": name and class only — never contacts, health, money or groups. */
+export type FoundChild = { id: string; name: string; class: string | null };
+
 export class ScheduleApiError extends Error {
   constructor(message: string, public status: number) { super(message); }
 }
@@ -77,21 +80,35 @@ export function scheduleErrorMessage(status: number, body: { message?: unknown; 
   return 'Графикът не се зареди. Проверете връзката и опитайте пак.';
 }
 
-async function request<T>(organizationId: string, path: string): Promise<T> {
-  const response = await fetch(`/backend/api/v1/schedule${path}`, {
+/** The search of the filter "Дете" (т. 6.5): the API's own words for a wrong text ("Напишете поне 2 букви от името."). */
+export function childSearchErrorMessage(status: number, body: { message?: unknown; errors?: Record<string, string[]> }): string {
+  const first = body.errors ? Object.values(body.errors)[0]?.[0] : undefined;
+  if (status === 422 && typeof first === 'string' && cyrillic.test(first)) return first;
+  if (status === 401) return 'Влезте отново, за да продължите.';
+  if (status === 403) return 'Нямате достъп до децата в графика.';
+  if (status === 429) return 'Търсихте много пъти за кратко. Изчакайте минута и опитайте пак.';
+  return 'Търсенето не стана. Проверете връзката и опитайте пак.';
+}
+
+type ErrorBody = { message?: unknown; errors?: Record<string, string[]> };
+
+/** `path` — under `/api/v1`; the message for a failure from `messageOf`. */
+async function request<T>(organizationId: string, path: string, messageOf: (status: number, body: ErrorBody) => string = scheduleErrorMessage, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(`/backend/api/v1${path}`, {
     credentials: 'include',
     headers: { Accept: 'application/json', 'X-Organization-Id': organizationId },
+    ...(signal ? { signal } : {}),
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { message?: unknown; errors?: Record<string, string[]> };
-    throw new ScheduleApiError(scheduleErrorMessage(response.status, body), response.status);
+    const body = await response.json().catch(() => ({})) as ErrorBody;
+    throw new ScheduleApiError(messageOf(response.status, body), response.status);
   }
   return response.json() as Promise<T>;
 }
 
 /** `query` — from `scheduleQuery`: `from`, `to` (Sofia's days, both included) and the filters. */
 export async function loadSchedule(organizationId: string, query: string): Promise<ScheduleBoard> {
-  const board = await request<Partial<ScheduleBoard>>(organizationId, `?${query}`);
+  const board = await request<Partial<ScheduleBoard>>(organizationId, `/schedule?${query}`);
   return {
     sessions: board.sessions ?? [],
     activities: board.activities ?? [],
@@ -104,5 +121,14 @@ export async function loadSchedule(organizationId: string, query: string): Promi
 }
 
 export function loadSessionPanel(organizationId: string, sessionId: string): Promise<SessionPanel> {
-  return request<SessionPanel>(organizationId, `/sessions/${encodeURIComponent(sessionId)}`);
+  return request<SessionPanel>(organizationId, `/schedule/sessions/${encodeURIComponent(sessionId)}`);
+}
+
+/**
+ * The enrolled children by name, for the filter "Дете" (т. 3.5, 6.5): up to 20, only in the groups where the person
+ * sees the enrollments. `id` is what `child=` takes. `text` — from `childSearchText`.
+ */
+export async function searchChildren(organizationId: string, text: string, signal?: AbortSignal): Promise<FoundChild[]> {
+  const body = await request<{ children?: FoundChild[] }>(organizationId, `/enrollment/children?${new URLSearchParams({ q: text }).toString()}`, childSearchErrorMessage, signal);
+  return Array.isArray(body.children) ? body.children : [];
 }
