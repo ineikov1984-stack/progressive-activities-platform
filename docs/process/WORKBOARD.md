@@ -16,7 +16,7 @@
    - Готово, когато: PR само с документи завършва за под 2 минути с всички 5 проверки зелени; PR с код пуска всичко.
 4. **„Махни“ → „Премахни“** в целия уеб (бърза). Видимият текст и `aria-label` в `platform/apps/web/src/**`, но **не** в `features/team/**` и `features/catalog/**`, ако там има отворен PR на Claude — виж „В работа“. Тестовете, които търсят стария текст, се обновяват. Готово, когато: `grep -rn "Махни" platform/apps/web/src` е празно, освен в коментари.
 5. **Втори поглед по сигурност** по шаблона `docs/process/reviewers/security.md` (само четене, без код). Етапът „Права“ — PR #81, #82, #83, #84 и поканите #74. Тесен вход: diff-ът на PR-а и `docs/product/team-rights.md`. Само сериозни находки — като коментар в PR-а и ред в „Опашка“ тук.
-6. **График — промени по занимания, PR 4б и 4в** — по `docs/process/CODEX.md`, т. 9.2–9.3 и `docs/product/schedule-changes.md`. Започват след merge на 4а (Claude, `claude/schedule-changes-4a`). Ако Claude е спрял по средата на 4а — т. 9.1.
+6. **График — „Премести“ (PR 4а-2), после PR 4б и 4в** — **започни с 4а-2** по `docs/process/CODEX.md`, т. 9.1; после т. 9.2–9.3. Спецификация: `docs/product/schedule-changes.md`. Част 1 на 4а (Отмени, Възстанови, писмата, миграцията) е merge-ната в #98.
 
 По-старите точки (#8, #18, #26 — втори поглед) остават в „Опашка“ с по-нисък приоритет. „API: 500 → JSON 401“ вече е направено (`bootstrap/app.php`, `shouldRenderJsonWhen`).
 
@@ -24,9 +24,6 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| График — филтър „Дете“ (`docs/product/schedule.md`, т. 3.5, 6.5) — стандартна | Claude | `claude/schedule-child-filter` | уеб: `features/schedule/**` (нов `child-filter.tsx`); тестове `schedule-presentation`, `schedule-api`. Без горещи файлове и без промени в API-то | код и тестове → screenshot-и 390/1440 → CI → merge; след него — картата на детето (`claude/schedule-child-card`) |
-| График — картата на детето (`docs/product/schedule.md`, т. 4.1) — строга, върху `claude/schedule-child-filter` | Claude | `claude/schedule-child-card` | горещ: `platform/apps/api/routes/api.php`; API: нов `ChildCard` (Enrollment), `StaffEnrollmentController::child`, `child_id` в `SessionRoster`; уеб: `features/schedule/**` (нов `child-card.tsx`), `skipSession` в `features/enrollment/api.ts`; тестове `ChildCardTest`, `ScheduleApiTest`, `TeamRightsCharacterizationTest`, `TeamRightsNarrowScopeTest`, `schedule-*`. Без миграции | спецификация → TDD → уеб → screenshot-и 390/768/1440 → ревю по сигурност → CI → merge след филтъра |
-| График — PR 4а: миграцията, „Отмени“ и „Възстанови“ на едно занимание и писмата (`docs/product/schedule-changes.md`, т. 3–7, 10) — строга | Claude | `claude/schedule-changes-4a` | **горещи:** `database/migrations/**` (нова `2026_10_31_182000_create_schedule_changes`), `routes/api.php` (`/schedule/changes`); API: `Domain/Catalog` (промени на графика), `Domain/Enrollment` (последствия, писма, `RecordVisitOutcome`, `ChangeEnrollment::transfer`), `SchedulePresenter`. Без уеб | commit без push → ревю по сигурност на PR-а; „Премести“ — следващ PR (4а-2) |
 
 ## Опашка (по приоритет)
 
@@ -72,6 +69,10 @@
 
 ## Наскоро завършено
 
+- 31.10.2026 — PR #98: „График“ PR 4а, част 1 — миграция (`schedule_changes`, `session_changes`, `original_starts_at`, `extra`, `starts_not_before`), „Отмени“ и „Възстанови“ на едно занимание, писма до семействата и учителите, покана при пробно, ревю по сигурност (Claude).
+- 31.10.2026 — PR #99: `CODEX.md` — ред на merge и команди, предаване на работата при изчерпан лимит (Claude).
+- 31.10.2026 — PR #97: `docs/process/CODEX.md` и одобрените макети в `docs/design/mockups/` (Claude).
+- 31.10.2026 — PR #96: филтър „Дете“ и картата на детето в графика; възрастта само с `contacts.view`; ревю по сигурност (Claude).
 - 31.10.2026 — PR #95: спецификация „Промени на занимания“ (`docs/product/schedule-changes.md`) — Премести, Отмени, Възстанови, масови, почивен ден; ревю на архитект; решения 1–9 на собственика (Claude).
 - 31.10.2026 — PR #93: „График“, PR 3 — Месец и Ден (по зали и по треньори), поправките от UX ревюто, колко е пълна групата и бърз преглед (Claude).
 - 31.10.2026 — PR #94: търсене на записаните деца за филтъра „Дете“ в графика (`GET /enrollment/children`), само в групите с `enrollment.view`; ревю по сигурност (Claude).

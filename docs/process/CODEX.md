@@ -215,15 +215,43 @@ Claude (или Codex, когато Claude спре) продължава в **с
 
 Първо са по-леките задачи от WORKBOARD → „За Codex“ (т. 1–5). После, ако Claude е спрял, продължи етапа „График — промени“:
 
-### 9.1 „График“ PR 4а — само ако Claude е спрял по средата
-4а е разделен на две:
-- **Част 1** — PR #98, клон `claude/schedule-changes-4a`: миграцията, „Отмени“, „Възстанови“, писмата.
-- **Част 2** — „Премести“, без миграция; `action: move` днес връща 422.
+### 9.1 „График“ PR 4а-2 — „Премести“ (строга, API) — **започни оттук**
+Част 1 (PR #98) е merge-ната: миграцията, `schedule_changes`/`session_changes`, `preview`/`apply`, „Отмени“, „Възстанови“, писмата и настройката `SCHEDULE_LOCK_TIMEOUT_MS`. Днес `action: move` връща 422. Тази задача го прави.
 
-Продължи по `docs/product/schedule-changes.md`, т. 4.2, 5.2, 6 и 10, ред 4а. Строга скорост; накрая ревю по сигурност.
+- **Клон:** `codex/schedule-move`, от `origin/main`. Миграция не трябва — колоните `original_starts_at` и `session_changes` вече са в базата.
+- **Спецификация:** `docs/product/schedule-changes.md`:
+  - т. 4.1, 4.1а — общи правила, заключване;
+  - т. 4.2 „Премести“;
+  - т. 4.8 — застъпвания и предупреждения по ключове `confirmed_warnings`;
+  - т. 4.9 — преподавателите;
+  - т. 5.2 — предупреденият пропуск отпада (решение 3);
+  - т. 5.4 — началото на незапочнало записване;
+  - т. 5.5 — пробни и еднократни; отказ без такса до новото начало (решение 5);
+  - т. 5.8 — местата, предупреждение (решение 7);
+  - т. 6 — писма „мести се“ до семействата и учителите (решение 6);
+  - т. 7.5 — `moved_from` в графика;
+  - т. 9 — тестовете за „Премести“.
+- **Код, който разширяваш** (не правиш паралелни класове):
+  - `app/Domain/Catalog/Actions/ApplyScheduleChange.php`, `PreviewScheduleChange.php`;
+  - `app/Domain/Catalog/Services/ScheduleChangePlanner.php`, `ScheduleConflictDetector.php`;
+  - `app/Domain/Enrollment/Services/ScheduleChangeEffects.php`;
+  - `app/Domain/Enrollment/Delivery/ScheduleLetters.php`;
+  - `app/Http/Presenters/SchedulePresenter.php`.
+  - Тестовете им са образец: `tests/Feature/Catalog/ScheduleChange*Test.php`, `tests/Feature/Enrollment/ScheduleChange*Test.php`, `tests/Support/ScheduleChangeFixture.php`.
+- **Внимавай:**
+  - денят и часът са по София, включително смяната на часа;
+  - ново начало преди сега дава 422;
+  - същата група в същото време е забранено; друг водещ, заета зала и повече деца са предупреждения;
+  - `instructors_source='assignment'` → преподавателите се смятат наново за новия ден;
+  - писмото съдържа стария и новия ден и час, а причината — само с отметката.
+- **Готово, когато:**
+  - всички тестове за „Премести“ от т. 9 минават в CI;
+  - `TeamRightsCharacterizationTest` и `TeamRightsNarrowScopeTest` са непроменени (маршрутите са същите);
+  - има независимо ревю по сигурност веднъж (`docs/process/reviewers/security.md`) и поправките;
+  - съобщението до собственика е по т. 8 (без миграция).
 
 ### 9.2 „График“ PR 4б — няколко занимания, почивен ден, допълнително занимание (строга, API)
-- **Кога:** след merge на 4а.
+- **Кога:** след merge на 4а-2 („Премести“).
 - **Спецификация:** `schedule-changes.md`:
   - т. 4.1, 4.1а (заключване, пакетни вставки, `lock_timeout`);
   - т. 4.5 „Смени залата“, 4.6 „Почивен ден“, 4.7 „Допълнително занимание“;
