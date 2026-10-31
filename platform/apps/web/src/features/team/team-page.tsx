@@ -2,18 +2,74 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useDashboardContext } from '@/features/dashboard/dashboard-context';
 import { sofiaDay } from '@/features/enrollment/presentation';
 import { AddMemberDialog } from './add-member-dialog';
 import { type GroupAssignment, loadTeam, type TeamList, type TeamMember } from './api';
 import {
-  accessAction, GROUPS_SHOWN, groupLink, groupsByActivity, groupSummary, groupTags, matchesFilters, memberRole, memberStatus, noGroupsText, parseStateFilter,
-  roleLabel, roleLabels, stateFilterLabels, type StateFilter, type TeamFilters, type TeamRole,
+  accessAction, foundText, GROUPS_SHOWN, groupLink, groupsByActivity, groupSummary, groupTags, lastLoginText, matchesFilters, memberRole, memberStatus,
+  noGroupsText, parseStateFilter, roleLabel, roleLabels, rolesFilterText, stateFilterLabels, type StateFilter, type TeamFilters, type TeamRole,
 } from './presentation';
 import styles from './team.module.css';
 
-const noFilters: TeamFilters = { search: '', role: '', state: '' };
+const noFilters: TeamFilters = { search: '', roles: [], state: '' };
+
+/**
+ * "Роля" for several roles at once: a button that opens a list of checkboxes (DECISIONS 31.10.2026 „Екип — последен
+ * вход и филтър по роли“). A disclosure: Tab goes through the checkboxes, Esc and a click outside close it and the
+ * focus goes back to the button. On a phone the list opens under the button, in the page.
+ */
+function RolesFilter({ roles, onChange }: { roles: TeamRole[]; onChange: (roles: TeamRole[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const wrapper = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function outside(event: MouseEvent) {
+      if (wrapper.current && event.target instanceof Node && !wrapper.current.contains(event.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', outside);
+    return () => document.removeEventListener('mousedown', outside);
+  }, [open]);
+
+  function keys(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'Escape' || !open) return;
+    event.preventDefault();
+    setOpen(false);
+    button.current?.focus();
+  }
+
+  function toggle(role: TeamRole, on: boolean) {
+    onChange(on ? (Object.keys(roleLabels) as TeamRole[]).filter((item) => item === role || roles.includes(item)) : roles.filter((item) => item !== role));
+  }
+
+  return (
+    <div ref={wrapper} className={`${styles.field} ${styles.rolesFilter}`} onKeyDown={keys}>
+      <span id="team-roles-label" className={styles.label}>Роля</span>
+      <button ref={button} id="team-roles" type="button" className={`${styles.input} ${styles.rolesButton}`} aria-expanded={open} aria-controls="team-roles-list"
+        aria-labelledby="team-roles-label team-roles" onClick={() => setOpen((value) => !value)}>
+        <span>{rolesFilterText(roles)}</span>
+        <svg className={styles.rolesChevron} viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+      {open ? (
+        <fieldset id="team-roles-list" className={styles.rolesList}>
+          <legend className="sr-only">Покажи хората с тези роли</legend>
+          {(Object.keys(roleLabels) as TeamRole[]).map((role) => (
+            <label key={role} className={styles.rolesItem}>
+              <input type="checkbox" checked={roles.includes(role)} onChange={(event) => toggle(role, event.target.checked)} />
+              <span>{roleLabels[role]}</span>
+            </label>
+          ))}
+          {roles.length > 0 ? (
+            <button type="button" className={styles.rowAction} onClick={() => { onChange([]); button.current?.focus(); }}>Всички роли</button>
+          ) : null}
+        </fieldset>
+      ) : null}
+    </div>
+  );
+}
 
 /** The page "Екип" is for every role that sees the team (`team.view`); a teacher gets this state instead. */
 export function NoTeamAccess() {
@@ -101,6 +157,8 @@ function MemberRow({ member, canManage, linked, now, today }: { member: TeamMemb
           <span className={styles.stack}>
             <span className={`${styles.badge} ${styles[`tone_${status.tone}`]}`}>{status.label}</span>
             {status.detail ? <span className={styles.small}>{status.detail}</span> : null}
+            {/* Only for those who manage the team, who get the moment. */}
+            {status.key === 'login' && member.last_login_at !== undefined ? <span className={styles.small}>{lastLoginText(member.last_login_at, now)}</span> : null}
           </span>
           {action ? <Link className={action.kind === 'button' ? styles.secondary : styles.waiting} href={action.href}>{action.label}</Link> : null}
         </div>
@@ -145,7 +203,6 @@ export function TeamPage() {
   const list = loaded?.scope === scope ? loaded.list : undefined;
   const error = failed?.key === key ? failed.text : '';
   const shown = list?.members.filter((member) => matchesFilters(member, filters, now));
-  const filtering = filters.search.trim() !== '' || filters.role !== '' || (filters.state !== '' && !archived);
 
   return (
     <div className={styles.page}>
@@ -165,14 +222,7 @@ export function TeamPage() {
               <input id="team-search" className={styles.input} type="search" autoComplete="off" value={filters.search}
                 onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} />
             </div>
-            <div className={styles.field}>
-              <label htmlFor="team-role">Роля</label>
-              <select id="team-role" className={styles.input} value={filters.role}
-                onChange={(event) => setFilters((current) => ({ ...current, role: event.target.value as '' | TeamRole }))}>
-                <option value="">Всички роли</option>
-                {(Object.keys(roleLabels) as TeamRole[]).map((role) => <option key={role} value={role}>{roleLabels[role]}</option>)}
-              </select>
-            </div>
+            <RolesFilter roles={filters.roles} onChange={(roles) => setFilters((current) => ({ ...current, roles }))} />
             <div className={styles.field}>
               <label htmlFor="team-state">Достъп</label>
               <select id="team-state" className={styles.input} value={filters.state}
@@ -185,6 +235,10 @@ export function TeamPage() {
 
           <section aria-labelledby="team-list-title" aria-busy={list === undefined && !error}>
             <h2 id="team-list-title" className="sr-only">{archived ? 'В архива' : 'Хората в екипа'}</h2>
+            {/* The count follows the search and the filters, and is read out when it changes. */}
+            <p className={list && shown && list.members.length > 0 ? styles.found : 'sr-only'} role="status">
+              {list && shown && list.members.length > 0 ? foundText(shown.length) : ''}
+            </p>
             {error && list === undefined ? (
               <div className={styles.empty} role="alert">
                 <strong>{error}</strong>
@@ -205,7 +259,6 @@ export function TeamPage() {
             ) : (
               <>
                 {error ? <p className={styles.error} role="alert">{error}</p> : null}
-                {filtering ? <p className={styles.small} role="status">Показани са {shown.length} от {list.members.length}</p> : null}
                 <div className={styles.tableWrap}>
                   <table className={styles.table}>
                     <thead><tr><th scope="col">Име</th><th scope="col">Роля</th><th scope="col">Групи</th><th scope="col">Достъп</th></tr></thead>

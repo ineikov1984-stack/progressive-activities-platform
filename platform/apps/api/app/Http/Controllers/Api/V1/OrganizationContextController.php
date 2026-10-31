@@ -8,6 +8,7 @@ use App\Domain\Audit\ValueObjects\AuditableReference;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
+use App\Domain\Organizations\Services\MembershipActivity;
 use App\Domain\Organizations\Services\StaffRights;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
@@ -19,13 +20,13 @@ use Symfony\Component\HttpFoundation\Response;
 
 class OrganizationContextController extends Controller
 {
-    public function select(Request $request, TenantContext $context, AuditRecorder $auditRecorder): JsonResponse
+    public function select(Request $request, TenantContext $context, AuditRecorder $auditRecorder, MembershipActivity $activity): JsonResponse
     {
         $validated = $request->validate([
             'organization_id' => ['required', 'uuid'],
         ]);
 
-        return DB::transaction(function () use ($request, $validated, $context, $auditRecorder): JsonResponse {
+        $response = DB::transaction(function () use ($request, $validated, $context, $auditRecorder): JsonResponse {
             $userId = (string) $request->user()->getAuthIdentifier();
 
             if (DB::getDriverName() === 'pgsql') {
@@ -63,6 +64,14 @@ class OrganizationContextController extends Controller
 
             return response()->json(['organization' => $this->present($organization)]);
         });
+        // "Последен вход" in the organization, after the selection is committed and in a transaction of its own.
+        if ($response->isSuccessful()) {
+            /** @var User $user */
+            $user = $request->user();
+            $activity->selected($user, (string) $validated['organization_id']);
+        }
+
+        return $response;
     }
 
     /**

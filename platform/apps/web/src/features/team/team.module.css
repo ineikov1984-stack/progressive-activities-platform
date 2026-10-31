@@ -230,7 +230,20 @@
 .rightsMain :is(input, select, textarea, button, a, summary, [tabindex="-1"]) { scroll-margin-bottom: calc(var(--control-height) + var(--space-3) * 2 + var(--space-4)); }
 .saveBar { position: sticky; bottom: 0; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-2); padding: var(--space-3) 0; border-top: 1px solid var(--border); background: var(--surface-page); }
 
+/* "Роля" for several roles: a button and a list of checkboxes; on a phone in the page, wider over it. */
+.rolesFilter { position: relative; }
+.rolesButton { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); text-align: left; cursor: pointer; }
+.rolesChevron { flex: none; width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.rolesButton[aria-expanded="true"] .rolesChevron { transform: rotate(180deg); }
+.rolesList { display: grid; gap: 0; min-width: 0; margin: var(--space-1) 0 0; padding: var(--space-1) var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-raised); }
+.rolesItem { display: flex; align-items: center; gap: var(--space-3); min-height: var(--control-height); color: var(--ink); font-size: 15px; cursor: pointer; }
+.rolesItem input { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--action); }
+.rolesList .rowAction { justify-self: start; }
+/* "Намерени: 3" above the list. */
+.found { margin: 0 0 var(--space-2); color: var(--ink-body); font-size: 14px; font-weight: 600; }
+
 @container team (min-width: 560px) {
+  .rolesList { position: absolute; top: 100%; right: 0; left: 0; z-index: 10; }
   .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
   .filters > :first-child { grid-column: 1 / -1; }
   .fieldGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

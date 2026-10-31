@@ -8,6 +8,7 @@ use App\Domain\Audit\ValueObjects\AuditableReference;
 use App\Domain\Identity\Models\User;
 use App\Domain\Identity\Support\PhoneNumber;
 use App\Domain\Organizations\Actions\UpdateOwnStaffContact;
+use App\Domain\Organizations\Services\MembershipActivity;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,7 +20,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class AuthController extends Controller
 {
-    public function login(Request $request, AuditRecorder $auditRecorder): JsonResponse
+    public function login(Request $request, AuditRecorder $auditRecorder, MembershipActivity $activity): JsonResponse
     {
         $credentials = $request->validate([
             'email' => ['required', 'string', 'email:rfc', 'max:254'],
@@ -46,6 +47,8 @@ class AuthController extends Controller
             AuditAction::IdentityLoginSucceeded,
             new AuditableReference('user', $user->id),
         );
+        // "Последен вход" in every team the person is in.
+        $activity->signedIn($user);
 
         return response()->json(['user' => $this->presentUser($user)]);
     }

@@ -265,7 +265,7 @@ class TeamController extends Controller
         $roles = OrganizationMembership::query()->withoutGlobalScopes()
             ->where('organization_id', $this->context->organizationId())
             ->whereIn('user_id', $members->pluck('user_id')->filter()->values()->all())
-            ->get(['user_id', 'role', 'status'])->keyBy('user_id');
+            ->get(['user_id', 'role', 'status', 'last_login_at', 'last_seen_at'])->keyBy('user_id');
         // The latest invitation not yet accepted, for "Поканен · изтича след N дни" and "Изпрати поканата пак" (т. 10):
         // its state and end only, never the address or a token.
         $invitations = Invitation::query()->whereIn('staff_member_id', $ids)->whereNull('accepted_at')
@@ -300,7 +300,12 @@ class TeamController extends Controller
                     'role' => $invitation->role->value,
                 ],
                 'version' => $member->version,
-                ...($contacts ? ['phone' => $member->phone, 'email' => $member->email] : []),
+                // The phone, the e-mail and when the person last signed in and was active — only for those who manage the team.
+                ...($contacts ? [
+                    'phone' => $member->phone, 'email' => $member->email,
+                    'last_login_at' => $membership?->last_login_at?->utc()->toIso8601String(),
+                    'last_seen_at' => $membership?->last_seen_at?->utc()->toIso8601String(),
+                ] : []),
             ];
         })->values()->all();
     }
