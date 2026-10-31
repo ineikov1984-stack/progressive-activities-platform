@@ -324,10 +324,10 @@ function RightsForm({ organizationId, actorRole, member, card, onSaved, onReload
               <div className={styles.confirm} role="group" aria-labelledby="finance-confirm">
                 <p id="finance-confirm">{asking === 'give'
                   ? `Давате на ${member.full_name} достъп до таксите и плащанията на цялата организация.`
-                  : `С „${draft.scope === 'own' ? 'Своите групи' : 'Избрани групи'}“ ${member.full_name} губи достъпа до таксите и плащанията. Да го махнем ли?`}</p>
+                  : `С „${draft.scope === 'own' ? 'Своите групи' : 'Избрани групи'}“ ${member.full_name} губи достъпа до таксите и плащанията. Да го премахнем ли?`}</p>
                 <div className={styles.actions}>
                   <button id="finance-yes" type="button" className={styles.primary} disabled={busy} onClick={() => void save(true)}>
-                    {asking === 'give' ? 'Да, давам достъп' : 'Да, махни финансите'}
+                    {asking === 'give' ? 'Да, давам достъп' : 'Да, премахни финансите'}
                   </button>
                   <button type="button" className={styles.secondary} onClick={() => setAsking(null)}>Отказ</button>
                 </div>

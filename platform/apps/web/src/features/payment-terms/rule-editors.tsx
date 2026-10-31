@@ -201,7 +201,7 @@ function Ladder({ context, path, unit, max, returned, creditFor, before }: {
               <span>%.</span>
               {!last && !context.disabled && steps.length > 1 ? (
                 <button type="button" className={styles.linkButton} onClick={() => remove(index)}>
-                  Махни<span className="sr-only"> стъпало {index + 1}</span>
+                  Премахни<span className="sr-only"> стъпало {index + 1}</span>
                 </button>
               ) : null}
             </Line>
@@ -238,7 +238,7 @@ function AbsenceTiers({ context }: { context: EditorContext }) {
                 replace(steps.filter((__, other) => other !== index));
                 requestAnimationFrame(() => addRef.current?.focus());
               }}>
-                Махни<span className="sr-only"> стъпало {index + 1}</span>
+                Премахни<span className="sr-only"> стъпало {index + 1}</span>
               </button>
             ) : null}
           </Line>
