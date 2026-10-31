@@ -108,7 +108,7 @@ final class SessionApplicability
             $earliest = $earliest === null || $session->starts_at->lt($earliest) ? $session->starts_at : $earliest;
             $latest = $latest === null || $session->starts_at->gt($latest) ? $session->starts_at : $latest;
         }
-        if ($earliest === null || $latest === null) {
+        if ($earliest === null) {
             return new Collection;
         }
         // A day either side: the days of an enrollment are the group's, not UTC's.
