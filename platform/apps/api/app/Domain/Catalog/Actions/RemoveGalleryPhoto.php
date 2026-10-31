@@ -19,8 +19,9 @@ use Illuminate\Validation\ValidationException;
  * "Махни от страницата" (docs/product/teacher-content.md, т. 5.6): the office takes a photo out of the gallery of a
  * published activity at once — at a parent's request or when it went up by mistake. Only the gallery and the version
  * change; title, status, prices and groups are not touched. The file goes when nothing else of the organization shows
- * it. The audit has identifiers and the version only, never the path. In PR 1b this goes through ApplyContentChange
- * and gets a row in the history.
+ * it; otherwise the answer names where it is still shown (cover, logo, profile, campaign, gallery), so that the office
+ * does not think it is gone. The audit has identifiers and the version only, never the path. In PR 1b this goes
+ * through ApplyContentChange and gets a row in the history.
  */
 final readonly class RemoveGalleryPhoto
 {
@@ -31,12 +32,13 @@ final readonly class RemoveGalleryPhoto
         private AuditRecorder $audit,
     ) {}
 
-    public function handle(User $actor, Activity $activity, int $expectedVersion, string $path): Activity
+    /** @return array{activity: Activity, shown_as: list<'cover'|'logo'|'profile'|'campaign'|'gallery'>} */
+    public function handle(User $actor, Activity $activity, int $expectedVersion, string $path): array
     {
         abort_unless($this->context->hasOrganization() && $activity->organization_id === $this->context->organizationId(), 404);
         Gate::forUser($actor)->authorize('catalog.manage', Organization::query()->findOrFail($activity->organization_id));
 
-        return DB::transaction(function () use ($activity, $expectedVersion, $path): Activity {
+        return DB::transaction(function () use ($activity, $expectedVersion, $path): array {
             $locked = Activity::query()->whereKey($activity->getKey())->lockForUpdate()->firstOrFail();
             abort_unless($locked->version === $expectedVersion, 409, 'Дейността е променена междувременно. Заредете страницата отново.');
             abort_if($locked->status === ActivityStatus::Archived, 409, 'Дейността е в архива.');
@@ -57,11 +59,12 @@ final readonly class RemoveGalleryPhoto
                 'version' => $locked->version,
             ]);
 
-            if (! $this->usage->inUse($path)) {
+            $shownAs = $this->usage->placesOf($path);
+            if ($shownAs === []) {
                 $this->media->deleteAfterCommit($path);
             }
 
-            return $locked->refresh();
+            return ['activity' => $locked->refresh(), 'shown_as' => $shownAs];
         });
     }
 }

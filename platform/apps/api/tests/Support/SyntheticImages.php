@@ -12,18 +12,22 @@ use RuntimeException;
 final class SyntheticImages
 {
     /** Text hidden in the metadata and after the picture; the cleaned file must not contain any of it. */
-    public const SECRETS = ['SYNTHETIC-', 'ns.adobe.com/xap', '<script'];
+    public const SECRETS = ['SYNTHETIC-', 'ns.adobe.com/xap', 'Photoshop 3.0', '8BIM', 'ICC_PROFILE', '<script'];
 
     /**
-     * A JPEG with EXIF (device, GPS, orientation), XMP, a comment and HTML after the end of the picture. The left half
-     * is red and the right half blue, so that the direction of turning can be seen.
+     * A JPEG with EXIF (device, GPS, orientation), XMP, IPTC (APP13), an ICC profile (APP2), a comment and HTML after
+     * the end of the picture. The left half is red and the right half blue, so that the direction of turning can be seen.
      */
     public static function jpegWithMetadata(int $width = 40, int $height = 20, int $orientation = 6): string
     {
         $jpeg = self::encode(self::halves($width, $height), 'jpeg');
         $exif = "Exif\0\0".self::tiff($orientation);
         $xmp = "http://ns.adobe.com/xap/1.0/\0".'<x:xmpmeta xmlns:x="adobe:ns:meta/">SYNTHETIC-XMP</x:xmpmeta>';
-        $segments = self::segment("\xE1", $exif).self::segment("\xE1", $xmp).self::segment("\xFE", 'SYNTHETIC-COMMENT');
+        // IPTC caption (record 2, dataset 120) in a Photoshop resource block.
+        $iptc = "\x1C\x02\x78".pack('n', strlen('SYNTHETIC-IPTC caption')).'SYNTHETIC-IPTC caption';
+        $photoshop = "Photoshop 3.0\0".'8BIM'.pack('n', 0x0404)."\0\0".pack('N', strlen($iptc)).$iptc.(strlen($iptc) % 2 === 1 ? "\0" : '');
+        $segments = self::segment("\xE1", $exif).self::segment("\xE1", $xmp).self::segment("\xED", $photoshop)
+            .self::segment("\xE2", "ICC_PROFILE\0\x01\x01".self::iccProfile()).self::segment("\xFE", 'SYNTHETIC-COMMENT');
 
         return substr($jpeg, 0, 2).$segments.substr($jpeg, 2).'<html><script>alert(1)</script></html>';
     }
@@ -46,23 +50,25 @@ final class SyntheticImages
     /** A WebP with an EXIF chunk (an extended "VP8X" file). */
     public static function webpWithMetadata(int $width = 24, int $height = 16): string
     {
-        $webp = self::encode(self::halves($width, $height), 'webp');
-        $chunks = substr($webp, 12);
-        if (substr($chunks, 0, 4) === 'VP8X') {
-            $chunks[8] = chr(ord($chunks[8]) | 0x08);
-        } else {
-            $chunks = self::riffChunk('VP8X', chr(0x08)."\0\0\0".self::uint24($width - 1).self::uint24($height - 1)).$chunks;
-        }
-        $chunks .= self::riffChunk('EXIF', self::tiff(1));
+        $chunks = self::riffChunk('VP8X', chr(0x08)."\0\0\0".self::uint24($width - 1).self::uint24($height - 1))
+            .self::webpBitstream(self::halves($width, $height)).self::riffChunk('EXIF', self::tiff(1));
 
         return 'RIFF'.pack('V', 4 + strlen($chunks)).'WEBP'.$chunks;
     }
 
-    /** Only the header of an animated WebP: enough for the size and the animation flag. */
+    /** A real animated WebP: two frames (red, then blue), 100 ms each, as a browser plays it. */
     public static function animatedWebp(int $width = 20, int $height = 20): string
     {
+        $frames = '';
+        foreach ([[220, 0, 0], [0, 0, 220]] as [$red, $green, $blue]) {
+            $image = self::canvas($width, $height);
+            imagefilledrectangle($image, 0, 0, $width - 1, $height - 1, (int) imagecolorallocate($image, $red, $green, $blue));
+            // At 0, 0, the size of the canvas, 100 ms, not blended, not disposed.
+            $frames .= self::riffChunk('ANMF', "\0\0\0\0\0\0".self::uint24($width - 1).self::uint24($height - 1).self::uint24(100)."\x02"
+                .self::webpBitstream($image));
+        }
         $chunks = self::riffChunk('VP8X', chr(0x02)."\0\0\0".self::uint24($width - 1).self::uint24($height - 1))
-            .self::riffChunk('ANIM', "\0\0\0\0\0\0");
+            .self::riffChunk('ANIM', "\xFF\xFF\xFF\xFF\0\0").$frames;
 
         return 'RIFF'.pack('V', 4 + strlen($chunks)).'WEBP'.$chunks;
     }
@@ -75,30 +81,73 @@ final class SyntheticImages
         return substr($png, 0, 33).self::pngChunk('acTL', pack('NN', 2, 0)).substr($png, 33);
     }
 
-    /** A JPEG header with four colour channels (CMYK). */
-    public static function cmykJpeg(int $width = 20, int $height = 20): string
+    /**
+     * A real CMYK JPEG (four channels, Adobe marker), which libjpeg and gd read. Every 8 × 8 block is flat: its coded data
+     * is a DC difference of 0 and an end of block, with Huffman tables of a single code.
+     */
+    public static function cmykJpeg(int $width = 16, int $height = 16): string
     {
         $components = '';
+        $scan = '';
         for ($id = 1; $id <= 4; $id++) {
+            // 1 × 1 sampling and quantization table 0; DC and AC Huffman tables 0.
             $components .= chr($id)."\x11\0";
+            $scan .= chr($id)."\0";
         }
+        // One code of length 1 for the symbol 0.
+        $oneCode = "\x01".str_repeat("\0", 15)."\0";
+        $bits = str_repeat('00', (int) (ceil($width / 8) * ceil($height / 8) * 4));
+        $bits .= str_repeat('1', (8 - strlen($bits) % 8) % 8);
+        $data = implode('', array_map(fn (string $byte): string => chr((int) bindec($byte)), str_split($bits, 8)));
 
-        return "\xFF\xD8".self::segment("\xC0", "\x08".pack('nn', $height, $width)."\x04".$components)."\xFF\xD9";
+        return "\xFF\xD8".self::segment("\xEE", "Adobe\0\x64\0\0\0\0\0").self::segment("\xDB", "\0".str_repeat("\x01", 64))
+            .self::segment("\xC0", "\x08".pack('nn', $height, $width)."\x04".$components)
+            .self::segment("\xC4", "\x00".$oneCode."\x10".$oneCode).self::segment("\xDA", "\x04".$scan."\0\x3F\0")
+            .$data."\xFF\xD9";
     }
 
-    /** A PNG whose header says 6000 × 5000 (30 megapixels); the picture data is never read. */
-    public static function oversizedPngHeader(): string
+    /** Only the header of a PNG of this size; the picture data is never read. */
+    public static function pngHeader(int $width, int $height): string
     {
-        return "\x89PNG\r\n\x1a\n".self::pngChunk('IHDR', pack('NNCCCCC', 6000, 5000, 8, 2, 0, 0, 0))
-            .self::pngChunk('IDAT', (string) gzcompress("\0\0\0\0")).self::pngChunk('IEND', '');
+        return "\x89PNG\r\n\x1a\n".self::pngChunk('IHDR', pack('NNCCCCC', $width, $height, 8, 6, 0, 0, 0))
+            .self::pngChunk('IDAT', (string) gzcompress("\0\0\0\0\0")).self::pngChunk('IEND', '');
     }
 
-    /** A plain JPEG of the given size, written to a file (large ones would not fit in a string comfortably). */
-    public static function plainJpegFile(string $path, int $width, int $height): void
+    /** Only the header of a still, extended WebP of this size. */
+    public static function webpHeader(int $width, int $height): string
     {
-        $image = self::halves($width, $height);
-        if (! imagejpeg($image, $path, 60)) {
-            throw new RuntimeException('Could not write the test JPEG.');
+        $chunks = self::riffChunk('VP8X', "\0\0\0\0".self::uint24($width - 1).self::uint24($height - 1));
+
+        return 'RIFF'.pack('V', 4 + strlen($chunks)).'WEBP'.$chunks;
+    }
+
+    /** Only the header of a colour JPEG of this size. */
+    public static function jpegHeader(int $width, int $height): string
+    {
+        return "\xFF\xD8".self::segment("\xC0", "\x08".pack('nn', $height, $width)."\x03\x01\x22\0\x02\x11\0\x03\x11\0")."\xFF\xD9";
+    }
+
+    /**
+     * A large picture written to a file: "jpeg", "progressive-jpeg", "rgba-png" (half transparent, with an opaque
+     * quarter) or "webp".
+     */
+    public static function pictureFile(string $path, string $format, int $width, int $height): void
+    {
+        $image = self::canvas($width, $height);
+        imagealphablending($image, false);
+        imagesavealpha($image, true);
+        imagefilledrectangle($image, 0, 0, $width - 1, $height - 1, (int) imagecolorallocatealpha($image, 30, 120, 90, $format === 'rgba-png' ? 64 : 0));
+        imagefilledrectangle($image, 0, 0, intdiv($width, 2), intdiv($height, 2), (int) imagecolorallocatealpha($image, 220, 0, 0, 0));
+        if ($format === 'progressive-jpeg') {
+            imageinterlace($image, true);
+        }
+        $written = match ($format) {
+            'rgba-png' => imagepng($image, $path),
+            'webp' => imagewebp($image, $path, 85),
+            default => imagejpeg($image, $path, 85),
+        };
+        if (! $written) {
+            throw new RuntimeException("Could not write the test {$format}.");
         }
     }
 
@@ -158,6 +207,22 @@ final class SyntheticImages
         fclose($stream);
 
         return $contents;
+    }
+
+    /** The image data of a still WebP made by gd ("VP8 " or "VP8L", with "ALPH" if any), without its RIFF header. */
+    private static function webpBitstream(GdImage $image): string
+    {
+        $chunks = substr(self::encode($image, 'webp'), 12);
+
+        return substr($chunks, 0, 4) === 'VP8X' ? substr($chunks, 18) : $chunks;
+    }
+
+    /** A minimal ICC profile: the 128-byte header and no tags. */
+    private static function iccProfile(): string
+    {
+        $header = pack('N', 132).'none'.pack('N', 0x02100000).'mntrRGB XYZ '.str_repeat("\0", 12).'acsp';
+
+        return str_pad($header, 128, "\0").pack('N', 0);
     }
 
     /** TIFF data as in EXIF: the device, the orientation and a GPS position. */

@@ -24,18 +24,21 @@ final readonly class CatalogMediaStore
      */
     public function store(UploadedFile $file, ?string $activityId): array
     {
-        $mime = $file->getMimeType();
+        // The kind comes from the content alone: never from the file's name or from what the browser says it is.
+        $source = $file->getRealPath();
+        $imageInfo = is_string($source) ? @getimagesize($source) : false;
+        if (! is_string($source) || $imageInfo === false) {
+            throw self::notAPhoto();
+        }
+        $mime = $imageInfo['mime'];
         $extension = match ($mime) {
             'image/jpeg' => 'jpg',
             'image/png' => 'png',
             'image/webp' => 'webp',
             default => null,
         };
-
-        $source = $file->getRealPath();
-        $imageInfo = is_string($source) ? @getimagesize($source) : false;
-        if ($extension === null || ! is_string($source) || $imageInfo === false || $imageInfo['mime'] !== $mime) {
-            throw ValidationException::withMessages(['file' => 'Снимката трябва да е JPG, PNG или WebP до 5 MB.']);
+        if ($extension === null) {
+            throw self::notAPhoto();
         }
         $clean = $this->clean($source, $mime);
 
@@ -177,6 +180,11 @@ final readonly class CatalogMediaStore
         $this->replace($record, json_encode([...$data, 'sanitized' => true], JSON_THROW_ON_ERROR));
 
         return true;
+    }
+
+    private static function notAPhoto(): ValidationException
+    {
+        return ValidationException::withMessages(['file' => 'Снимката трябва да е JPG, PNG или WebP до 5 MB.']);
     }
 
     /** @return array{contents: string, mime: string, width: int, height: int} */

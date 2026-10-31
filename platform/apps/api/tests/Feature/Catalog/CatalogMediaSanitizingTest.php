@@ -30,6 +30,8 @@ class CatalogMediaSanitizingTest extends TestCase
         $stored = $this->storedContents($organization, $path);
         $this->assertWithoutSecrets($stored);
         $this->assertStringNotContainsString("\xFF\xE1", $stored, 'No APP1 segment (EXIF or XMP) is left.');
+        $this->assertStringNotContainsString("\xFF\xED", $stored, 'No APP13 segment (IPTC) is left.');
+        $this->assertStringNotContainsString("\xFF\xE2", $stored, 'No APP2 segment (ICC) is left.');
         $this->assertSame([20, 40], array_slice((array) getimagesizefromstring($stored), 0, 2), 'Turned upright by its orientation.');
         $exif = @exif_read_data(Storage::disk('local')->path("catalog/{$organization->id}/".basename($path)));
         $this->assertFalse(is_array($exif) && (isset($exif['GPSLatitude']) || isset($exif['Model']) || isset($exif['Orientation'])));
@@ -64,12 +66,17 @@ class CatalogMediaSanitizingTest extends TestCase
         $this->assertTrue($this->storedRecord($organization, $logo)['sanitized']);
     }
 
-    public function test_over_twenty_four_megapixels_is_refused_and_nothing_is_stored(): void
+    public function test_over_the_limit_is_refused_and_nothing_is_stored(): void
     {
         Storage::fake('local');
         $organization = $this->signedInOwner();
 
-        $this->uploadPhoto(SyntheticImages::oversizedPngHeader(), 'huge.png')
+        // 24 megapixels for a JPEG, 16 for a PNG or a WebP.
+        $this->uploadPhoto(SyntheticImages::jpegHeader(6001, 4000), 'huge.jpg')
+            ->assertUnprocessable()->assertJsonPath('errors.file.0', 'Снимката е твърде голяма.');
+        $this->uploadPhoto(SyntheticImages::pngHeader(4000, 4001), 'huge.png')
+            ->assertUnprocessable()->assertJsonPath('errors.file.0', 'Снимката е твърде голяма.');
+        $this->uploadPhoto(SyntheticImages::webpHeader(4001, 4000), 'huge.webp')
             ->assertUnprocessable()->assertJsonPath('errors.file.0', 'Снимката е твърде голяма.');
 
         $this->assertSame([], $this->storedNames($organization));
@@ -84,7 +91,7 @@ class CatalogMediaSanitizingTest extends TestCase
         $this->uploadPhoto(SyntheticImages::cmykJpeg(), 'print.jpg')->assertUnprocessable()->assertJsonPath('errors.file.0', $unreadable);
         $this->uploadPhoto(SyntheticImages::animatedWebp(), 'moving.webp')->assertUnprocessable()->assertJsonPath('errors.file.0', $unreadable);
         $this->uploadPhoto(SyntheticImages::animatedPng(), 'moving.png')->assertUnprocessable()->assertJsonPath('errors.file.0', $unreadable);
-        // A PNG called .jpg is checked by its content, as before: it is stored as a PNG, without anything added.
+        // A PNG called .jpg: the kind comes from the content, so it is stored as a PNG, without anything added.
         $path = $this->uploadPhoto(SyntheticImages::pngWithMetadata(), 'disguised.jpg')->assertCreated()->json('media.path');
         $this->assertStringEndsWith('.png', $path);
         $this->assertWithoutSecrets($this->storedContents($organization, $path));

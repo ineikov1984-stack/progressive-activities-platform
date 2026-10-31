@@ -4,6 +4,7 @@ namespace Tests\Feature\Catalog;
 
 use App\Domain\Catalog\Models\Activity;
 use App\Domain\Catalog\Models\OrganizationCatalogProfile;
+use App\Domain\Catalog\Services\CatalogMediaUsage;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
@@ -13,6 +14,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use LogicException;
 use PHPUnit\Framework\Attributes\Group as TestGroup;
 use Tests\Support\SyntheticImages;
 use Tests\TestCase;
@@ -34,7 +36,8 @@ class GalleryPhotoRemovalTest extends TestCase
         $this->postJson($this->removeUrl($activity), ['version' => 1, 'path' => $first])->assertOk()
             ->assertJsonPath('activity.version', 2)
             ->assertJsonPath('activity.status', 'published')
-            ->assertJsonPath('activity.sections.gallery', [['path' => $second, 'alt' => 'Готови картини']]);
+            ->assertJsonPath('activity.sections.gallery', [['path' => $second, 'alt' => 'Готови картини']])
+            ->assertJsonPath('still_shown', false)->assertJsonPath('shown_as', []);
 
         $this->get($public.basename($first))->assertNotFound();
         $this->get($public.basename($second))->assertOk();
@@ -54,7 +57,7 @@ class GalleryPhotoRemovalTest extends TestCase
         $this->assertStringNotContainsString('акварел', (string) $event->metadata);
     }
 
-    public function test_a_file_still_shown_elsewhere_stays_and_a_coordinator_may_remove(): void
+    public function test_a_photo_that_is_also_the_cover_stays_the_answer_says_so_and_a_coordinator_may_remove(): void
     {
         Storage::fake('local');
         [$owner, $organization] = $this->schoolWith('organization_owner');
@@ -65,11 +68,43 @@ class GalleryPhotoRemovalTest extends TestCase
         $coordinator = $this->memberOf($organization, 'coordinator');
         $this->signInAs($coordinator, $organization);
 
-        $this->postJson($this->removeUrl($activity), ['version' => 1, 'path' => $first])->assertOk()
-            ->assertJsonCount(1, 'activity.sections.gallery');
+        $response = $this->postJson($this->removeUrl($activity), ['version' => 1, 'path' => $first])->assertOk()
+            ->assertJsonCount(1, 'activity.sections.gallery')
+            // So that the office does not think the photo is gone: where it is still shown, never its path.
+            ->assertJsonPath('still_shown', true)->assertJsonPath('shown_as', ['cover']);
+        $this->assertStringNotContainsString(pathinfo($first, PATHINFO_FILENAME), (string) json_encode([$response->json('still_shown'), $response->json('shown_as')]));
 
         Storage::disk('local')->assertExists("catalog/{$organization->id}/".basename($first));
         $this->get("/api/v1/public/organizations/{$organization->slug}/media/".basename($first))->assertOk();
+    }
+
+    public function test_the_same_photo_in_another_activitys_gallery_keeps_its_file(): void
+    {
+        Storage::fake('local');
+        [$user, $organization] = $this->schoolWith('organization_owner');
+        $this->signInAs($user, $organization);
+        [$activity, $first] = $this->publishedGallery($organization);
+        $this->inOrganization($organization, fn (): Activity => Activity::query()->create([
+            'slug' => 'akvarel', 'title' => 'Акварел', 'category' => 'Изкуство', 'summary' => 'Акварел за деца.',
+            'age_label' => '6–9 години', 'status' => 'published', 'published_at' => now(), 'version' => 1,
+            'gallery' => [['path' => $first, 'alt' => 'Деца рисуват с акварел']],
+        ]));
+
+        $this->postJson($this->removeUrl($activity), ['version' => 1, 'path' => $first])->assertOk()
+            ->assertJsonPath('still_shown', true)->assertJsonPath('shown_as', ['gallery']);
+
+        Storage::disk('local')->assertExists("catalog/{$organization->id}/".basename($first));
+        Storage::disk('local')->assertExists("catalog/{$organization->id}/".pathinfo($first, PATHINFO_FILENAME).'.json');
+        $this->get("/api/v1/public/organizations/{$organization->slug}/media/".basename($first))->assertOk();
+    }
+
+    public function test_without_a_selected_organization_no_photo_looks_unused(): void
+    {
+        app(TenantContext::class)->clear();
+
+        // The tenant scope would find no record at all, and the file would be deleted: stop instead.
+        $this->expectException(LogicException::class);
+        app(CatalogMediaUsage::class)->placesOf('catalog/'.Str::uuid().'.jpg');
     }
 
     public function test_a_stale_version_a_draft_an_archived_activity_and_a_missing_photo_change_nothing(): void

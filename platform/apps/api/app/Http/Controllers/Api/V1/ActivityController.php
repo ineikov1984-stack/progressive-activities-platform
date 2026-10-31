@@ -72,7 +72,11 @@ final class ActivityController extends Controller
         return response()->json(['activity' => $this->present($updated, $organization, $this->seesTerms($request, $organization))]);
     }
 
-    /** "Махни от страницата" — a photo out of the gallery of a published activity (docs/product/teacher-content.md, т. 5.6). */
+    /**
+     * "Махни от страницата" — a photo out of the gallery of a published activity (docs/product/teacher-content.md, т. 5.6).
+     * `still_shown` and `shown_as` say where the organization still uses the same file (cover, logo, profile, campaign,
+     * gallery): then it stays, and the office takes it off there too.
+     */
     public function removeGalleryPhoto(Request $request, TenantContext $context, string $activity, RemoveGalleryPhoto $action): JsonResponse
     {
         $organization = $this->organization($context);
@@ -82,10 +86,14 @@ final class ActivityController extends Controller
             'version' => ['required', 'integer', 'min:1'],
             'path' => ['required', 'string', 'max:255'],
         ]);
-        $updated = $action->handle($request->user(), $record, $validated['version'], $validated['path'])
-            ->load('offerings.priceOptions', 'offerings.paymentTermsChoices');
+        $result = $action->handle($request->user(), $record, $validated['version'], $validated['path']);
+        $updated = $result['activity']->load('offerings.priceOptions', 'offerings.paymentTermsChoices');
 
-        return response()->json(['activity' => $this->present($updated, $organization, $this->seesTerms($request, $organization))]);
+        return response()->json([
+            'activity' => $this->present($updated, $organization, $this->seesTerms($request, $organization)),
+            'still_shown' => $result['shown_as'] !== [],
+            'shown_as' => $result['shown_as'],
+        ]);
     }
 
     /** @return array<string, mixed> */

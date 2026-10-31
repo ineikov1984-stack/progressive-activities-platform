@@ -12,8 +12,15 @@ use GdImage;
  */
 final readonly class ImageSanitizer
 {
-    /** About 96 MB once decoded (memory_limit=256M in the image); checked in the header, before decoding. */
-    public const MAX_PIXELS = 24_000_000;
+    /**
+     * The largest photo, checked in the header before decoding (docs/product/teacher-content.md, т. 5.1). gd keeps 4 bytes
+     * a pixel: a 24-megapixel JPEG is about 96 MB once decoded. A PNG is read with all its rows next to the picture, and
+     * libwebp decodes into a buffer of its own, so 16 megapixels already take about 128 MB; logos and screenshots need no
+     * more. Both fit in memory_limit=256M next to the framework (checked in the image by the CI docker job).
+     */
+    public const MAX_JPEG_PIXELS = 24_000_000;
+
+    public const MAX_PNG_WEBP_PIXELS = 16_000_000;
 
     /** The long side after cleaning. */
     public const MAX_EDGE = 2560;
@@ -49,7 +56,8 @@ final readonly class ImageSanitizer
         if ($info === false || $info['mime'] !== $mime || $info[0] < 1 || $info[1] < 1) {
             throw ImageRejected::unreadable();
         }
-        if ($info[0] * $info[1] > self::MAX_PIXELS) {
+        $pixels = $info[0] * $info[1];
+        if ($pixels > self::maxPixels($mime)) {
             throw ImageRejected::tooLarge();
         }
         // CMYK (four channels) would come out with wrong colours; an animation would lose all but one frame.
@@ -69,6 +77,11 @@ final readonly class ImageSanitizer
             'width' => imagesx($image),
             'height' => imagesy($image),
         ];
+    }
+
+    public static function maxPixels(string $mime): int
+    {
+        return $mime === 'image/jpeg' ? self::MAX_JPEG_PIXELS : self::MAX_PNG_WEBP_PIXELS;
     }
 
     private function isAnimated(string $path, string $mime): bool
@@ -135,7 +148,8 @@ final readonly class ImageSanitizer
             'image/png' => @imagecreatefrompng($path),
             default => @imagecreatefromwebp($path),
         };
-        if (! $image instanceof GdImage || imagesx($image) * imagesy($image) > self::MAX_PIXELS) {
+        $pixels = $image instanceof GdImage ? imagesx($image) * imagesy($image) : 0;
+        if (! $image instanceof GdImage || $pixels > self::maxPixels($mime)) {
             throw ImageRejected::unreadable();
         }
         if (! imageistruecolor($image)) {

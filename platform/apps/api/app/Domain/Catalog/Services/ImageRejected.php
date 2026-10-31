@@ -18,7 +18,7 @@ final class ImageRejected extends RuntimeException
         parent::__construct($message);
     }
 
-    /** Over 24 megapixels, seen in the header before decoding: 422. */
+    /** Over 24 megapixels for a JPEG, 16 for a PNG or a WebP, seen in the header before decoding: 422. */
     public static function tooLarge(): self
     {
         return new self(self::TOO_LARGE, 'Снимката е твърде голяма.');

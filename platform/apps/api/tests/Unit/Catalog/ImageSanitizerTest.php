@@ -5,6 +5,7 @@ namespace Tests\Unit\Catalog;
 use App\Domain\Catalog\Services\ImageCapabilities;
 use App\Domain\Catalog\Services\ImageRejected;
 use App\Domain\Catalog\Services\ImageSanitizer;
+use GdImage;
 use PHPUnit\Framework\TestCase;
 use Tests\Support\SyntheticImages;
 
@@ -27,13 +28,16 @@ class ImageSanitizerTest extends TestCase
         $this->assertTrue((new ImageCapabilities)->available(), 'gd with JPEG, PNG and WebP, and exif are needed (PR 0).');
     }
 
-    public function test_a_jpeg_loses_exif_gps_xmp_the_comment_and_what_follows_the_picture_and_is_turned_upright(): void
+    public function test_a_jpeg_loses_exif_gps_xmp_iptc_icc_the_comment_and_what_follows_the_picture_and_is_turned_upright(): void
     {
         $source = SyntheticImages::jpegWithMetadata(40, 20, 6);
         $before = @exif_read_data($this->tempFile($source));
         $this->assertIsArray($before);
         $this->assertSame(6, $before['Orientation'] ?? null, 'The fixture carries the orientation.');
         $this->assertArrayHasKey('GPSLatitude', $before, 'The fixture carries a position.');
+        foreach (["\xFF\xED", "\xFF\xE2", 'Photoshop 3.0', 'ICC_PROFILE'] as $part) {
+            $this->assertStringContainsString($part, $source, 'The fixture carries IPTC (APP13) and an ICC profile (APP2).');
+        }
 
         $clean = $this->sanitizer()->sanitize($this->tempFile($source), 'image/jpeg');
 
@@ -42,6 +46,8 @@ class ImageSanitizerTest extends TestCase
         $this->assertSame([20, 40], array_slice((array) getimagesizefromstring($clean['contents']), 0, 2));
         $this->assertWithoutSecrets($clean['contents']);
         $this->assertStringNotContainsString("\xFF\xE1", $clean['contents'], 'No APP1 segment (EXIF or XMP) is left.');
+        $this->assertStringNotContainsString("\xFF\xED", $clean['contents'], 'No APP13 segment (IPTC) is left.');
+        $this->assertStringNotContainsString("\xFF\xE2", $clean['contents'], 'No APP2 segment (ICC) is left.');
         $after = @exif_read_data($this->tempFile($clean['contents']));
         $this->assertFalse(is_array($after) && (isset($after['GPSLatitude']) || isset($after['Model']) || isset($after['Orientation'])));
         // The left half (red) is now on top, the right half (blue) at the bottom.
@@ -95,30 +101,64 @@ class ImageSanitizerTest extends TestCase
         $this->assertSame([1920, 2560], [$clean['width'], $clean['height']]);
     }
 
-    public function test_twenty_four_megapixels_are_cleaned_well_within_the_memory_limit(): void
+    public function test_a_half_transparent_png_at_its_limit_is_cleaned_and_keeps_its_transparency(): void
     {
         $path = $this->tempFile('');
-        SyntheticImages::plainJpegFile($path, 6000, 4000);
-        $before = memory_get_usage();
-        memory_reset_peak_usage();
+        SyntheticImages::pictureFile($path, 'rgba-png', 4000, 4000);
 
-        $clean = $this->sanitizer()->sanitize($path, 'image/jpeg');
+        $clean = $this->sanitizer()->sanitize($path, 'image/png');
 
-        $this->assertSame([2560, 1707], [$clean['width'], $clean['height']]);
-        // About 96 MB for the decoded photo and 18 MB for the smaller copy; memory_limit is 256M (PR 0).
-        $this->assertLessThan(160 * 1024 * 1024, memory_get_peak_usage() - $before);
+        $this->assertSame([2560, 2560], [$clean['width'], $clean['height']]);
+        $this->assertSame(64, SyntheticImages::colorAt($clean['contents'], 2500, 2500)[3]);
+        $this->assertSame(0, SyntheticImages::colorAt($clean['contents'], 100, 100)[3]);
     }
 
-    public function test_over_twenty_four_megapixels_is_refused_from_the_header(): void
+    /**
+     * The largest photo of each kind, cleaned in a fresh PHP process: under 192M (the image's 256M less 64 MB for the
+     * framework; with gd bundled, as in the image, its pictures count there), and the whole process — with the memory
+     * libjpeg and libwebp keep outside memory_limit — under 256 MB.
+     */
+    public function test_the_largest_photos_are_cleaned_within_the_memory_limit_in_a_fresh_process(): void
     {
-        $this->assertRejected(SyntheticImages::oversizedPngHeader(), 'image/png', ImageRejected::TOO_LARGE, 'Снимката е твърде голяма.');
+        $cases = [
+            ['jpeg', 'image/jpeg', 6000, 4000, [2560, 1707]],
+            ['progressive-jpeg', 'image/jpeg', 6000, 4000, [2560, 1707]],
+            ['rgba-png', 'image/png', 4000, 4000, [2560, 2560]],
+            ['webp', 'image/webp', 4000, 4000, [2560, 2560]],
+        ];
+        foreach ($cases as [$format, $mime, $width, $height, $size]) {
+            $this->assertLessThanOrEqual(ImageSanitizer::maxPixels($mime), $width * $height, 'At the limit, not over it.');
+            $path = $this->tempFile('');
+            SyntheticImages::pictureFile($path, $format, $width, $height);
+
+            $result = $this->cleanInFreshProcess($path, $mime);
+
+            $this->assertSame($size, [$result['width'], $result['height']], $format);
+            $this->assertLessThan(256 * 1024 * 1024, $result['rss'], sprintf('%s: %d MB resident.', $format, intdiv($result['rss'], 1048576)));
+        }
+    }
+
+    public function test_over_the_limit_is_refused_from_the_header(): void
+    {
+        $tooLarge = 'Снимката е твърде голяма.';
+        // 24 megapixels for a JPEG, 16 for a PNG or a WebP.
+        $this->assertRejected(SyntheticImages::jpegHeader(6001, 4000), 'image/jpeg', ImageRejected::TOO_LARGE, $tooLarge);
+        $this->assertRejected(SyntheticImages::pngHeader(4000, 4001), 'image/png', ImageRejected::TOO_LARGE, $tooLarge);
+        $this->assertRejected(SyntheticImages::webpHeader(4001, 4000), 'image/webp', ImageRejected::TOO_LARGE, $tooLarge);
+        $this->assertRejected(SyntheticImages::pngHeader(6000, 4000), 'image/png', ImageRejected::TOO_LARGE, $tooLarge);
     }
 
     public function test_cmyk_animated_damaged_and_mislabelled_files_are_refused(): void
     {
         $unreadable = 'Снимката не може да се обработи. Запазете я като обикновена JPG снимка и опитайте отново.';
-        $this->assertRejected(SyntheticImages::cmykJpeg(), 'image/jpeg', ImageRejected::UNREADABLE, $unreadable);
-        $this->assertRejected(SyntheticImages::animatedWebp(), 'image/webp', ImageRejected::UNREADABLE, $unreadable);
+        // Both are real pictures: gd reads the CMYK one, and a browser plays the animation. The checks refuse them.
+        $cmyk = SyntheticImages::cmykJpeg();
+        $this->assertInstanceOf(GdImage::class, imagecreatefromstring($cmyk));
+        $this->assertSame(4, ((array) getimagesizefromstring($cmyk))['channels'] ?? null);
+        $this->assertRejected($cmyk, 'image/jpeg', ImageRejected::UNREADABLE, $unreadable);
+        $animated = SyntheticImages::animatedWebp();
+        $this->assertSame(['VP8X', 0x02, 2], [substr($animated, 12, 4), ord($animated[20]) & 0x02, substr_count($animated, 'ANMF')]);
+        $this->assertRejected($animated, 'image/webp', ImageRejected::UNREADABLE, $unreadable);
         $this->assertRejected(SyntheticImages::animatedPng(), 'image/png', ImageRejected::UNREADABLE, $unreadable);
         $this->assertRejected(substr(SyntheticImages::plainPng(20, 20), 0, 60), 'image/png', ImageRejected::UNREADABLE, $unreadable);
         $this->assertRejected(SyntheticImages::plainPng(20, 20), 'image/jpeg', ImageRejected::UNREADABLE, $unreadable);
@@ -142,6 +182,32 @@ class ImageSanitizerTest extends TestCase
             $this->assertTrue($rejected->toolsAreMissing());
             $this->assertSame('Снимките временно не се приемат. Опитайте по-късно.', $rejected->getMessage());
         }
+    }
+
+    /**
+     * Cleans the photo in a new PHP process, with only the class loader, under memory_limit=192M.
+     *
+     * @return array{width: int, height: int, rss: int, peak: int}
+     */
+    private function cleanInFreshProcess(string $path, string $mime): array
+    {
+        $code = 'require '.var_export(dirname(__DIR__, 3).'/vendor/autoload.php', true).';'
+            .'$clean = (new \\'.ImageSanitizer::class.'(new \\'.ImageCapabilities::class.'))->sanitize('.var_export($path, true).', '.var_export($mime, true).');'
+            .'echo json_encode(["width" => $clean["width"], "height" => $clean["height"], "rss" => getrusage()["ru_maxrss"] * 1024, "peak" => memory_get_peak_usage()]);';
+        $process = proc_open([PHP_BINARY, '-d', 'memory_limit=192M', '-r', $code], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        $this->assertIsResource($process);
+        $output = (string) stream_get_contents($pipes[1]);
+        $errors = (string) stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $this->assertSame(0, proc_close($process), "Not cleaned under 192M: {$errors}{$output}");
+        $result = json_decode($output, true);
+        $this->assertIsArray($result);
+        foreach (['width', 'height', 'rss', 'peak'] as $key) {
+            $this->assertIsInt($result[$key] ?? null);
+        }
+
+        return $result;
     }
 
     private function sanitizer(): ImageSanitizer
