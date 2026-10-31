@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GroupAssignment, TeamMember } from '../src/features/team/api';
 import {
-  accessAction, accessHeadings, assignmentPhase, changeableRoles, daysText, expiresText, firstErrorField, groupsByActivity, groupsMeta, groupSummary,
+  accessAction, accessHeadings, assignmentPhase, changeableRoles, daysText, expiresText, firstErrorField, groupLink, groupsByActivity, groupsMeta, groupSummary,
   groupTags, guestModeFor, historyItem, historyText, invitableRoles, invitationFold, matchesFilters, memberRole, memberStatus, noGroupsText,
   parseStateFilter, periodText, roleAccess, roleLabel, stateFilterLabels, teamErrorMessage, tokenFromHash, welcomeText,
 } from '../src/features/team/presentation';
@@ -131,6 +131,17 @@ describe('groups', () => {
     expect(groupsMeta(ivan)).toBe('5 групи в 3 дейности');
     expect(groupsMeta([group('Рисуване', 'Група 1'), group('Рисуване', 'Група 3')])).toBe('2 групи');
     expect(groupsMeta([group('Рисуване', 'Група 1'), group('Шахмат', 'Група 1')])).toBe('2 групи в 2 дейности');
+  });
+
+  it('opens the children of a group in "Записвания", and the link says so with the visible name in it', () => {
+    const link = groupLink(group('Шахмат', 'Група 2 · 3.–4. клас', { group_id: 'a1b2c3d4-0000-4000-8000-000000000001' }));
+    expect(link).toEqual({
+      href: '/dashboard/enrollments?view=groups&group=a1b2c3d4-0000-4000-8000-000000000001',
+      label: 'Децата в Шахмат · Група 2 · 3.–4. клас',
+    });
+    expect(link.label.endsWith('Група 2 · 3.–4. клас')).toBe(true);
+    // An id never breaks out of its parameter.
+    expect(groupLink(group('Шахмат', 'Група 1', { group_id: 'x&view=submitted' })).href).toBe('/dashboard/enrollments?view=groups&group=x%26view%3Dsubmitted');
   });
 
   it('tells a teacher without groups from someone who does not lead groups', () => {

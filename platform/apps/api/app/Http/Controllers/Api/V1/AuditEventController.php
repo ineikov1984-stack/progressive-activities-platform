@@ -10,12 +10,17 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
+/**
+ * "Последни действия" on the home screen: only the roles that see the team ("team.view" — not the teacher). Who did it,
+ * on which record, the details and the request id only for those who manage the team ("team.manage").
+ */
 class AuditEventController extends Controller
 {
     public function index(Request $request, TenantContext $context): JsonResponse
     {
         $organization = Organization::query()->findOrFail($context->organizationId());
-        Gate::forUser($request->user())->authorize('view', $organization);
+        Gate::forUser($request->user())->authorize('viewTeam', $organization);
+        $details = Gate::forUser($request->user())->allows('manageTeam', $organization);
 
         $events = AuditEvent::query()
             ->where('organization_id', $context->organizationId())
@@ -24,14 +29,15 @@ class AuditEventController extends Controller
             ->get()
             ->map(fn (AuditEvent $event): array => [
                 'id' => $event->id,
-                'actor_id' => $event->actor_id,
                 'action' => $event->action,
                 'subject_type' => $event->subject_type,
+                'created_at' => $event->created_at->toIso8601String(),
+            ] + ($details ? [
+                'actor_id' => $event->actor_id,
                 'subject_id' => $event->subject_id,
                 'metadata' => $event->metadata,
                 'correlation_id' => $event->correlation_id,
-                'created_at' => $event->created_at->toIso8601String(),
-            ]);
+            ] : []));
 
         return response()->json(['events' => $events]);
     }

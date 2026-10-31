@@ -145,6 +145,10 @@
 .groupItem { display: grid; gap: var(--space-2); border-top: 1px solid var(--border); }
 .groupRow { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-3); min-height: var(--control-height); }
 .groupName { flex: 1 1 10rem; min-width: 0; color: var(--ink-body); overflow-wrap: anywhere; }
+/* A group opens its children in "Записвания": inline in the list, as tall as the row in the profile. */
+.groupLink { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.groupLink:hover { color: var(--action-hover); }
+.groupName .groupLink { display: inline-flex; align-items: center; min-height: var(--control-height); }
 .groupRole { color: var(--ink-muted); font-size: 14px; }
 .groupRoleStrong { color: var(--ink); font-size: 14px; font-weight: 650; }
 .groupRow .tag { margin-left: 0; }

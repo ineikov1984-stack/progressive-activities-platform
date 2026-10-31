@@ -20,7 +20,7 @@ describe('dashboard API', () => {
         slug: 'progressive-academy-demo',
         status: 'active',
         role: 'organization_owner',
-        permissions: ['create', 'update', 'invite', 'finance', 'view'],
+        permissions: ['create', 'update', 'invite', 'finance', 'view', 'team.view', 'team.manage'],
       }] }))
       .mockResolvedValueOnce(jsonResponse({ invitations: [] }))
       .mockResolvedValueOnce(jsonResponse({ events: [{
@@ -62,5 +62,15 @@ describe('dashboard API', () => {
     expect(overview).toEqual({ invitations: [], auditEvents: [] });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith('/backend/api/v1/audit-events', expect.anything());
+  });
+
+  it('asks for the last actions only when the role sees the team, so a teacher gets an empty list without a request', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const overview = await loadWorkspaceOverview('org-1', false, false);
+
+    expect(overview).toEqual({ invitations: [], auditEvents: [] });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

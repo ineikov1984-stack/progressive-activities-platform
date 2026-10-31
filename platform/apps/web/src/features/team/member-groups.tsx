@@ -6,6 +6,7 @@ import { loadStaffGroups, type StaffGroup } from '@/features/enrollment/api';
 import { shortDay, sofiaDay } from '@/features/enrollment/presentation';
 import { assignGroup, createTeacherProfile, endAssignment, type GroupAssignment, TeamApiError, type TeamMember } from './api';
 import { assignmentPhase, assignmentRole, focusLater, focusVisible, groupsByActivity, groupsMeta } from './presentation';
+import { GroupName } from './team-page';
 import styles from './team.module.css';
 
 type Props = {
@@ -15,6 +16,8 @@ type Props = {
   canAssign: boolean;
   /** Letting a person lead groups: owner and administrator (`team.manage`). */
   canManage: boolean;
+  /** Each group opens its children in "Записвания" for those who see the enrollments (`enrollment.view`). */
+  canOpenGroups: boolean;
   onChanged: () => void;
   /** Each new number opens the form for a group: "+ Добави група" in the header, or right after adding the person. */
   addRequest: number;
@@ -127,7 +130,7 @@ function AddForm({ groups, taken, name, busy, onAdd, onCancel }: {
  * "Групи" in the profile (docs/product/team.md, т. 5, 10): by activity, lead or assistant, from a day to a day; the
  * ended ones folded. Works in published groups too; ending sends the assignment's version, a stale one gets 409.
  */
-export function MemberGroups({ organizationId, member, canAssign, canManage, onChanged, addRequest, addInHeader }: Props) {
+export function MemberGroups({ organizationId, member, canAssign, canManage, canOpenGroups, onChanged, addRequest, addInHeader }: Props) {
   const [today] = useState(() => sofiaDay(new Date()));
   const [groups, setGroups] = useState<StaffGroup[]>();
   const [adding, setAdding] = useState(false);
@@ -229,7 +232,7 @@ export function MemberGroups({ organizationId, member, canAssign, canManage, onC
   const row = (assignment: GroupAssignment, closed: boolean) => (
     <li key={assignment.group_id} className={styles.groupItem}>
       <div className={styles.groupRow}>
-        <span className={styles.groupName}>{assignment.group}</span>
+        <span className={styles.groupName}><GroupName assignment={assignment} linked={canOpenGroups} /></span>
         <span className={assignment.role === 'assistant' ? styles.groupRoleStrong : styles.groupRole}>{capitalized(assignmentRole(assignment.role))}</span>
         {closed && assignment.ends_on ? <span className={styles.tag}>до {shortDay(assignment.ends_on)}</span> : null}
         {!closed && assignment.starts_on && assignment.starts_on > today ? <span className={styles.tag}>от {shortDay(assignment.starts_on)}</span> : null}

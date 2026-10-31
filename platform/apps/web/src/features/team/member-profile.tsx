@@ -414,6 +414,7 @@ export function MemberProfile({ memberId }: { memberId: string }) {
   const canView = organization.permissions.includes('team.view');
   const canManage = organization.permissions.includes('team.manage');
   const canAssign = organization.permissions.includes('catalog.manage');
+  const canOpenGroups = organization.permissions.includes('enrollment.view');
   const [attempt, setAttempt] = useState(0);
   const [loaded, setLoaded] = useState<{ memberId: string; details: MemberDetails }>();
   const [failed, setFailed] = useState<{ key: string; text: string; status: number }>();
@@ -530,7 +531,7 @@ export function MemberProfile({ memberId }: { memberId: string }) {
 
       <div className={styles.columns}>
         <div className={styles.column}>
-          <MemberGroups organizationId={organization.id} member={member} canAssign={canAssign} canManage={canManage} onChanged={reload}
+          <MemberGroups organizationId={organization.id} member={member} canAssign={canAssign} canManage={canManage} canOpenGroups={canOpenGroups} onChanged={reload}
             addRequest={addRequest} addInHeader={addInHeader} />
           {history ? <HistoryCard history={history} /> : null}
         </div>
