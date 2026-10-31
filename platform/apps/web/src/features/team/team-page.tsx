@@ -2,59 +2,107 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useDashboardContext } from '@/features/dashboard/dashboard-context';
+import { sofiaDay } from '@/features/enrollment/presentation';
 import { AddMemberDialog } from './add-member-dialog';
-import { loadTeam, type TeamList, type TeamMember } from './api';
+import { type GroupAssignment, loadTeam, type TeamList, type TeamMember } from './api';
 import {
-  assignmentText, matchesFilters, memberRole, memberStatus, parseStateFilter, roleLabel, roleLabels, stateFilterLabels, waitingAction,
-  type StateFilter, type TeamFilters, type TeamRole,
+  accessAction, GROUPS_SHOWN, groupsByActivity, groupSummary, groupTags, matchesFilters, memberRole, memberStatus, noGroupsText, parseStateFilter,
+  roleLabel, roleLabels, stateFilterLabels, type StateFilter, type TeamFilters, type TeamRole,
 } from './presentation';
 import styles from './team.module.css';
 
 const noFilters: TeamFilters = { search: '', role: '', state: '' };
 
-/** The page "Екип" is for every role that sees the team (`team.view`); a teacher gets the "no access" state. */
+/** The page "Екип" is for every role that sees the team (`team.view`); a teacher gets this state instead. */
 export function NoTeamAccess() {
   return (
     <div className={styles.empty} role="note">
-      <strong>Нямате достъп до „Екип“</strong>
-      <p>Вашата роля не вижда екипа на организацията. Обърнете се към собственика на организацията.</p>
+      <strong>Страницата „Екип“ не е за вашата роля</strong>
+      <p>Ако ви трябва, помолете собственика на организацията да смени ролята ви.</p>
       <p><Link href="/dashboard">Към началото</Link></p>
     </div>
   );
 }
 
-function MemberRow({ member, canManage, now }: { member: TeamMember; canManage: boolean; now: Date }) {
+/** "Шахмат: Група 1, Група 2 · 3.–4. клас [помощник]" — one line per activity; only "помощник" and a coming start are marked. */
+export function ActivityLines({ groups, today }: { groups: GroupAssignment[]; today: string }) {
+  return (
+    <ul className={styles.activityLines}>
+      {groupsByActivity(groups).map((item) => (
+        <li key={item.activity}>
+          <span className={styles.activityName}>{item.activity}:</span>{' '}
+          {item.groups.map((group, index) => (
+            <Fragment key={group.group_id}>
+              {index > 0 ? ', ' : ''}{group.group}
+              {groupTags(group, today).map((tag) => <span key={tag} className={styles.tag}>{tag}</span>)}
+            </Fragment>
+          ))}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`} viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false">
+      <path d="M5 7.5 10 12.5 15 7.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Variant Б: up to two groups are shown; from three on, a button with the count and the activities opens them. */
+function GroupsCell({ member, today }: { member: TeamMember; today: string }) {
+  const [open, setOpen] = useState(false);
+  if (member.groups.length === 0) return <span className={styles.none}>{noGroupsText(member)}</span>;
+  if (member.groups.length <= GROUPS_SHOWN) return <ActivityLines groups={member.groups} today={today} />;
+  const summary = groupSummary(member.groups);
+  const id = `groups-${member.id}`;
+  return (
+    <>
+      <button type="button" className={styles.groupsButton} aria-expanded={open} aria-controls={id} onClick={() => setOpen((value) => !value)}>
+        <strong>{summary.count}</strong>
+        {summary.chips.map((chip) => <span key={chip} className={styles.chip}>{chip}</span>)}
+        <Chevron open={open} />
+      </button>
+      {open ? <div id={id} className={styles.groupsOpen}><ActivityLines groups={member.groups} today={today} /></div> : null}
+    </>
+  );
+}
+
+function MemberRow({ member, canManage, now, today }: { member: TeamMember; canManage: boolean; now: Date; today: string }) {
   const status = memberStatus(member, now);
   const role = memberRole(member);
-  const waiting = waitingAction(member, canManage);
-  const contacts = [member.phone, member.email].filter(Boolean).join(' · ');
+  const action = accessAction(member, canManage, now);
   return (
     <tr>
-      <td>
+      <td className={styles.cellName}>
         <div className={styles.person}>
           <Link className={styles.name} href={`/dashboard/team/${encodeURIComponent(member.id)}`}>{member.full_name}</Link>
-          <span className={`${styles.badge} ${styles[`tone_${status.tone}`]}`}>{status.label}</span>
-          {contacts ? <span className={styles.contacts}>{contacts}</span> : null}
+          {member.phone ? <span className={styles.contacts}>{member.phone}</span> : null}
         </div>
       </td>
-      <td data-label="Роля">{role ? roleLabel(role) : <span className={styles.none}>Без роля</span>}</td>
-      <td data-label="Групи">
-        {member.groups.length > 0 ? (
-          <ul className={styles.plainList}>{member.groups.map((group) => <li key={group.group_id}>{assignmentText(group)}</li>)}</ul>
-        ) : <span className={styles.none}>Няма групи</span>}
-      </td>
-      <td data-label="Чака">
-        {waiting ? <Link className={styles.waiting} href={waiting.href}>{waiting.label}</Link> : <span className={styles.none}>Нищо</span>}
+      <td className={styles.cellRole}>{role ? roleLabel(role) : <span className={styles.none}>Няма роля</span>}</td>
+      <td><GroupsCell member={member} today={today} /></td>
+      <td className={styles.cellAccess}>
+        <div className={styles.accessCell}>
+          <span className={styles.stack}>
+            <span className={`${styles.badge} ${styles[`tone_${status.tone}`]}`}>{status.label}</span>
+            {status.detail ? <span className={styles.small}>{status.detail}</span> : null}
+          </span>
+          {action ? <Link className={action.kind === 'button' ? styles.secondary : styles.waiting} href={action.href}>{action.label}</Link> : null}
+        </div>
       </td>
     </tr>
   );
 }
 
 /**
- * "Екип" (docs/product/team.md, т. 10): who is in the organization, what they lead and what waits for each of them.
- * Search and filters work on the loaded list; "Архивирани" loads the archived people.
+ * "Екип" (docs/product/team.md, т. 10; DECISIONS 31.10.2026 „Екип — полиран списък и профил“): who is in the
+ * organization, their role, the groups they lead and their access. Search and filters work on the loaded list;
+ * "В архива" loads the archived records.
  */
 export function TeamPage() {
   const { organization } = useDashboardContext();
@@ -68,6 +116,7 @@ export function TeamPage() {
   const [failed, setFailed] = useState<{ key: string; text: string }>();
   const [adding, setAdding] = useState(false);
   const [now] = useState(() => new Date());
+  const [today] = useState(() => sofiaDay(new Date()));
   const scope = `${organization.id}|${archived ? 'archived' : 'current'}`;
   const key = `${scope}|${attempt}`;
 
@@ -76,7 +125,7 @@ export function TeamPage() {
     let active = true;
     loadTeam(organization.id, archived)
       .then((list) => { if (active) setLoaded({ scope, list }); })
-      .catch((reason: unknown) => { if (active) setFailed({ key, text: reason instanceof Error ? reason.message : 'Екипът не се зареди.' }); });
+      .catch((reason: unknown) => { if (active) setFailed({ key, text: reason instanceof Error ? reason.message : 'Списъкът на екипа не се зареди.' }); });
     return () => { active = false; };
   }, [canView, organization.id, archived, scope, key]);
 
@@ -90,11 +139,10 @@ export function TeamPage() {
     <div className={styles.page}>
       <header className={styles.header}>
         <div className={styles.heading}>
-          <p className={styles.eyebrow}>Организация</p>
           <h1>Екип</h1>
-          <p className={styles.lead}>Хората в организацията, групите им и какво чака всеки.</p>
+          <p className={styles.lead}>Хората в организацията, ролите им и групите, които водят.</p>
         </div>
-        {canView && canManage ? <button type="button" className={styles.primary} onClick={() => setAdding(true)}>+ Добави човек</button> : null}
+        {canView && canManage ? <button type="button" className={styles.primary} onClick={() => setAdding(true)}>+ Добави в екипа</button> : null}
       </header>
 
       {!canView ? <NoTeamAccess /> : (
@@ -114,17 +162,17 @@ export function TeamPage() {
               </select>
             </div>
             <div className={styles.field}>
-              <label htmlFor="team-state">Състояние</label>
+              <label htmlFor="team-state">Достъп</label>
               <select id="team-state" className={styles.input} value={filters.state}
                 onChange={(event) => setFilters((current) => ({ ...current, state: event.target.value as StateFilter }))}>
-                <option value="">Всички без архивираните</option>
+                <option value="">Всички (без архива)</option>
                 {(Object.keys(stateFilterLabels) as Exclude<StateFilter, ''>[]).map((state) => <option key={state} value={state}>{stateFilterLabels[state]}</option>)}
               </select>
             </div>
           </div>
 
           <section aria-labelledby="team-list-title" aria-busy={list === undefined && !error}>
-            <h2 id="team-list-title" className="sr-only">{archived ? 'Архивирани хора' : 'Хората в екипа'}</h2>
+            <h2 id="team-list-title" className="sr-only">{archived ? 'В архива' : 'Хората в екипа'}</h2>
             {error && list === undefined ? (
               <div className={styles.empty} role="alert">
                 <strong>{error}</strong>
@@ -134,8 +182,8 @@ export function TeamPage() {
               <div className={styles.skeletonList}>{[0, 1, 2].map((row) => <span className={styles.skeleton} key={row} />)}</div>
             ) : list.members.length === 0 ? (
               <div className={styles.empty}>
-                <strong>{archived ? 'Няма архивирани хора' : 'В екипа още няма хора'}</strong>
-                <p>{archived ? 'Тук ще са хората, които сте архивирали.' : canManage ? 'С „Добави човек“ добавяте преподавател без вход или колега, когото каните да влиза в системата.' : 'Собственикът и администраторът добавят хората в екипа.'}</p>
+                <strong>{archived ? 'Архивът е празен' : 'В екипа още няма никого'}</strong>
+                <p>{archived ? 'Тук ще виждате записите, които архивирате.' : canManage ? 'С „Добави в екипа“ добавяте преподавател, който не се нуждае от достъп, или колега, на когото изпращате покана.' : 'Собственикът и администраторът добавят хората в екипа.'}</p>
               </div>
             ) : shown.length === 0 ? (
               <div className={styles.empty}>
@@ -145,13 +193,19 @@ export function TeamPage() {
             ) : (
               <>
                 {error ? <p className={styles.error} role="alert">{error}</p> : null}
-                {filtering ? <p className={styles.small} role="status">Показани {shown.length} от {list.members.length}</p> : null}
+                {filtering ? <p className={styles.small} role="status">Показани са {shown.length} от {list.members.length}</p> : null}
                 <div className={styles.tableWrap}>
                   <table className={styles.table}>
-                    <thead><tr><th scope="col">Човек</th><th scope="col">Роля</th><th scope="col">Групи</th><th scope="col">Чака</th></tr></thead>
-                    <tbody>{shown.map((member) => <MemberRow key={member.id} member={member} canManage={list.can_manage} now={now} />)}</tbody>
+                    <thead><tr><th scope="col">Име</th><th scope="col">Роля</th><th scope="col">Групи</th><th scope="col">Достъп</th></tr></thead>
+                    <tbody>{shown.map((member) => <MemberRow key={member.id} member={member} canManage={list.can_manage} now={now} today={today} />)}</tbody>
                   </table>
                 </div>
+                {archived ? null : (
+                  <p className={styles.small}>
+                    <strong>Има достъп</strong> — влиза със свой имейл и парола. <strong>Няма достъп</strong> — присъствията отбелязвате вие вместо
+                    преподавателя. <strong>Изпратена покана</strong> — чакаме да я приеме.
+                  </p>
+                )}
               </>
             )}
           </section>

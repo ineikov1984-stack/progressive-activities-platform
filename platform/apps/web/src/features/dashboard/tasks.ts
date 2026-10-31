@@ -62,7 +62,7 @@ export function buildTasks(activities: ActivityDraft[], invitations: DashboardIn
       id: 'invitations',
       tone: 'limited',
       title: plural(pending.length, 'неприета покана', 'неприети покани'),
-      detail: 'Напомнете на колегите да проверят имейла си или изпратете поканата пак',
+      detail: 'Напомнете на колегите да проверят имейла си или изпратете поканата отново',
       href: '/dashboard/team?state=invited',
     });
   }

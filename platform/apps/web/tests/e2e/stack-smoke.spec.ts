@@ -92,46 +92,50 @@ test('the owner adds a teacher without a login, then invites them by e-mail and 
   const email = `teacher-e2e+${stamp}@example.test`;
   await page.goto('/dashboard/team');
   await slow(page.getByRole('heading', { level: 1, name: 'Екип' })).toBeVisible();
-  await page.getByRole('button', { name: '+ Добави човек' }).click();
-  const panel = page.getByRole('dialog', { name: 'Добави човек в екипа' });
+  await page.getByRole('button', { name: '+ Добави в екипа' }).click();
+  const panel = page.getByRole('dialog', { name: 'Добави в екипа' });
   await panel.getByLabel('Име и фамилия').fill(name);
   await panel.getByLabel('Телефон').fill('0888 123 456');
   await expect(panel.getByRole('radio', { name: /^Преподавател или треньор/ })).toBeChecked();
-  await expect(panel.getByRole('switch', { name: /Покани да влиза/ })).not.toBeChecked();
+  await expect(panel.getByRole('switch', { name: /Изпрати покана за достъп/ })).not.toBeChecked();
   await Promise.all([
     page.waitForURL(/\/dashboard\/team\/[0-9a-f-]{36}\?tab=groups&added=1$/),
-    panel.getByRole('button', { name: 'Добави човека' }).click(),
+    panel.getByRole('button', { name: 'Добави', exact: true }).click(),
   ]);
   await slow(page.getByRole('heading', { level: 1, name })).toBeVisible();
-  await expect(page.getByText('Само профил, без вход').first()).toBeVisible();
-  // Right after adding, the form for the first group opens by itself.
+  await expect(page.getByText('Няма достъп', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(`${name} е в екипа. Сега добавете групите, които води.`)).toBeVisible();
+  // One page without tabs; right after adding, the form for the first group opens by itself.
   await slow(page.getByRole('region', { name: 'Групи' }).getByLabel('Група', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Права' })).toContainText('Още няма роля, защото няма достъп.');
 
-  // The invitation waits folded on one line until it is opened.
-  const invitation = page.getByRole('region', { name: 'Покана за вход' });
-  const fold = invitation.getByRole('button', { name: /Не влиза в системата.*Покани да влиза/ });
-  await expect(fold).toHaveAttribute('aria-expanded', 'false');
-  await fold.click();
+  // "Изпрати покана" waits folded until it is opened.
+  const invitation = page.getByRole('region', { name: 'Покана за достъп' });
+  const open = invitation.getByRole('button', { name: 'Изпрати покана', exact: true });
+  await expect(open).toHaveAttribute('aria-expanded', 'false');
+  await open.click();
   await invitation.getByLabel('Роля').selectOption('instructor');
   await invitation.getByLabel('Имейл').fill(email);
   await invitation.getByRole('button', { name: 'Изпрати поканата', exact: true }).click();
   await slow(invitation.getByText(`Изпратихме покана на ${email}.`)).toBeVisible();
-  // The form folds away; sending again is a second step that says the old links stop working.
+  // The form folds away; sending again is a second step that says the old link stops working.
   await expect(invitation.getByLabel('Имейл')).toHaveCount(0);
-  await expect(invitation.getByRole('button', { name: 'Изпрати поканата пак' })).toBeVisible();
-  await expect(invitation.getByText('Старото писмо и старата връзка спират да важат.')).toBeVisible();
-  // The link for copying is only for someone who already logs in: it waits folded.
-  await invitation.getByText('Колегата вече влиза в системата?').click();
+  await expect(invitation.getByRole('button', { name: 'Изпрати поканата отново' })).toBeVisible();
+  await expect(invitation.getByText('Връзката от предишната покана спира да работи.')).toBeVisible();
+  // The link for copying is only for someone who already has a profile: it waits folded.
+  await invitation.getByText('Колегата вече има профил в системата?').click();
   const link = invitation.getByLabel('Връзка за копиране');
   await expect(link).toHaveValue(/\/invite#[A-Za-z0-9]{64}$/);
   const href = await link.inputValue();
   await expect(invitation.getByRole('button', { name: 'Копирай връзката' })).toBeVisible();
 
-  // The list shows that the invitation waits, never its link.
+  // The list: the role of the invitation (not "no role"), the waiting invitation and a link to send it again — never the link.
   await page.goto('/dashboard/team');
   const row = page.getByRole('row').filter({ hasText: name });
-  await slow(row.getByText(/^Поканен · изтича /)).toBeVisible();
-  await expect(row.getByRole('link', { name: 'Изпрати поканата пак' })).toBeVisible();
+  await slow(row.getByText('Изпратена покана', { exact: true })).toBeVisible();
+  await expect(row.getByText(/^изтича /)).toBeVisible();
+  await expect(row.getByRole('cell', { name: 'Преподавател', exact: true })).toBeVisible();
+  await expect(row.getByRole('link', { name: 'Изпрати отново' })).toBeVisible();
   await expect(page.getByText('/invite#')).toHaveCount(0);
 
   // Someone without a session opens the copied link: the organization and the role, a login and no new profile
@@ -142,7 +146,7 @@ test('the owner adds a teacher without a login, then invites them by e-mail and 
     await visitor.goto(`/invite${new URL(href).hash}`);
     await slow(visitor.getByRole('heading', { level: 1, name: 'Покана за екипа на Progressive Academy Demo' })).toBeVisible();
     await expect(visitor.getByText('Роля: Преподавател')).toBeVisible();
-    await expect(visitor.getByText('Тази връзка е за човек, който вече влиза в системата.', { exact: false })).toBeVisible();
+    await expect(visitor.getByText('Тази връзка е за човек, който вече има профил.', { exact: false })).toBeVisible();
     await expect(visitor.getByRole('button', { name: 'Влез и приеми' })).toBeVisible();
     await expect(visitor.getByRole('button', { name: 'Създай профил и приеми' })).toHaveCount(0);
     await expect(visitor.getByText(email)).toHaveCount(0);

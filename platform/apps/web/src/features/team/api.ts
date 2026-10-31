@@ -4,11 +4,15 @@ import { teamErrorMessage, type ErrorBody } from './presentation';
 export type MemberState = 'login' | 'profile_only' | 'archived';
 /**
  * A group the person leads or assists; in the list only current and coming ones, in the profile the ended ones too.
- * `version` is the assignment's: ending it asks for it.
+ * `activity` and `group` are the activity's title and the group's name (`label` is both); `version` is the
+ * assignment's: ending it asks for it.
  */
-export type GroupAssignment = { group_id: string; label: string; role: 'lead' | 'assistant' | string; starts_on: string | null; ends_on: string | null; version: number };
-/** The latest invitation that is not accepted yet: its state and end only, never the link. */
-export type MemberInvitation = { status: 'pending' | 'expired' | string; expires_at: string };
+export type GroupAssignment = {
+  group_id: string; label: string; activity: string; group: string; role: 'lead' | 'assistant' | string;
+  starts_on: string | null; ends_on: string | null; version: number;
+};
+/** The latest invitation that is not accepted yet: its state, end and the role it gives — never the link. */
+export type MemberInvitation = { status: 'pending' | 'expired' | string; expires_at: string; role?: string };
 export type TeamMember = {
   id: string;
   full_name: string;

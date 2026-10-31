@@ -5,7 +5,7 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { loadStaffGroups, type StaffGroup } from '@/features/enrollment/api';
 import { shortDay, sofiaDay } from '@/features/enrollment/presentation';
 import { assignGroup, createTeacherProfile, endAssignment, type GroupAssignment, TeamApiError, type TeamMember } from './api';
-import { assignmentPhase, assignmentRole, focusLater, periodText } from './presentation';
+import { assignmentPhase, assignmentRole, focusLater, focusVisible, groupsByActivity, groupsMeta } from './presentation';
 import styles from './team.module.css';
 
 type Props = {
@@ -13,25 +13,20 @@ type Props = {
   member: TeamMember;
   /** Who leads and assists a group: owner, administrator and coordinator (`catalog.manage`, т. 13.1). */
   canAssign: boolean;
-  /** A teacher profile for a person: owner and administrator (`team.manage`). */
+  /** Letting a person lead groups: owner and administrator (`team.manage`). */
   canManage: boolean;
   onChanged: () => void;
-  /** Right after "Добави човека": the form for the first group opens by itself. */
-  openAddOnStart?: boolean;
-  onAddOpened?: () => void;
+  /** Each new number opens the form for a group: "+ Добави група" in the header, or right after adding the person. */
+  addRequest: number;
+  /** The header holds "+ Добави група" on a wide screen; the section's own button is then for a phone only. */
+  addInHeader: boolean;
 };
 
-const phaseOrder = { current: 0, coming: 1, ended: 2 } as const;
 const capitalized = (text: string) => text.charAt(0).toLocaleUpperCase('bg-BG') + text.slice(1);
 
-function phaseBadge(assignment: GroupAssignment, today: string): { text: string; tone: 'ok' | 'info' | 'muted' } {
-  const phase = assignmentPhase(assignment, today);
-  if (phase === 'coming') return { text: `Започва на ${shortDay(assignment.starts_on)}`, tone: 'info' };
-  if (phase === 'ended') return { text: `Приключило на ${shortDay(assignment.ends_on)}`, tone: 'muted' };
-  return { text: 'Текущо', tone: 'ok' };
-}
-
-function EndForm({ assignment, today, busy, onEnd, onCancel }: { assignment: GroupAssignment; today: string; busy: boolean; onEnd: (endsOn: string) => void; onCancel: () => void }) {
+function EndForm({ assignment, name, today, busy, onEnd, onCancel }: {
+  assignment: GroupAssignment; name: string; today: string; busy: boolean; onEnd: (endsOn: string) => void; onCancel: () => void;
+}) {
   const [endsOn, setEndsOn] = useState(() => (assignment.starts_on && assignment.starts_on > today ? assignment.starts_on : today));
   const id = `end-${assignment.group_id}`;
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -41,20 +36,20 @@ function EndForm({ assignment, today, busy, onEnd, onCancel }: { assignment: Gro
   return (
     <form className={styles.inline} onSubmit={submit}>
       <div className={styles.field}>
-        <label htmlFor={id}>Последен ден</label>
+        <label htmlFor={id}>Последен ден в групата</label>
         <input id={id} className={styles.input} type="date" value={endsOn} min={assignment.starts_on ?? undefined} required onChange={(event) => setEndsOn(event.target.value)} aria-describedby={`${id}-hint`} />
       </div>
-      <p id={`${id}-hint`} className={styles.small}>След този ден човекът излиза от следващите занимания на групата. Започналите и ръчно сменените занимания не се променят.</p>
+      <p id={`${id}-hint`} className={styles.small}>След този ден следващите занимания на групата са без {name}. Вече започналите и ръчно сменените занимания не се променят.</p>
       <div className={styles.actions}>
-        <button type="submit" className={styles.primary} disabled={busy || !endsOn} aria-busy={busy}>{busy ? 'Приключване…' : 'Приключи назначението'}</button>
+        <button type="submit" className={styles.primary} disabled={busy || !endsOn} aria-busy={busy}>{busy ? 'Приключване…' : 'Да, приключи'}</button>
         <button type="button" className={styles.secondary} onClick={onCancel}>Отказ</button>
       </div>
     </form>
   );
 }
 
-function AddForm({ groups, taken, busy, onAdd, onCancel }: {
-  groups: StaffGroup[]; taken: Set<string>; busy: boolean;
+function AddForm({ groups, taken, name, busy, onAdd, onCancel }: {
+  groups: StaffGroup[]; taken: Set<string>; name: string; busy: boolean;
   onAdd: (groupId: string, role: 'lead' | 'assistant', startsOn: string, endsOn: string) => void; onCancel: () => void;
 }) {
   const [groupId, setGroupId] = useState('');
@@ -82,7 +77,7 @@ function AddForm({ groups, taken, busy, onAdd, onCancel }: {
   if (free.length === 0) {
     return (
       <div className={styles.inline}>
-        <p>{groups.length === 0 ? 'Организацията още няма групи. Групите се създават в стъпка 7 на всяка дейност.' : 'Човекът вече води всички групи.'}</p>
+        <p>{groups.length === 0 ? 'Още нямате групи. Създавате ги в стъпка 7 на всяка дейност.' : `${name} вече е във всички групи.`}</p>
         <div className={styles.actions}>
           {groups.length === 0 ? <Link className={styles.secondary} href="/dashboard/activities">Към дейностите</Link> : null}
           <button type="button" className={styles.secondary} onClick={onCancel}>Затвори</button>
@@ -119,7 +114,7 @@ function AddForm({ groups, taken, busy, onAdd, onCancel }: {
           <input id="assign-to" className={styles.input} type="date" value={endsOn} min={startsOn || undefined} onChange={(event) => setEndsOn(event.target.value)} />
         </div>
       </div>
-      <p className={styles.small}>Без дати назначението важи веднага, докато не го приключите.</p>
+      <p className={styles.small}>Ако не изберете дати, важи от днес, докато не приключите работата в групата.</p>
       <div className={styles.actions}>
         <button type="submit" className={styles.primary} disabled={busy} aria-busy={busy}>{busy ? 'Добавяне…' : 'Добави групата'}</button>
         <button type="button" className={styles.secondary} onClick={onCancel}>Отказ</button>
@@ -129,38 +124,42 @@ function AddForm({ groups, taken, busy, onAdd, onCancel }: {
 }
 
 /**
- * "Групи" in the profile (docs/product/team.md, т. 5, 10): lead or assistant, from a day to a day; works in published
- * groups too. Ending sends the assignment's version from the profile; a stale one gets 409.
+ * "Групи" in the profile (docs/product/team.md, т. 5, 10): by activity, lead or assistant, from a day to a day; the
+ * ended ones folded. Works in published groups too; ending sends the assignment's version, a stale one gets 409.
  */
-export function MemberGroups({ organizationId, member, canAssign, canManage, onChanged, openAddOnStart = false, onAddOpened }: Props) {
+export function MemberGroups({ organizationId, member, canAssign, canManage, onChanged, addRequest, addInHeader }: Props) {
   const [today] = useState(() => sofiaDay(new Date()));
   const [groups, setGroups] = useState<StaffGroup[]>();
   const [adding, setAdding] = useState(false);
   const [ending, setEnding] = useState<string>();
+  const [endedOpen, setEndedOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const archived = member.state === 'archived';
   const profileId = member.instructor_profile_id;
-  const assignments = [...member.groups].sort((a, b) => phaseOrder[assignmentPhase(a, today)] - phaseOrder[assignmentPhase(b, today)]);
-  const taken = new Set(member.groups.filter((item) => assignmentPhase(item, today) !== 'ended').map((item) => item.group_id));
+  const name = member.full_name;
+  const open = member.groups.filter((item) => assignmentPhase(item, today) !== 'ended');
+  const ended = member.groups.filter((item) => assignmentPhase(item, today) === 'ended');
+  const taken = new Set(open.map((item) => item.group_id));
+  const canAdd = canAssign && !archived && profileId !== null;
   const message = (reason: unknown, fallback: string) => (reason instanceof Error && reason.message ? reason.message : fallback);
 
-  const canAdd = canAssign && !archived && profileId !== null;
+  // "+ Добави група" in the header, or right after adding the person: the groups load, then the form opens.
   useEffect(() => {
-    if (!openAddOnStart || !canAdd) return;
+    if (addRequest === 0 || !canAdd) return;
     let active = true;
     loadStaffGroups(organizationId)
       .then((loaded) => {
         if (!active) return;
         setGroups(loaded);
+        setEnding(undefined);
         setAdding(true);
-        onAddOpened?.();
         focusLater('assign-group');
       })
-      .catch(() => undefined);
+      .catch(() => { if (active) setError('Групите не се заредиха. Проверете интернет връзката и опитайте отново.'); });
     return () => { active = false; };
-  }, [openAddOnStart, canAdd, organizationId, onAddOpened]);
+  }, [addRequest, canAdd, organizationId]);
 
   async function organizationGroups(): Promise<StaffGroup[]> {
     if (groups) return groups;
@@ -176,7 +175,7 @@ export function MemberGroups({ organizationId, member, canAssign, canManage, onC
       setAdding(true);
       focusLater('assign-group');
     } catch (reason) {
-      setError(message(reason, 'Групите не се заредиха. Проверете връзката и опитайте отново.'));
+      setError(message(reason, 'Групите не се заредиха. Проверете интернет връзката и опитайте отново.'));
     }
   }
 
@@ -187,11 +186,11 @@ export function MemberGroups({ organizationId, member, canAssign, canManage, onC
       await assignGroup(organizationId, groupId, { instructor_profile_id: profileId, role, starts_on: startsOn || null, ends_on: endsOn || null });
       const group = groups?.find((item) => item.id === groupId);
       const label = group ? [group.activity_title, group.name].filter(Boolean).join(' · ') : 'групата';
-      setNotice(`${member.full_name} е ${assignmentRole(role)} в „${label}“.`);
+      setNotice(`${name} вече е ${assignmentRole(role)} в „${label}“.`);
       setAdding(false);
       onChanged();
     } catch (reason) {
-      setError(message(reason, 'Назначението не беше добавено.'));
+      setError(message(reason, 'Групата не беше добавена.'));
     } finally {
       setBusy(false);
     }
@@ -202,11 +201,11 @@ export function MemberGroups({ organizationId, member, canAssign, canManage, onC
     setBusy(true); setError('');
     try {
       await endAssignment(organizationId, assignment.group_id, profileId, endsOn, assignment.version);
-      setNotice(`Назначението в „${assignment.label}“ приключва на ${shortDay(endsOn)}.`);
+      setNotice(`Последният ден в „${assignment.label}“ е ${shortDay(endsOn)}.`);
       setEnding(undefined);
       onChanged();
     } catch (reason) {
-      setError(message(reason, 'Назначението не беше приключено.'));
+      setError(message(reason, 'Промяната не беше запазена.'));
       // Changed meanwhile: the profile is loaded again, so the next try has the new version.
       if (reason instanceof TeamApiError && reason.status === 409) onChanged();
     } finally {
@@ -214,67 +213,91 @@ export function MemberGroups({ organizationId, member, canAssign, canManage, onC
     }
   }
 
-  async function makeTeacher() {
+  async function letLead() {
     setBusy(true); setError('');
     try {
       await createTeacherProfile(organizationId, member.id);
-      setNotice(`${member.full_name} вече има профил на преподавател и може да води групи.`);
+      setNotice(`${name} вече може да води групи.`);
       onChanged();
     } catch (reason) {
-      setError(message(reason, 'Профилът на преподавател не беше създаден.'));
+      setError(message(reason, 'Промяната не беше запазена.'));
     } finally {
       setBusy(false);
     }
   }
 
+  const row = (assignment: GroupAssignment, closed: boolean) => (
+    <li key={assignment.group_id} className={styles.groupItem}>
+      <div className={styles.groupRow}>
+        <span className={styles.groupName}>{assignment.group}</span>
+        <span className={assignment.role === 'assistant' ? styles.groupRoleStrong : styles.groupRole}>{capitalized(assignmentRole(assignment.role))}</span>
+        {closed && assignment.ends_on ? <span className={styles.tag}>до {shortDay(assignment.ends_on)}</span> : null}
+        {!closed && assignment.starts_on && assignment.starts_on > today ? <span className={styles.tag}>от {shortDay(assignment.starts_on)}</span> : null}
+        {canAssign && !archived && !closed && ending !== assignment.group_id ? (
+          <button id={`end-button-${assignment.group_id}`} type="button" className={styles.rowAction}
+            onClick={() => { setEnding(assignment.group_id); setAdding(false); setNotice(''); setError(''); focusLater(`end-${assignment.group_id}`); }}>
+            Приключи<span className="sr-only"> работата в „{assignment.label}“</span>
+          </button>
+        ) : null}
+      </div>
+      {ending === assignment.group_id ? (
+        <EndForm assignment={assignment} name={name} today={today} busy={busy} onEnd={(endsOn) => end(assignment, endsOn)}
+          onCancel={() => { setEnding(undefined); focusLater(`end-button-${assignment.group_id}`); }} />
+      ) : null}
+    </li>
+  );
+
   return (
     <section className={styles.card} aria-labelledby="groups-title">
-      <h2 id="groups-title">Групи</h2>
+      <div className={styles.cardHead}>
+        <h2 id="groups-title">Групи</h2>
+        {open.length > 0 ? <span className={styles.muted}>{groupsMeta(open)}</span> : null}
+      </div>
       <p className={notice ? styles.ok : 'sr-only'} role="status">{notice}</p>
       {error ? <p className={styles.error} role="alert">{error}</p> : null}
 
       {!profileId ? (
         <>
-          <p>Няма профил на преподавател, затова не води групи.</p>
+          <p>Още не може да води групи.</p>
           {canManage && !archived ? (
             <div className={styles.actions}>
-              <button type="button" className={styles.secondary} disabled={busy} onClick={makeTeacher}>Създай профил на преподавател</button>
+              <button type="button" className={styles.secondary} disabled={busy} onClick={letLead}>Разреши да води групи</button>
             </div>
           ) : null}
         </>
       ) : (
         <>
-          {assignments.length === 0 ? <p className={styles.muted}>Още не води група.</p> : (
-            <ul className={styles.rows}>
-              {assignments.map((assignment) => {
-                const badge = phaseBadge(assignment, today);
-                const period = periodText(assignment);
-                const open = assignmentPhase(assignment, today) !== 'ended';
-                return (
-                  <li key={assignment.group_id}>
-                    <div className={styles.rowHead}>
-                      <span className={styles.rowTitle}>{assignment.label}</span>
-                      <span className={`${styles.badge} ${styles[`tone_${badge.tone}`]}`}>{badge.text}</span>
+          {open.length === 0 ? <p className={styles.muted}>Още не води група.</p> : groupsByActivity(open).map((item) => (
+            <div key={item.activity} className={styles.activityBlock}>
+              <h3 className={styles.activityTitle}>{item.activity}</h3>
+              <ul className={styles.groupList}>{item.groups.map((assignment) => row(assignment, false))}</ul>
+            </div>
+          ))}
+          {ended.length > 0 ? (
+            <div>
+              <button type="button" className={styles.rowAction} aria-expanded={endedOpen} aria-controls="ended-groups" onClick={() => setEndedOpen((value) => !value)}>
+                Приключили групи ({ended.length})<span aria-hidden="true">{endedOpen ? ' ▴' : ' ▾'}</span>
+              </button>
+              {endedOpen ? (
+                <div id="ended-groups">
+                  {groupsByActivity(ended).map((item) => (
+                    <div key={item.activity} className={styles.activityBlock}>
+                      <h3 className={styles.activityTitle}>{item.activity}</h3>
+                      <ul className={styles.groupList}>{item.groups.map((assignment) => row(assignment, true))}</ul>
                     </div>
-                    <span>{capitalized(assignmentRole(assignment.role))}{period ? ` · ${period}` : ''}</span>
-                    {canAssign && !archived && open ? (
-                      ending === assignment.group_id
-                        ? <EndForm assignment={assignment} today={today} busy={busy} onEnd={(endsOn) => end(assignment, endsOn)}
-                          onCancel={() => { setEnding(undefined); focusLater(`end-button-${assignment.group_id}`); }} />
-                        : <button id={`end-button-${assignment.group_id}`} type="button" className={styles.linkButton}
-                          onClick={() => { setEnding(assignment.group_id); setAdding(false); setNotice(''); setError(''); focusLater(`end-${assignment.group_id}`); }}>
-                          Приключи назначението<span className="sr-only"> в „{assignment.label}“</span>
-                        </button>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {canAssign && !archived ? (
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {canAdd ? (
             adding && groups
-              ? <AddForm groups={groups} taken={taken} busy={busy} onAdd={add} onCancel={() => { setAdding(false); focusLater('add-group-button'); }} />
-              : <div className={styles.actions}><button id="add-group-button" type="button" className={styles.secondary} onClick={openAdd}>+ Добави група</button></div>
+              ? <AddForm groups={groups} taken={taken} name={name} busy={busy} onAdd={add} onCancel={() => { setAdding(false); focusVisible(['add-group-button', 'add-group-header']); }} />
+              : (
+                <div className={`${styles.actions} ${addInHeader ? styles.phoneOnly : ''}`}>
+                  <button id="add-group-button" type="button" className={styles.secondary} onClick={openAdd}>+ Добави група</button>
+                </div>
+              )
           ) : !canAssign ? <p className={styles.small}>Групите разпределят собственикът, администраторът и координаторът.</p> : null}
         </>
       )}
