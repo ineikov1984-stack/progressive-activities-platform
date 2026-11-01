@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { deadlineText, historyLines, initialView, clock, childLabel, undoAllowed, attendanceView } from '../src/features/attendance/presentation';
+import { deadlineText, historyLines, initialView, clock, childLabel, undoAllowed, attendanceView, panelChildState, saveFeedback } from '../src/features/attendance/presentation';
 import type { AttendanceChild, History, Sheet } from '../src/features/attendance/api';
 const child = { enrollment_id: 'e', name: 'Ана Иванова' } as AttendanceChild;
 const row = (id: string, at: string, from: History['from'], to: History['to'], extra: Partial<History> = {}): History => ({ id, at, from, to, by: 'Иван Петров', kind: 'mark', enrollment_id: 'e', ...extra });
@@ -28,4 +28,28 @@ it('allows undo to a previous status after the deadline but never clearing a lat
 
 it('keeps month links explicit and defaults to daily work only for people who may mark',()=>{
  expect(attendanceView('',true)).toBe('pending');expect(attendanceView('',false)).toBe('month');expect(attendanceView('view=month',true)).toBe('month');expect(attendanceView('group=g&month=2026-11',true)).toBe('month');expect(attendanceView('group=g&view=pending',true)).toBe('pending');expect(attendanceView('view=pending',false)).toBe('month');
+});
+
+it('distinguishes future, missing, warned, paused and closed sessions in the schedule panel',()=>{
+ const session={starts_at:'2026-11-02T15:30:00Z',status:'scheduled',not_held:null} as Sheet['session'];
+ const c={...child,expected:true,status:null,warned:false,came_while_paused:false} as AttendanceChild;
+ const now=Date.parse('2026-11-02T15:40:00Z');
+ expect(panelChildState(session,c,now)).toBe('unmarked');
+ expect(panelChildState(session,c,now-3600000)).toBe('future');
+ expect(panelChildState(session,{...c,status:'present'},now)).toBe('present');
+ expect(panelChildState(session,{...c,status:'absent'},now)).toBe('absent');
+ expect(panelChildState(session,{...c,status:'absent',warned:true},now)).toBe('warned');
+ expect(panelChildState(session,{...c,expected:false},now)).toBe('paused');
+ expect(panelChildState(session,{...c,expected:false,came_while_paused:true,status:'present'},now)).toBe('paused_present');
+ expect(panelChildState({...session,status:'cancelled'},c,now)).toBe('cancelled');
+ expect(panelChildState({...session,not_held:{at:session.starts_at}},c,now)).toBe('not_held');
+});
+it('always reports dirty, pending, offline, failed, saved and read-only states truthfully',()=>{
+ expect(saveFeedback({pending:0,failed:false,offline:false},true,false)).toBe('Всичко е записано');
+ expect(saveFeedback({pending:0,failed:false,offline:false},true,true)).toBe('Има незаписани промени');
+ expect(saveFeedback({pending:1,failed:false,offline:false},true,false)).toBe('Записва се…');
+ expect(saveFeedback({pending:1,failed:false,offline:true},true,false)).toBe('Няма връзка · има незаписани промени');
+ expect(saveFeedback({pending:1,failed:true,offline:false},true,false)).toBe('Не е записано');
+ expect(saveFeedback({pending:0,failed:false,offline:false},false,false)).toBe('Само преглед');
+ expect(saveFeedback({pending:0,failed:false,offline:false},false,true,true)).toBe('Не е записано');
 });

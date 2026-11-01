@@ -1,4 +1,5 @@
 'use client';
+import {saveFeedback} from './presentation';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -48,6 +49,7 @@ function SheetEditor({ initial, organizationId, withDetails, onClose, closeReque
   const [sheet, setSheet] = useState(initial); const base = useRef(initial); const intents = useRef<Intent[]>([]);
   const [mode, setMode] = useState(initialView(initial)); const [reason, setReason] = useState(''); const reasonField = useRef<HTMLTextAreaElement>(null);
   const [topic, setTopic] = useState(initial.session.topic ?? ''); const topicRef = useRef(topic); const lastTopic = useRef(topic);
+  const [saveRejected,setSaveRejected]=useState(false);
   const [notice, setNotice] = useState(''); const [queueState, setQueueState] = useState({ pending: 0, failed: false, offline: false });
   const queue = useRef<AttendanceQueue | null>(null); const [child, setChild] = useState<AttendanceChild>(); const eye = useRef<HTMLButtonElement | null>(null);
   const [toast, setToast] = useState<{ text: string; applied: Applied[] }>(); const [hoverToast, setHoverToast] = useState(false); const [focusToast, setFocusToast] = useState(false); const pauseToast = hoverToast || focusToast;
@@ -89,14 +91,15 @@ function SheetEditor({ initial, organizationId, withDetails, onClose, closeReque
     if (draft.action !== 'topic' && base.current.abilities.reason_required && !reason.trim()) { setNotice('Напишете причина за поправката.'); reasonField.current?.focus(); return; }
     const intent: Intent = { ...draft, id: crypto.randomUUID(), ...(draft.action !== 'topic' && reason.trim() ? { reason: reason.trim() } : {}) };
     if (intent.action === 'topic') lastTopic.current = intent.topic ?? '';
-    epoch.current++; intents.current.push(intent); repaint();
+    setSaveRejected(false); epoch.current++; intents.current.push(intent); repaint();
     queue.current.add(intent.id, () => intent.action === 'mark' ? { action: 'mark', reason: intent.reason, marks: (intent.marks ?? []).map((m) => ({ enrollment_id: m.enrollment_id, status: m.status, version: m.version ?? base.current.children.find((c) => c.enrollment_id === m.enrollment_id)?.version ?? 0 })) } : intent.action === 'topic' ? { action: 'topic', topic: intent.topic?.trim() || null } : { action: 'all_present', reason: intent.reason }, (answer, error) => {
       intents.current = intents.current.filter((i) => i.id !== intent.id);
-      if (answer) { base.current = answer;
+      if (answer) { setSaveRejected(false); base.current = answer;
         if (intent.undo) setToast({ text: `Отменено: ${answer.applied.length} ${answer.applied.length === 1 ? 'дете' : 'деца'}.`, applied: [] });
         else if (intent.action !== 'topic' && answer.applied.length) { const one = answer.applied[0]; const name = answer.children.find((c) => c.enrollment_id === one.enrollment_id)?.name ?? 'Дете'; setToast({ text: answer.applied.length === 1 ? `Записано: ${name} — ${markLabel(one.to)}` : `Записано: ${answer.applied.length} деца — Присъства`, applied: undoAllowed(answer.applied, answer.abilities.reason_required) ? answer.applied : [] }); }
         setNotice('');
       } else if (error instanceof AttendanceError) {
+        setSaveRejected(true);
         if (error.status === 409 && error.body.children && error.body.session && error.body.abilities && error.body.counts) {
           base.current = error.body as Answer; const changed = error.body.children.find((c) => error.body.conflicts?.includes(c.enrollment_id));
           setNotice(changed ? `Междувременно ${changed.marked_by ?? 'член на екипа'} отбеляза ${changed.name}: „${markLabel(changed.status)}“. Вижте новото състояние.` : error.message);
@@ -152,7 +155,7 @@ function SheetEditor({ initial, organizationId, withDetails, onClose, closeReque
     </details></>}
     {sheet.abilities.not_held || sheet.abilities.held ? <button ref={actionButton} className={styles.button} disabled={queueState.pending>0} onClick={()=>{if(topic.trim()!==(base.current.session.topic??'')){saveTopic();setNotice('Изчакайте темата да се запише и опитайте пак.');return;}setSessionAction(sheet.abilities.held?'held':'not_held');}}>{sheet.abilities.held?'Проведе се':'Не се проведе'}</button> : null}
     {sessionAction ? <AttendanceSessionAction organizationId={organizationId} sheet={sheet} action={sessionAction} onClose={()=>{setSessionAction(undefined);actionButton.current?.focus();}} onSaved={(fresh)=>{epoch.current++;base.current=fresh;setSheet(fresh);setSessionAction(undefined);setMode(initialView(fresh));setNotice('Записано.');setTopic(fresh.session.topic??'');topicRef.current=fresh.session.topic??'';lastTopic.current=fresh.session.topic??'';actionButton.current?.focus();}}/> : null}
-    </div><footer className={styles.editorFoot}><span className={styles.muted}>{queueState.pending?queueState.failed?'Не е записано':'Записва се…':!sheet.abilities.mark?'Само преглед':'Промените се записват автоматично'}</span>{onClose?<button className={styles.primary} onClick={requestClose}>Готово</button>:<Link className={styles.primary} href={back} onClick={leave}>Готово</Link>}</footer>
+    </div><footer className={styles.editorFoot}><span className={styles.muted} role="status" aria-live="polite">{saveFeedback(queueState,sheet.abilities.mark,topic.trim()!==(sheet.session.topic??'').trim(),saveRejected)}</span>{onClose?<button className={styles.primary} onClick={requestClose}>Готово</button>:<Link className={styles.primary} href={back} onClick={leave}>Готово</Link>}</footer>
     {toast ? <div className={styles.toast} onMouseEnter={() => setHoverToast(true)} onMouseLeave={() => setHoverToast(false)} onFocus={() => setFocusToast(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setFocusToast(false); }}><span role="status" aria-live="polite">{toast.text}</span>{toast.applied.length > 0 ? <button className={styles.button} onClick={() => { enqueue({ action: 'mark', undo: true, marks: toast.applied.map((a) => ({ enrollment_id: a.enrollment_id, status: a.from, version: a.version })) }); setToast(undefined); }}>Отмени</button> : null}</div> : null}
     {child?.child_id ? <ChildCardDialog organizationId={organizationId} child={{ ...child, child_id: child.child_id }} session={{ id: s.id, group_id: s.group.id, starts_at: s.starts_at }} withDetails={withDetails} now={now} onClose={() => { setChild(undefined); eye.current?.focus(); }} /> : null}
   </div>;

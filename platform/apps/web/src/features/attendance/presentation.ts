@@ -43,3 +43,20 @@ export function attendanceView(query:string,daily:boolean): 'pending' | 'month' 
  if(params.get('view')==='pending')return 'pending';
  return params.get('view')==='month'||params.has('group')||params.has('month')?'month':'pending';
 }
+
+/** Existing sheet permissions gate these labels; a future session is never an unmarked absence. */
+export function panelChildState(session:Sheet['session'],child:AttendanceChild,now:number):string {
+ if(session.status==='cancelled')return 'cancelled';
+ if(session.not_held)return 'not_held';
+ if(child.came_while_paused)return 'paused_present';
+ if(!child.expected)return 'paused';
+ if(child.warned)return 'warned';
+ if(child.status)return child.status;
+ return Date.parse(session.starts_at)>now?'future':'unmarked';
+}
+export function saveFeedback(state:{pending:number;failed:boolean;offline:boolean},canMark:boolean,dirtyTopic:boolean,rejected=false):string {
+ if(state.pending){if(state.failed)return 'Не е записано';if(state.offline)return 'Няма връзка · има незаписани промени';return 'Записва се…';}
+ if(rejected)return 'Не е записано';
+ if(dirtyTopic)return 'Има незаписани промени';
+ return canMark?'Всичко е записано':'Само преглед';
+}
