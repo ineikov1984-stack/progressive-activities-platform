@@ -6,7 +6,7 @@ import { approvalLine } from './presentation';
 import styles from './enrollments.module.css';
 
 /** `canChange`: "Създава и променя дейности" — the owner, the administrator, the coordinator (DECISIONS 31.10.2026). */
-type Props = { organizationId: string; groupId: string; mode?: ApprovalMode; canChange: boolean; onSaved: () => void };
+type Props = { organizationId: string; groupId: string; mode?: ApprovalMode; canChange: boolean; onSaved: (mode: ApprovalMode) => void };
 
 const options: { value: ApprovalMode; title: string; text: string }[] = [
   { value: 'manual', title: 'Ръчно от екипа', text: 'Всяка заявка чака вашето решение.' },
@@ -30,11 +30,11 @@ export function ApprovalSetting({ organizationId, groupId, mode, canChange, onSa
     const previous = current;
     setCurrent(next); setBusy(true); setMessage(''); setError('');
     try {
-      await saveGroupApproval(organizationId, groupId, next);
+      const saved = await saveGroupApproval(organizationId, groupId, next);
       setMessage(next === 'automatic'
         ? 'Записано. Новите заявки се одобряват сами, докато има място. Заявките, които вече чакат, решавате вие.'
         : 'Записано. Новите заявки ще чакат вашето решение.');
-      onSaved();
+      onSaved(saved.enrollment_approval_mode);
     } catch (reason) {
       setCurrent(previous);
       setError(changeErrorMessage(reason, 'Настройката не беше запазена. Опитайте отново.'));

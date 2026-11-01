@@ -405,7 +405,7 @@ test('the team opens enrollments: inbox and group rosters', async () => {
   await expect(page.getByRole('button', { name: /^Заявки/ })).toHaveAttribute('aria-pressed', 'true');
   await slow(page.getByRole('region', { name: 'Заявки, които чакат решение' })).toHaveAttribute('aria-busy', 'false');
   await page.getByRole('button', { name: 'Групи', exact: true }).click();
-  const firstGroup = page.getByRole('button', { name: /Група/ }).first();
+  const firstGroup = page.getByRole('button', { name: /^Виж децата —/ }).first();
   await slow(firstGroup).toBeVisible();
   await firstGroup.click();
   await slow(page.getByText(/Заети места:/)).toBeVisible();

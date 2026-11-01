@@ -1,15 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDashboardContext } from '@/features/dashboard/dashboard-context';
 import { type ApplicationFacets, type ApplicationPage, type DetailsTarget, loadApplications, loadStaffGroups, reviewApplication, type ReviewDecision, type StaffApplication, type StaffGroup } from './api';
 import { ChildDetailsPanel, DetailsName } from './child-details';
-import { GroupRosterPanel } from './group-roster';
+import { GroupsWorkspace } from './groups-workspace';
+import { ownScheduleOnly } from '../dashboard/navigation';
 import {
-  activitySummary, applicationPlaces, dateText, dateTimeText, type GroupFilter, groupFill, groupFilterLabels, groupsByActivity, hasPlaceForWaiting,
-  matchesGroupFilter, matchesGroupSearch, needsGroupPlace, priceText, scheduleText, scopeLabels, waitingQueues, waitingText,
+  applicationPlaces, dateText, dateTimeText, needsGroupPlace, priceText, scopeLabels, waitingQueues, waitingText,
 } from './presentation';
 import styles from './enrollments.module.css';
 
@@ -20,18 +20,8 @@ function initialTab(view: string | null): Tab {
 }
 /** Filters appear once a list is long enough to need them. */
 const FILTERS_FROM = 4;
-/** With more activities than this, the group list opens folded, one activity at a time. */
-const OPEN_ACTIVITIES_UP_TO = 4;
 /** Applications shown at once; "Покажи още" adds the next ones. */
 const PAGE = 20;
-
-function Chevron({ open }: { open: boolean }) {
-  return (
-    <svg className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`} viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false">
-      <path d="M5 7.5 10 12.5 15 7.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 type RowProps = {
   application: StaffApplication;
@@ -173,121 +163,16 @@ function WaitingQueues({ queues, counts, busyId, canManage, onDecide, onDetails 
   );
 }
 
-function GroupsView({ groups, organizationId, canManage, canChangeApproval, openGroup, onToggleGroup, onChanged, onDetails }: { groups: StaffGroup[]; organizationId: string; canManage: boolean; canChangeApproval: boolean; openGroup?: string; onToggleGroup: (groupId: string) => void; onChanged: () => void; onDetails?: (target: DetailsTarget, opener: HTMLElement) => void }) {
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<GroupFilter>('all');
-  // Many activities open folded, except the one with the group opened from a link.
-  const [folded, setFolded] = useState<Set<string>>(() => {
-    const sections = groupsByActivity(groups);
-    if (sections.length <= OPEN_ACTIVITIES_UP_TO) return new Set();
-    return new Set(sections.filter((section) => !section.groups.some((group) => group.id === openGroup)).map((section) => section.id));
-  });
-  const narrowing = search.trim() !== '' || filter !== 'all';
-  // The heading of an activity always counts all its groups; the filter decides which are listed.
-  const sections = groupsByActivity(groups)
-    .map((section) => ({ section, shown: section.groups.filter((group) => matchesGroupFilter(group, filter) && matchesGroupSearch(group, search)) }))
-    .filter((item) => item.shown.length > 0);
-  const filters: GroupFilter[] = ['all', 'free', 'full', 'waiting'];
-
-  function toggleActivity(id: string) {
-    setFolded((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }
-
-  return (
-    <>
-      {groups.length > FILTERS_FROM ? (
-        <div className={`${styles.filters} ${styles.filtersOpen}`} role="search" aria-label="Търсене в групите">
-          <div className={styles.filterField}>
-            <label htmlFor="groups-search">Дейност, група или място</label>
-            <input id="groups-search" type="search" value={search} placeholder="Например: шахмат" maxLength={100} onChange={(event) => setSearch(event.target.value)} />
-          </div>
-          <div className={styles.chips} role="group" aria-label="Покажи">
-            {filters.map((item) => (
-              <button key={item} type="button" className={`${styles.chip} ${filter === item ? styles.chipOn : ''}`} aria-pressed={filter === item} onClick={() => setFilter(item)}>
-                {groupFilterLabels[item]} <span className={styles.chipCount}>{groups.filter((group) => matchesGroupFilter(group, item)).length}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      {sections.length === 0 ? (
-        <div className={styles.empty} role="status">
-          <strong>Няма групи, които отговарят на търсенето</strong>
-          <p><button type="button" className={styles.secondary} onClick={() => { setSearch(''); setFilter('all'); }}>Покажи всички групи</button></p>
-        </div>
-      ) : (
-        <div className={styles.activities}>
-          {sections.map(({ section, shown }) => {
-            const open = narrowing || !folded.has(section.id);
-            const label = (
-              <span className={styles.activityText}>
-                <span className={styles.activityTitle}>{section.title}</span>
-                <span className={styles.small}>{section.category ? `${section.category} · ` : ''}{activitySummary(section, shown.length)}</span>
-                {section.placeForWaiting > 0 ? <span className={styles.workBadge}>Има място за чакащо дете</span> : null}
-              </span>
-            );
-            return (
-              <section key={section.id} className={styles.activity} aria-labelledby={`activity-${section.id}`}>
-                <h3 className={styles.activityHeading} id={`activity-${section.id}`}>
-                  {narrowing ? <span className={styles.activityStatic}>{label}</span> : (
-                    <button type="button" className={styles.activityButton} aria-expanded={open} onClick={() => toggleActivity(section.id)}>
-                      {label}
-                      <span className={styles.toggle}><span className={styles.toggleText}>{open ? 'Скрий' : 'Покажи'}</span><Chevron open={open} /></span>
-                    </button>
-                  )}
-                </h3>
-                {open ? (
-                  <ul className={styles.groupList}>
-                    {shown.map((group) => {
-                      const expanded = openGroup === group.id;
-                      const fill = groupFill(group);
-                      const details = [scheduleText(group.schedule), group.location_name, group.enrollment_approval_mode === 'automatic' ? 'автоматично одобрение' : ''].filter(Boolean).join(' · ');
-                      return (
-                        <li key={group.id} className={styles.groupItem}>
-                          <h4 className={`${styles.groupHeading} ${expanded ? styles.groupHeadingOpen : ''}`}>
-                            <button id={`group-${group.id}`} type="button" className={styles.groupButton} aria-expanded={expanded} onClick={() => onToggleGroup(group.id)}>
-                              <span className={styles.groupMain}>
-                                <strong>{group.name}</strong>
-                                <span className={styles.small}>{details || 'Денят и часът още не са въведени'}</span>
-                              </span>
-                              <span className={styles.groupStats}>
-                                <span className={styles.fill}>
-                                  {fill.percent !== null ? <span className={styles.meter} aria-hidden="true"><span className={fill.full ? styles.meterFull : styles.meterValue} style={{ width: `${fill.percent}%` }} /></span> : null}
-                                  <span className={fill.full ? styles.fullText : undefined}>{fill.text}</span>
-                                </span>
-                                {group.waitlist_count > 0 ? <span className={hasPlaceForWaiting(group) ? styles.workBadge : styles.waitBadge}>{hasPlaceForWaiting(group) ? `Има място · ${waitingText(group.waitlist_count)}` : waitingText(group.waitlist_count)}</span> : null}
-                              </span>
-                              <span className={styles.toggle}><span className={styles.toggleText}>{expanded ? 'Скрий децата' : 'Деца'}</span><Chevron open={expanded} /></span>
-                            </button>
-                          </h4>
-                          {expanded ? <GroupRosterPanel organizationId={organizationId} groupId={group.id} canManage={canManage} canChangeApproval={canChangeApproval} onChanged={onChanged} onDetails={onDetails} /> : null}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : null}
-              </section>
-            );
-          })}
-        </div>
-      )}
-    </>
-  );
-}
-
 const noFilters: FilterValues = { search: '', activityId: '', groupId: '' };
 
 export function EnrollmentsPage() {
   const { organization } = useDashboardContext();
   const searchParams = useSearchParams();
+  const router = useRouter();
   // A teacher without "Вижда децата и записванията" comes from "Начало" to their own groups only: no applications
   // and no waiting lists (DECISIONS 31.10.2026).
   const canView = organization.permissions.includes('enrollment.view');
-  const [tab, setTab] = useState<Tab>(() => canView ? initialTab(searchParams.get('view')) : 'groups');
+  const tab: Tab = canView ? initialTab(searchParams.get('view')) : 'groups';
   const [submitted, setSubmitted] = useState<ApplicationPage>();
   const [waitlisted, setWaitlisted] = useState<ApplicationPage>();
   const [groups, setGroups] = useState<StaffGroup[]>();
@@ -312,14 +197,20 @@ export function EnrollmentsPage() {
   const closeDetails = useCallback(() => {
     setDetails(undefined);
     // Opened from a link, the panel gives the focus to the group it came with.
-    requestAnimationFrame(() => (detailsOpener.current ?? document.getElementById(`group-${searchParams.get('group')}`))?.focus());
-  }, [searchParams]);
-  const [openGroup, setOpenGroup] = useState<string | undefined>(() => searchParams.get('group') ?? undefined);
+    requestAnimationFrame(() => (detailsOpener.current?.isConnected ? detailsOpener.current : document.getElementById('selected-group-title'))?.focus());
+  }, []);
+  const openGroup = searchParams.get('group') ?? undefined;
+  const changeView = (next: Tab, groupId?: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('view', next); params.delete('enrollment');
+    if (next === 'groups' && groupId) params.set('group', groupId); else params.delete('group');
+    router.push(`/dashboard/enrollments?${params}`, { scroll: false });
+  };
   // Opened from "Какво ви чака": once the groups are loaded, bring that group into view and focus it.
   const linkedGroup = useRef(searchParams.get('group'));
   useEffect(() => {
     if (!groups || !linkedGroup.current) return;
-    const button = document.getElementById(`group-${linkedGroup.current}`);
+    const button = document.getElementById('selected-group-title');
     linkedGroup.current = null;
     button?.scrollIntoView({ block: 'start' });
     button?.focus();
@@ -397,7 +288,7 @@ export function EnrollmentsPage() {
   }, [tab, groups, organization.id]);
 
   function chooseTab(next: Tab) {
-    setTab(next);
+    changeView(next);
     setFilters(noFilters);
     setQuery('');
     setShownCount(PAGE);
@@ -421,6 +312,7 @@ export function EnrollmentsPage() {
             : `Заявката за ${name} е отказана. Родителят ще види обяснението.`;
       setNotice({ text });
       await refresh();
+      if (groups) await loadStaffGroups(organization.id).then(setGroups).catch(() => undefined);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Решението не беше запазено.');
       await refresh().catch(() => undefined);
@@ -453,7 +345,7 @@ export function EnrollmentsPage() {
   const showFilters = tab !== 'groups' && (filtering || filters.search !== '' || (unfiltered?.total ?? 0) >= FILTERS_FROM);
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${tab === 'groups' && openGroup ? styles.selectedPage : ''}`}>
       <header className={styles.header}>
         <p className={styles.eyebrow}>Управление</p>
         <h1>{canView ? 'Записвания' : 'Моите групи'}</h1>
@@ -486,7 +378,7 @@ export function EnrollmentsPage() {
             {list === undefined || visible === undefined ? <span className={styles.skeleton} aria-busy="true" /> : list.length === 0 ? (
               <div className={styles.empty}>
                 <strong>{filtering ? 'Няма заявки, които отговарят на търсенето' : tab === 'submitted' ? 'Няма нови заявки' : 'Никой не чака място'}</strong>
-                <p>{filtering ? 'Променете търсенето или изчистете филтрите.' : tab === 'submitted' ? 'Когато родител подаде заявка, тя ще се появи тук и в „Какво ви чака“.' : 'Тук ще са децата, които чакат свободно място в пълна група.'}</p>
+                <p>{filtering ? 'Променете търсенето или изчистете филтрите.' : tab === 'submitted' ? 'Когато родител подаде заявка, тя ще се появи тук и в „Изисква внимание“.' : 'Тук ще са децата, които чакат свободно място в пълна група.'}</p>
               </div>
             ) : tab === 'waitlisted' ? (
               <WaitingQueues queues={queues ?? []} counts={filtering ? new Map() : queueCounts} busyId={busyId} canManage={canManage} onDecide={decide} onDetails={openDetails} />
@@ -514,9 +406,8 @@ export function EnrollmentsPage() {
             <p>{canView ? <>Групите се създават в стъпка 7 на всяка дейност. <Link href="/dashboard/activities">Към дейностите</Link></> : 'Когато ви добавят в група, тя ще се появи тук и на „Начало“.'}</p>
           </div>
         ) : (
-          <GroupsView groups={groups} organizationId={organization.id} canManage={canManage} canChangeApproval={canChangeApproval} openGroup={openGroup}
-            onToggleGroup={(groupId) => setOpenGroup((current) => current === groupId ? undefined : groupId)} onChanged={refreshGroups}
-            onDetails={canView ? openDetails : undefined} />
+          <GroupsWorkspace groups={groups} organizationId={organization.id} canManage={canManage} canChangeApproval={canChangeApproval} openGroup={openGroup} ownSchedule={ownScheduleOnly(organization)}
+            onSelectGroup={(groupId) => changeView('groups', groupId)} onChanged={refreshGroups} onDetails={canView ? openDetails : undefined} />
         )}
       </section>
       {details ? <ChildDetailsPanel key={`${details.kind}-${details.id}`} organizationId={organization.id} target={details} onClose={closeDetails} /> : null}
