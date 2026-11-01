@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { TeacherSubstitutes } from '../substitute/teacher-section';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { loadTeaching, type TeachingGroup } from '@/features/dashboard/api';
@@ -134,7 +135,7 @@ function GroupsCard({ teaching, failed, onRetry }: { teaching: TeachingGroup[] |
               {item.groups.map((group) => (
                 <li key={group.id} className={styles.group}>
                   <span className={styles.groupName}>
-                    {linked ? <Link className={styles.groupLink} href={group.href}>{group.name}<span className="sr-only"> — децата в групата</span></Link> : group.name}
+                    {linked || group.tone === 'substitute' ? <Link className={styles.groupLink} href={group.href}>{group.name}<span className="sr-only">{group.tone === 'substitute' ? ' — в графика' : ' — децата в групата'}</span></Link> : group.name}
                   </span>
                   <span className={`${styles.part} ${styles[`part_${group.tone}`]}`}>{group.part}</span>
                   <span className={styles.groupDetail}>{group.detail}</span>
@@ -144,8 +145,7 @@ function GroupsCard({ teaching, failed, onRetry }: { teaching: TeachingGroup[] |
           </div>
         ))
       )}
-      {/* "Търся заместник" comes with "График": no button that does nothing until then. */}
-      <p className={styles.later}>Заместник ще можете да поискате оттук, когато влезе графикът.</p>
+      {teaching ? <TeacherSubstitutes key={organization.id} groups={teaching} embedded /> : null}
     </section>
   );
 }

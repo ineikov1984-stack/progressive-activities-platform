@@ -1,3 +1,4 @@
+import { substituteGroupHref } from '../substitute/presentation';
 import type { DashboardInvitation, TeachingGroup } from './api';
 import type { ActivityDraft } from '../catalog/admin/api';
 import { activityCompleteness } from '../catalog/admin/presentation';
@@ -17,7 +18,7 @@ export function teachingCard(group: TeachingGroup): { id: string; title: string;
     id: group.group_id,
     title: `${group.activity_title} · ${group.group_name}`,
     detail: `${part} · ${next}`,
-    href: `/dashboard/enrollments?view=groups&group=${encodeURIComponent(group.group_id)}`,
+    href: group.basis === 'substitute' ? substituteGroupHref(group) : `/dashboard/enrollments?view=groups&group=${encodeURIComponent(group.group_id)}`,
   };
 }
 

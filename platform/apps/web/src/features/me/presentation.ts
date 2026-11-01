@@ -1,3 +1,4 @@
+import { substituteGroupHref } from '../substitute/presentation';
 import type { OrganizationAccess, TeachingGroup } from '../dashboard/api';
 import { shortDay } from '../enrollment/presentation';
 import type { AccessScope } from '../team/api';
@@ -63,7 +64,7 @@ export function myGroups(groups: TeachingGroup[]): MyActivity[] {
       part: substitute ? 'Заместник' : group.role === 'assistant' ? 'Помощник' : 'Водещ',
       tone,
       detail,
-      href: `/dashboard/enrollments?view=groups&group=${encodeURIComponent(group.group_id)}`,
+      href: group.basis === 'substitute' ? substituteGroupHref(group) : `/dashboard/enrollments?view=groups&group=${encodeURIComponent(group.group_id)}`,
     };
     byActivity.set(group.activity_title, [...(byActivity.get(group.activity_title) ?? []), item]);
   }
