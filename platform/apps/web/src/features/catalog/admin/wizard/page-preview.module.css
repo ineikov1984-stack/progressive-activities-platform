@@ -1,0 +1,27 @@
+.trigger,.close { display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);min-height:44px;padding:var(--space-2) var(--space-4);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);color:var(--ink);font:inherit;font-weight:600;cursor:pointer; }
+.trigger svg { width:20px;height:20px; }
+.trigger:focus-visible,.dialog :focus-visible { outline:3px solid var(--ink);outline-offset:3px; }
+.dialog { width:calc(100% - var(--space-8));max-width:1440px;max-height:calc(100dvh - var(--space-8));margin:auto;padding:0;border:1px solid var(--border);border-radius:var(--radius-xl);color:var(--ink-body);background:var(--surface);overflow:hidden; }
+.dialog::backdrop { background:color-mix(in srgb, var(--nav) 40%, transparent); }
+.panel { display:flex;flex-direction:column;max-height:calc(100dvh - var(--space-8)); }
+.header,.footer { display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);padding:var(--space-4) var(--space-6);flex-shrink:0; }
+.header { border-bottom:1px solid var(--border); }
+.header h2 { margin:0;color:var(--ink);font-size:1.25rem; }
+.header p,.note p { margin:var(--space-2) 0 0; }
+.header p,.footer span { font-size:.875rem;color:var(--ink-muted); }
+.close { min-width:44px;font-size:1.5rem;flex-shrink:0;padding:var(--space-2); }
+.body { overflow:auto;overscroll-behavior:contain;min-height:0; }
+.note { padding:var(--space-4) var(--space-6);background:var(--surface-sunken);font-size:.875rem; }
+.note summary { min-height:44px;display:flex;align-items:center;font-weight:600;cursor:pointer;color:var(--ink); }
+.footer { border-top:1px solid var(--border); }
+.media { position:absolute;inset:0; }
+.media img { object-fit:cover; }
+@media(max-width:600px) {
+ .dialog { width:100%;max-height:100dvh;height:100dvh;border-radius:0; }
+ .panel { max-height:100dvh;height:100%; }
+ .header,.footer,.note { padding:var(--space-3) var(--space-4); }
+ .header p { font-size:.75rem; }
+ .footer { padding-bottom:calc(var(--space-3) + env(safe-area-inset-bottom)); }
+ .footer span { display:none; }
+ .footer .trigger { width:100%; }
+}

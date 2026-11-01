@@ -8,7 +8,8 @@ import { PublicMedia } from './category-illustration';
 import { PublicLocationDetails, VisitOfferList } from './visit-offer-list';
 import styles from './catalog.module.css';
 
-export function ActivityPage({ response }: { response: PublicActivityResponse }) {
+export function ActivityPage({ response, preview = false, renderMedia }: { response: PublicActivityResponse; preview?: boolean; renderMedia?: (url: string | null | undefined, title: string, category: string) => ReactNode }) {
+  const media = (url: string | null | undefined, title: string, category: string, priority = false) => renderMedia ? renderMedia(url, title, category) : <PublicMedia url={url} title={title} category={category} priority={priority} />;
   const { organization, activity } = response;
   const accent = { '--catalog-accent': safeAccent(organization.accent_color) } as CSSProperties;
   const sections = cleanActivitySections(activity.sections);
@@ -20,18 +21,18 @@ export function ActivityPage({ response }: { response: PublicActivityResponse })
   const mode = sectionCount > 4 ? 'rich' : sectionCount > 0 ? 'balanced' : 'minimal';
 
   return <main className={styles.publicShell} style={accent} data-content-mode={mode}>
-    <nav className={styles.publicNav} aria-label="Навигация"><Link href={`/o/${organization.slug}`}>← Всички дейности</Link><span>{organization.public_name}</span></nav>
+    <nav className={styles.publicNav} aria-label="Навигация">{preview ? <span>Преглед на страницата</span> : <Link href={`/o/${organization.slug}`}>← Всички дейности</Link>}<span>{organization.public_name}</span></nav>
     <section className={styles.hero}>
       <div className={styles.heroCopy}>
         <p className={styles.eyebrow}>{activity.category}</p>
-        <div className={styles.badgeRow} data-status-badges>{publicBadges(activity).map((label, index) => <span key={label} className={index === 0 ? styles.statusBadge : styles.specialBadge} data-status={index === 0 ? activity.availability.status : undefined}>{label}</span>)}</div>
+        {!preview && <div className={styles.badgeRow} data-status-badges>{publicBadges(activity).map((label, index) => <span key={label} className={index === 0 ? styles.statusBadge : styles.specialBadge} data-status={index === 0 ? activity.availability.status : undefined}>{label}</span>)}</div>}
         <h1>{activity.title}</h1>
         {audienceLabel(activity) && <p className={styles.audience}>{audienceLabel(activity)}</p>}
         {meaningfulText(activity.summary) && <p className={styles.lead}>{activity.summary.trim()}</p>}
         <div className={styles.heroPrice}><small>ЦЕНА</small><strong>{cardPriceLabel(activity.price)}</strong></div>
-        <div className={styles.heroActions}><a className={styles.primaryButton} href={target.href}>{target.label} <span aria-hidden="true">↓</span></a></div>
+        {!preview && <div className={styles.heroActions}><a className={styles.primaryButton} href={target.href}>{target.label} <span aria-hidden="true">↓</span></a></div>}
       </div>
-      <div className={styles.heroVisual}><PublicMedia url={activity.hero_image_url} title={activity.title} category={activity.category} priority /></div>
+      <div className={styles.heroVisual}>{media(activity.hero_image_url, activity.title, activity.category, true)}</div>
     </section>
 
     {sections.about && <ContentSection eyebrow="ЗА ДЕЙНОСТТА" title="За дейността"><p>{sections.about}</p></ContentSection>}
@@ -46,11 +47,11 @@ export function ActivityPage({ response }: { response: PublicActivityResponse })
     <section className={styles.contentSection} id="groups" aria-labelledby="groups-title" tabIndex={-1}>
       <p className={styles.eyebrow}>ПРАКТИЧЕСКА ИНФОРМАЦИЯ</p><h2 id="groups-title">Групи и график</h2>
       {activity.groups.length ? <div className={styles.groupList}>{activity.groups.map((group, index) => <article className={styles.groupCard} key={group.id ?? index}>
-        <div><h3>{group.name}</h3>{meaningfulText(group.age_label) && <p className={styles.audience}>{group.age_label!.trim()}</p>}{groupScheduleLines(group.schedule).map((line, i) => <p key={i}>{line}</p>)}<span className={styles.statusBadge} data-status={group.availability.status}>{availabilityLabel(group.availability)}</span></div>
-        <PublicLocationDetails location={group.location} />
+        <div><h3>{group.name}</h3>{meaningfulText(group.age_label) && <p className={styles.audience}>{group.age_label!.trim()}</p>}{groupScheduleLines(group.schedule).map((line, i) => <p key={i}>{line}</p>)}{!preview && <span className={styles.statusBadge} data-status={group.availability.status}>{availabilityLabel(group.availability)}</span>}</div>
+        {preview ? <div className={styles.locationBlock}><small>МЯСТО</small><strong>{group.location?.name || 'Мястото ще бъде уточнено'}</strong><span>{group.location?.address}</span></div> : <PublicLocationDetails location={group.location} />}
         <div className={styles.priceList}><small>ЦЕНА ЗА ГРУПАТА</small>{group.prices.length ? group.prices.map((price, i) => <div key={i}><strong>{cardPriceLabel(price)}</strong>{meaningfulText(price.terms) && <span>{price.terms!.trim()}</span>}</div>) : <span>Все още не е обявено</span>}</div>
       </article>)}</div> : <p>Графикът още не е обявен.</p>}
-      <div className={styles.enrollmentNotice}><strong>{enrollmentCta}</strong></div>
+      {!preview && <div className={styles.enrollmentNotice}><strong>{enrollmentCta}</strong></div>}
     </section>
 
     {(sections.participation_terms || terms.length > 0) && <ContentSection eyebrow="УСЛОВИЯ" title={`Условия за участие в „${activity.title}“`}>
@@ -58,10 +59,10 @@ export function ActivityPage({ response }: { response: PublicActivityResponse })
       {terms.length > 0 && <div className={styles.termsGrid}>{terms.map((term, i) => <article key={i}>{term.title && <h3>{term.title}</h3>}{term.terms && <p>{term.terms}</p>}{term.cancellation_policy && <p><strong>Отписване:</strong> {term.cancellation_policy}</p>}</article>)}</div>}
     </ContentSection>}
     {instructors.length > 0 && <ContentSection eyebrow="НАШИЯТ ЕКИП" title={sections.instructor_intro || 'Запознайте се с преподавателите'}><div className={styles.instructorGrid}>{instructors.map((instructor, i) => <article key={i}>
-      {publicMediaUrl(instructor.photo_url) && <Image src={publicMediaUrl(instructor.photo_url)!} alt={instructor.public_name.trim()} width={160} height={160} unoptimized />}
+      {renderMedia && instructor.photo_url ? <div className={styles.instructorPortrait}>{media(instructor.photo_url, instructor.public_name, activity.category)}</div> : publicMediaUrl(instructor.photo_url) && <Image src={publicMediaUrl(instructor.photo_url)!} alt={instructor.public_name.trim()} width={160} height={160} unoptimized />}
       <div><h3>{instructor.public_name.trim()}</h3>{meaningfulText(instructor.role_title) && <strong>{instructor.role_title!.trim()}</strong>}{meaningfulText(instructor.bio) && <p>{instructor.bio!.trim()}</p>}{(instructor.qualifications ?? []).map(meaningfulText).filter(Boolean).map((qualification, index) => <p key={index}>{qualification}</p>)}</div>
     </article>)}</div></ContentSection>}
-    {sections.gallery!.length > 0 && <ContentSection eyebrow="ГАЛЕРИЯ" title="Моменти от заниманията"><div className={styles.gallery}>{sections.gallery!.map((image, index) => <div className={styles.galleryVisual} key={index}><PublicMedia url={image.url} title={image.alt || activity.title} category={activity.category} /></div>)}</div></ContentSection>}
+    {sections.gallery!.length > 0 && <ContentSection eyebrow="ГАЛЕРИЯ" title="Моменти от заниманията"><div className={styles.gallery}>{sections.gallery!.map((image, index) => <div className={styles.galleryVisual} key={index}>{media(image.url, image.alt || activity.title, activity.category)}</div>)}</div></ContentSection>}
     {sections.faq!.length > 0 && <ContentSection eyebrow="ПОЛЕЗНО" title="Често задавани въпроси"><div className={styles.faqList}>{sections.faq!.map((item, index) => <details key={index}><summary>{item.question}<span aria-hidden="true">+</span></summary><p>{item.answer}</p></details>)}</div></ContentSection>}
   </main>;
 }

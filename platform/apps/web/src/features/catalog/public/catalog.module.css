@@ -186,3 +186,6 @@
 @media (prefers-reduced-motion: reduce) {
   .publicShell *, .publicShell *::before, .publicShell *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
 }
+
+/* The editor supplies authenticated, absolutely positioned media. Keep the public portrait size. */
+.instructorPortrait { position: relative; flex-shrink: 0; width: calc(var(--space-20) * 2); height: calc(var(--space-20) * 2); overflow: hidden; border-radius: var(--radius-lg); }
