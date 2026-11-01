@@ -26,7 +26,7 @@
 .quiet:disabled, .secondary:has(input:disabled) { color: var(--ink-muted); cursor: not-allowed; }
 .iconButton { display: grid; flex: none; width: var(--control-height); height: var(--control-height); place-items: center; border: 1px solid var(--border-control); border-radius: var(--radius-sm); color: var(--ink-muted); background: var(--surface); cursor: pointer; }
 .iconButton:hover { color: var(--status-full); }
-.linkButton { margin-left: auto; padding: 0; border: 0; color: var(--action); background: none; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.linkButton { display: inline-flex; align-items: center; justify-content: center; min-width: var(--control-height); min-height: var(--control-height); margin-left: auto; padding: 0; border: 0; color: var(--action); background: none; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
 
 /* Messages */
 .lockedNotice, .error, .success { margin: 0 clamp(1rem, 3vw, 2rem); padding: var(--space-4) var(--space-6); border-radius: var(--radius-lg); font-size: 14px; line-height: 20px; }
@@ -75,7 +75,7 @@
 .textareaTall { min-height: 180px; resize: vertical; line-height: 1.5; }
 .textareaSmall { min-height: 80px; resize: vertical; line-height: 1.5; }
 .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.chip { display: inline-flex; align-items: center; min-height: 40px; padding: 0 var(--space-4); border: 1px solid var(--border-control); border-radius: var(--radius-pill); color: var(--ink); background: var(--surface); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
+.chip { display: inline-flex; align-items: center; min-height: var(--control-height); padding: 0 var(--space-4); border: 1px solid var(--border-control); border-radius: var(--radius-pill); color: var(--ink); background: var(--surface); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
 .chip:hover { background: var(--surface-sunken); }
 .chipOn, .chipOn:hover { border-color: var(--ink); color: var(--ink-inverse); background: var(--ink); }
 .chipOn::before { content: "✓"; margin-right: var(--space-1); font-weight: 700; }
@@ -212,7 +212,7 @@
   .headerHint { display: none; }
   .footer { position: sticky; bottom: 0; z-index: 2; margin: 0 calc(-1 * clamp(1rem, 3vw, 2rem)); padding: var(--space-3) clamp(1rem, 3vw, 2rem); border-top: 1px solid var(--border); background: var(--surface); }
   .footer .muted { display: none; }
-  .footer .primary { flex: 1 1 auto; }
+  .footer .primary { flex: 1 1 auto; min-width: 0; max-width: 100%; padding-top: var(--space-2); padding-bottom: var(--space-2); white-space: normal; }
 }
 
 /* Step 8 — special visits */
@@ -222,6 +222,7 @@
 .specialReady strong { display: block; color: var(--ink); font-size: 16px; }
 .specialGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: var(--space-4); }
 .specialCard { display: grid; align-content: start; justify-items: start; gap: var(--space-3); padding: var(--space-6); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.specialCard .secondary { max-width: 100%; white-space: normal; text-align: center; }
 .specialCard h3 { margin: 0; color: var(--ink); font-size: 18px; line-height: 24px; }
 .specialCard p { margin: 0; color: var(--ink-body); font-size: 15px; line-height: 22px; }
 .subheading { margin: 0; color: var(--ink); font-size: 16px; line-height: 22px; }
