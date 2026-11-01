@@ -1,5 +1,7 @@
 'use client';
 
+import {loadSheet,type Sheet} from '../attendance/api';
+import {cellLabels,panelChildState} from '../attendance/presentation';
 import {AttendanceSessionButton} from '../attendance/session-dialog';
 import { type MouseEvent, type RefObject, useEffect, useRef, useState } from 'react';
 import { loadSessionPanel, type ScheduleSession, ScheduleApiError, type SessionChild, type SessionPanel } from './api';
@@ -172,7 +174,7 @@ function SessionDetails({ organizationId, session, names, now, withDetails, head
         ) : !panel ? (
           <div className={styles.skeletonKids} aria-hidden="true">{[0, 1, 2, 3].map((item) => <span key={item} className={styles.skeleton} />)}</div>
         ) : panel.session.children ? (
-          <ChildrenList kids={panel.session.children} cancelled={mark === 'cancelled' || mark === 'not_held'} openId={card?.enrollment_id} onOpen={openCard} />
+          <AttendanceChildren key={`${organizationId}:${session.id}:${attempt}:${panel.abilities.attendance??'none'}`} organizationId={organizationId} sessionId={session.id} allowed={!!panel.abilities.attendance} now={now} kids={panel.session.children} cancelled={mark === 'cancelled' || mark === 'not_held'} openId={card?.enrollment_id} onOpen={openCard} />
         ) : null}
         {!panel && !loaded?.error ? <span className="sr-only" role="status">Зареждане на децата…</span> : null}
       </div>
@@ -185,13 +187,28 @@ function SessionDetails({ organizationId, session, names, now, withDetails, head
   );
 }
 
+/** Only the existing protected attendance endpoint supplies marks; the schedule roster does not grant access. */
+function AttendanceChildren({organizationId,sessionId,allowed,now,...props}:{organizationId:string;sessionId:string;allowed:boolean;now:Date}&Parameters<typeof ChildrenList>[0]) {
+ const [result,setResult]=useState<{sheet?:Sheet;error?:string}>();const [attempt,retry]=useState(0);
+ useEffect(()=>{
+  if(!allowed)return;
+  const c=new AbortController();
+  let request=0;
+  const read=()=>{const generation=++request;return loadSheet(organizationId,sessionId,c.signal).then(sheet=>{if(!c.signal.aborted&&generation===request)setResult({sheet});}).catch(()=>{if(!c.signal.aborted&&generation===request)setResult({error:'Присъствията не се заредиха.'});});};
+  read();const timer=setInterval(read,30000);return()=>{c.abort();clearInterval(timer);};
+ },[organizationId,sessionId,allowed,attempt]);
+ const sheet=result?.sheet;
+ const statuses=allowed&&sheet?Object.fromEntries(sheet.children.map(child=>[child.enrollment_id,panelChildState(sheet.session,child,now.getTime())])):undefined;
+ return <>{allowed&&result?.error?<p className={styles.small} role="status">{result.error} <button className={styles.button} onClick={()=>retry(n=>n+1)}>Опитай пак</button></p>:null}<ChildrenList {...props} statuses={statuses}/></>;
+}
+
 /**
  * Name and class in alphabetical order (the API's), the first eight and "Още N деца"; the states in words. The eye
  * opens the card of the child (т. 4.1). A child without `child_id` — where the person only stands in for the day — has
  * no card, so no eye either.
  */
-function ChildrenList({ kids, cancelled, openId, onOpen }: {
-  kids: NonNullable<SessionPanel['session']['children']>; cancelled: boolean;
+function ChildrenList({ kids, cancelled, openId, onOpen, statuses }: {
+  kids: NonNullable<SessionPanel['session']['children']>; cancelled: boolean; statuses?:Record<string,string>;
   openId?: string; onOpen: (child: CardChild, element: HTMLButtonElement) => void;
 }) {
   const [all, setAll] = useState(false);
@@ -217,6 +234,7 @@ function ChildrenList({ kids, cancelled, openId, onOpen }: {
                   <span key={mark} className={`${styles.tag} ${mark === 'пробно' || mark === 'еднократно' ? styles.tagQuiet : ''}`}>{mark}</span>
                 ))}
               </span>
+              {statuses?.[child.enrollment_id] ? <span className={styles.kidAttendance}>{['present','paused_present'].includes(statuses[child.enrollment_id])?'✓ ':statuses[child.enrollment_id]==='absent'?'✕ ':statuses[child.enrollment_id]==='unmarked'?'? ':''}{cellLabels[statuses[child.enrollment_id]]}</span>:null}
               {child.child_id ? (
                 <button ref={index === CHILDREN_SHOWN ? (element: HTMLButtonElement | null) => { firstMore.current = element; } : undefined} type="button" className={styles.eye}
                   aria-label={`Виж ${child.name}`} aria-haspopup="dialog" aria-expanded={openId === child.enrollment_id}

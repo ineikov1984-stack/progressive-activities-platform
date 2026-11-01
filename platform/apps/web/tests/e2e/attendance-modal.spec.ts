@@ -26,3 +26,37 @@ for(const width of [390,1440])test(`long roster scrolls inside the modal with vi
  await page.setViewportSize({width,height:1000});const f=await fixture(page,{office:true});for(let i=0;i<8;i++)f.current.children.push({...f.current.children[0],enrollment_id:id(900+i),child_id:id(950+i),name:`Демо дете ${i+1}`});f.current.counts.expected+=8;f.current.counts.unmarked+=8;
  await page.goto('/dashboard/schedule?view=cards&date=2026-11-02');await page.locator('[data-session-id]').first().click();await page.getByRole('button',{name:'Отбележи присъствия',exact:true}).click();const modal=page.getByRole('dialog',{name:'Присъствия за заниманието',exact:true});await expect(modal.locator('[role="group"]')).toHaveCount(12);await expect(modal.getByText('Отбелязва само неотбелязаните.',{exact:false})).toBeVisible();await page.screenshot({path:test.info().outputPath(`roster-${width}.png`)});await modal.getByRole('group',{name:'Николай Савов'}).getByRole('button',{name:'Присъства',exact:true}).scrollIntoViewIfNeeded();await expect(modal.getByRole('heading',{name:'Шахмат · Група 2 · 3.–4. клас',exact:true})).toBeInViewport();await expect(modal.getByRole('button',{name:'Готово',exact:true})).toBeInViewport();await layout(page);expect(f.errors).toEqual([]);
 });
+
+for(const width of [390,768,1440])test(`schedule panel shows protected individual statuses and refreshes after marking at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:1000});const f=await fixture(page,{office:true});
+ await page.goto('/dashboard/schedule?view=cards&date=2026-11-02');await page.locator('[data-session-id]').first().click();const panel=page.getByRole('dialog',{name:/Група 2/});
+ const ana=panel.getByRole('listitem').filter({hasText:'Ана Иванова'});
+ await expect(ana.getByText('? Неотбелязано',{exact:true})).toBeVisible();
+ await expect(panel.getByText('Предупредено отсъствие',{exact:true})).toBeVisible();
+ await expect(panel.getByText('В пауза',{exact:true})).toBeVisible();
+ await panel.getByRole('button',{name:'Отбележи присъствия',exact:true}).click();const modal=page.getByRole('dialog',{name:'Присъствия за заниманието',exact:true});
+ await modal.getByRole('group',{name:'Ана Иванова'}).getByRole('button',{name:'Присъства',exact:true}).click();
+ await expect(modal.locator('footer').getByRole('status')).toHaveText('Всичко е записано');
+ await modal.getByRole('button',{name:'Готово',exact:true}).click();await expect(ana.getByText('✓ Присъства',{exact:true})).toBeVisible();
+ await layout(page);await page.screenshot({path:test.info().outputPath(`panel-status-${width}.png`)});expect(f.errors).toEqual([]);
+});
+test('a visible roster alone never fetches or reveals attendance without its permission',async({page})=>{
+ const requests:string[]=[];page.on('request',r=>requests.push(new URL(r.url()).pathname));await fixture(page,{office:true,panelAttendance:false});
+ await page.goto('/dashboard/schedule?view=cards&date=2026-11-02');await page.locator('[data-session-id]').first().click();const panel=page.getByRole('dialog',{name:/Група 2/});
+ await expect(panel.getByText('Ана Иванова',{exact:true})).toBeVisible();await expect(panel.getByText('? Неотбелязано',{exact:true})).toHaveCount(0);
+ expect(requests.filter(p=>p.includes('/attendance/sessions/'))).toEqual([]);
+});
+test('failed sheet access leaves the roster usable without individual marks',async({page})=>{
+ await fixture(page,{office:true,sheetForbidden:true});await page.goto('/dashboard/schedule?view=cards&date=2026-11-02');await page.locator('[data-session-id]').first().click();const panel=page.getByRole('dialog',{name:/Група 2/});
+ await expect(panel.getByText('Присъствията не се заредиха.',{exact:false})).toBeVisible();await expect(panel.getByText('Ана Иванова',{exact:true})).toBeVisible();await expect(panel.getByText('? Неотбелязано',{exact:true})).toHaveCount(0);
+});
+test('footer keeps offline save feedback visible while the list scrolls',async({page})=>{
+ await page.setViewportSize({width:390,height:800});await fixture(page,{office:true,offline:true,offlineFailures:100});await page.goto('/dashboard/attendance');await page.getByRole('article').first().getByRole('button',{name:'Отбележи присъствия',exact:true}).click();const modal=page.getByRole('dialog',{name:'Присъствия за заниманието',exact:true});
+ await modal.getByRole('group',{name:'Ана Иванова'}).getByRole('button',{name:'Присъства',exact:true}).click();const status=modal.locator('footer').getByRole('status');await expect(status).toHaveText('Няма връзка · има незаписани промени');
+ await modal.getByText('Тема и история на заниманието',{exact:true}).scrollIntoViewIfNeeded();await expect(status).toBeInViewport();await layout(page);await page.screenshot({path:test.info().outputPath('offline-footer-390.png')});
+});
+test('dirty topic is not announced as saved and a refused save stays visibly unsaved',async({page})=>{
+ await fixture(page,{office:true,forbidden:true});await page.goto('/dashboard/attendance');await page.getByRole('article').first().getByRole('button',{name:'Отбележи присъствия',exact:true}).click();const modal=page.getByRole('dialog',{name:'Присъствия за заниманието',exact:true});
+ await modal.getByText('Тема и история на заниманието',{exact:true}).click();await modal.getByLabel('Тема на заниманието (по избор)').fill('Нова тема');await expect(modal.locator('footer').getByRole('status')).toHaveText('Има незаписани промени');
+ await expect(modal.locator('footer').getByRole('status')).toHaveText('Не е записано');
+});
