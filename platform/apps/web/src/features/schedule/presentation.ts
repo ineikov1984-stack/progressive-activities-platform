@@ -883,3 +883,8 @@ export function profileLink(card: Pick<ChildCard, 'groups'>, context: CardContex
 export function pauseLink(group: Pick<ChildCardGroup, 'group_id' | 'enrollment_id'>): string {
   return childLink(group.group_id, group.enrollment_id, true);
 }
+
+/** Informational only; the API remains the authority for available actions. */
+export function showChangeCutoffHint(manage:boolean,actions:readonly string[],startsAt:string,now:number):boolean {
+ return manage&&actions.length===0&&now>=Date.parse(startsAt)-15*60000;
+}

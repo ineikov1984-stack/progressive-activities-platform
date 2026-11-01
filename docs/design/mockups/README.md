@@ -19,7 +19,7 @@
 | `Substitute` | „Търся заместник“ | `docs/product/substitute.md` | основа PR 1 — #136; API/уеб предстоят |
 | `Main`, `MarkA`, `ChildSheet`, `History` | Присъствия — учителят на телефона: днес, отбелязване, детето, поправка и история | `docs/product/attendance.md`, т. 6.1–6.4 | направено (#133); общото UX ревю с PR 8 |
 | `Admin` | Присъствия — администраторът вижда месеца | `docs/product/attendance.md`, т. 6.5–6.8 | PR 8: месец, поправки и непроведено; снимки в `docs/design/reviews/attendance-office/` |
-| `AttendanceModal`, `AttendanceWorkspace` | Одобрен на 01.11 компактен модален прозорец и ежедневна работа / месечен преглед | `attendance.md` т. 6.9; HTML съдържа целия одобрен интерактивен поток | направено (#135); замества уеб подредбата от PR 7–8; attendance.md т. 6.10: т. 1–2 реализирани в `codex/attendance-status-feedback` (снимки в `reviews/attendance-feedback/`); т. 3–5 предстоят |
+| `AttendanceModal`, `AttendanceWorkspace` | Одобрен на 01.11 компактен модален прозорец и ежедневна работа / месечен преглед | `attendance.md` т. 6.9; HTML съдържа целия одобрен интерактивен поток | направено (#135); замества уеб подредбата от PR 7–8; attendance.md т. 6.10: т. 1–2 — #138 (`reviews/attendance-feedback/`); т. 3–4 — `codex/attendance-compact-actions` (`reviews/attendance-compact/`); т. 5 предстои |
 | `ChildPanel` | Профил на детето — страничен панел | DECISIONS 30.10.2026 | етап 4 (без пари) и 5 (пари) |
 | `Payment`, `Wallet` | Приеми плащане; портфейл | DECISIONS 30.10.2026; финансовите таблици чакат решение | етап 5 |
 | `TeamProfile`, `TeacherPay` | Възнаграждения в профила на служител; учителят вижда своите | DECISIONS 30.10.2026 | етап 6 |
