@@ -4,6 +4,7 @@ namespace App\Http\Presenters;
 
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Catalog\Services\ScheduleReader;
+use App\Domain\Catalog\Services\SessionCutoff;
 use App\Domain\Catalog\Services\SessionRoles;
 use stdClass;
 
@@ -70,7 +71,7 @@ final class SchedulePresenter
         $group = $panel['group'];
         $last = $panel['last_change'];
         $actions = [];
-        if ($manage && ! $group['archived'] && $session->starts_at->isFuture()) {
+        if ($manage && ! $group['archived'] && ! SessionCutoff::passed($session)) {
             $actions = $session->status === 'cancelled' ? ['restore'] : ['move', 'cancel'];
         }
 

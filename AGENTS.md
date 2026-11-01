@@ -25,7 +25,7 @@ Multi-tenant SaaS и marketplace за извънкласни дейности, �
 - `platform/apps/web` — Next.js 16 (App Router), React 19, TypeScript strict, CSS Modules.
 - `platform/packages/` — `design-system` (tokens и компоненти), `api-client` (генериран от OpenAPI). В момента празни — виж WORKBOARD.
 - `platform/docs/architecture/` — ADR-и. `platform/compose.yaml` — локална среда.
-- Домейни в API: `app/Domain/{Identity,Organizations,Catalog,Enrollment,Audit}`. Домейн не вика вътрешности на друг домейн — само неговите Actions/Services.
+- Домейни в API: `app/Domain/{Identity,Organizations,Catalog,Enrollment,Attendance,PaymentTerms,Audit}`. Домейн не вика вътрешности на друг домейн — само неговите Actions/Services.
 
 ## Команди
 

@@ -51,6 +51,21 @@ final readonly class AccessScope
         if (TeamAbilities::isTeaching($ability) && in_array($groupId, $this->teaching->groupsFor($user), true)) {
             return true;
         }
+
+        return $this->inScope($user, $access, $ability, $groupId);
+    }
+
+    /** Role and explicit grants in their scope, without the broader teaching shortcut. */
+    public function allowsInScope(User $user, string $ability, string $groupId): bool
+    {
+        return $this->inScope($user, $this->rights->for($user), $ability, $groupId);
+    }
+
+    private function inScope(User $user, StaffAccess $access, string $ability, string $groupId): bool
+    {
+        if ($access->role === null) {
+            return false;
+        }
         if (TeamAbilities::isOwnGroupsOnly($ability) || ! $access->has($ability)) {
             return false;
         }
