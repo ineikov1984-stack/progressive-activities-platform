@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { deadlineText, historyLines, initialView, clock, childLabel } from '../src/features/attendance/presentation';
+import { deadlineText, historyLines, initialView, clock, childLabel, undoAllowed } from '../src/features/attendance/presentation';
 import type { AttendanceChild, History, Sheet } from '../src/features/attendance/api';
 const child = { enrollment_id: 'e', name: 'Ана Иванова' } as AttendanceChild;
 const row = (id: string, at: string, from: History['from'], to: History['to'], extra: Partial<History> = {}): History => ({ id, at, from, to, by: 'Иван Петров', kind: 'mark', enrollment_id: 'e', ...extra });
@@ -20,4 +20,8 @@ it('groups consecutive first marks, retains late reasons and shows newest lines 
 });
 it('keeps paused presence and warned absence distinct from ordinary absence', () => {
   expect(childLabel({...child, expected:false, came_while_paused:true})).toContain('дошло по време на пауза'); expect(childLabel({...child, expected:true, warned:true})).toBe('Предупредено отсъствие');
+});
+
+it('allows undo to a previous status after the deadline but never clearing a late first mark',()=>{
+ const applied={enrollment_id:'e',from:null,to:'present' as const,version:1}; expect(undoAllowed([applied],false)).toBe(true); expect(undoAllowed([applied],true)).toBe(false); expect(undoAllowed([{...applied,from:'absent'}],true)).toBe(true);
 });

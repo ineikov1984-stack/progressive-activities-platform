@@ -1,4 +1,4 @@
-import type { AttendanceChild, History, Mark, Sheet } from './api';
+import type { Applied, AttendanceChild, History, Mark, Sheet } from './api';
 export const format = (value: string, options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('bg-BG', { timeZone: 'Europe/Sofia', ...options }).format(new Date(value));
 export const clock = (value: string) => format(value, { hour: '2-digit', minute: '2-digit' });
 export const date = (value: string) => format(value, { day: 'numeric', month: 'long' });
@@ -32,3 +32,6 @@ export function historyLines(history: History[], children: AttendanceChild[]): {
   }
   return lines.reverse().map(({ id, at, text }) => ({ id, at, text }));
 }
+
+/** Clearing a mark after the deadline is forbidden by the API. */
+export const undoAllowed = (applied: Applied[], late: boolean): boolean => !late || applied.every((change) => change.from !== null);

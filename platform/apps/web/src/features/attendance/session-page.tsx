@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useDashboardContext } from '../dashboard/dashboard-context';
 import { ChildCardDialog } from '../schedule/child-card';
 import { AttendanceError, loadSheet, saveAttendance, type Answer, type Applied, type AttendanceChild, type Change, type Mark, type Sheet } from './api';
-import { childLabel, clock, deadlineText, historyLines, initialView, markLabel, when } from './presentation';
+import { childLabel, clock, deadlineText, historyLines, initialView, markLabel, undoAllowed, when } from './presentation';
 import { AttendanceQueue } from './queue';
 import styles from './attendance.module.css';
 type Intent = { id: string; action: Change['action']; marks?: { enrollment_id: string; status: Mark; version?: number }[]; topic?: string; reason?: string; undo?: boolean };
@@ -68,7 +68,7 @@ function SheetEditor({ initial, organizationId, withDetails }: { initial: Sheet;
       intents.current = intents.current.filter((i) => i.id !== intent.id);
       if (answer) { base.current = answer;
         if (intent.undo) setToast({ text: `Отменено: ${answer.applied.length} ${answer.applied.length === 1 ? 'дете' : 'деца'}.`, applied: [] });
-        else if (intent.action !== 'topic' && answer.applied.length) { const one = answer.applied[0]; const name = answer.children.find((c) => c.enrollment_id === one.enrollment_id)?.name ?? 'Дете'; setToast({ text: answer.applied.length === 1 ? `Записано: ${name} — ${markLabel(one.to)}` : `Записано: ${answer.applied.length} деца — Присъства`, applied: answer.applied }); }
+        else if (intent.action !== 'topic' && answer.applied.length) { const one = answer.applied[0]; const name = answer.children.find((c) => c.enrollment_id === one.enrollment_id)?.name ?? 'Дете'; setToast({ text: answer.applied.length === 1 ? `Записано: ${name} — ${markLabel(one.to)}` : `Записано: ${answer.applied.length} деца — Присъства`, applied: undoAllowed(answer.applied, answer.abilities.reason_required) ? answer.applied : [] }); }
         setNotice('');
       } else if (error instanceof AttendanceError) {
         if (error.status === 409 && error.body.children && error.body.session && error.body.abilities && error.body.counts) {
@@ -109,7 +109,7 @@ function SheetEditor({ initial, organizationId, withDetails }: { initial: Sheet;
     <div className={styles.kids}>{sheet.children.filter((c) => c.expected).map(childRow)}</div>
     {sheet.children.some((c) => !c.expected) ? <><h2>Не се очакват днес</h2><div className={styles.kids}>{sheet.children.filter((c) => !c.expected).map(childRow)}</div></> : null}
     {!editing && sheet.abilities.mark ? <button className={styles.button} onClick={() => setMode('mark')}>Поправи</button> : null}
-    <p className={styles.muted}>{sheet.abilities.reason_required ? 'Поправката след срока се записва с причина.' : deadlineText(sheet.abilities.deadline)}</p>
+    <p className={styles.muted}>{editing ? 'Записва се при всяко докосване. ' : ''}{sheet.abilities.reason_required ? 'Поправката след срока се записва с причина.' : deadlineText(sheet.abilities.deadline)}</p>
     <h2>История на промените</h2>{history.length === 0 ? <p className={styles.muted}>Все още няма промени.</p> : null}<ul className={styles.history}>{history.map((line) => <li key={line.id}><strong>{line.text}</strong><p className={styles.muted}>{when(line.at, line.at)}</p></li>)}</ul>
     </>}
     <Link className={styles.button} href={back} onClick={leave}>Готово</Link>

@@ -31,7 +31,7 @@ async function fixture(page: Page, options: { complete?: boolean; late?: boolean
       const body = req.postDataJSON(); const applied = [];
       if (options.conflict && writes.length === 1) { current.children[0].status='absent'; current.children[0].marked_by='Мария Колева'; current.children[0].version=1; return route.fulfill({status:409,json:{...current,conflicts:[id(20)]}}); }
       if (body.action === 'topic') current.session.topic=body.topic;
-      else for (const c of current.children) { const mark = body.marks?.find((m: { enrollment_id:string }) => m.enrollment_id===c.enrollment_id); if (mark || (body.action==='all_present' && c.expected && c.status===null && !c.warned)) { const from=c.status; c.status=mark ? mark.status : 'present'; c.version++; c.warned=c.status!=='present'&&!!c.skip; c.came_while_paused=!c.expected&&c.status==='present'; applied.push({enrollment_id:c.enrollment_id,from,to:c.status,version:c.version}); } }
+      else for (const c of current.children) { const mark = body.marks?.find((m: { enrollment_id:string }) => m.enrollment_id===c.enrollment_id); if (mark || (body.action==='all_present' && c.expected && c.status===null && !c.warned)) { const from=c.status; c.status=mark ? mark.status : 'present'; c.version++; c.warned=c.status!=='present'&&!!c.skip; c.came_while_paused=!c.expected&&c.status==='present'; applied.push({enrollment_id:c.enrollment_id,from,to:c.status,version:c.version}); current.history.unshift({id:id(300+current.history.length),at:'2026-11-02T15:40:00Z',by:'Иван Петров',enrollment_id:c.enrollment_id,from,to:c.status,kind:'mark'}); } }
       current.counts.present=current.children.filter((c)=>c.expected&&c.status==='present').length; current.counts.absent=current.children.filter((c)=>c.expected&&c.status==='absent').length; current.counts.unmarked=current.children.filter((c)=>c.expected&&c.status===null).length;
       json={...current,applied};
     } else if (path.endsWith(`/attendance/sessions/${id(10)}`)) json=current;
@@ -66,6 +66,7 @@ for (const width of [390,768,1440]) {
 test('offline requests keep body/key, serialize later clicks and retry on reconnect',async({page})=>{
   const f=await fixture(page,{offline:true}); await page.goto(`/dashboard/attendance/${id(10)}`);
   const row=page.getByRole('group',{name:'Ана Иванова'}); await row.getByRole('button',{name:'Присъства',exact:true}).click(); await expect(page.getByText('Няма връзка. Отметките ще се запишат, щом се върне.')).toBeVisible();
+  expect(await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true}); window.dispatchEvent(event); return event.defaultPrevented;})).toBe(true);
   await row.getByRole('button',{name:'Отсъства',exact:true}).click(); await page.evaluate(()=>window.dispatchEvent(new Event('online'))); await page.waitForTimeout(100); await page.evaluate(()=>window.dispatchEvent(new Event('online')));
   await expect.poll(()=>f.writes.length).toBe(4); expect(f.writes[0]).toEqual(f.writes[1]); expect(f.writes[0]).toEqual(f.writes[2]); expect(JSON.parse(f.writes[3].body).marks[0].version).toBe(1);
 });
