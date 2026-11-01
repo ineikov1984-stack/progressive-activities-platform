@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { deadlineText, historyLines, initialView, clock, childLabel, undoAllowed, attendanceView, panelChildState, saveFeedback } from '../src/features/attendance/presentation';
+import { deadlineText, historyLines, initialView, clock, childLabel, undoAllowed, attendanceView, panelChildState, saveFeedback, attendanceAction } from '../src/features/attendance/presentation';
 import type { AttendanceChild, History, Sheet } from '../src/features/attendance/api';
 const child = { enrollment_id: 'e', name: 'Ана Иванова' } as AttendanceChild;
 const row = (id: string, at: string, from: History['from'], to: History['to'], extra: Partial<History> = {}): History => ({ id, at, from, to, by: 'Иван Петров', kind: 'mark', enrollment_id: 'e', ...extra });
@@ -52,4 +52,11 @@ it('always reports dirty, pending, offline, failed, saved and read-only states t
  expect(saveFeedback({pending:1,failed:true,offline:false},true,false)).toBe('Не е записано');
  expect(saveFeedback({pending:0,failed:false,offline:false},false,false)).toBe('Само преглед');
  expect(saveFeedback({pending:0,failed:false,offline:false},false,true,true)).toBe('Не е записано');
+});
+
+it('uses marking as the primary action only when the session can still be marked',()=>{
+ expect(attendanceAction('mark',null)).toEqual({label:'Отбележи присъствия',primary:true});
+ expect(attendanceAction('mark',{unmarked:3})).toEqual({label:'Отбележи присъствия',primary:true});
+ expect(attendanceAction('mark',{unmarked:0})).toEqual({label:'Прегледай присъствията',primary:false});
+ expect(attendanceAction('view',{unmarked:3})).toEqual({label:'Прегледай присъствията',primary:false});
 });

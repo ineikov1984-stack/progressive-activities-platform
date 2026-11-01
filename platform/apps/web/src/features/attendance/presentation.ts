@@ -60,3 +60,9 @@ export function saveFeedback(state:{pending:number;failed:boolean;offline:boolea
  if(dirtyTopic)return 'Има незаписани промени';
  return canMark?'Всичко е записано':'Само преглед';
 }
+
+/** The same editor opens for marking and inspection; the action describes the initial task. */
+export function attendanceAction(ability:'mark'|'view',counts:{unmarked:number}|null|undefined):{label:string;primary:boolean} {
+ const primary=ability==='mark'&&(counts?.unmarked??1)>0;
+ return {label:primary?'Отбележи присъствия':'Прегледай присъствията',primary};
+}

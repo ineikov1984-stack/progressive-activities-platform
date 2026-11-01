@@ -140,7 +140,7 @@ function SheetEditor({ initial, organizationId, withDetails, onClose, closeReque
     <div className={styles.editorToolbar}>
     <div className={styles.counts}><span className={`${styles.badge} ${styles.present}`}>Присъстват {sheet.counts.present}</span><span className={`${styles.badge} ${styles.warning}`}>Отсъстват {sheet.counts.absent}</span><span className={styles.badge}>Неотбелязани {sheet.counts.unmarked}</span>{sheet.counts.present_paused ? <span className={styles.badge}>+{sheet.counts.present_paused} в пауза</span> : null}</div>
 {editing && sheet.counts.unmarked > 0 ? <button className={styles.button} onClick={() => enqueue({ action: 'all_present' })}>✓ Всички присъстват</button> : null}</div>
-    {editing && sheet.counts.unmarked > 0 ? <p className={styles.helper}>Отбелязва само неотбелязаните. Записаните отсъствия, предупредените отсъствия и децата в пауза не се променят.</p>:null}
+    {editing && sheet.counts.unmarked > 0 ? <details className={styles.markingHelp}><summary>Само неотбелязаните · Как работи?</summary><p className={styles.helper}>„Всички присъстват“ отбелязва само неотбелязаните. Записаните отсъствия, предупредените отсъствия и децата в пауза не се променят.</p></details>:null}
 
     {!sheet.abilities.mark && now.getTime() < Date.parse(sheet.abilities.opens_at) ? <p className={styles.muted}>Отбелязването започва в {clock(sheet.abilities.opens_at)}.</p> : null}
     {!sheet.abilities.mark?<p className={styles.muted}>{now.getTime() >= Date.parse(sheet.abilities.deadline) ? 'Само преглед. Срокът на учителя изтече. Поправка може да направи собственикът или администраторът.' : 'Само преглед — отбелязването още не е започнало или нямате право за промяна.'}</p>:null}

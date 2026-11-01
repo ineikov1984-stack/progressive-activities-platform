@@ -119,3 +119,12 @@
 .editorBody>h2 { font-size:1rem; margin:var(--space-4) 0 var(--space-2); }
 .editorToolbar .button { flex-shrink:0; }
 @media(max-width:559px) { .editorToolbar { align-items:flex-start; } }
+
+.markingHelp { color:var(--ink-muted);font-size:.85rem;margin:var(--space-1) 0; }
+.markingHelp summary { min-height:var(--control-height);display:flex;align-items:center;cursor:pointer;text-decoration:underline;text-underline-offset:3px; }
+.markingHelp[open] summary { color:var(--ink); }
+@media(max-width:559px) {
+ .editorToolbar { gap:var(--space-2); }
+ .editorToolbar .counts { gap:var(--space-1); }
+ .editorToolbar .badge { font-size:.75rem;padding:var(--space-1) var(--space-2); }
+}
