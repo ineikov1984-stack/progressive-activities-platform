@@ -1,11 +1,12 @@
-FROM composer:2 AS vendor
+# Multi-platform index digests verified on 2026-11-01; update deliberately through a PR.
+FROM composer:2@sha256:4ed71c38c6d788eb4e4e3747b5332f5b40d5b5a6fcadd5062a1a70986a118e0a AS vendor
 WORKDIR /app
 COPY composer.json composer.lock* ./
 # The composer image has no gd or exif; the runtime image below has both and checks them.
 RUN composer install --no-interaction --prefer-dist --no-scripts \
     --ignore-platform-req=ext-gd --ignore-platform-req=ext-exif
 
-FROM php:8.4-cli-alpine AS development
+FROM php:8.4-cli-alpine@sha256:d8784155c4d37986be9ddd7a8950df7e78998cc48e35472cd69e2b9371424a65 AS development
 # pcntl: `schedule:work` in the worker container hears `docker compose stop` and lets a running send finish.
 # gd (JPEG, PNG, WebP) and exif: catalog photos are decoded and encoded again without the phone's metadata
 # (docs/product/teacher-content.md, 5.2). The build stops if any of them is missing.

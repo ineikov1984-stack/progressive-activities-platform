@@ -26,7 +26,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Базови Docker образи по digest | Codex | `codex/pin-api-base-images` | `platform/apps/api/Dockerfile`, WORKBOARD; без горещи файлове | Поето от Codex след „готово“ за #122; бърза скорост. Следват проверка на официалните digest-и, сборка и CI |
+| Базови Docker образи по digest | Codex | `codex/pin-api-base-images` | `platform/apps/api/Dockerfile`, WORKBOARD; без горещи файлове | Поето от Codex след „готово“ за #122; бърза скорост. Проверени официални multi-platform index-и (amd64/arm64); локална сборка и Composer platform requirements минават (PHP 8.4.27, gd/exif/pcntl); чака PR/CI и merge от собственика |
 
 ## Опашка (по приоритет)
 
