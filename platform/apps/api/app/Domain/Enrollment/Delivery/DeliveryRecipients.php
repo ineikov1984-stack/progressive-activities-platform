@@ -7,6 +7,7 @@ use App\Domain\Enrollment\Models\EnrollmentApplication;
 use App\Domain\Enrollment\Models\EnrollmentEvent;
 use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Enrollment\Services\ScheduleChangeEffects;
+use App\Domain\Enrollment\Services\TeamLetters;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
@@ -18,6 +19,8 @@ use App\Domain\Organizations\Models\OrganizationMembership;
  */
 final class DeliveryRecipients
 {
+    public function __construct(private readonly SubstituteLetters $substitutes) {}
+
     /** Events the parent hears about. */
     public const PARENT = [
         'enrollment.application_submitted', 'enrollment.application_approved', 'enrollment.application_waitlisted',
@@ -37,6 +40,17 @@ final class DeliveryRecipients
      */
     public function for(EnrollmentEvent $event): array
     {
+        if ($event->type === TeamLetters::REQUESTED) {
+            $request = $this->substitutes->request($event);
+            $users = $request === null || $this->substitutes->sessions($request)->isEmpty()
+                ? [] : $this->substitutes->recipients($request)->all();
+            if ($users === []) {
+                return [['audience' => 'team', 'recipient_kind' => 'user', 'recipient_key' => 'no_recipient',
+                    'recipient_user_id' => null, 'status' => 'skipped', 'skipped_reason' => 'no_recipient']];
+            }
+
+            return array_map(fn (User $user): array => self::row('team', (string) $user->id, $user->hasVerifiedEmail()), $users);
+        }
         // A change of the schedule: one letter per family and per teacher, the person named in the event
         // (docs/product/schedule-changes.md, т. 6.1). The team that made the change hears nothing.
         if ($event->type === ScheduleChangeEffects::LETTER) {

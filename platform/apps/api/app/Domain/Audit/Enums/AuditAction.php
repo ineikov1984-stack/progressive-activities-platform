@@ -38,6 +38,8 @@ enum AuditAction: string
     case AttendanceSessionNotHeld = 'attendance.session_not_held';
     case AttendanceSessionHeld = 'attendance.session_held';
     case AttendanceCorrectedLate = 'attendance.corrected_late';
+    case ScheduleSubstituteRequested = 'schedule.substitute_requested';
+    case ScheduleSubstituteRequestWithdrawn = 'schedule.substitute_request_withdrawn';
     case ScheduleChangeApplied = 'schedule.change_applied';
     case TeamMemberAdded = 'team.member_added';
     case TeamMemberUpdated = 'team.member_updated';

@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Gate;
 class AuditEventController extends Controller
 {
     private const TEAM_MANAGE_ONLY = [
+        'schedule.substitute_requested', 'schedule.substitute_request_withdrawn',
         'team.access_grant_added', 'team.access_grant_changed', 'team.access_grant_revoked', 'team.access_scope_changed',
         'team.access_group_added', 'team.access_group_removed', 'team.access_template_changed', 'enrollment.contact_revealed',
     ];

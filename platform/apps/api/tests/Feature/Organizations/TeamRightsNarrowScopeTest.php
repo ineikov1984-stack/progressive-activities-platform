@@ -149,7 +149,7 @@ class TeamRightsNarrowScopeTest extends TestCase
 
     private function covered(string $method, string $uri): bool
     {
-        return str_starts_with($uri, 'api/v1/attendance/') || str_starts_with($uri, 'api/v1/enrollment/')
+        return str_starts_with($uri, 'api/v1/me/substitute-requests') || str_starts_with($uri, 'api/v1/attendance/') || str_starts_with($uri, 'api/v1/enrollment/')
             || $uri === 'api/v1/team' || str_starts_with($uri, 'api/v1/team/')
             || (str_starts_with($uri, 'api/v1/catalog/') && $method !== 'GET')
             || $uri === 'api/v1/enrollments/{enrollment}/visit-outcome'
@@ -173,6 +173,10 @@ class TeamRightsNarrowScopeTest extends TestCase
         $version = ['version' => 1];
 
         return [
+            'GET api/v1/me/substitute-requests' => ['/api/v1/me/substitute-requests', [], 200],
+            'GET api/v1/me/substitute-requests/options' => ['/api/v1/me/substitute-requests/options?from=2026-11-03', [], 200],
+            'POST api/v1/me/substitute-requests' => ['/api/v1/me/substitute-requests', [], 422],
+            'POST api/v1/me/substitute-requests/{substituteRequest}/withdraw' => ["/api/v1/me/substitute-requests/{$missing}/withdraw", $version, 404],
             'POST api/v1/enrollments/{enrollment}/visit-outcome' => ["/api/v1/enrollments/{$f['visit']->id}/visit-outcome", ['outcome' => 'attended'], 422],
             'POST api/v1/attendance/sessions/{session}/changes' => ["/api/v1/attendance/sessions/{$f['session']->id}/changes", [], 422],
             'GET api/v1/attendance/month' => ["/api/v1/attendance/month?group={$f['tuesday']->id}", [], 200],

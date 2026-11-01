@@ -13,6 +13,7 @@ use App\Domain\Enrollment\Models\EnrollmentEventDelivery;
 use App\Domain\Enrollment\Models\EnrollmentTransition;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
 use App\Domain\Enrollment\Services\SessionApplicability;
+use App\Domain\Enrollment\Services\TeamLetters;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use Carbon\CarbonImmutable;
@@ -30,12 +31,16 @@ final class ComposeDelivery
         private readonly CatalogMediaStore $media,
         private readonly SessionApplicability $sessions,
         private readonly ScheduleLetters $schedule,
+        private readonly SubstituteLetters $substitutes,
     ) {}
 
     /** @return array{to: string, mail: MailContent}|array{skip: string} */
     public function handle(EnrollmentEventDelivery $delivery): array
     {
         $event = EnrollmentEvent::query()->find($delivery->event_id);
+        if ($event !== null && $event->type === TeamLetters::REQUESTED) {
+            return $this->substitutes->handle($delivery, $event);
+        }
         // A change of the schedule names its family or teacher itself (docs/product/schedule-changes.md, т. 6.1).
         if ($event !== null && in_array($event->type, ScheduleLetters::TYPES, true)) {
             $organization = Organization::query()->find($event->organization_id);
