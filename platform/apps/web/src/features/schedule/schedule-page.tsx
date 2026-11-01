@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useDashboardContext } from '../dashboard/dashboard-context';
 import { ownScheduleOnly } from '../dashboard/navigation';
 import { loadChildCard, loadSchedule, ScheduleApiError, type ScheduleBoard, type ScheduleSession } from './api';
@@ -239,20 +239,29 @@ function ScheduleWorkspace() {
     <div className={`${styles.page} ${selecting ? styles.selectingPage : ''}`}>
       <header className={styles.header}>
         <div className={styles.titleRow}>
-          <h1 ref={title} tabIndex={-1}>{own ? 'Моят график' : 'График'}</h1>
+          <div><h1 ref={title} tabIndex={-1}>{own ? 'Моят график' : 'График'}</h1><p className={styles.small}>{own ? 'Вашите занимания и замествания.' : 'Заниманията на организацията.'}</p></div>
+          {manage ? <CalendarActions>
+            <button type="button" className={styles.button} onClick={(e) => beginChange('holiday', e.currentTarget)}>Почивен ден</button>
+            <button type="button" className={styles.button} aria-pressed={selecting} onClick={() => { setSelecting(!selecting); if (selecting) setSelected({}); closePreview(); }}>Избери{selecting ? ' ✓' : ''}</button>
+            <button type="button" className={styles.button} onClick={(e) => beginChange('add', e.currentTarget)}>+ Допълнително занимание</button>
+          </CalendarActions> : null}
+        </div>
+        <div className={styles.calendarTools}>
           <div className={styles.period}>
-            <button type="button" className={styles.button} onClick={() => go({ date: today })}>Днес</button>
-            <button type="button" className={styles.iconButton} aria-label={steps.previous} onClick={() => go({ date: stepDay(view, day, -1) })}><PreviousIcon /></button>
-            <button type="button" className={styles.iconButton} aria-label={steps.next} onClick={() => go({ date: stepDay(view, day, 1) })}><NextIcon /></button>
+            <div className={styles.periodButtons}>
+              <button type="button" className={styles.button} onClick={() => go({ date: today })}>Днес</button>
+              <button type="button" className={styles.iconButton} aria-label={steps.previous} onClick={() => go({ date: stepDay(view, day, -1) })}><PreviousIcon /></button>
+              <button type="button" className={styles.iconButton} aria-label={steps.next} onClick={() => go({ date: stepDay(view, day, 1) })}><NextIcon /></button>
+            </div>
+            <label className={styles.datePicker}><span className="sr-only">Избери дата</span><input type="date" value={day} onChange={(event) => { if(event.target.value && event.target.validity.valid) go({date:event.target.value}); }} /></label>
             <p className={styles.periodLabel} aria-live="polite">{period.label}</p>
           </div>
-        </div>
-        {manage ? <div className={styles.changeActions}>
-          <button type="button" className={styles.button} onClick={(e) => beginChange('holiday', e.currentTarget)}>Почивен ден</button>
-          <button type="button" className={styles.button} aria-pressed={selecting} onClick={() => { setSelecting(!selecting); if (selecting) setSelected({}); closePreview(); }}>Избери{selecting ? ' ✓' : ''}</button>
-          <button type="button" className={styles.button} onClick={(e) => beginChange('add', e.currentTarget)}>+ Допълнително занимание</button>
-        </div> : null}
         <div className={styles.switches}>
+          <div className={styles.views} role="group" aria-label="Изглед">
+            {viewsFor(own).map((item) => (
+              <button key={item.id} type="button" aria-pressed={view === item.id} onClick={() => chooseView(item.id)}>{item.label}</button>
+            ))}
+          </div>
           {view === 'day' ? (
             <div className={styles.views} role="group" aria-label="Колони">
               {dayColumnChoices.map((item) => (
@@ -260,11 +269,7 @@ function ScheduleWorkspace() {
               ))}
             </div>
           ) : null}
-          <div className={styles.views} role="group" aria-label="Изглед">
-            {viewsFor(own).map((item) => (
-              <button key={item.id} type="button" aria-pressed={view === item.id} onClick={() => chooseView(item.id)}>{item.label}</button>
-            ))}
-          </div>
+        </div>
         </div>
       </header>
 
@@ -272,7 +277,7 @@ function ScheduleWorkspace() {
         chips={dictionary ? filterChips(address.filters, dictionary, chosenChildName) : []} child={child}
         onToggle={(filter, id) => go({ filters: toggleFilter(address.filters, filter, id) })} onClear={clearFilters} />
 
-      <p role="status" aria-live="polite">{announcement}</p>
+      <p className={announcement ? styles.announcement : 'sr-only'} role="status" aria-live="polite">{announcement}</p>
       {selecting && manage ? <p className={styles.small}>Изберете заниманията, които искате да промените заедно. Може да изберете и цял ден от заглавието му.{view === 'month' ? ' За избор отворете Ден или Седмица.' : ''}</p> : null}
       {body}
       {selection && Object.keys(selected).length > 0 ? <section className={styles.selectionBar} role="region" aria-label="Избрани занимания">
@@ -287,4 +292,13 @@ function ScheduleWorkspace() {
       {change && manage ? <ScheduleChangeDialog organizationId={organization.id} action={change} sessions={Object.values(selected)} board={dictionary ?? emptyBoard} day={day} onClose={closeChange} onApplied={changed} onSubstitute={Object.values(selected).length > 0 && Object.values(selected).every(s => dictionary?.abilities[s.group_id]?.substitute) ? () => { setChange(undefined); setAssigning(true); } : undefined} /> : null}
     </div>
   );
+}
+
+/** Keep secondary actions discoverable on a phone without replacing the calendar controls. */
+function CalendarActions({children}:{children:ReactNode}) {
+  const [open,setOpen]=useState(false);const id=useId();const button=useRef<HTMLButtonElement>(null);
+  return <div className={styles.calendarActions} onKeyDown={(event)=>{if(event.key==='Escape'&&!document.querySelector('dialog[open]')){setOpen(false);button.current?.focus();}}}>
+    <button ref={button} type="button" className={`${styles.button} ${styles.actionsToggle}`} aria-expanded={open} aria-controls={id} onClick={()=>setOpen(value=>!value)}>Действия <span aria-hidden="true">{open?'−':'+'}</span></button>
+    <div id={id} className={styles.changeActions} data-expanded={open}>{children}</div>
+  </div>;
 }
