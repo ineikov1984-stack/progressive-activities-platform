@@ -36,6 +36,7 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, canChange
   const [reloadKey, setReloadKey] = useState(0);
   const [approving, setApproving] = useState('');
   const [search, setSearch] = useState('');
+  const [view, setView] = useState<'children' | 'waiting' | 'settings'>('children');
   const topNotice = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
@@ -97,6 +98,11 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, canChange
 
   return (
     <div className={styles.roster}>
+      <div className={styles.rosterViews} role="group" aria-label="В избраната група">
+        <button type="button" aria-pressed={view === 'children'} onClick={() => setView('children')}>Деца · {roster.enrollments.length}</button>
+        {Array.isArray(roster.waitlist) ? <button type="button" aria-pressed={view === 'waiting'} onClick={() => setView('waiting')}>Чакащи · {waitlist.length}</button> : null}
+        {roster.group.enrollment_approval_mode ? <button type="button" aria-pressed={view === 'settings'} onClick={() => setView('settings')}>Настройки</button> : null}
+      </div>
       {/* A teacher's list carries no places. */}
       {typeof roster.group.enrolled_for_period === 'number' ? (
         <p className={styles.places}>
@@ -105,11 +111,12 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, canChange
         </p>
       ) : null}
       {/* A teacher's list does not say how the group approves (TeacherRosterPresenter): then nothing is shown. */}
-      <ApprovalSetting key={roster.group.enrollment_approval_mode} organizationId={organizationId} groupId={groupId} canChange={canChangeApproval}
+      {view === 'settings' ? <ApprovalSetting organizationId={organizationId} groupId={groupId} canChange={canChangeApproval}
         mode={roster.group.enrollment_approval_mode === 'automatic' || roster.group.enrollment_approval_mode === 'manual' ? roster.group.enrollment_approval_mode : undefined}
-        onSaved={() => onChanged?.()} />
+        onSaved={(mode) => { setRoster(current => current ? { ...current, group: { ...current.group, enrollment_approval_mode: mode } } : current); onChanged?.(); }} /> : null}
       <p ref={topNotice} tabIndex={-1} className={topText ? styles.rowNotice : styles.srOnly}>{topText}</p>
       {error ? <div className={styles.actions}><p className={styles.error} role="alert">{error}</p>{retry}</div> : null}
+      {view === 'children' ? <>
       {searchable ? (
         <div className={styles.rosterSearch}>
           <label htmlFor={`roster-search-${groupId}`}>Търси дете в групата</label>
@@ -117,7 +124,7 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, canChange
           <span className={styles.small} role="status">{needle ? `Показани: ${shown.length} от ${roster.enrollments.length}` : ''}</span>
         </div>
       ) : null}
-      <h5 className={styles.subTitle}>Записани деца ({roster.enrollments.length})</h5>
+      <h4 className={styles.subTitle}>Записани деца ({roster.enrollments.length})</h4>
       {/* Once above the children, not under each one. */}
       {roster.enrollments.some((item) => item.can_reveal_contact) ? (
         <p className={styles.small}>С „Покажи телефона“ на реда на детето виждате контакта на родителя. {REVEAL_NOTE}</p>
@@ -144,9 +151,11 @@ export function GroupRosterPanel({ organizationId, groupId, canManage, canChange
           ))}
         </ul>
       )}
-      {waitlist.length > 0 ? (
+      </> : null}
+      {view === 'waiting' ? (
         <>
-          <h5 className={styles.subTitle}>Чакащи ({waitlist.length})</h5>
+          <h4 className={styles.subTitle}>Чакащи ({waitlist.length})</h4>
+          {waitlist.length === 0 ? <p className={styles.muted}>Няма чакащи деца в тази група.</p> : null}
           {canManage && waitlist.some(blockedByGroup) ? <p id={`roster-full-${groupId}`} className={styles.smallWarning}>Няма свободно място — записване за периода ще е възможно, когато място се освободи.</p> : null}
           <ol className={styles.waitList}>
             {waitlist.map((item) => (
