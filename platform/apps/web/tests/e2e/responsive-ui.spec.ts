@@ -119,10 +119,13 @@ for (const width of widths) {
     await page.setViewportSize({ width, height: 1000 }); const errors = await fixture(page);
     await page.goto(`/dashboard/activities/${activity.id}`);
     await expect(page.getByRole('heading', { level: 1, name: activity.title })).toBeVisible();
-    const steps = page.getByRole('navigation', { name: 'Стъпки', exact: true }).getByRole('button');
+    const steps = page.getByRole('navigation', { name: 'Стъпки', exact: true }).getByRole('button',{includeHidden:true});
     await expect(steps).toHaveCount(9);
     for (let index = 0; index < 9; index++) {
-      await steps.nth(index).click(); await expect(steps.nth(index)).toHaveAttribute('aria-current', 'step'); await layout(page);
+      const choice=page.getByRole('combobox',{name:'Избери стъпка',exact:true});
+      if(await choice.isVisible()){await choice.selectOption(String(index+1));await expect(choice).toHaveValue(String(index+1));}
+      else {await steps.nth(index).click();await expect(steps.nth(index)).toHaveAttribute('aria-current','step');}
+      await layout(page);
       if ([390, 1440].includes(width) && [0, 7].includes(index)) await page.screenshot({ path: test.info().outputPath(`editor-${index + 1}-${width}.png`), fullPage: true });
     }
     await keyboardFocus(page); expect(errors).toEqual([]);

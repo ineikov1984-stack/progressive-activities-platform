@@ -28,7 +28,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| UX: дейности и редактор | Codex | `codex/activity-workspace-ux` | catalog/admin activity-list и wizard, засегнати тестове; WORKBOARD/DECISIONS; без горещи файлове | По искане на собственика: директни UX корекции в приетия стил, първо дейности; Екип след това при ресурс |
+| UX: дейности и редактор | Codex | `codex/activity-workspace-ux` | catalog/admin activity-list и wizard, засегнати тестове; WORKBOARD/DECISIONS; без горещи файлове | Реализирано: карти/филтри/категории, мобилен избор на стъпка и честен readonly статус; 12 unit / 16 browser, UX 0/0; снимки reviews/activity-workspace; чака CI/merge. Следва Екип |
 
 ## Опашка (по приоритет)
 

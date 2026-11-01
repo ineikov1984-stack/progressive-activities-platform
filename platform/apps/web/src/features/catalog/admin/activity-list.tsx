@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { CategoryIllustration } from '../public/category-illustration';
 import { useDashboardContext } from '@/features/dashboard/dashboard-context';
 import { ActivityDraft, createActivity, loadCatalogWorkspace } from './api';
 import { usePrivateMedia } from './private-image';
@@ -47,13 +48,13 @@ function ActivityCard({ activity, organizationId, organizationSlug }: { activity
   const editHref = `/dashboard/activities/${activity.id}`;
   const statusClass = activity.status === 'published' ? styles.badgeAvailable : activity.status === 'archived' ? styles.badgeMuted : styles.badgeDraft;
   const progressText = isComplete
-    ? 'Всички стъпки са попълнени'
-    : `${completeness.done} от ${completeness.total} стъпки${completeness.next ? ` · следва „${completeness.next.label}“` : ''}`;
+    ? 'Всички раздели са попълнени'
+    : `${completeness.done} от ${completeness.total} раздела${completeness.next ? ` · следва „${completeness.next.label}“` : ''}`;
 
   return (
     <article className={styles.card}>
       <div className={styles.cover} aria-hidden="true">
-        {cover ? <Image src={cover} alt="" fill sizes="112px" unoptimized /> : <span>{activity.title.slice(0, 1).toUpperCase()}</span>}
+        {cover ? <Image src={cover} alt="" fill sizes="64px" unoptimized /> : <CategoryIllustration category={activity.category} />}
       </div>
       <div className={styles.main}>
         <div className={styles.head}>
@@ -63,26 +64,31 @@ function ActivityCard({ activity, organizationId, organizationSlug }: { activity
           </div>
           <span className={`${styles.badge} ${statusClass}`}>{activityStatusLabel(activity.status)}</span>
         </div>
-        <div className={styles.progress}>
+        {activity.status === 'draft' ? <div className={styles.progress}>
           <span className={styles.bar} role="progressbar" aria-label="Завършеност" aria-valuemin={0} aria-valuemax={completeness.total} aria-valuenow={completeness.done}>
             <span className={isComplete ? styles.barDone : styles.barPartial} style={{ width: `${Math.round((completeness.done / completeness.total) * 100)}%` }} />
           </span>
           <span>{progressText}</span>
-        </div>
+        </div> : null}
+      </div>
         <div className={styles.actions}>
           {activity.status === 'draft'
             ? <Link className={styles.primarySmall} href={editHref}>Продължи</Link>
-            : <Link className={styles.secondarySmall} href={editHref}>Редактирай</Link>}
+            : <Link className={styles.secondarySmall} href={editHref}>Прегледай</Link>}
           {activity.status === 'published'
             ? <Link className={styles.quietSmall} href={`/o/${organizationSlug}/activities/${activity.slug}`}>Преглед като родител</Link>
             : null}
         </div>
-      </div>
     </article>
   );
 }
 
 export function ActivityList() {
+  const { organization } = useDashboardContext();
+  return <ActivityWorkspace key={organization.id} />;
+}
+
+function ActivityWorkspace() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { organization } = useDashboardContext();
@@ -95,14 +101,17 @@ export function ActivityList() {
   const [category, setCategory] = useState<string>(activityCategories[0]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [loadError,setLoadError]=useState('');const [attempt,retry]=useState(0);
+  const newButton=useRef<HTMLButtonElement>(null);
+  function cancelCreate() { setIsCreating(false);requestAnimationFrame(()=>newButton.current?.focus()); }
 
   useEffect(() => {
     let active = true;
     loadCatalogWorkspace(organization.id)
       .then((workspace) => { if (active) setActivities(workspace.activities); })
-      .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : 'Дейностите не се заредиха.'); });
+      .catch((reason: unknown) => { if (active) setLoadError(reason instanceof Error ? reason.message : 'Дейностите не се заредиха.'); });
     return () => { active = false; };
-  }, [organization.id]);
+  }, [organization.id,attempt]);
 
   useEffect(() => { if (isCreating) createInput.current?.focus(); }, [isCreating]);
 
@@ -137,12 +146,11 @@ export function ActivityList() {
     <div className={styles.page}>
       <header className={styles.header}>
         <div className={styles.heading}>
-          <p className={styles.eyebrow}>Каталог на организацията</p>
           <h1>Дейности</h1>
-          <p className={styles.muted}>Създавайте дейности, групи и цени. Родителите виждат само публикуваните.</p>
+          <p className={styles.muted}>Дейности, групи и цени на едно място.</p>
         </div>
         {!isCreating ? (
-          <button type="button" className={styles.primary} onClick={() => setIsCreating(true)}>
+          <button ref={newButton} type="button" className={styles.primary} onClick={() => setIsCreating(true)}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
             Създай нова дейност
           </button>
@@ -153,11 +161,11 @@ export function ActivityList() {
         <form className={styles.create} onSubmit={create} aria-labelledby="create-title">
           <div className={styles.createHead}>
             <h2 id="create-title">Нова дейност</h2>
-            <button type="button" className={styles.quietSmall} onClick={() => setIsCreating(false)}>Откажи</button>
+            <button type="button" className={styles.quietSmall} disabled={saving} onClick={cancelCreate}>Откажи</button>
           </div>
           <div className={styles.field}>
             <label htmlFor="new-activity">Име на дейността</label>
-            <input id="new-activity" ref={createInput} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Например: Шахмат за начинаещи" required maxLength={120} />
+            <input id="new-activity" disabled={saving} ref={createInput} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Например: Шахмат за начинаещи" required maxLength={120} />
             <span className={styles.hint}>Кратко и разбираемо за родител. Всичко може да се промени по-късно.</span>
           </div>
           <fieldset className={styles.field}>
@@ -165,7 +173,7 @@ export function ActivityList() {
             <div className={styles.chips}>
               {activityCategories.map((item) => (
                 <label key={item} className={`${styles.chip} ${category === item ? styles.chipOn : ''}`}>
-                  <input type="radio" name="category" value={item} checked={category === item} onChange={() => setCategory(item)} />
+                  <input type="radio" aria-label={item} disabled={saving} name="category" value={item} checked={category === item} onChange={() => setCategory(item)} />
                   {item}
                 </label>
               ))}
@@ -178,7 +186,9 @@ export function ActivityList() {
         </form>
       ) : null}
 
-      {error ? <p className={styles.error} role="alert">{error}</p> : null}
+      {isCreating && error ? <p className={styles.error} role="alert">{error}</p> : null}
+      <div className={styles.listBody} hidden={isCreating}>
+      {loadError ? <div className={styles.error}><p role="alert">{loadError}</p><button className={styles.secondarySmall} onClick={()=>{setLoadError('');retry(n=>n+1);}}>Опитай пак</button></div> : null}
 
       <div className={styles.toolbar}>
         <div className={styles.tabs} role="group" aria-label="Филтър по статус">
@@ -195,21 +205,22 @@ export function ActivityList() {
         </label>
       </div>
 
-      <section aria-label="Дейности" aria-busy={activities === undefined} className={styles.grid}>
-        {activities === undefined
+      <section aria-label="Дейности" aria-busy={activities === undefined && !loadError} className={styles.grid}>
+        {loadError ? null : activities === undefined
           ? [0, 1, 2, 3].map((item) => <span className={styles.skeleton} key={item} />)
           : activities.length === 0
             ? (
               <div className={styles.empty}>
                 <h2>Създайте първата си дейност</h2>
                 <p>Въведете име и категория, а после ще ви преведем през останалите стъпки.</p>
-                {!isCreating ? <button type="button" className={styles.primary} onClick={() => setIsCreating(true)}>Създай нова дейност</button> : null}
+
               </div>
             )
             : visible.length === 0
-              ? <p className={styles.muted}>Няма дейности, които отговарят на избраното.</p>
+              ? <div className={styles.noResults}><h2>Няма намерени дейности</h2><p className={styles.muted}>Опитайте с друго име или изчистете филтрите.</p><button className={styles.secondarySmall} onClick={()=>{setFilter('all');setQuery('');}}>Изчисти филтрите</button></div>
               : visible.map((activity) => <ActivityCard key={activity.id} activity={activity} organizationId={organization.id} organizationSlug={organization.slug} />)}
       </section>
+      </div>
     </div>
   );
 }

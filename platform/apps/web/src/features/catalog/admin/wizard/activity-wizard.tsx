@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useDashboardContext } from '@/features/dashboard/dashboard-context';
 import { CategoryIllustration } from '@/features/catalog/public/category-illustration';
 import { type ActivityDraft, type ActivityGroup, type ActivitySections, type InstructorProfile, loadActivity, loadCatalogWorkspace, loadGroups, type Location, publishActivity, updateActivity, uploadCatalogMedia } from '../api';
-import { activityCategories, activityCompleteness, formatEur } from '../presentation';
+import { activityCategories, activityCompleteness, activityStatusLabel, formatEur } from '../presentation';
 import { PrivateImage, usePrivateMedia } from '../private-image';
 import { Autosave, type AutosaveState } from './autosave';
 import { checkOffering, enrollmentModes, isFreeTrial, priceUnits, type OfferingDraft } from './offering';
@@ -244,7 +244,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
             <h1 className={styles.title}>{content.title.trim() || 'Нова дейност'}</h1>
             <span className={`${styles.status} ${saveState === 'error' ? styles.statusError : ''}`} role="status" aria-live="polite">
               {!locked && savedAt !== undefined && saveState === 'saved' ? <Icon path={icons.check} /> : null}
-              {locked ? 'Публикувана' : `Чернова · ${statusText}`}
+              {locked ? activityStatusLabel(activity.status) : `Чернова · ${statusText}`}
             </span>
           </div>
         </div>
@@ -255,16 +255,21 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
 
       {locked ? (
         <div className={styles.lockedNotice} role="note">
-          <strong>Тази дейност е {activity.status === 'published' ? 'публикувана' : 'в архива'} и родителите я виждат такава, каквато е.</strong>
-          <span>Описанието, снимките, цените, групите и графикът засега не могат да се променят оттук. Скоро ще може да правите промени като чернова и да ги публикувате с едно натискане, без дейността да изчезва от каталога.</span>
+          <strong>{activity.status === 'published' ? 'Дейността е публикувана и се вижда от родителите.' : 'Дейността е в архива.'}</strong>
+          <span>Този формуляр е само за преглед. Описанието, снимките, цените, групите и графикът не могат да се променят оттук.</span>
         </div>
       ) : null}
       {saveError ? <p className={styles.error} role="alert">{saveError}</p> : null}
 
       <div className={`${styles.layout} ${step.id === 'people' || step.id === 'groups' ? styles.layoutWide : ''}`}>
         <nav className={styles.steps} aria-label="Стъпки">
-          <span className={styles.muted}>Стъпка {step.number} от {wizardSteps.length}</span>
-          <ol>
+          <label className={styles.mobileStepChoice}>Стъпка {step.number} от {wizardSteps.length}
+            <select aria-label="Избери стъпка" value={step.number} onChange={(event)=>goTo(stepByNumber(event.target.value))}>
+              {wizardSteps.map(item=><option key={item.id} value={item.number}>{item.number}. {item.title}{done.has(item.id)?' · готово':''}</option>)}
+            </select>
+          </label>
+          <span className={`${styles.muted} ${styles.desktopSteps}`}>Стъпка {step.number} от {wizardSteps.length}</span>
+          <ol className={styles.desktopSteps}>
             {wizardSteps.map((item) => {
               const current = item.id === step.id;
               const complete = done.has(item.id);
