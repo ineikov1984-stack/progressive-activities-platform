@@ -71,3 +71,26 @@ for(const width of [390,768,1440])test(`compact marking explains bulk behavior o
 test('completed schedule attendance opens for inspection and unauthorized users see no cutoff hint',async({page})=>{
  await fixture(page,{office:true,complete:true});await page.goto('/dashboard/schedule?view=cards&date=2026-11-02');await page.locator('[data-session-id]').first().click();const panel=page.getByRole('dialog',{name:/Група 2/});await expect(panel.getByText('„Премести“ и „Отмени“ са достъпни до 15 минути преди началото.',{exact:true})).toHaveCount(0);await expect(panel.getByRole('button',{name:'Отбележи присъствия',exact:true})).toHaveCount(0);await panel.getByRole('button',{name:'Прегледай присъствията',exact:true}).click();const modal=page.getByRole('dialog',{name:'Присъствия за заниманието',exact:true});await expect(modal.getByText('✓ Всички деца са отбелязани',{exact:true})).toBeVisible();await expect(modal.getByRole('button',{name:'Поправи',exact:true})).toBeVisible();
 });
+
+for (const width of [390, 768, 1440]) {
+  test(`review statuses share a consistent column at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 }); await fixture(page, { office: true, complete: true, readOnly: true });
+    await page.goto('/dashboard/schedule?view=cards&date=2026-11-02'); await page.locator('[data-session-id]').first().click(); await page.getByRole('button', { name: 'Прегледай присъствията', exact: true }).click();
+    const modal = page.getByRole('dialog', { name: 'Присъствия за заниманието', exact: true });
+    for (const [name, status] of [['Ана Иванова', '✓ Присъства'], ['Калоян Петков', '✕ Предупредено отсъствие']]) {
+      const row = modal.getByRole('group', { name, exact: true }); const label = row.getByText(status, { exact: true }); await expect(label).toBeVisible();
+      const placement = await label.evaluate(el => { const r = el.getBoundingClientRect(); const row = el.parentElement!.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, rowLeft: row.left, rowRight: row.right }; });
+      if (width < 560) { const eye = await row.getByRole('button', { name: `Виж ${name}`, exact: true }).boundingBox(); expect(placement.top).toBeGreaterThanOrEqual(eye!.y + eye!.height); expect(Math.abs(placement.left - placement.rowLeft)).toBeLessThanOrEqual(1); }
+      else { expect(Math.abs(placement.right - placement.rowRight)).toBeLessThanOrEqual(1); }
+
+    }
+    await expect(modal.getByText('✓ Всички деца са отбелязани', { exact: true })).toBeVisible(); await layout(page); await page.screenshot({ path: test.info().outputPath(`review-aligned-${width}.png`) });
+  });
+  test(`incomplete review does not signal success at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 }); await fixture(page, { office: true, readOnly: true });
+    await page.goto('/dashboard/schedule?view=cards&date=2026-11-02'); await page.locator('[data-session-id]').first().click(); await page.getByRole('button', { name: 'Прегледай присъствията', exact: true }).click();
+    const modal = page.getByRole('dialog', { name: 'Присъствия за заниманието', exact: true }); const summary = modal.getByText('Има неотбелязани деца', { exact: true }); await expect(summary).toBeVisible();
+    const colors = await summary.evaluate(el => { const actual = getComputedStyle(el.parentElement!).backgroundColor; const probe = document.createElement('span'); probe.style.color = 'var(--status-available-soft)'; el.append(probe); const success = getComputedStyle(probe).color; probe.remove(); return { actual, success }; });
+    expect(colors.actual).not.toBe(colors.success); await expect(modal.getByText('Неотбелязани 2', { exact: true })).toHaveCount(1); await layout(page); await page.screenshot({ path: test.info().outputPath(`review-pending-${width}.png`) });
+  });
+}
