@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\InstructorProfileController;
 use App\Http\Controllers\Api\V1\InvitationAcceptanceController;
 use App\Http\Controllers\Api\V1\InvitationController;
 use App\Http\Controllers\Api\V1\LocationController;
+use App\Http\Controllers\Api\V1\OfficeSubstituteRequestController;
 use App\Http\Controllers\Api\V1\OpenDayCampaignController;
 use App\Http\Controllers\Api\V1\OperatorOrganizationApplicationController;
 use App\Http\Controllers\Api\V1\OrganizationApplicationController;
@@ -144,9 +145,13 @@ Route::prefix('v1')->group(function (): void {
             Route::prefix('schedule')->middleware('tenant')->group(function (): void {
                 // "График" (docs/product/schedule.md, т. 6): the sessions of the person's scope and the panel of one; read only, no audit.
                 Route::middleware(['organization.access:operational.read', 'throttle:120,1'])->group(function (): void {
+                    Route::get('/substitute-requests', [OfficeSubstituteRequestController::class, 'index']);
+                    Route::get('/substitute-requests/{substituteRequest}', [OfficeSubstituteRequestController::class, 'show'])->whereUuid('substituteRequest');
                     Route::get('/', [ScheduleController::class, 'index']);
                     Route::get('/sessions/{session}', [ScheduleController::class, 'show'])->whereUuid('session');
                 });
+                Route::get('/substitutes/candidates', [OfficeSubstituteRequestController::class, 'candidates'])->middleware(['organization.access:operational.read', 'throttle:60,1,substitute-candidates']);
+                Route::post('/substitute-requests/{substituteRequest}/decline', [OfficeSubstituteRequestController::class, 'decline'])->whereUuid('substituteRequest')->middleware(['organization.access:operational.write', 'throttle:30,1']);
                 // Changes of the schedule (docs/product/schedule-changes.md, т. 7.1): the team with "schedule.manage" for the
                 // whole organization; the preview reads only, the change has its key for a repeat. Counters of their own.
                 Route::middleware('organization.access:operational.write')->group(function (): void {

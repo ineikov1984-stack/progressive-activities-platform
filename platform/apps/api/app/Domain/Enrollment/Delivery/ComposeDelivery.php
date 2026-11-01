@@ -38,7 +38,7 @@ final class ComposeDelivery
     public function handle(EnrollmentEventDelivery $delivery): array
     {
         $event = EnrollmentEvent::query()->find($delivery->event_id);
-        if ($event !== null && $event->type === TeamLetters::REQUESTED) {
+        if ($event !== null && in_array($event->type, [TeamLetters::REQUESTED, TeamLetters::DECLINED], true)) {
             return $this->substitutes->handle($delivery, $event);
         }
         // A change of the schedule names its family or teacher itself (docs/product/schedule-changes.md, т. 6.1).
