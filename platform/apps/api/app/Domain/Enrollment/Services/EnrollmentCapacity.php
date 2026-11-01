@@ -33,10 +33,19 @@ final class EnrollmentCapacity
 
         $remaining = $group->capacity_max === null ? null : max(0, $group->capacity_max - $occupied);
         $sessions = Session::query()->where('group_id', $group->id)
-            ->where('status', 'scheduled')->where('starts_at', '>', $at->utc())->orderBy('id')->get();
+            ->where('status', 'scheduled')->where('starts_at', '>', $at->utc())->orderBy('id')
+            ->when($forAllocation, fn ($query) => $query->lockForUpdate())->get();
+        // Allocation keeps the group → ordered sessions → ordered enrollments lock order.
+        // Load the group's enrollments once, rather than locking/loading them for every session.
+        $taken = $forAllocation && $sessions->isNotEmpty()
+            ? $this->countForSessions($sessions, Enrollment::query()->where('group_id', $group->id)
+                ->whereIn('status', [EnrollmentStatus::Active, EnrollmentStatus::Paused, EnrollmentStatus::Ended])
+                ->with(['group', 'sessionExceptions', 'pauses'])->orderBy('id')->lockForUpdate()->get())
+            : $this->takenForSessions($sessions);
         foreach ($sessions as $session) {
-            $sessionRemaining = $this->remainingForSession($session, $forAllocation);
-            if ($sessionRemaining !== null) {
+            $capacity = $session->capacity ?? $group->capacity_max;
+            if ($capacity !== null) {
+                $sessionRemaining = max(0, $capacity - $taken[(string) $session->id]);
                 $remaining = $remaining === null ? $sessionRemaining : min($remaining, $sessionRemaining);
             }
         }
@@ -150,8 +159,18 @@ final class EnrollmentCapacity
      */
     public function takenForSessions(Collection $sessions): array
     {
+        return $this->countForSessions($sessions, $this->applicability->candidates($sessions));
+    }
+
+    /**
+     * @param  Collection<int, Session>  $sessions
+     * @param  Collection<int, Enrollment>  $enrollments
+     * @return array<string, int>
+     */
+    private function countForSessions(Collection $sessions, Collection $enrollments): array
+    {
         $byGroup = [];
-        foreach ($this->applicability->candidates($sessions) as $enrollment) {
+        foreach ($enrollments as $enrollment) {
             $byGroup[(string) $enrollment->group_id][] = $enrollment;
         }
         $taken = [];
