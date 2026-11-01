@@ -21,6 +21,7 @@ export function OfficeSubstituteTasks({onCount}:{onCount:(count:number)=>void}){
  function open(id:string,button:HTMLButtonElement){opener.current=button;pushed.current=true;decided.current=false;const params=new URLSearchParams(query.toString());params.set('substitute',id);router.push(`${path}?${params}`,{scroll:false});}
  function close(){if(pushed.current){pushed.current=false;router.back();}else{const params=new URLSearchParams(query.toString());params.delete('substitute');router.replace(`${path}${params.size?`?${params}`:''}`,{scroll:false});}}
  const rows=result?.data?.requests??[];
+ if(result?.data&&!rows.length&&!notice&&!requestId)return null;
  return <div className={styles.section}>
   <p role="status" className={notice?styles.success:'sr-only'}>{notice}</p>
   {result?.error?<p role="alert">{result.error} <button className={styles.button} onClick={()=>retry(n=>n+1)}>Опитай пак</button></p>:!result?<div className={styles.skeleton} role="status">Зареждане на заявките за заместник…</div>:null}

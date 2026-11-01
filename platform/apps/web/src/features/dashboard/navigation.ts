@@ -125,3 +125,10 @@ export function parseDashboardNavigationPreference(value: string | null): boolea
 export function defaultDashboardNavigationCollapsed(viewportWidth: number): boolean {
   return viewportWidth >= 720 && viewportWidth < 1180;
 }
+
+/** The phone uses the same authorized destinations as the full menu. */
+export function mobileDashboardNavigation(groups: DashboardNavGroup[]): DashboardNavItem[] {
+  const order = ['home', 'schedule', 'enrollments', 'attendance'];
+  const items = groups.flatMap(group => group.items);
+  return order.flatMap(id => items.filter(item => item.id === id));
+}
