@@ -141,7 +141,7 @@ export function Dashboard() {
 
   const isLoaded = activities !== undefined && invitations !== undefined;
   const tasks: Task[] = isLoaded ? buildTasks(activities, invitations, pendingApplications, freed, canCreateActivity) : [];
-  if (canSeeAttendancePending && attendancePending?.org === organization.id && attendancePending.total > 0) tasks.unshift({id:'attendance',tone:'action',title:attendancePending.total === 1 ? '1 занимание чака отбелязване' : `${attendancePending.total} занимания чакат отбелязване`,detail:'Отворете присъствията за месеца',href:'/dashboard/attendance'});
+  if (canSeeAttendancePending && attendancePending?.org === organization.id && attendancePending.total > 0) tasks.unshift({id:'attendance',tone:'action',title:attendancePending.total === 1 ? '1 занимание чака отбелязване' : `${attendancePending.total} занимания чакат отбелязване`,detail:'Отворете заниманията за отбелязване',href:'/dashboard/attendance'});
   const published = activities?.filter((activity) => activity.status === 'published').length ?? 0;
   const firstName = user.name.split(/\s+/)[0];
   // For a teacher their groups are the page; for the others they come after "Какво ви чака".
@@ -151,7 +151,7 @@ export function Dashboard() {
   const ownGroups = teaching === undefined ? null : teaching.length > 0 || groupsFirst ? (
     <section aria-labelledby="teaching-title" className={styles.section}>
       <h2 id="teaching-title" className={styles.sectionTitle}>Моите групи</h2>
-      {hasMonth(teaching) ? <Link className={styles.shortcut} href="/dashboard/attendance">Присъствия за месеца →</Link> : null}
+      {hasMonth(teaching) ? <Link className={styles.shortcut} href="/dashboard/attendance?view=month">Присъствия за месеца →</Link> : null}
       {teaching.length === 0 ? (
         <p className={styles.muted}>Все още нямате групи. Когато ви добавят в група, тя ще се появи тук.</p>
       ) : (

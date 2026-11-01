@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { deadlineText, historyLines, initialView, clock, childLabel, undoAllowed } from '../src/features/attendance/presentation';
+import { deadlineText, historyLines, initialView, clock, childLabel, undoAllowed, attendanceView } from '../src/features/attendance/presentation';
 import type { AttendanceChild, History, Sheet } from '../src/features/attendance/api';
 const child = { enrollment_id: 'e', name: 'Ана Иванова' } as AttendanceChild;
 const row = (id: string, at: string, from: History['from'], to: History['to'], extra: Partial<History> = {}): History => ({ id, at, from, to, by: 'Иван Петров', kind: 'mark', enrollment_id: 'e', ...extra });
@@ -24,4 +24,8 @@ it('keeps paused presence and warned absence distinct from ordinary absence', ()
 
 it('allows undo to a previous status after the deadline but never clearing a late first mark',()=>{
  const applied={enrollment_id:'e',from:null,to:'present' as const,version:1}; expect(undoAllowed([applied],false)).toBe(true); expect(undoAllowed([applied],true)).toBe(false); expect(undoAllowed([{...applied,from:'absent'}],true)).toBe(true);
+});
+
+it('keeps month links explicit and defaults to daily work only for people who may mark',()=>{
+ expect(attendanceView('',true)).toBe('pending');expect(attendanceView('',false)).toBe('month');expect(attendanceView('view=month',true)).toBe('month');expect(attendanceView('group=g&month=2026-11',true)).toBe('month');expect(attendanceView('group=g&view=pending',true)).toBe('pending');expect(attendanceView('view=pending',false)).toBe('month');
 });

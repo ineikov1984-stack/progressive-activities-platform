@@ -110,7 +110,8 @@ function ScheduleWorkspace() {
     return () => { active = false; };
   }, [organization.id, query, key, router]);
   const current = result?.key === key ? result : undefined;
-  const board = current?.board;
+  // An attendance refresh keeps the same graph mounted, including scroll and the focused opener.
+  const board = current?.board ?? (result?.key.startsWith(`${organization.id}?${query}#`) ? result.board : undefined);
   const names = useMemo(() => scheduleNames(dictionary ?? emptyBoard), [dictionary]);
 
   // The quick look on a computer; it goes when the view, the period or the filters change.
@@ -278,7 +279,7 @@ function ScheduleWorkspace() {
       </section> : null}
 
       {preview.shown && !panel && !selecting ? <SchedulePreview shown={preview.shown} names={names} now={now} onEnter={preview.keep} onLeave={preview.hide} /> : null}
-      {panel ? <SchedulePanel organizationId={organization.id} target={panel} names={names} now={now} withDetails={withDetails} onClose={closePanel} onChildNamed={rememberChild} board={dictionary ?? emptyBoard} onChanged={changed} selection={selection} /> : null}
+      {panel ? <SchedulePanel organizationId={organization.id} target={panel} names={names} now={now} withDetails={withDetails} onClose={closePanel} onChildNamed={rememberChild} board={dictionary ?? emptyBoard} onChanged={changed} onAttendanceChanged={()=>setAttempt((n)=>n+1)} selection={selection} /> : null}
       {change && manage ? <ScheduleChangeDialog organizationId={organization.id} action={change} sessions={Object.values(selected)} board={dictionary ?? emptyBoard} day={day} onClose={closeChange} onApplied={changed} /> : null}
     </div>
   );
