@@ -105,10 +105,10 @@ class OperationalInstructorNamesTest extends TestCase
                 $counts[] = count(DB::getQueryLog());
                 DB::disableQueryLog();
                 $this->assertCount(count($batch), $names);
-                $this->assertSame('Човек 0',$names[$ids[0]]);
+                $this->assertSame('Човек 0', $names[$ids[0]]);
             }
-            $this->assertSame($counts[0],$counts[1]);
-            $this->assertLessThanOrEqual(2,$counts[1]);
+            $this->assertSame($counts[0], $counts[1]);
+            $this->assertLessThanOrEqual(2, $counts[1]);
         });
     }
 }
