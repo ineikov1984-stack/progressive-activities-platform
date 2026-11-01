@@ -47,6 +47,8 @@ async function openSchedule(page: Page, options: { manage?: boolean; retry?: boo
   await page.goto('/dashboard/schedule?view=cards&date=2026-11-18');
   await expect(page.getByRole('heading', { name: manage ? 'График' : 'Моят график', exact: true })).toBeVisible();
   await expect(page.locator('[data-session-id]').first()).toBeVisible();
+  const actions = page.getByRole('button', { name: 'Действия', exact: true });
+  if (await actions.isVisible()) await actions.click();
   return { applies };
 }
 

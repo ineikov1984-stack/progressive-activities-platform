@@ -1,7 +1,7 @@
 'use client';
 
 import type { ScheduleActivity, ScheduleSession } from './api';
-import { dayName, fillOf, fillText, legend, type MonthDay, monthLayout, monthLine, type ScheduleNames, sessionsCount } from './presentation';
+import { calendarAttendance, dayName, fillOf, fillText, legend, type MonthDay, monthLayout, monthLine, type ScheduleNames, sessionsCount } from './presentation';
 import { colorClass, Legend, type OpenSession, SessionCard } from './schedule-views';
 import { FillBar, type PreviewHandlers } from './session-preview';
 import styles from './schedule.module.css';
@@ -33,15 +33,17 @@ function dayWords(item: MonthDay, today: string): string {
  * A line of a day: "16:00 Шахмат · Гр. 1 · 8/10" when it fits; "Пълна" and "Няма записани" always stay; a cancelled
  * one starts with "Отменено ·". A thin bar under it shows how full.
  */
-function MonthLine({ session, names, preview }: { session: ScheduleSession; names: ScheduleNames; preview: PreviewHandlers }) {
+function MonthLine({ session, names, preview, now }: { session: ScheduleSession; names: ScheduleNames; preview: PreviewHandlers; now: Date }) {
   const cancelled = session.status === 'cancelled' || !!session.not_held;
   const fill = fillOf(session);
+  const attendance = calendarAttendance(session, now);
   return (
     <span className={`${styles.monthLine} ${colorClass(names.activity(session.activity_id))} ${cancelled ? styles.monthCancelled : ''}`}
       onMouseEnter={(event) => preview.enter({ kind: 'session', session }, event.currentTarget)} onMouseLeave={preview.leave}>
       {cancelled ? <span className={styles.monthCancelWord}>{session.not_held?'Не се проведе':'Отменено'} ·</span> : null}
       <span className={styles.monthText}>{monthLine(session, names)}</span>
       {cancelled ? null : <span className={fill.word ? styles.monthFillWord : styles.monthFill}>{fillText(session, 'block')}</span>}
+      {attendance ? <span className={styles.attendanceTick} role="img" aria-label={`Присъствия: ${attendance}`} title={attendance}>{session.attendance?.unmarked === 0 ? '✓' : '?'}</span> : null}
       {cancelled ? null : <FillBar session={session} className={styles.monthBar} />}
     </span>
   );
@@ -74,7 +76,7 @@ export function MonthView({ day, sessions, activities, names, today, now, onDay,
                       onClick={() => { preview.close(); onDay(item.day); }} onFocus={(event) => preview.focus(target, event)} onBlur={preview.blur}>
                       <span className={styles.monthNumber} aria-hidden="true">{item.number}</span>
                       <span className="sr-only">{dayWords(item, today)}</span>
-                      {item.shown.map((session) => <MonthLine key={session.id} session={session} names={names} preview={preview} />)}
+                      {item.shown.map((session) => <MonthLine key={session.id} session={session} names={names} preview={preview} now={now} />)}
                       {item.more ? <span className={styles.monthMore}>+{item.more} още</span> : null}
                       <span className="sr-only"> Виж деня.</span>
                     </button>

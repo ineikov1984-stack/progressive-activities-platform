@@ -162,7 +162,7 @@
 .monthFill { flex: none; font-weight: 600; }
 .monthFillWord, .monthCancelWord { flex: none; font-weight: 700; }
 .monthBar { position: absolute; right: 0; bottom: 0; left: 0; height: 2px; border-radius: 0; }
-@container monthline (max-width: 150px) { .monthFill { display: none; } }
+
 .monthCancelled { color: var(--ink-muted); background: var(--surface-sunken); }
 .monthCancelled .monthText { text-decoration: line-through; }
 .monthMore { padding: 0 var(--space-1); color: var(--ink); font-size: 12px; font-weight: 700; line-height: 16px; }
@@ -324,3 +324,51 @@
 @media (max-width: 899px) { .selectionBar { position: fixed; bottom: var(--workspace-bottom-offset, 0px); left: 0; right: 0; margin: 0; border-radius: var(--radius-md) var(--radius-md) 0 0; padding-bottom: max(var(--space-4), env(safe-area-inset-bottom)); } .selectionBar div { display: grid; grid-template-columns: 1fr 1fr; } .selectingPage { padding-bottom: 180px; } }
 
 .kidAttendance { flex: 0 0 36%; max-width: 36%; color: var(--ink); font-size: 13px; line-height: 1.4; text-align: right; overflow-wrap: anywhere; }
+
+/* MobileWorkspace: calendar controls remain visible; secondary actions fold on a phone. */
+.header { display:grid;gap:var(--space-4);justify-content:stretch;align-items:stretch; }
+.titleRow { justify-content:space-between;align-items:flex-start; }
+.titleRow h1 { margin:0 0 var(--space-2); }
+.calendarTools { display:grid;gap:var(--space-3);padding:var(--space-3);border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);min-width:0; }
+.period { display:grid;grid-template-columns:minmax(0,1fr) 8.5rem;gap:var(--space-2); }
+.periodButtons .button { padding-inline:var(--space-2); }
+.periodButtons { display:flex;align-items:center;gap:var(--space-1); }
+.periodLabel { grid-column:1/-1;font-size:1rem; }
+.datePicker { display:flex;min-width:0;align-items:center; }
+.datePicker input { box-sizing:border-box;width:100%;max-width:100%;min-width:0;min-height:var(--control-height);padding:var(--space-2);border:1px solid var(--border-control);border-radius:var(--radius-md);background:var(--surface);color:var(--ink);font:inherit;font-size:.875rem; }
+.switches { display:grid;gap:var(--space-2); }
+.switches .views { display:flex; }
+.switches .views button { flex:1 0 auto;min-width:var(--control-height);padding-inline:var(--space-2); }
+.calendarActions { min-width:0; }
+.actionsToggle { display:none; }
+.announcement { margin:0;color:var(--ink); }
+.scrollHint { display:none; }
+.eventFacts { position:absolute;bottom:var(--space-1);left:var(--space-1);right:var(--space-1);display:flex;justify-content:space-between;align-items:center;gap:var(--space-1);background:var(--cat,var(--surface-sunken));font-size:.7rem;line-height:1rem;font-weight:650; }
+.eventFacts>span:first-child { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.attendanceTick { flex:none;color:var(--ink);font-size:.85rem;font-weight:750;line-height:1rem; }
+.attendanceLabel { padding:var(--space-1) var(--space-2);border-radius:var(--radius-pill);background:var(--surface-sunken);color:var(--ink);font-size:.75rem;font-weight:650; }
+@container schedule (min-width:1000px) {
+ .calendarTools { grid-template-columns:minmax(0,1fr) max-content;align-items:start;padding:var(--space-4); }
+ .period { grid-template-columns:auto auto minmax(0,1fr);align-items:center; }
+ .periodLabel { grid-column:3;grid-row:1; }
+ .datePicker { grid-column:2;grid-row:1; }
+ .switches .views button { padding-inline:var(--space-3); }
+}
+@container schedule (max-width:999px) {
+ .calendarActions:has(.changeActions[data-expanded=true]) { width:100%; }
+ .actionsToggle { display:inline-flex; }
+ .calendarActions .changeActions { display:none;margin-top:var(--space-2);padding:var(--space-3);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface); }
+ .calendarActions .changeActions[data-expanded=true] { display:flex; }
+ .calendarActions .changeActions .button { flex:1 1 auto; }
+ .scrollHint { display:block; }
+}
+@media(max-width:559px) {
+ .page { padding:var(--space-4);gap:var(--space-3); }
+ .titleRow { align-items:center; }
+ .calendarActions { width:auto; }
+ .calendarActions .changeActions { width:100%;box-sizing:border-box; }
+ .titleRow:has(.changeActions[data-expanded=true]) .calendarActions:has(.changeActions[data-expanded=true]) { width:100%; }
+ .weekScroll { max-height:max(22rem,calc(100dvh - 22rem)); }
+}
+
+@media(max-width:359px) { .period { grid-template-columns:1fr; } .datePicker { grid-row:3;max-width:10rem; } }

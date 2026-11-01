@@ -4,7 +4,7 @@ import { type CSSProperties, Fragment, type ReactNode, useEffect, useRef, useSta
 import { selectable } from './changes';
 import type { ScheduleActivity, ScheduleBoard, ScheduleSession } from './api';
 import {
-  activityColor, blockLines, cardDays, clock, type DayColumns, dayLayout, dayName, fillText, instructorsText, legend, markLabels, movedFromLabel, openingPoint,
+  activityColor, blockLines, calendarAttendance, cardDays, clock, type DayColumns, dayLayout, dayName, fillText, instructorsText, legend, markLabels, movedFromLabel, openingPoint,
   type ScheduleNames, sessionMark, startClock, timeRange, waitingText, type Week, type WeekBlock, weekLayout, sofiaMinutes, sofiaDay,
 } from './presentation';
 import { FillBar, type PreviewHandlers } from './session-preview';
@@ -75,7 +75,7 @@ function TimeGrid({ label, kind, columns, startHour, endHour, now, block, more }
   }, [opening, rows, startHour]);
 
   return (
-    <div ref={scroller} className={styles.weekScroll} role="region" aria-label={label} tabIndex={0}>
+    <><p className={`${styles.small} ${styles.scrollHint}`}>Плъзнете календара, за да видите всички {kind === 'week' ? 'дни' : 'колони'}.</p><div ref={scroller} className={styles.weekScroll} role="region" aria-label={label} tabIndex={0}>
       <div className={`${styles.weekGrid} ${kind === 'day' ? styles.gridDay : ''}`} style={vars({ rows, columns: columns.length })}>
         <span className={styles.corner} aria-hidden="true" />
         {columns.map((column, index) => <div key={column.key} className={styles.dayHead} data-head={index === 0 ? '' : undefined}>{column.head}</div>)}
@@ -95,7 +95,7 @@ function TimeGrid({ label, kind, columns, startHour, endHour, now, block, more }
           </div>
         ))}
       </div>
-    </div>
+    </div></>
   );
 }
 
@@ -111,7 +111,8 @@ function useFittedLines(text: string) {
     const fit = () => {
       const lines = Array.from(box.querySelectorAll<HTMLElement>('[data-line]'));
       for (const line of lines) line.hidden = false;
-      const limit = box.clientHeight - parseFloat(getComputedStyle(box).paddingBottom || '0');
+      const facts = box.querySelector<HTMLElement>('[data-facts]');
+      const limit = Math.min(facts?.offsetTop ?? Infinity, box.clientHeight - parseFloat(getComputedStyle(box).paddingBottom || '0'));
       let over = false;
       for (const line of lines) {
         over = over || line.offsetTop + line.offsetHeight > limit + 0.5;
@@ -138,6 +139,8 @@ function Block({ session, kind, by, names, now, position, onOpen, preview, selec
   const checked = !!selection?.selected[session.id];
   const view = blockLines(session, kind, by, names, now);
   const target = { kind: 'session' as const, session };
+  const attendance = calendarAttendance(session, now);
+  const closed = view.mark === 'cancelled' || view.mark === 'not_held';
   const ref = useFittedLines(`${view.mark}|${view.lines.join('|')}`);
   return (
     <button ref={ref} type="button" style={position} data-session-id={session.id} role={choosing ? 'checkbox' : undefined} aria-checked={choosing ? checked : undefined} aria-haspopup={choosing ? undefined : 'dialog'} aria-describedby={choosing ? undefined : preview.describedBy(session.id)}
@@ -145,15 +148,16 @@ function Block({ session, kind, by, names, now, position, onOpen, preview, selec
       onMouseEnter={(event) => preview.enter(target, event.currentTarget)} onMouseLeave={preview.leave}
       onFocus={(event) => preview.focus(target, event)} onBlur={preview.blur}
       className={`${styles.event} ${colorClass(names.activity(session.activity_id))} ${checked && choosing ? styles.eventSelected : ''} ${view.mark === 'now' ? styles.isNow : ''} ${(view.mark === 'cancelled' || view.mark === 'not_held') ? styles.isCancelled : ''}`}>
-      <span className="sr-only">{view.label} {movedFromLabel(session)}</span>
+      <span className="sr-only">{view.label} {movedFromLabel(session)} {attendance ? `Присъствия: ${attendance}` : ''}</span>
       <span className={styles.lines} aria-hidden="true">
         <span className={styles.lineFirst}>
           {movedFromLabel(session) ? <span className={styles.small}>{movedFromLabel(session)}</span> : null}
       <strong>{choosing ? <span className={styles.selectionMark}>{checked ? '☑' : '☐'} </span> : null}{view.time}</strong>
           {view.mark ? <span className={`${styles.mark} ${styles[`mark_${view.mark}`]}`}>{markLabels[view.mark]}</span> : null}
         </span>
-        {[...view.lines, ...(movedFromLabel(session) ? [movedFromLabel(session)!] : [])].map((line, index) => <span key={index} data-line="" className={index === 0 ? styles.lineMain : undefined}>{line}</span>)}
+        {[...view.lines.filter((_, index) => closed || index !== 1), ...(movedFromLabel(session) ? [movedFromLabel(session)!] : [])].map((line, index) => <span key={index} data-line="" className={index === 0 ? styles.lineMain : undefined}>{line}</span>)}
       </span>
+      {!closed ? <span className={styles.eventFacts} data-facts="" aria-hidden="true"><span>{fillText(session,'block')}</span>{attendance ? <span className={styles.attendanceTick} title={attendance}>{session.attendance?.unmarked === 0 ? '✓' : '?'}</span> : null}</span> : null}
       {(view.mark === 'cancelled' || view.mark === 'not_held') ? null : <FillBar session={session} className={styles.blockBar} />}
     </button>
   );
@@ -231,7 +235,7 @@ export function SessionCard({ session, names, now, onOpen, selection }: { sessio
     <button type="button" data-session-id={session.id} role={choosing ? 'checkbox' : undefined} aria-checked={choosing ? checked : undefined} aria-haspopup={choosing ? undefined : 'dialog'} onClick={(event) => { if (choosing) selection?.toggle(session); else onOpen(session, event.currentTarget); }}
       className={`${styles.card} ${checked && choosing ? styles.eventSelected : ''} ${colorClass(activity)} ${mark === 'now' ? styles.cardNow : ''} ${cancelled ? styles.cardCancelled : ''}`}>
       {mark ? <span className={`${styles.badge} ${styles[`mark_${mark}`]}`}>{markLabels[mark]}</span> : null}
-      {!cancelled && session.attendance && Date.parse(session.starts_at) <= now.getTime() ? <span className={styles.small}>{session.attendance.unmarked === 0 ? '✓ отбелязано' : 'чака отбелязване'}</span> : null}
+      {calendarAttendance(session, now) ? <span className={styles.attendanceLabel}>{calendarAttendance(session, now)}</span> : null}
       {movedFromLabel(session) ? <span className={styles.small}>{movedFromLabel(session)}</span> : null}
       <strong>{choosing ? <span className={styles.selectionMark}>{checked ? '☑' : '☐'} </span> : null}{startClock(session)} · {activity?.title ?? 'Занимание'} · {names.group(session.group_id)?.name ?? 'Група'}</strong>
       <span className="sr-only">{timeRange(session)},</span>

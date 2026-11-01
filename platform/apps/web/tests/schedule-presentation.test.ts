@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ChildCard, ChildCardGroup, ScheduleSession } from '../src/features/schedule/api';
 import {
-  activityColor, activityColorToken, addDays, ageText, blockLines, canSkipSession, cardDays, cardGroupState, cardGroupTitle, childCardMeta,
+  activityColor, activityColorToken, addDays, ageText, blockLines, calendarAttendance, canSkipSession, cardDays, cardGroupState, cardGroupTitle, childCardMeta,
   contactsGroupOf, initials, pauseGroupOf, pauseLink, profileLink, sessionGroupOf, CHILD_SEARCH_DELAY_MS, CHILD_SEARCH_HINT, childChipLabel, childFilterAllowed, childLink,
   childMarks, childOptionLabel, childrenHeading, childResultsText, childSearchText, chooseChild, clock, dayBlockDetail, fillOf, fillText, hasFilters, moveActive,
   NO_CHILDREN_FOUND, openingPoint, dayLayout, dayName, defaultView, emptyText, filterChips,
@@ -703,4 +703,23 @@ it('explains the cutoff only for authorized people without currently available c
  expect(showChangeCutoffHint(true,[],start,cutoff+3600000)).toBe(true);
  expect(showChangeCutoffHint(false,[],start,cutoff)).toBe(false);
  expect(showChangeCutoffHint(true,['move'],start,cutoff)).toBe(false);
+});
+
+describe('calendar attendance summary', () => {
+  const now = new Date('2026-11-18T18:00:00+02:00');
+  const attendance = {present:6,absent:2,unmarked:0};
+  it('checks a completed session with absences too', () => {
+    expect(calendarAttendance(at('2026-11-18','17:00',60,{attendance}),now)).toBe('✓ отбелязано');
+  });
+  it('counts unfinished attendance without claiming success', () => {
+    expect(calendarAttendance(at('2026-11-18','17:00',60,{attendance:{...attendance,unmarked:2}}),now)).toBe('2 неотбелязани');
+  });
+  it('does not invent attendance when the API omitted it', () => {
+    expect(calendarAttendance(at('2026-11-18','17:00'),now)).toBeNull();
+  });
+  it('does not check future, cancelled or not-held sessions', () => {
+    expect(calendarAttendance(at('2026-11-19','17:00',60,{attendance}),now)).toBeNull();
+    expect(calendarAttendance(at('2026-11-18','17:00',60,{attendance,status:'cancelled'}),now)).toBeNull();
+    expect(calendarAttendance(at('2026-11-18','17:00',60,{attendance,not_held:true}),now)).toBeNull();
+  });
 });
