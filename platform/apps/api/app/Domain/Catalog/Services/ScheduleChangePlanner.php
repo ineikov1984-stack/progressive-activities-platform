@@ -132,7 +132,7 @@ final readonly class ScheduleChangePlanner
 
         $planned = [];
         foreach ($sessions as $session) {
-            if ($request->action === 'holiday' && ($session->status !== 'scheduled' || $session->starts_at->lessThanOrEqualTo($now))) {
+            if ($request->action === 'holiday' && ($session->status !== 'scheduled' || SessionCutoff::passed($session, $now))) {
                 continue;
             }
             if ($request->action === 'change_location' && $session->location_id === $request->locationId) {
@@ -231,6 +231,9 @@ final readonly class ScheduleChangePlanner
         if ($session->starts_at->lessThanOrEqualTo($now)) {
             throw ValidationException::withMessages(['sessions' => 'Заниманието вече е започнало.']);
         }
+        if ($action !== 'change_location' && SessionCutoff::passed($session, $now)) {
+            throw ValidationException::withMessages(['sessions' => 'До началото остават под 15 минути — заниманието вече не се мести и не се отменя. Ако не се проведе, отбележете го в „Присъствия“.']);
+        }
         $teachersBefore = array_values(array_map('strval', $session->instructors->modelKeys()));
         $after = clone $session;
         $after->version = $session->version + 1;
@@ -265,7 +268,7 @@ final readonly class ScheduleChangePlanner
             $start = CarbonImmutable::parse($day.' '.$request->from, $timezone);
             $end = CarbonImmutable::parse($day.' '.$request->to, $timezone);
             // A missing spring hour must not silently become another time.
-            if ($start->format('Y-m-d H:i') !== $day.' '.$request->from || $start->lessThanOrEqualTo($now)) {
+            if ($start->format('Y-m-d H:i') !== $day.' '.$request->from || $start->lessThanOrEqualTo($now->addMinutes(SessionCutoff::OPENS_BEFORE_MINUTES))) {
                 throw ValidationException::withMessages(['date' => 'Изберете бъдещ ден и час.']);
             }
             if ($end->format('Y-m-d H:i') !== $day.' '.$request->to || $end->lessThanOrEqualTo($start)) {
@@ -349,7 +352,7 @@ final readonly class ScheduleChangePlanner
             if ($request->action === 'holiday') {
                 if ($session->status === 'cancelled') {
                     $skipped['cancelled']++;
-                } elseif ($session->starts_at->lessThanOrEqualTo($now)) {
+                } elseif (SessionCutoff::passed($session, $now)) {
                     $skipped['started']++;
                 }
             } elseif ($session->location_id === $request->locationId) {

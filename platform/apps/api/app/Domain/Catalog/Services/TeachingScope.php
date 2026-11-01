@@ -3,10 +3,12 @@
 namespace App\Domain\Catalog\Services;
 
 use App\Domain\Catalog\Enums\ActivityStatus;
+use App\Domain\Catalog\Models\Session;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\StaffMember;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -65,6 +67,18 @@ final readonly class TeachingScope
      */
     public function activeGroupsFor(User $user): array
     {
+        return $this->currentGroups($user, true);
+    }
+
+    /** @return list<string> begun assignments and offering leads; never substitutions */
+    public function ownGroupsNow(User $user): array
+    {
+        return $this->currentGroups($user, false);
+    }
+
+    /** @return list<string> */
+    private function currentGroups(User $user, bool $includeSubstitutions): array
+    {
         $profiles = $this->profilesFor($user);
         if ($profiles === []) {
             return [];
@@ -85,7 +99,7 @@ final readonly class TeachingScope
             ->where('offerings.organization_id', $organizationId)
             ->whereIn('offerings.lead_instructor_profile_id', $profiles)
             ->pluck('activity_groups.id');
-        $substituted = DB::table('activity_session_instructors')
+        $substituted = $includeSubstitutions ? DB::table('activity_session_instructors')
             ->join('activity_sessions', 'activity_sessions.id', '=', 'activity_session_instructors.session_id')
             ->where('activity_session_instructors.organization_id', $organizationId)
             ->where('activity_sessions.organization_id', $organizationId)
@@ -93,7 +107,7 @@ final readonly class TeachingScope
             ->where('activity_sessions.status', 'scheduled')
             ->where('activity_sessions.starts_at', '>=', self::standingInFrom())
             ->where('activity_sessions.starts_at', '<', self::standingInUntil())
-            ->pluck('activity_sessions.group_id');
+            ->pluck('activity_sessions.group_id') : [];
 
         $groups = [];
         foreach ([...$assigned, ...$led, ...$substituted] as $groupId) {
@@ -103,6 +117,49 @@ final readonly class TeachingScope
         sort($result);
 
         return $result;
+    }
+
+    public function teachesSession(User $user, Session $session): bool
+    {
+        return in_array((string) $session->id, $this->sessionsTaught($user, collect([$session])), true);
+    }
+
+    /**
+     * Teaching on the session's Sofia day, independent of today's assignments or substitutions.
+     *
+     * @param  Collection<int, Session>  $sessions
+     * @return list<string>
+     */
+    public function sessionsTaught(User $user, Collection $sessions): array
+    {
+        $organizationId = $this->context->organizationId();
+        $sessions = $sessions->filter(fn (Session $session): bool => (string) $session->organization_id === $organizationId);
+        $profiles = $this->profilesFor($user);
+        if ($profiles === [] || $sessions->isEmpty()) {
+            return [];
+        }
+        $groups = $sessions->pluck('group_id')->unique()->all();
+        $assigned = DB::table('activity_group_instructors')->where('organization_id', $organizationId)
+            ->whereIn('instructor_profile_id', $profiles)->whereIn('group_id', $groups)
+            ->get(['group_id', 'starts_on', 'ends_on'])->groupBy('group_id');
+        $onSession = DB::table('activity_session_instructors')->where('organization_id', $organizationId)
+            ->whereIn('instructor_profile_id', $profiles)->whereIn('session_id', $sessions->pluck('id'))->pluck('session_id')->all();
+        $led = DB::table('activity_groups')->join('offerings', 'offerings.id', '=', 'activity_groups.offering_id')
+            ->where('activity_groups.organization_id', $organizationId)->where('offerings.organization_id', $organizationId)
+            ->whereIn('activity_groups.id', $groups)->whereIn('offerings.lead_instructor_profile_id', $profiles)
+            ->pluck('activity_groups.id')->all();
+        $taught = [];
+        foreach ($sessions as $session) {
+            $day = $session->starts_at->setTimezone(self::TIMEZONE)->toDateString();
+            $inPeriod = ($assigned[(string) $session->group_id] ?? collect())->contains(fn ($row): bool => ($row->starts_on === null || substr((string) $row->starts_on, 0, 10) <= $day)
+                && ($row->ends_on === null || substr((string) $row->ends_on, 0, 10) >= $day));
+            if ($inPeriod || in_array($session->id, $onSession, true) || in_array($session->group_id, $led, true)) {
+                $taught[] = (string) $session->id;
+            }
+        }
+        sort($taught);
+
+        return $taught;
     }
 
     public function includes(User $user, string $groupId): bool
