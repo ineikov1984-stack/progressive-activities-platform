@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { OfficeSubstituteTasks } from '../substitute/office-tasks';
+import { isOffice } from '../substitute/presentation';
 import { TeacherSubstitutes } from '../substitute/teacher-section';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -89,6 +91,8 @@ function TaskIcon({ tone }: { tone: Task['tone'] }) {
 export function Dashboard() {
   const router = useRouter();
   const { user, organization } = useDashboardContext();
+  const office = isOffice(organization);
+  const [officeCount, setOfficeCount] = useState<number>();
   const [activities, setActivities] = useState<ActivityDraft[]>();
   const [pendingApplications, setPendingApplications] = useState(0);
   const [attendancePending, setAttendancePending] = useState<{org:string;total:number}>();
@@ -151,7 +155,7 @@ export function Dashboard() {
   // For a teacher their groups are the page; for the others they come after "Какво ви чака".
   const groupsFirst = !canSeeEnrollments;
   // Applications, drafts and invitations are the tasks: without any of them "Какво ви чака" has nothing to say.
-  const mayHaveTasks = canSeeEnrollments || canSeeCatalog || canInvite || canSeeAttendancePending;
+  const mayHaveTasks = canSeeEnrollments || canSeeCatalog || canInvite || canSeeAttendancePending || office;
   const ownGroups = teaching === undefined ? null : teaching.length > 0 || groupsFirst ? (
     <>
     <TeacherSubstitutes key={organization.id} groups={teaching} />
@@ -194,15 +198,16 @@ export function Dashboard() {
       {groupsFirst ? ownGroups : null}
 
       {mayHaveTasks ? <section aria-labelledby="tasks-title" className={styles.section}>
-        <h2 id="tasks-title" className={styles.sectionTitle}>Какво ви чака</h2>
+        <h2 id="tasks-title" tabIndex={-1} className={styles.sectionTitle}>Какво ви чака</h2>
+        {office ? <OfficeSubstituteTasks key={organization.id} onCount={setOfficeCount} /> : null}
         {!isLoaded ? (
           <div className={styles.taskGrid} aria-busy="true">{[0, 1, 2].map((item) => <span className={styles.skeleton} key={item} />)}</div>
-        ) : tasks.length === 0 ? (
+        ) : tasks.length === 0 ? (office && officeCount !== 0 ? null : (
           <div className={styles.allClear}>
             <span className={styles.allClearIcon} aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10" /></svg></span>
-            <div><strong>Всичко е наред</strong><p>Няма чернови или покани, които чакат действие.</p></div>
+            <div><strong>Всичко е наред</strong><p>{office ? 'Няма чернови, покани или заявки за заместник, които чакат действие.' : 'Няма чернови или покани, които чакат действие.'}</p></div>
           </div>
-        ) : (
+        )) : (
           <div className={styles.taskGrid}>
             {tasks.map((task) => (
               <Link className={styles.task} href={task.href} key={task.id}>

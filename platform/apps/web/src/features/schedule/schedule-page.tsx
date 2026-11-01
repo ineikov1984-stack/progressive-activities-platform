@@ -16,6 +16,7 @@ import { MonthView } from './month-view';
 import { CardsView, DayView, ScheduleSkeleton, WeekView } from './schedule-views';
 import { SchedulePreview, usePreview } from './session-preview';
 import { type PanelTarget, SchedulePanel } from './session-panel';
+import { AssignmentDialog } from '../substitute/assignment-dialog';
 import { ScheduleChangeDialog } from './change-dialog';
 import { changeSuccess, selectSessions, selectable, type ChangeAction, type ChangeResult, type Selection } from './changes';
 import { NextIcon, PreviousIcon } from './icons';
@@ -160,6 +161,7 @@ function ScheduleWorkspace() {
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Selection>({});
   const [announcement, setAnnouncement] = useState('');
+  const [assigning, setAssigning] = useState(false);
   const [change, setChange] = useState<ChangeAction>();
   const changeOpener = useRef<HTMLElement | null>(null);
   const title = useRef<HTMLHeadingElement>(null);
@@ -274,13 +276,15 @@ function ScheduleWorkspace() {
       {selecting && manage ? <p className={styles.small}>Изберете заниманията, които искате да промените заедно. Може да изберете и цял ден от заглавието му.{view === 'month' ? ' За избор отворете Ден или Седмица.' : ''}</p> : null}
       {body}
       {selection && Object.keys(selected).length > 0 ? <section className={styles.selectionBar} role="region" aria-label="Избрани занимания">
+        {announcement === 'Изберете занимания на един и същ преподавател.' ? <p role="alert">{announcement}</p> : null}
         <p><strong>Избрани {Object.keys(selected).length} занимания · {Object.values(selected).reduce((sum, session) => sum + session.taken, 0)} деца</strong> · <button type="button" onClick={() => setSelected({})}>Изчисти</button></p>
-        <div><button type="button" onClick={(e) => beginChange('change_location', e.currentTarget)}>Смени залата</button><button type="button" onClick={(e) => beginChange('cancel', e.currentTarget)}>Отмени избраните</button></div>
+        <div><button type="button" onClick={(e) => beginChange('change_location', e.currentTarget)}>Смени залата</button>{Object.values(selected).every(s => dictionary?.abilities[s.group_id]?.substitute) ? <button type="button" onClick={e => { if(Object.keys(selected).length > 50) { setAnnouncement('Изберете най-много 50 занимания за заместник.'); return; } changeOpener.current = e.currentTarget; setAssigning(true); }}>Назначи заместник</button> : null}<button type="button" onClick={(e) => beginChange('cancel', e.currentTarget)}>Отмени избраните</button></div>
       </section> : null}
 
       {preview.shown && !panel && !selecting ? <SchedulePreview shown={preview.shown} names={names} now={now} onEnter={preview.keep} onLeave={preview.hide} /> : null}
       {panel ? <SchedulePanel organizationId={organization.id} target={panel} names={names} now={now} withDetails={withDetails} onClose={closePanel} onChildNamed={rememberChild} board={dictionary ?? emptyBoard} onChanged={changed} onAttendanceChanged={()=>setAttempt((n)=>n+1)} selection={selection} /> : null}
-      {change && manage ? <ScheduleChangeDialog organizationId={organization.id} action={change} sessions={Object.values(selected)} board={dictionary ?? emptyBoard} day={day} onClose={closeChange} onApplied={changed} /> : null}
+      {assigning ? <AssignmentDialog organizationId={organization.id} sessions={Object.values(selected)} board={dictionary ?? emptyBoard} onInvalid={setAnnouncement} onClose={() => { setAssigning(false); requestAnimationFrame(() => (changeOpener.current?.isConnected ? changeOpener.current : title.current)?.focus()); }} onApplied={result => { if(result) changed(result); }} onNotice={setAnnouncement} /> : null}
+      {change && manage ? <ScheduleChangeDialog organizationId={organization.id} action={change} sessions={Object.values(selected)} board={dictionary ?? emptyBoard} day={day} onClose={closeChange} onApplied={changed} onSubstitute={Object.values(selected).length > 0 && Object.values(selected).every(s => dictionary?.abilities[s.group_id]?.substitute) ? () => { setChange(undefined); setAssigning(true); } : undefined} /> : null}
     </div>
   );
 }

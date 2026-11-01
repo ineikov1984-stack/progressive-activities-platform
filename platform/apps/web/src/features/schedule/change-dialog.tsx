@@ -10,11 +10,11 @@ import styles from './changes.module.css';
 type Form = { date: string; from: string; to: string; location: string; group: string; reason: string; reasonToParents: boolean; notify: boolean;
   days: string[]; limited: boolean; locations: string[]; activities: string[] };
 type Props = { organizationId: string; action: ChangeAction; sessions: ScheduleSession[]; board: ScheduleBoard; day: string;
-  onClose: () => void; onApplied: (result: ChangeResult) => void };
+  onClose: () => void; onApplied: (result: ChangeResult) => void; onSubstitute?: () => void };
 const check = (values: string[], value: string) => values.includes(value) ? values.filter((id) => id !== value) : [...values, value];
 
 /** The approved ScheduleNew/ScheduleBulk dialogs; native modal focus, Escape and return to the opener. */
-export function ScheduleChangeDialog({ organizationId, action, sessions, board, day, onClose, onApplied }: Props) {
+export function ScheduleChangeDialog({ organizationId, action, sessions, board, day, onClose, onApplied, onSubstitute }: Props) {
   const id = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -173,6 +173,8 @@ export function ScheduleChangeDialog({ organizationId, action, sessions, board, 
             {action === 'holiday' ? <details><summary>Виж списъка</summary><ul>{preview.sessions.map((session) => <li key={session.id}>{sessionWhen(session)} · {names.activity(session.activity_id)?.title} · {names.group(session.group_id)?.name} · {names.location(session.location_id) ?? 'Без място'} · {session.children} деца</li>)}</ul></details> : null}
           </div> : null}
           {notice ? <p className={styles.warning} role="alert">{notice}</p> : null}
+          {onSubstitute && action === 'move' ? targets.flatMap(s => s.instructors.filter(t => t.role === 'substitute').map(t => <div key={`${s.id}:${t.profile_id}`} className={styles.summary}><p>Заместник: {t.name} · замества {t.replaces?.map(p => p.name).join(', ') || 'преподавателя'}</p><button type="button" disabled={saving} onClick={onSubstitute}>Смени заместника</button></div>)) : null}
+          {onSubstitute && action === 'cancel' ? <button type="button" disabled={saving} onClick={onSubstitute}>Вместо това — намери заместник</button> : null}
           {action === 'cancel' ? <p className={styles.hint}>Отмененото остава в графика като „Отменено“ и може да се върне, докато не е започнало.</p> : null}
         </div>
         <footer className={styles.footer}><button type="button" disabled={saving} onClick={() => dialog.current?.close()}>Отказ</button>

@@ -1,5 +1,6 @@
 'use client';
 
+import { AssignmentDialog } from '../substitute/assignment-dialog';
 import { SessionSubstitutes } from '../substitute/teacher-section';
 import {loadSheet,type Sheet} from '../attendance/api';
 import {cellLabels,panelChildState,attendanceAction} from '../attendance/presentation';
@@ -111,6 +112,9 @@ function SessionDetails({ organizationId, session, names, now, withDetails, head
   heading: RefObject<HTMLHeadingElement | null>; onClose: () => void; onBack?: () => void; onChildNamed?: (id: string, name: string) => void;
 }) {
   const [attempt, setAttempt] = useState(0);
+  const [assigning, setAssigning] = useState(false);
+  const [substituteNotice, setSubstituteNotice] = useState('');
+  const substituteOpener = useRef<HTMLElement | null>(null);
   const [change, setChange] = useState<ChangeAction>();
   const key = `${session.id}:${attempt}`;
   const [result, setResult] = useState<{ key: string; panel?: SessionPanel; error?: string }>();
@@ -164,6 +168,9 @@ function SessionDetails({ organizationId, session, names, now, withDetails, head
       <div className={styles.drawerBody}>
         {/* The same summary as the quick look on a computer: the state, how full with the bar, who waits. */}
         <SessionFacts session={current} now={now} />
+        {substituteNotice ? <p role="status">{substituteNotice}</p> : null}
+        {panel?.last_substitute ? <p className={styles.small}>Нов заместник · {panel.last_substitute.by ?? 'Екипът'} · {new Date(panel.last_substitute.at).toLocaleString('bg-BG', { timeZone: 'Europe/Sofia' })}</p> : null}
+        {panel?.actions?.includes('substitute') ? <button className={styles.button} type="button" onClick={e => { substituteOpener.current = e.currentTarget; setAssigning(true); }}>Замести учител</button> : null}
         {panel?.last_change ? <p className={styles.reason}><strong>Причина за промяна:</strong> {panel.last_change.reason ?? reason ?? 'Промяна в графика'}{panel.last_change.by ? ` · ${panel.last_change.by}` : ''} · {new Date(panel.last_change.at).toLocaleString('bg-BG', { timeZone: 'Europe/Sofia' })}</p> : reason ? <p className={styles.reason}><strong>Причина:</strong> {reason}</p> : null}
         {panel?.abilities.attendance ? <AttendanceSessionButton sessionId={current.id} className={attendance.primary?styles.buttonPrimary:styles.button} onClosed={()=>{setAttempt((n)=>n+1);onAttendanceChanged?.();}}>{attendance.label}</AttendanceSessionButton> : null}
         {panel?.session.not_held_detail ? <p className={styles.reason}>{panel.session.not_held_detail.reason} · {panel.session.not_held_detail.by} · {new Date(panel.session.not_held_detail.at).toLocaleString('bg-BG', {timeZone:'Europe/Sofia'})}</p> : null}
@@ -182,7 +189,8 @@ function SessionDetails({ organizationId, session, names, now, withDetails, head
         ) : null}
         {!panel && !loaded?.error ? <span className="sr-only" role="status">Зареждане на децата…</span> : null}
       </div>
-      {change && panel?.abilities.manage ? <ScheduleChangeDialog organizationId={organizationId} action={change} sessions={[current]} board={board} day={sofiaDay(current.starts_at)} onClose={() => setChange(undefined)} onApplied={(result) => { setChange(undefined); setAttempt((n) => n + 1); onChanged(result); }} /> : null}
+      {change && panel?.abilities.manage ? <ScheduleChangeDialog organizationId={organizationId} action={change} sessions={[current]} board={board} day={sofiaDay(current.starts_at)} onClose={() => setChange(undefined)} onApplied={(result) => { setChange(undefined); setAttempt((n) => n + 1); onChanged(result); }} onSubstitute={panel.actions?.includes('substitute') ? () => { substituteOpener.current = heading.current; setChange(undefined); setAssigning(true); } : undefined} /> : null}
+      {assigning ? <AssignmentDialog organizationId={organizationId} sessions={[current]} board={board} onClose={() => { setAssigning(false); requestAnimationFrame(() => substituteOpener.current?.focus()); }} onApplied={result => { setAttempt(n => n + 1); if(result) onChanged(result); }} onNotice={setSubstituteNotice} /> : null}
       {cardChild ? (
         <ChildCardDialog organizationId={organizationId} child={cardChild} session={current} withDetails={withDetails} now={now} onClose={closeCard}
           onNamed={onChildNamed} onChanged={() => setAttempt((value) => value + 1)} />

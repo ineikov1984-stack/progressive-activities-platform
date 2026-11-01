@@ -54,3 +54,5 @@
 @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 
 @media (max-width: 560px) { .primary { width: 100%; justify-content: center; } }
+
+.sectionTitle:focus-visible { outline: 3px solid var(--focus); outline-offset: var(--space-1); border-radius: var(--radius-sm); }
