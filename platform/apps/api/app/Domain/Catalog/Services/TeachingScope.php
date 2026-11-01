@@ -162,6 +162,32 @@ final readonly class TeachingScope
         return $taught;
     }
 
+    /** The role of an assignment on each session's day, even when replaced on that session.
+     * @param  Collection<int, Session>  $sessions
+     * @return array<string, string>
+     */
+    public function assignmentRoles(User $user, Collection $sessions): array
+    {
+        $assigned = DB::table('activity_group_instructors')->where('organization_id', $this->context->organizationId())
+            ->whereIn('instructor_profile_id', $this->profilesFor($user))->whereIn('group_id', $sessions->pluck('group_id'))
+            ->get(['group_id', 'role', 'starts_on', 'ends_on'])->groupBy('group_id');
+        $result = [];
+        foreach ($sessions as $session) {
+            $day = $session->starts_at->setTimezone(self::TIMEZONE)->toDateString();
+            foreach ($assigned[(string) $session->group_id] ?? [] as $row) {
+                if (($row->starts_on === null || substr((string) $row->starts_on, 0, 10) <= $day)
+                    && ($row->ends_on === null || substr((string) $row->ends_on, 0, 10) >= $day)) {
+                    $id = (string) $session->id;
+                    if (($result[$id] ?? null) !== 'lead') {
+                        $result[$id] = $row->role === 'assistant' ? 'assistant' : 'lead';
+                    }
+                }
+            }
+        }
+
+        return $result;
+    }
+
     public function includes(User $user, string $groupId): bool
     {
         return in_array($groupId, $this->groupsFor($user), true);
@@ -175,9 +201,9 @@ final readonly class TeachingScope
      * @param  list<string>  $profiles
      * @return array<string, string> group => basis
      */
-    public function bases(array $profiles): array
+    public function bases(array $profiles, bool $includeCancelled = false, bool $includeYesterdayAssignments = false): array
     {
-        return array_map(fn (array $row): string => $row['basis'], $this->teaching($profiles));
+        return array_map(fn (array $row): string => $row['basis'], $this->teaching($profiles, $includeCancelled, $includeYesterdayAssignments));
     }
 
     /**
@@ -308,7 +334,7 @@ final readonly class TeachingScope
      * @param  list<string>  $profiles
      * @return array<string, array{basis: string, role: string, starts_on: string|null, ends_on: string|null}>
      */
-    private function teaching(array $profiles): array
+    private function teaching(array $profiles, bool $includeCancelled = false, bool $includeYesterdayAssignments = false): array
     {
         if ($profiles === []) {
             return [];
@@ -316,7 +342,7 @@ final readonly class TeachingScope
 
         $organizationId = $this->context->organizationId();
         $now = CarbonImmutable::now(self::TIMEZONE);
-        $today = $now->toDateString();
+        $today = ($includeYesterdayAssignments ? $now->subDay() : $now)->toDateString();
         $day = fn (mixed $date): ?string => $date === null || $date === '' ? null : substr((string) $date, 0, 10);
         $result = [];
 
@@ -352,7 +378,7 @@ final readonly class TeachingScope
             ->where('activity_session_instructors.organization_id', $organizationId)
             ->where('activity_sessions.organization_id', $organizationId)
             ->whereIn('activity_session_instructors.instructor_profile_id', $profiles)
-            ->where('activity_sessions.status', 'scheduled')
+            ->when(! $includeCancelled, fn ($query) => $query->where('activity_sessions.status', 'scheduled'))
             ->where('activity_sessions.ends_at', '>=', $since)
             ->orderBy('activity_sessions.starts_at')->orderBy('activity_sessions.id')
             ->get(['activity_sessions.group_id', 'activity_sessions.starts_at', 'activity_session_instructors.role']);

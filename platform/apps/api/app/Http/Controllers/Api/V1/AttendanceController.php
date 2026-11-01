@@ -6,6 +6,7 @@ use App\Domain\Attendance\Actions\RecordAttendance;
 use App\Domain\Attendance\Actions\RecordAttendanceSession;
 use App\Domain\Attendance\Services\AttendanceAccess;
 use App\Domain\Attendance\Services\AttendanceSheet;
+use App\Domain\Attendance\Services\AttendanceToday;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Catalog\Services\AccessScope;
 use App\Domain\Catalog\Services\ScheduleReader;
@@ -18,6 +19,22 @@ use Illuminate\Http\Request;
 
 final class AttendanceController extends Controller
 {
+    public function today(Request $request, AttendanceToday $today): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        return response()->json($today->today($user));
+    }
+
+    public function pending(Request $request, AttendanceToday $today): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        return response()->json($today->pending($user));
+    }
+
     public function show(Request $request, string $session, AttendanceAccess $access, AttendanceSheet $sheet, AccessScope $scope, ScheduleReader $reader): JsonResponse
     {
         /** @var User $user */

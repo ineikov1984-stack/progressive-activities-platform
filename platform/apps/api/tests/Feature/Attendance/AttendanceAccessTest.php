@@ -45,9 +45,13 @@ class AttendanceAccessTest extends TestCase
             $this->assertSame($mark, $access->mayMark($user, $f['session']));
             $this->assertSame($mark, $access->canMark($user, $f['session']));
             $this->assertFalse($access->requiresReason($user, $f['session']));
+            $batch = $access->forSessions($user, collect([$f['session']]), [])[$f['session']->id];
+            $this->assertSame($view, $batch['view']);
+            $this->assertSame($mark, $batch['mark']);
             $this->travelTo('2026-11-04T22:00:00Z');
             $this->assertSame($late, $access->canMark($user, $f['session']));
             $this->assertSame($late, $access->requiresReason($user, $f['session']));
+            $this->assertSame($late, $access->forSessions($user, collect([$f['session']]), [])[$f['session']->id]['mark']);
         });
     }
 

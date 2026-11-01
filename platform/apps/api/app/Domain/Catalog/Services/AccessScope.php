@@ -109,6 +109,23 @@ final readonly class AccessScope
         return $groups;
     }
 
+    /** Role and explicit grants only, with no implicit teaching shortcut. Null means all groups.
+     * @return list<string>|null
+     */
+    public function groupsInScope(User $user, string $ability): ?array
+    {
+        $access = $this->rights->for($user);
+        if ($access->role === null || ! $access->has($ability) || TeamAbilities::isOwnGroupsOnly($ability)) {
+            return [];
+        }
+        if (TeamAbilities::kind($ability) !== AbilityKind::Group || $access->scope === StaffScope::All) {
+            return null;
+        }
+        $selected = $access->scope === StaffScope::Groups ? [...$access->groupIds, ...$this->groupsOf($access->activityIds)] : [];
+
+        return array_values(array_unique([...$this->teaching->activeGroupsFor($user), ...$selected]));
+    }
+
     /**
      * The sessions of the schedule the person sees (docs/product/schedule.md, т. 2). Seeing the schedule of one's scope
      * is a right of its own without a key — "catalog.view" is no condition, it is a right for the whole organization:
@@ -119,7 +136,7 @@ final readonly class AccessScope
      * - a group where the person only stands in: only the sessions they are on that keep it theirs — ended no earlier
      *   than yesterday, cancelled ones too (т. 6.4) — never the whole group.
      */
-    public function scheduleGroups(User $user): ScheduleScope
+    public function scheduleGroups(User $user, bool $includeYesterdayAssignments = false): ScheduleScope
     {
         $access = $this->rights->for($user);
         if ($access->role === null) {
@@ -132,7 +149,7 @@ final readonly class AccessScope
         $groups = $access->scope === StaffScope::Groups ? [...$access->groupIds, ...$this->groupsOf($access->activityIds)] : [];
         $standIn = [];
         $profiles = $this->teaching->profilesFor($user);
-        foreach ($this->teaching->bases($profiles) as $groupId => $basis) {
+        foreach ($this->teaching->bases($profiles, includeCancelled: true, includeYesterdayAssignments: $includeYesterdayAssignments) as $groupId => $basis) {
             if ($basis === 'substitute') {
                 $standIn[] = $groupId;
             } else {

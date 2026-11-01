@@ -113,7 +113,7 @@ class TeamRightsCharacterizationTest extends TestCase
         $mismatches = [];
         foreach ($this->routes($f) as $key => [$method, $uri, $body, $allowed, $status]) {
             $expected = in_array($role, $allowed, true) ? $status : 403;
-            if (str_contains($key, 'api/v1/attendance/') && $role === 'platform_admin') {
+            if (str_contains($key, 'api/v1/attendance/sessions/') && $role === 'platform_admin') {
                 $expected = 404;
             }
             $actual = $this->signInTo($actor, $f['organization'])->json($method, $uri, $body)->status();
@@ -321,6 +321,8 @@ class TeamRightsCharacterizationTest extends TestCase
             // New with "График" (docs/product/schedule.md, т. 2, 6): every role sees the schedule of its scope — the teacher
             // the group they lead, which holds this session.
             'POST api/v1/attendance/sessions/{session}/changes' => ['POST', "/api/v1/attendance/sessions/{$f['session']->id}/changes", [], [...self::SCHEDULE_MANAGE, 'instructor'], 422],
+            'GET api/v1/attendance/today' => ['GET', '/api/v1/attendance/today', [], array_values(array_diff(self::ALL, ['platform_admin'])), 200],
+            'GET api/v1/attendance/pending' => ['GET', '/api/v1/attendance/pending', [], [...self::SCHEDULE_MANAGE, 'instructor'], 200],
             'GET api/v1/attendance/sessions/{session}' => ['GET', "/api/v1/attendance/sessions/{$f['session']->id}", [], array_values(array_diff(self::ALL, ['platform_admin'])), 200],
             'GET api/v1/schedule' => ['GET', '/api/v1/schedule?from=2026-11-02&to=2026-11-29', [], self::ALL, 200],
             'GET api/v1/schedule/sessions/{session}' => ['GET', "/api/v1/schedule/sessions/{$f['session']->id}", [], self::ALL, 200],

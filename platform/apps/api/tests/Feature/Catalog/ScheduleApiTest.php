@@ -73,6 +73,8 @@ class ScheduleApiTest extends TestCase
             // Ани for the period and Вики for this one visit.
             'taken' => 2,
             'waiting' => 1,
+            'not_held' => false,
+            'attendance' => null,
         ]);
         $this->assertSame(
             [$f['tuesday']->id, $f['studio']->id, $f['thursday']->id],
@@ -553,6 +555,8 @@ class ScheduleApiTest extends TestCase
             EnrollmentPause::query()->create(['enrollment_id' => $child->id, 'starts_on' => '2026-12-20', 'ends_on' => '2026-12-24', 'reason_category' => 'holiday']);
             EnrollmentSessionException::query()->create(['enrollment_id' => $child->id, 'session_id' => $first->id, 'kind' => 'excluded']);
         });
+        // Attendance summaries must stay batched too: the sessions are now in the past.
+        $this->travelTo('2026-12-02T18:00:00Z');
         $december = '/api/v1/schedule?from=2026-12-01&to=2026-12-31';
         $byChild = $december."&child={$child->child_id}&activity[]={$danceActivity->id}";
 

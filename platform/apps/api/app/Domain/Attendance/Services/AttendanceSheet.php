@@ -26,12 +26,42 @@ final readonly class AttendanceSheet
         return array_map(fn (array $sheet): array => $sheet['counts'], $this->sheets($sessions));
     }
 
+    /** Counts and last mark for list responses, without loading history or actor names.
+     * @param  Collection<int, Session>  $sessions
+     * @return array<string, array{counts: array<string, int>, last_marked_at: string|null}>
+     */
+    public function summariesFor(Collection $sessions): array
+    {
+        return array_map(fn (array $sheet): array => ['counts' => $sheet['counts'], 'last_marked_at' => $sheet['last_marked_at']], $this->sheets($sessions));
+    }
+
     /** @param Collection<int, Session> $sessions
      * @return array<string, AttendanceSession>
      */
     public function notHeld(Collection $sessions): array
     {
         return AttendanceSession::query()->whereIn('session_id', $sessions->pluck('id'))->whereNotNull('not_held_at')->get()->keyBy('session_id')->all();
+    }
+
+    /** Details only for callers with schedule.manage, from tenant-bound state rows.
+     * @param  array<string, AttendanceSession>  $states
+     * @return array<string, array{at: string|null, by: string|null, reason: string|null}>
+     */
+    public function notHeldDetails(array $states): array
+    {
+        $actors = array_values(array_unique(array_map(fn (AttendanceSession $state): ?string => $state->not_held_by, $states)));
+        $names = DB::table('users')->whereIn('id', $actors)->pluck('name', 'id')->all();
+        foreach (DB::table('staff_members')->where('organization_id', $this->context->organizationId())->whereIn('user_id', $actors)->whereNull('archived_at')->get(['user_id', 'full_name']) as $person) {
+            if ($person->full_name !== '') {
+                $names[$person->user_id] = $person->full_name;
+            }
+        }
+        $result = [];
+        foreach ($states as $id => $state) {
+            $result[$id] = ['at' => $state->not_held_at?->toIso8601String(), 'by' => $names[$state->not_held_by] ?? null, 'reason' => $state->not_held_reason];
+        }
+
+        return $result;
     }
 
     /** @return array<string, mixed> */
