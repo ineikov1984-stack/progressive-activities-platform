@@ -467,6 +467,25 @@ class ScheduleApiTest extends TestCase
         $this->getJson("/api/v1/schedule/sessions/{$sessions[1]['id']}")->assertOk()->assertJsonPath('session.instructors.0.role', 'substitute');
     }
 
+    public function test_an_explicit_substitute_names_the_replaced_assistant_in_the_panel_and_dictionary(): void
+    {
+        $f = $this->rightsFixture();
+        [$user, $person] = $this->teacherIn($f);
+        $profile = $this->profileOf($f['organization'], $person);
+        $replaced = $this->inTenant($f['organization'], function () use ($f, $profile): InstructorProfile {
+            $replaced = InstructorProfile::query()->create(['public_name' => 'Иван Петров']);
+            $f['session']->forceFill(['instructors_source' => 'manual'])->save();
+            $f['session']->instructors()->attach($profile->id, ['role' => 'assistant', 'replaces_instructor_profile_id' => $replaced->id]);
+
+            return $replaced;
+        });
+        $this->signInTo($user, $f['organization']);
+        $expected = [['profile_id' => $profile->id, 'name' => $profile->public_name, 'role' => 'substitute', 'replaces' => [['profile_id' => $replaced->id, 'name' => 'Иван Петров']]]];
+        $this->getJson(self::NOVEMBER)->assertOk()->assertJsonCount(1, 'sessions')->assertJsonPath('sessions.0.instructors', $expected)
+            ->assertJsonFragment(['id' => $replaced->id, 'name' => 'Иван Петров']);
+        $this->getJson("/api/v1/schedule/sessions/{$f['session']->id}")->assertOk()->assertJsonPath('session.instructors', $expected)->assertJsonMissingPath('session.children');
+    }
+
     public function test_places_taken_agree_with_the_rule_for_one_session_and_the_panel_names_who_is_away(): void
     {
         $f = $this->rightsFixture();

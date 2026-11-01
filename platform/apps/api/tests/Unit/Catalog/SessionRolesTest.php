@@ -100,6 +100,25 @@ class SessionRolesTest extends TestCase
         $this->assertSame([['profile_id' => 'l', 'name' => 'Водещ на дейността', 'role' => 'assistant']], $roles);
     }
 
+    public function test_explicit_substitution_names_an_assistant_even_after_the_assignment_ended(): void
+    {
+        $roles = SessionRoles::derive([
+            ['profile_id' => 's', 'name' => 'Мария Колева', 'replaces_instructor_profile_id' => 'o', 'replaces_name' => 'Иван Петров'],
+        ], [$this->assignment('o', 'Иван Петров', 'assistant', null, '2026-11-11')], null, self::DAY);
+        $this->assertSame([['profile_id' => 's', 'name' => 'Мария Колева', 'role' => 'substitute',
+            'replaces' => [['profile_id' => 'o', 'name' => 'Иван Петров']]]], $roles);
+    }
+
+    public function test_a_lead_explicitly_covered_is_not_missing_for_a_legacy_manual_teacher(): void
+    {
+        $roles = SessionRoles::derive([
+            ['profile_id' => 's', 'name' => 'Мария Колева', 'replaces_instructor_profile_id' => 'o', 'replaces_name' => 'Иван Петров'],
+            $this->onSession('m', 'Деси Маринова'),
+        ], [$this->assignment('o', 'Иван Петров', 'lead')], null, self::DAY);
+        $this->assertSame([['profile_id' => 'm', 'name' => 'Деси Маринова', 'role' => 'lead'],
+            ['profile_id' => 's', 'name' => 'Мария Колева', 'role' => 'substitute', 'replaces' => [['profile_id' => 'o', 'name' => 'Иван Петров']]]], $roles);
+    }
+
     /** @return array{profile_id: string, name: string} */
     private function onSession(string $profileId, string $name): array
     {

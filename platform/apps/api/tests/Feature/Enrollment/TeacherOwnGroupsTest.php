@@ -15,6 +15,7 @@ use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationMembership;
 use App\Domain\Organizations\Models\StaffMember;
 use App\Domain\Organizations\Tenancy\TenantContext;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -86,15 +87,21 @@ class TeacherOwnGroupsTest extends TestCase
             $cancelled->forceFill(['status' => 'cancelled', 'instructors_source' => 'manual'])->save();
         });
 
+        // Ten days before: the future substitution is in My groups, but its children are not available.
         $this->signIn($teacher, $f['organization'])->getJson('/api/v1/enrollment/groups')
-            ->assertOk()->assertJsonCount(1, 'groups')->assertJsonPath('groups.0.id', $f['thursday']->id);
-        $this->getJson("/api/v1/enrollment/groups/{$f['thursday']->id}/roster")->assertOk();
+            ->assertOk()->assertJsonCount(0, 'groups');
+        $this->getJson("/api/v1/enrollment/groups/{$f['thursday']->id}/roster")->assertForbidden();
         $this->getJson("/api/v1/enrollment/groups/{$f['studio']->id}/roster")->assertForbidden();
         $this->getJson('/api/v1/me/teaching')->assertOk()->assertExactJson(['groups' => [[
             'group_id' => $f['thursday']->id, 'group_name' => 'Четвъртък', 'activity_id' => $f['chessActivityId'],
             'activity_title' => 'Шах', 'label' => 'Шах · Четвъртък', 'basis' => 'substitute', 'role' => 'assistant',
             'starts_on' => '2026-11-12', 'ends_on' => '2026-11-12', 'next_session_starts_at' => '2026-11-12T15:00:00+00:00',
         ]]]);
+
+        // The session's day opens the roster at midnight in Sofia.
+        $this->travelTo('2026-11-11 22:00:00');
+        $this->getJson('/api/v1/enrollment/groups')->assertOk()->assertJsonCount(1, 'groups');
+        $this->getJson("/api/v1/enrollment/groups/{$f['thursday']->id}/roster")->assertOk();
 
         // Friday 13 November, 23:59 in Sofia: the session was yesterday, the attendance can still be corrected.
         $this->travelTo('2026-11-13 21:59:00');
@@ -105,6 +112,30 @@ class TeacherOwnGroupsTest extends TestCase
         $this->getJson("/api/v1/enrollment/groups/{$f['thursday']->id}/roster")->assertForbidden();
         $this->getJson('/api/v1/enrollment/groups')->assertOk()->assertJsonCount(0, 'groups');
         $this->getJson('/api/v1/me/teaching')->assertOk()->assertExactJson(['groups' => []]);
+    }
+
+    #[DataProvider('substituteMidnights')]
+    public function test_the_substitution_window_uses_calendar_days_across_dst(string $start, string $before, string $opens, string $last, string $after): void
+    {
+        $f = $this->fixture();
+        [$teacher, $profile] = $this->teacher($f['organization']);
+        $this->withTenant($f['organization'], function () use ($f, $profile, $start): void {
+            $session = $f['thursday']->sessions()->create(['starts_at' => $start, 'ends_at' => CarbonImmutable::parse($start)->addHour(), 'status' => 'scheduled', 'instructors_source' => 'manual']);
+            $session->instructors()->attach($profile->id, ['role' => 'assistant']);
+        });
+        $this->signIn($teacher, $f['organization']);
+        foreach ([[$before, 403], [$opens, 200], [$last, 200], [$after, 403]] as [$instant, $status]) {
+            $this->travelTo($instant);
+            $this->getJson("/api/v1/enrollment/groups/{$f['thursday']->id}/roster")->assertStatus($status);
+        }
+    }
+
+    public static function substituteMidnights(): array
+    {
+        return [
+            'spring' => ['2026-03-29T12:00:00Z', '2026-03-28 21:59:59', '2026-03-28 22:00:00', '2026-03-30 20:59:59', '2026-03-30 21:00:00'],
+            'autumn' => ['2026-10-25T12:00:00Z', '2026-10-24 20:59:59', '2026-10-24 21:00:00', '2026-10-26 21:59:59', '2026-10-26 22:00:00'],
+        ];
     }
 
     public function test_the_lead_of_an_offering_sees_all_its_groups_and_an_assignment_tells_the_role(): void

@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\DB;
  * @phpstan-type ScheduleGroup array{id: string, name: string, age_label: string|null, activity_id: string, activity_title: string, activity_current: bool, location_id: string|null, capacity_max: int|null, lead_profile_id: string|null, lead_name: string|null, archived: bool}
  * @phpstan-type ScheduleDictionary array{activities: list<array{id: string, title: string, color: int}>, groups: list<array{id: string, name: string, activity_id: string, age_label: string|null}>, locations: list<array{id: string, name: string}>, instructors: list<array{id: string, name: string}>}
  * @phpstan-type Assignment array{profile_id: string, name: string, role: string, starts_on: string|null, ends_on: string|null}
- * @phpstan-type Teacher array{profile_id: string, name: string}
+ * @phpstan-type Teacher array{profile_id: string, name: string, replaces_instructor_profile_id: string|null, replaces_name: string|null}
  * @phpstan-type LastChange array{action: string, at: string, by: string|null, reason: string|null}
  */
 final readonly class ScheduleReader
@@ -255,12 +255,15 @@ final readonly class ScheduleReader
         $result = [];
         foreach (DB::table('activity_session_instructors')
             ->join('instructor_profiles', 'instructor_profiles.id', '=', 'activity_session_instructors.instructor_profile_id')
+            ->leftJoin('instructor_profiles as replaced', fn ($join) => $join->on('replaced.id', '=', 'activity_session_instructors.replaces_instructor_profile_id')->where('replaced.organization_id', $organizationId))
             ->where('activity_session_instructors.organization_id', $organizationId)
             ->where('instructor_profiles.organization_id', $organizationId)
             ->whereIn('activity_session_instructors.session_id', $sessionIds)
             ->orderBy('instructor_profiles.id')
-            ->get(['activity_session_instructors.session_id', 'instructor_profiles.id', 'instructor_profiles.public_name']) as $row) {
-            $result[(string) $row->session_id][] = ['profile_id' => (string) $row->id, 'name' => (string) $row->public_name];
+            ->get(['activity_session_instructors.session_id', 'instructor_profiles.id', 'instructor_profiles.public_name', 'activity_session_instructors.replaces_instructor_profile_id', 'replaced.public_name as replaces_name']) as $row) {
+            $result[(string) $row->session_id][] = ['profile_id' => (string) $row->id, 'name' => (string) $row->public_name,
+                'replaces_instructor_profile_id' => $row->replaces_instructor_profile_id === null ? null : (string) $row->replaces_instructor_profile_id,
+                'replaces_name' => $row->replaces_name === null ? null : (string) $row->replaces_name];
         }
 
         return $result;
@@ -367,6 +370,9 @@ final readonly class ScheduleReader
             }
             foreach ($onSession[(string) $session->id] ?? [] as $teacher) {
                 $people[$teacher['profile_id']] = $teacher['name'];
+                if ($teacher['replaces_instructor_profile_id'] !== null) {
+                    $people[$teacher['replaces_instructor_profile_id']] = $teacher['replaces_name'] ?? '';
+                }
             }
         }
 

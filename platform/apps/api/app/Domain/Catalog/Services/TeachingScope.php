@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
  *
  * A group is the person's when one of their teacher profiles
  * - (a) has an assignment in it whose period holds today or a later day (Sofia): current, or starting later;
- * - (b) is on one of its sessions that ended no earlier than the start of yesterday (Sofia): a substitute keeps the group
+ * - (b) is on one of its sessions starting yesterday or today (Sofia): a substitute keeps the group
  *   while the teacher may still correct the attendance, until the end of the day after the session (DECISIONS 30.10.2026);
  * - (c) leads its offering (`offerings.lead_instructor_profile_id`): every group of that offering.
  * An ended assignment and an older substitution give nothing. A cancelled session is not taught.
@@ -54,7 +54,7 @@ final readonly class TeachingScope
     /** @return list<string> */
     public function groupsFor(User $user): array
     {
-        return array_keys($this->teaching($this->profilesFor($user)));
+        return $this->currentGroups($user, true, true);
     }
 
     /**
@@ -77,7 +77,7 @@ final readonly class TeachingScope
     }
 
     /** @return list<string> */
-    private function currentGroups(User $user, bool $includeSubstitutions): array
+    private function currentGroups(User $user, bool $includeSubstitutions, bool $includeFutureAssignments = false): array
     {
         $profiles = $this->profilesFor($user);
         if ($profiles === []) {
@@ -90,7 +90,7 @@ final readonly class TeachingScope
         $assigned = DB::table('activity_group_instructors')
             ->where('organization_id', $organizationId)
             ->whereIn('instructor_profile_id', $profiles)
-            ->where(fn ($begun) => $begun->whereNull('starts_on')->orWhere('starts_on', '<=', $today))
+            ->when(! $includeFutureAssignments, fn ($query) => $query->where(fn ($begun) => $begun->whereNull('starts_on')->orWhere('starts_on', '<=', $today)))
             ->where(fn ($open) => $open->whereNull('ends_on')->orWhere('ends_on', '>=', $today))
             ->pluck('group_id');
         $led = DB::table('activity_groups')
@@ -194,7 +194,7 @@ final readonly class TeachingScope
     }
 
     /**
-     * Why each of the profiles' groups (`groupsFor`) is theirs: "assignment", "offering_lead" or "substitute" — the last
+     * Why each of the profiles' visible schedule groups is theirs: "assignment", "offering_lead" or "substitute" — the last
      * only when nothing else makes it theirs. The schedule shows a whole group, or only the sessions stood in
      * (docs/product/schedule.md, т. 2).
      *
