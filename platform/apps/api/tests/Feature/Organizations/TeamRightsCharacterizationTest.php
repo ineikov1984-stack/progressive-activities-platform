@@ -273,6 +273,10 @@ class TeamRightsCharacterizationTest extends TestCase
         $stale = ['version' => 999];
 
         return [
+            'GET api/v1/me/substitute-requests' => ['GET', '/api/v1/me/substitute-requests', [], array_values(array_diff(self::ALL, ['platform_admin'])), 200],
+            'GET api/v1/me/substitute-requests/options' => ['GET', '/api/v1/me/substitute-requests/options?from=2026-11-03', [], array_values(array_diff(self::ALL, ['platform_admin'])), 200],
+            'POST api/v1/me/substitute-requests' => ['POST', '/api/v1/me/substitute-requests', [], array_values(array_diff(self::ALL, ['platform_admin'])), 422],
+            'POST api/v1/me/substitute-requests/{substituteRequest}/withdraw' => ['POST', '/api/v1/me/substitute-requests/00000000-0000-4000-8000-000000000001/withdraw', ['version' => 1], array_values(array_diff(self::ALL, ['platform_admin'])), 404],
             'GET api/v1/me/teaching' => ['GET', '/api/v1/me/teaching', [], self::ALL, 200],
             'POST api/v1/enrollments/{enrollment}/visit-outcome' => ['POST', "/api/v1/enrollments/{$f['visit']->id}/visit-outcome", ['outcome' => 'attended'], self::VISIT_STAFF, 422],
             'GET api/v1/context/organization' => ['GET', '/api/v1/context/organization', [], self::ALL, 200],

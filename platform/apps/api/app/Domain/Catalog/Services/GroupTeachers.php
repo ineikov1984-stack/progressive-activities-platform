@@ -51,6 +51,7 @@ final class GroupTeachers
                 $session->save();
             }
         }
+        app(SubstituteRequestLocks::class)->noLongerTeaching($group);
     }
 
     /** @param array{starts_on: string|null, ends_on: string|null} $assignment */
