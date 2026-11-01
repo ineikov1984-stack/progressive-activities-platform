@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { InlineHelp } from '@/features/help/inline-help';
+import { InlineHelp } from '../../../help/inline-help';
 import styles from './wizard.module.css';
 
 export const icons = {
