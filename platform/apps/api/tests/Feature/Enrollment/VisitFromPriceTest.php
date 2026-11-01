@@ -257,7 +257,7 @@ class VisitFromPriceTest extends TestCase
         });
     }
 
-    public function test_cancellation_and_no_show_follow_the_copy_of_the_terms(): void
+    public function test_cancellations_follow_the_copy_of_the_terms_and_attendance_uses_its_own_route(): void
     {
         // The standard visit terms: at least 24 h before — nothing; 12–24 h — half; later — all; no-show — all.
         $f = $this->fixture(['enrollment_approval_mode' => 'automatic']);
@@ -281,12 +281,17 @@ class VisitFromPriceTest extends TestCase
         $this->actingAs($f['parent'])->postJson('/api/v1/parent/enrollments/'.$late->id.'/visit-outcome', ['outcome' => 'late_cancelled'])->assertOk();
         $this->assertOutcome($late, 'ended', $key);
 
-        // After the start: only the team.
+        // After the start neither parent nor team cancels; attendance has its own route.
         $this->travelTo('2026-11-09T15:30:00Z');
         $this->actingAs($f['parent'])->postJson('/api/v1/parent/enrollments/'.$absent->id.'/visit-outcome', ['outcome' => 'late_cancelled'])
             ->assertUnprocessable();
-        $this->inTenant($f['organization'], fn () => app(RecordVisitOutcome::class)->handle($f['staff'], $absent, 'no_show', null));
-        $this->assertOutcome($absent, 'ended', $key);
+        try {
+            $this->inTenant($f['organization'], fn () => app(RecordVisitOutcome::class)->handle($f['staff'], $absent, 'no_show', null));
+            $this->fail('Attendance must be recorded through its own route.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('outcome', $exception->errors());
+        }
+        $this->inTenant($f['organization'], fn () => $this->assertSame('active', $absent->refresh()->status->value));
     }
 
     public function test_free_cancellation_ends_with_the_last_step_that_keeps_nothing(): void

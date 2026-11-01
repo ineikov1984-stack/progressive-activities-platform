@@ -60,15 +60,15 @@ class ScheduleChangeVisitsTest extends TestCase
         $staff = User::factory()->create();
         OrganizationMembership::query()->create(['organization_id' => $organization, 'user_id' => $staff->id, 'role' => 'coordinator', 'status' => 'active']);
 
-        // Not yet: "came" is written after the new start, not before it.
+        // Attendance is recorded only through attendance, before or after the new start.
         $this->travelTo('2026-11-02T13:00:00Z');
         $this->refused(fn () => app(RecordVisitOutcome::class)->handle($staff, $enrollment, 'attended', null));
         // Started: the parent no longer cancels, though the booked start is a day later.
         $this->travelTo('2026-11-02T15:00:00Z');
         $this->refused(fn () => app(RecordVisitOutcome::class)->handle($parent, $enrollment, 'cancelled_in_time', null));
-        app(RecordVisitOutcome::class)->handle($staff, $enrollment, 'attended', null);
+        $this->refused(fn () => app(RecordVisitOutcome::class)->handle($staff, $enrollment, 'attended', null));
 
-        $this->assertSame('ended', Enrollment::query()->findOrFail($enrollment->id)->status->value);
+        $this->assertSame('active', Enrollment::query()->findOrFail($enrollment->id)->status->value);
     }
 
     public function test_a_visit_not_moved_keeps_the_deadline_of_the_start_it_was_booked_for(): void

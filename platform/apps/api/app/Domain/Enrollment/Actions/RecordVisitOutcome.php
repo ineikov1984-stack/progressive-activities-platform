@@ -37,6 +37,12 @@ final class RecordVisitOutcome
                 || ! in_array($outcome, ['attended', 'cancelled_in_time', 'late_cancelled', 'no_show'], true)) {
                 throw ValidationException::withMessages(['outcome' => 'Невалиден резултат за посещението.']);
             }
+            if ($staff && ! $cancellation) {
+                throw ValidationException::withMessages(['outcome' => 'Дали детето е дошло, се отбелязва в „Присъствия“.']);
+            }
+            if ($staff && now()->greaterThanOrEqualTo($session->starts_at)) {
+                throw ValidationException::withMessages(['outcome' => 'Посещението вече е започнало — отбележете в „Присъствия“, че детето не е дошло.']);
+            }
             $existing = $current->transitions()->whereNotNull('metadata->outcome')->first();
             if ($existing !== null) {
                 if ($existing->metadata['outcome'] !== $outcome) {
@@ -68,7 +74,7 @@ final class RecordVisitOutcome
             if ((! $staff && now()->greaterThanOrEqualTo($session->starts_at))
                 || ($outcome === 'cancelled_in_time' && ! $timely)
                 || ($outcome === 'late_cancelled' && $timely)
-                || (! $cancellation && now()->lessThan($session->starts_at))) {
+            ) {
                 throw ValidationException::withMessages(['outcome' => 'Резултатът не съответства на срока за посещението.']);
             }
             $metadata = $offer !== null ? [
@@ -101,8 +107,8 @@ final class RecordVisitOutcome
     }
 
     /**
-     * The team records how a visit went with "enrollment.enroll" in the visit's group (docs/product/team-rights.md,
-     * т. 2.2, 9); with the stage "Присъствия", "attendance.mark". The platform operator does not, as before.
+     * The team cancels a visit before its start with "enrollment.enroll" in the visit's group (docs/product/team-rights.md,
+     * т. 2.2, 9). Attendance itself is recorded only through "Присъствия". The platform operator does not cancel.
      */
     private function recordsVisits(User $actor, string $groupId): bool
     {
