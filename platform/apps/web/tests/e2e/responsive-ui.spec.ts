@@ -126,6 +126,7 @@ for (const width of widths) {
       if(await choice.isVisible()){await choice.selectOption(String(index+1));await expect(choice).toHaveValue(String(index+1));}
       else {await steps.nth(index).click();await expect(steps.nth(index)).toHaveAttribute('aria-current','step');}
       await layout(page);
+      if(index===5){const help=page.locator('summary').filter({hasText:'Кой имейл да посоча?'});await help.focus();await help.press('Enter');await expect(page.getByText('Попълнен е имейлът на организацията. Сменете го, ако за тази дейност отговаря друг човек.',{exact:true})).toBeVisible();await layout(page);if([390,768,1440].includes(width))await page.screenshot({path:test.info().outputPath(`editor-help-${width}.png`),fullPage:true});await help.press('Space');}
       if ([390, 1440].includes(width) && [0, 7].includes(index)) await page.screenshot({ path: test.info().outputPath(`editor-${index + 1}-${width}.png`), fullPage: true });
     }
     await keyboardFocus(page); expect(errors).toEqual([]);

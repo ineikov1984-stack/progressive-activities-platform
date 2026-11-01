@@ -1,0 +1,12 @@
+.help { min-width: 0; color: var(--ink-body); font-size: 14px; line-height: 20px; }
+.help > summary { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control-height); min-width: var(--control-height); width: fit-content; max-width: 100%; box-sizing: border-box; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); color: var(--ink); font-weight: 600; cursor: pointer; list-style: none; }
+.help > summary::-webkit-details-marker { display: none; }
+.help > summary:hover { background: var(--surface-sunken); }
+.help > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.icon { display: grid; place-items: center; flex: none; width: 18px; height: 18px; border: 1px solid currentColor; border-radius: var(--radius-pill); font-size: 12px; font-weight: 700; }
+.sign { margin-left: auto; padding-left: var(--space-2); }
+.sign::before { content: '+'; }
+.help[open] > summary .sign::before { content: '−'; }
+.body { padding: var(--space-3); border-left: 2px solid var(--border-control); border-radius: var(--radius-sm); background: var(--surface-sunken); overflow-wrap: anywhere; }
+.body p { margin: 0; }
+.body p + p { margin-top: var(--space-2); }

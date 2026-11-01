@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { InlineHelp } from '../../../help/inline-help';
 import styles from './wizard.module.css';
 
 export const icons = {
@@ -22,12 +23,13 @@ export function Icon({ path }: { path: string }) {
   return <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden="true">{path.split(' M').map((part, index) => <path key={index} d={index === 0 ? part : `M${part}`} />)}</svg>;
 }
 
-export function Field({ id, label, hint, children, aside }: { id: string; label: string; hint?: ReactNode; children: ReactNode; aside?: ReactNode }) {
+export function Field({ id, label, hint, children, aside, help }: { id: string; label: string; hint?: ReactNode; children: ReactNode; aside?: ReactNode; help?: { label: string; text: ReactNode } }) {
   return (
     <div className={styles.field}>
       <div className={styles.fieldHead}><label className={styles.label} htmlFor={id}>{label}</label>{aside}</div>
       {children}
       {hint ? <span className={styles.hint} id={`${id}-hint`}>{hint}</span> : null}
+      {help ? <InlineHelp label={help.label}>{help.text}</InlineHelp> : null}
     </div>
   );
 }

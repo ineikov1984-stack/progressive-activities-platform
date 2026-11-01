@@ -147,6 +147,7 @@ for (const width of [390, 768, 1440]) {
     await page.goto('/dashboard/settings/payment-terms');
     await expect(page.getByRole('heading', { name: 'Такси, отсъствия и отказ', level: 1 })).toBeVisible();
 
+    const help=page.locator('summary').filter({hasText:'Как са сметнати примерите?'});await help.focus();await help.press('Enter');await expect(page.getByText('Всички примери са за месечна такса 60,00 € и 4 занимания през ноември, по 15,00 € всяко.',{exact:true})).toBeVisible();await workspaceLayout(page);await page.screenshot({path:test.info().outputPath(`help-${width}.png`),fullPage:true});await help.press('Space');await expect(help.locator('..')).not.toHaveAttribute('open','');
     await workspaceLayout(page);
     await page.screenshot({path:test.info().outputPath(`terms-${width}.png`),fullPage:true});
     await openRule(page, 'Пауза — ваканция, болест, пътуване');

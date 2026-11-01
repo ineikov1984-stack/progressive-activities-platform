@@ -119,7 +119,7 @@ export function StepPrice({ organizationId, offering, groupModes, problems, lock
       <Field id="w-enroll" label="Как се записва детето (по избор)" hint="Какво трябва да направи родителят след заявката.">
         <textarea id="w-enroll" className={`${styles.input} ${styles.textareaSmall}`} value={offering.enrollment_instructions} placeholder="Например: след заявката ще ви се обадим до 2 работни дни." onChange={(event) => onOffering({ enrollment_instructions: event.target.value })} />
       </Field>
-      <Field id="w-email" label="Имейл за въпроси" hint="Родителите пишат на него. Попълнен е с имейла на организацията — сменете го, ако за тази дейност отговаря друг.">
+      <Field id="w-email" label="Имейл за въпроси" hint="Родителите пишат на този адрес." help={{ label: 'Кой имейл да посоча?', text: 'Попълнен е имейлът на организацията. Сменете го, ако за тази дейност отговаря друг човек.' }}>
         <input id="w-email" type="email" required className={styles.input} value={offering.contact_email} aria-invalid={problems.contact_email ? true : undefined} aria-describedby={problems.contact_email ? 'w-email-problem w-email-hint' : 'w-email-hint'} onChange={(event) => onOffering({ contact_email: event.target.value })} />
       </Field>
       {problems.contact_email ? <p className={styles.fieldError} id="w-email-problem">{problems.contact_email}</p> : null}
