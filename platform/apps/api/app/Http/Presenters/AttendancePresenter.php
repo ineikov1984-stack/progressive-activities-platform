@@ -5,6 +5,20 @@ namespace App\Http\Presenters;
 /** Only the attendance contract; never Enrollment's contacts, health or financial fields. */
 final class AttendancePresenter
 {
+    /** @param array<string, mixed> $report
+     * @return array<string, mixed>
+     */
+    public static function month(array $report, bool $children, bool $correctLate): array
+    {
+        foreach ($report['rows'] as &$row) {
+            if (! $children) {
+                unset($row['child_id']);
+            }
+        }
+
+        return [...$report, 'abilities' => ['correct_late' => $correctLate, 'children' => $children]];
+    }
+
     /** @phpstan-import-type SessionTeacher from \App\Domain\Catalog\Services\SessionRoles
      * @param  array<string, mixed>  $panel
      * @param  array<string, mixed>  $sheet

@@ -175,6 +175,7 @@ class TeamRightsNarrowScopeTest extends TestCase
         return [
             'POST api/v1/enrollments/{enrollment}/visit-outcome' => ["/api/v1/enrollments/{$f['visit']->id}/visit-outcome", ['outcome' => 'attended'], 422],
             'POST api/v1/attendance/sessions/{session}/changes' => ["/api/v1/attendance/sessions/{$f['session']->id}/changes", [], 422],
+            'GET api/v1/attendance/month' => ["/api/v1/attendance/month?group={$f['tuesday']->id}", [], 200],
             'GET api/v1/attendance/today' => ['/api/v1/attendance/today', [], 200],
             'GET api/v1/attendance/pending' => ['/api/v1/attendance/pending', [], 200],
             'GET api/v1/attendance/sessions/{session}' => ["/api/v1/attendance/sessions/{$f['session']->id}", [], 200],

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domain\Attendance\Services\AttendanceMonth;
 use App\Domain\Audit\AuditRecorder;
 use App\Domain\Audit\Enums\AuditAction;
 use App\Domain\Audit\ValueObjects\AuditableReference;
@@ -135,7 +136,7 @@ final class StaffEnrollmentController extends Controller
      * "Подробности" (DECISIONS 30.10.2026, team-rights.md т. 2.2). No contacts, money or health; nothing is written to
      * the audit log.
      */
-    public function child(Request $request, string $child, ChildCard $cards): JsonResponse
+    public function child(Request $request, string $child, ChildCard $cards, AttendanceMonth $attendanceMonth): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
@@ -143,13 +144,15 @@ final class StaffEnrollmentController extends Controller
         if ($card === null) {
             abort(404, 'Детето не е намерено.');
         }
+        $month = AttendanceMonth::validateMonth($request->query->has('month') ? $request->query('month') : AttendanceMonth::currentMonth());
+        $attendance = $attendanceMonth->forChild($user, $card['id'], array_column($card['groups'], 'group_id'), $month);
         $groups = [];
         $contacts = false;
         foreach ($card['groups'] as $group) {
             $enrols = $this->scope->allows($user, 'enrollment.enroll', $group['group_id']);
             $seesContacts = $this->scope->allows($user, 'contacts.view', $group['group_id']);
             $contacts = $contacts || $seesContacts;
-            $groups[] = [...$group, 'abilities' => ['contacts' => $seesContacts, 'skip' => $enrols, 'pause' => $enrols]];
+            $groups[] = [...$group, 'abilities' => ['contacts' => $seesContacts, 'skip' => $enrols, 'pause' => $enrols], 'attendance' => $attendance[$group['group_id']] ?? null];
         }
 
         return response()->json([...$card, 'age' => $contacts ? $card['age'] : null, 'groups' => $groups]);

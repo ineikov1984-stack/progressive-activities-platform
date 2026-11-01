@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Domain\Attendance\Actions\RecordAttendance;
 use App\Domain\Attendance\Actions\RecordAttendanceSession;
 use App\Domain\Attendance\Services\AttendanceAccess;
+use App\Domain\Attendance\Services\AttendanceMonth;
 use App\Domain\Attendance\Services\AttendanceSheet;
 use App\Domain\Attendance\Services\AttendanceToday;
 use App\Domain\Catalog\Models\Session;
@@ -19,6 +20,19 @@ use Illuminate\Http\Request;
 
 final class AttendanceController extends Controller
 {
+    public function month(Request $request, AttendanceMonth $month, AccessScope $scope): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $validated = $request->validate(['group' => ['sometimes', 'uuid']], ['group.uuid' => 'Изберете група.']);
+        $value = $request->query->has('month') ? $request->query('month') : AttendanceMonth::currentMonth();
+        $report = $month->read($user, isset($validated['group']) ? strtolower($validated['group']) : null, $value);
+        $cards = $scope->scheduleChildren($user);
+
+        return response()->json(AttendancePresenter::month($report, $cards === null || in_array($report['group']['id'], $cards, true),
+            $scope->allowsEverywhere($user, 'attendance.correct_late')));
+    }
+
     public function today(Request $request, AttendanceToday $today): JsonResponse
     {
         /** @var User $user */
