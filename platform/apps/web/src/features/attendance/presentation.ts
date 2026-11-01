@@ -6,7 +6,7 @@ export const when = (start: string, end: string) => `${format(start, { weekday: 
 export const deadlineText = (deadline: string) => `Можете да поправяте до ${format(new Date(Date.parse(deadline) - 1).toISOString(), { weekday: 'long', day: 'numeric', month: 'long' })}, 23:59. След това — само собственикът или администраторът, с причина.`;
 export const markLabel = (status: Mark | undefined) => status === 'present' ? 'Присъства' : status === 'absent' ? 'Отсъства' : 'Неотбелязано';
 export const cellLabels: Record<string, string> = { present: 'Присъства', absent: 'Отсъства', warned: 'Предупредено отсъствие', paused: 'В пауза', paused_present: 'Присъства · дошло по време на пауза', unmarked: 'Неотбелязано', future: 'Предстоящо', cancelled: 'Отменено', not_held: 'Не се проведе' };
-export const cellSigns: Record<string, string> = { present: '✓', absent: '✕', warned: 'пр.', paused: 'пауза', paused_present: '✓ п.', unmarked: '?', future: '·', cancelled: '—', not_held: 'н.пр.' };
+export const cellSigns: Record<string, string> = { present: '✓', absent: '✕', warned: 'пр.', paused: 'пауза', paused_present: '✓ п.', unmarked: '?', future: '', cancelled: 'отм.', not_held: 'н.пр.' };
 export function childLabel(child: AttendanceChild): string { return child.came_while_paused ? cellLabels.paused_present : !child.expected ? 'В пауза' : child.warned ? cellLabels.warned : markLabel(child.status); }
 export const initialView = (sheet: Sheet) => sheet.abilities.mark && !sheet.abilities.reason_required && sheet.counts.unmarked > 0 ? 'mark' : 'view';
 export function historyLines(history: History[], children: AttendanceChild[]): { id: string; at: string; text: string }[] {

@@ -18,6 +18,7 @@ import { loadApplications, loadStaffGroups } from '@/features/enrollment/api';
 import { OrganizationStatusCard } from '@/features/organizations/application/status-card';
 import { roleLabel } from '@/features/team/presentation';
 import styles from './home.module.css';
+import { canSeePending, loadPending } from '../attendance/api';
 import { TodaySection, hasMonth } from '../attendance/today';
 
 const auditActionLabels: Record<string, string> = {
@@ -86,6 +87,14 @@ export function Dashboard() {
   const { user, organization } = useDashboardContext();
   const [activities, setActivities] = useState<ActivityDraft[]>();
   const [pendingApplications, setPendingApplications] = useState(0);
+  const [attendancePending, setAttendancePending] = useState<{org:string;total:number}>();
+  const canSeeAttendancePending = canSeePending(organization.access?.abilities);
+  useEffect(() => {
+    if (!canSeeAttendancePending) return;
+    const abort = new AbortController();
+    const read = () => loadPending(organization.id, abort.signal).then((data) => { if (!abort.signal.aborted) setAttendancePending({org:organization.id,total:data.total}); }).catch(() => {});
+    read(); const timer = setInterval(read, 30000); return () => {abort.abort();clearInterval(timer);};
+  }, [organization.id, canSeeAttendancePending]);
   const [freed, setFreed] = useState<FreedPlace[]>([]);
   const canManageEnrollments = organization.permissions.includes('enrollment.manage');
   const canSeeEnrollments = organization.permissions.includes('enrollment.view');
@@ -131,13 +140,14 @@ export function Dashboard() {
   }, [organization.id, router, canManageEnrollments, canSeeEnrollments, canInvite, canSeeTeam, canSeeCatalog]);
 
   const isLoaded = activities !== undefined && invitations !== undefined;
-  const tasks = isLoaded ? buildTasks(activities, invitations, pendingApplications, freed, canCreateActivity) : [];
+  const tasks: Task[] = isLoaded ? buildTasks(activities, invitations, pendingApplications, freed, canCreateActivity) : [];
+  if (canSeeAttendancePending && attendancePending?.org === organization.id && attendancePending.total > 0) tasks.unshift({id:'attendance',tone:'action',title:attendancePending.total === 1 ? '1 занимание чака отбелязване' : `${attendancePending.total} занимания чакат отбелязване`,detail:'Отворете присъствията за месеца',href:'/dashboard/attendance'});
   const published = activities?.filter((activity) => activity.status === 'published').length ?? 0;
   const firstName = user.name.split(/\s+/)[0];
   // For a teacher their groups are the page; for the others they come after "Какво ви чака".
   const groupsFirst = !canSeeEnrollments;
   // Applications, drafts and invitations are the tasks: without any of them "Какво ви чака" has nothing to say.
-  const mayHaveTasks = canSeeEnrollments || canSeeCatalog || canInvite;
+  const mayHaveTasks = canSeeEnrollments || canSeeCatalog || canInvite || canSeeAttendancePending;
   const ownGroups = teaching === undefined ? null : teaching.length > 0 || groupsFirst ? (
     <section aria-labelledby="teaching-title" className={styles.section}>
       <h2 id="teaching-title" className={styles.sectionTitle}>Моите групи</h2>

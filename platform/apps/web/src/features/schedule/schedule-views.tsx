@@ -144,7 +144,7 @@ function Block({ session, kind, by, names, now, position, onOpen, preview, selec
       onClick={(event) => { preview.close(); if (choosing) selection?.toggle(session); else onOpen(session, event.currentTarget); }}
       onMouseEnter={(event) => preview.enter(target, event.currentTarget)} onMouseLeave={preview.leave}
       onFocus={(event) => preview.focus(target, event)} onBlur={preview.blur}
-      className={`${styles.event} ${colorClass(names.activity(session.activity_id))} ${checked && choosing ? styles.eventSelected : ''} ${view.mark === 'now' ? styles.isNow : ''} ${view.mark === 'cancelled' ? styles.isCancelled : ''}`}>
+      className={`${styles.event} ${colorClass(names.activity(session.activity_id))} ${checked && choosing ? styles.eventSelected : ''} ${view.mark === 'now' ? styles.isNow : ''} ${(view.mark === 'cancelled' || view.mark === 'not_held') ? styles.isCancelled : ''}`}>
       <span className="sr-only">{view.label} {movedFromLabel(session)}</span>
       <span className={styles.lines} aria-hidden="true">
         <span className={styles.lineFirst}>
@@ -154,7 +154,7 @@ function Block({ session, kind, by, names, now, position, onOpen, preview, selec
         </span>
         {[...view.lines, ...(movedFromLabel(session) ? [movedFromLabel(session)!] : [])].map((line, index) => <span key={index} data-line="" className={index === 0 ? styles.lineMain : undefined}>{line}</span>)}
       </span>
-      {view.mark === 'cancelled' ? null : <FillBar session={session} className={styles.blockBar} />}
+      {(view.mark === 'cancelled' || view.mark === 'not_held') ? null : <FillBar session={session} className={styles.blockBar} />}
     </button>
   );
 }
@@ -225,12 +225,13 @@ export function SessionCard({ session, names, now, onOpen, selection }: { sessio
   const checked = !!selection?.selected[session.id];
   const activity = names.activity(session.activity_id);
   const mark = sessionMark(session, now);
-  const cancelled = mark === 'cancelled';
+  const cancelled = mark === 'cancelled' || mark === 'not_held';
   const people = instructorsText(session.instructors);
   return (
     <button type="button" data-session-id={session.id} role={choosing ? 'checkbox' : undefined} aria-checked={choosing ? checked : undefined} aria-haspopup={choosing ? undefined : 'dialog'} onClick={(event) => { if (choosing) selection?.toggle(session); else onOpen(session, event.currentTarget); }}
       className={`${styles.card} ${checked && choosing ? styles.eventSelected : ''} ${colorClass(activity)} ${mark === 'now' ? styles.cardNow : ''} ${cancelled ? styles.cardCancelled : ''}`}>
       {mark ? <span className={`${styles.badge} ${styles[`mark_${mark}`]}`}>{markLabels[mark]}</span> : null}
+      {!cancelled && session.attendance && Date.parse(session.starts_at) <= now.getTime() ? <span className={styles.small}>{session.attendance.unmarked === 0 ? '✓ отбелязано' : 'чака отбелязване'}</span> : null}
       {movedFromLabel(session) ? <span className={styles.small}>{movedFromLabel(session)}</span> : null}
       <strong>{choosing ? <span className={styles.selectionMark}>{checked ? '☑' : '☐'} </span> : null}{startClock(session)} · {activity?.title ?? 'Занимание'} · {names.group(session.group_id)?.name ?? 'Група'}</strong>
       <span className="sr-only">{timeRange(session)},</span>

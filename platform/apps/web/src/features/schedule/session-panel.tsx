@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { type MouseEvent, type RefObject, useEffect, useRef, useState } from 'react';
 import { loadSessionPanel, type ScheduleSession, ScheduleApiError, type SessionChild, type SessionPanel } from './api';
 import { ScheduleChangeDialog } from './change-dialog';
@@ -159,6 +160,8 @@ function SessionDetails({ organizationId, session, names, now, withDetails, head
         {/* The same summary as the quick look on a computer: the state, how full with the bar, who waits. */}
         <SessionFacts session={current} now={now} />
         {panel?.last_change ? <p className={styles.reason}><strong>Причина за промяна:</strong> {panel.last_change.reason ?? reason ?? 'Промяна в графика'}{panel.last_change.by ? ` · ${panel.last_change.by}` : ''} · {new Date(panel.last_change.at).toLocaleString('bg-BG', { timeZone: 'Europe/Sofia' })}</p> : reason ? <p className={styles.reason}><strong>Причина:</strong> {reason}</p> : null}
+        {panel?.abilities.attendance ? <Link className={styles.button} href={`/dashboard/attendance/${encodeURIComponent(current.id)}?from=schedule`}>Присъствия</Link> : null}
+        {panel?.session.not_held_detail ? <p className={styles.reason}>{panel.session.not_held_detail.reason} · {panel.session.not_held_detail.by} · {new Date(panel.session.not_held_detail.at).toLocaleString('bg-BG', {timeZone:'Europe/Sofia'})}</p> : null}
         {panel?.abilities.manage ? <div className={styles.changeActions}>{panel.actions?.map((action) => <button key={action} type="button" className={styles.button} onClick={() => setChange(action)}>{action === 'move' ? 'Премести' : action === 'cancel' ? 'Отмени' : 'Възстанови'}</button>)}</div> : null}
         {loaded?.error ? (
           <div className={styles.problem}>
@@ -168,7 +171,7 @@ function SessionDetails({ organizationId, session, names, now, withDetails, head
         ) : !panel ? (
           <div className={styles.skeletonKids} aria-hidden="true">{[0, 1, 2, 3].map((item) => <span key={item} className={styles.skeleton} />)}</div>
         ) : panel.session.children ? (
-          <ChildrenList kids={panel.session.children} cancelled={mark === 'cancelled'} openId={card?.enrollment_id} onOpen={openCard} />
+          <ChildrenList kids={panel.session.children} cancelled={mark === 'cancelled' || mark === 'not_held'} openId={card?.enrollment_id} onOpen={openCard} />
         ) : null}
         {!panel && !loaded?.error ? <span className="sr-only" role="status">Зареждане на децата…</span> : null}
       </div>

@@ -386,15 +386,16 @@ export function waitingText(waiting: number): string | null {
 
 // ---- The state of a session, always in words ----------------------------------------------------------------------
 
-export type SessionMark = 'cancelled' | 'now' | 'later' | 'moved';
-export const markLabels: Record<SessionMark, string> = { cancelled: 'Отменено', now: 'Сега', later: 'По-късно', moved: 'Преместено' };
+export type SessionMark = 'not_held' | 'cancelled' | 'now' | 'later' | 'moved';
+export const markLabels: Record<SessionMark, string> = { not_held: 'Не се проведе', cancelled: 'Отменено', now: 'Сега', later: 'По-късно', moved: 'Преместено' };
 
 /**
  * "Отменено"; "Сега" between the start and the end; "Преместено" (PR 4); "По-късно" — later today. A past session
  * and one on another day have no mark until the attendance comes (етап 3).
  */
-export function sessionMark(session: Pick<ScheduleSession, 'status' | 'starts_at' | 'ends_at' | 'moved'>, now: Date): SessionMark | null {
+export function sessionMark(session: Pick<ScheduleSession, 'status' | 'starts_at' | 'ends_at' | 'moved' | 'not_held'>, now: Date): SessionMark | null {
   if (session.status === 'cancelled') return 'cancelled';
+  if (session.not_held) return 'not_held';
   const start = Date.parse(session.starts_at);
   const end = Date.parse(session.ends_at);
   const time = now.getTime();
@@ -606,7 +607,7 @@ export function dayBlockDetail(session: ScheduleSession, by: DayColumns, names: 
 export const MONTH_ROWS = 3;
 
 /** `held` — the sessions that are not cancelled, the number a day shows on a phone. */
-export type MonthDay = { day: string; number: number; inMonth: boolean; sessions: ScheduleSession[]; shown: ScheduleSession[]; more: number; held: number; cancelled: number };
+export type MonthDay = { day: string; number: number; inMonth: boolean; sessions: ScheduleSession[]; shown: ScheduleSession[]; more: number; held: number; cancelled: number; notHeld: number };
 export type MonthLayout = { month: string; weeks: MonthDay[][] };
 
 /** The month's six weeks; each day with its sessions by Sofia, the first three of them and how many more. */
@@ -618,9 +619,10 @@ export function monthLayout(sessions: ScheduleSession[], day: string, rows = MON
     // The API's order: by start, then by activity.
     const list = [...(byDay.get(item) ?? [])].sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at));
     const cancelled = list.filter((session) => session.status === 'cancelled').length;
+    const notHeld = list.filter((session) => session.status !== 'cancelled' && session.not_held).length;
     return {
       day: item, number: Number(item.slice(8)), inMonth: item.startsWith(grid.month), sessions: list, shown: list.slice(0, rows),
-      more: Math.max(0, list.length - rows), held: list.length - cancelled, cancelled,
+      more: Math.max(0, list.length - rows), held: list.length - cancelled - notHeld, cancelled, notHeld,
     };
   });
   return { month: grid.month, weeks: Array.from({ length: 6 }, (_, week) => days.slice(week * 7, week * 7 + 7)) };
@@ -663,13 +665,13 @@ export function blockLines(session: ScheduleSession, kind: 'week' | 'day', by: D
   const activity = names.activity(session.activity_id)?.title ?? 'Занимание';
   const group = names.group(session.group_id)?.name;
   const place = names.location(session.location_id);
-  const fill = mark === 'cancelled' ? null : fillText(session, 'block');
+  const fill = (mark === 'cancelled' || mark === 'not_held') ? null : fillText(session, 'block');
   const lines = kind === 'week'
     ? [activity, fill, group, place]
     : [group ? `${activity} · ${group}` : activity, fill, dayBlockDetail(session, by, names)];
   const label = [
     timeRange(session), activity, group, kind === 'week' ? place : dayBlockDetail(session, by, names),
-    mark === 'cancelled' ? null : fillText(session, 'long'), mark && mark !== 'later' ? markLabels[mark] : null,
+    (mark === 'cancelled' || mark === 'not_held') ? null : fillText(session, 'long'), mark && mark !== 'later' ? markLabels[mark] : null,
   ].filter(Boolean).join(', ');
   return { time: kind === 'week' ? startClock(session) : timeRange(session), mark: mark === 'later' ? null : mark, lines: lines.filter((line): line is string => Boolean(line)), label };
 }

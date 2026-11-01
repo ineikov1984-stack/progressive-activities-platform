@@ -31,6 +31,7 @@ const iconPaths: Record<ShellIconName, string[]> = {
   home: ['M3 10.5 12 3l9 7.5', 'M5 9.5V21h14V9.5', 'M9 21v-7h6v7'],
   activities: ['m12 3 1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3Z', 'm5 15 .9 2.1L8 18l-2.1.9L5 21l-.9-2.1L2 18l2.1-.9L5 15Z'],
   calendar: ['M4 5h16v16H4z', 'M8 3v4', 'M16 3v4', 'M4 10h16', 'M8 14h2', 'M14 14h2'],
+  attendance: ['M5 12l4 4L19 6'],
   enrollments: ['M9 11h6', 'M9 15h4', 'M6 3h12v18H6z', 'm15 7 1 1 2-2'],
   'open-days': ['M5 21V4l10-1v18', 'M15 21h4V5h-4', 'M11 12h.01'],
   finance: ['M3 7h18v13H3z', 'M3 10h18', 'M7 16h4', 'M16 14h2'],

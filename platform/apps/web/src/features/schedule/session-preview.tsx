@@ -21,7 +21,7 @@ export function FillBar({ session, className }: { session: Pick<ScheduleSession,
 /** The state, "8 от 10 места" with the bar and who waits: at the top of the panel and in the preview. */
 export function SessionFacts({ session, now }: { session: ScheduleSession; now: Date }) {
   const mark = sessionMark(session, now);
-  const cancelled = mark === 'cancelled';
+  const cancelled = mark === 'cancelled' || mark === 'not_held';
   const waiting = cancelled ? null : waitingText(session.waiting);
   return (
     <div className={styles.factsBox}>
@@ -33,6 +33,7 @@ export function SessionFacts({ session, now }: { session: ScheduleSession; now: 
           <FillBar session={session} />
         </span>
       )}
+      {!cancelled && session.attendance ? <span>Присъстваха {session.attendance.present} · Отсъстваха {session.attendance.absent}{session.attendance.unmarked > 0 ? ` · Неотбелязани ${session.attendance.unmarked}` : ''}</span> : null}
       {waiting ? <span className={styles.small}>{waiting}</span> : null}
     </div>
   );
@@ -138,8 +139,8 @@ export function SchedulePreview({ shown, names, now, onEnter, onLeave }: { shown
             <ul className={styles.previewList}>
               {target.sessions.map((session) => (
                 <li key={session.id}>
-                  <span>{session.status === 'cancelled' ? 'Отменено · ' : ''}{monthLine(session, names)}</span>
-                  {session.status === 'cancelled' ? null : <span className={styles.small}>{fillText(session, 'short')}</span>}
+                  <span>{session.not_held ? 'Не се проведе · ' : session.status === 'cancelled' ? 'Отменено · ' : ''}{monthLine(session, names)}</span>
+                  {(session.status === 'cancelled' || session.not_held) ? null : <span className={styles.small}>{fillText(session, 'short')}</span>}
                 </li>
               ))}
             </ul>
