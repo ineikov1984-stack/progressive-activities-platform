@@ -85,8 +85,8 @@ test.afterAll(async () => {
 
 test('sign in leads to the home screen with tasks', async () => {
   await signIn(page);
-  await slow(page.getByRole('heading', { level: 1, name: 'Progressive Academy Demo' })).toBeVisible();
-  await slow(page.getByRole('heading', { name: 'Какво ви чака' })).toBeVisible();
+  await slow(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await slow(page.getByRole('heading', { name: 'Изисква внимание' })).toBeVisible();
   await slow(page.getByRole('link', { name: 'Създай нова дейност' })).toBeVisible();
   await expect(page.getByText(/catalog\.|tenant|organization_id/)).toHaveCount(0);
 });
@@ -372,7 +372,7 @@ test('an owner creates, fills in and publishes an activity with the wizard', asy
   await page.reload();
   await slow(page.getByLabel('Цена', { exact: true }).first()).toHaveValue('25,00');
   // Each price uses the organization's "Такси, отсъствия и отказ" unless other terms are chosen for its way of paying.
-  const terms = () => page.getByLabel('Такси, отсъствия и отказ').first();
+  const terms = () => page.getByRole('combobox', { name: 'Такси, отсъствия и отказ', exact: true }).first();
   await slow(terms().locator('option:checked')).toHaveText(/^Условията на организацията/);
   await terms().selectOption({ label: 'Гъвкави' });
   await slow(terms().locator('option:checked')).toHaveText('Гъвкави');

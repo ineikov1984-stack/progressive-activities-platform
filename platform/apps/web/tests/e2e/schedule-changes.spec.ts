@@ -225,3 +225,16 @@ test('repeated moves keep the original time and returning to it clears the marke
   await dialog.getByLabel('Нов ден').fill('2026-11-17');
   await expect(dialog).toContainText('Заниманието ще е в първоначалния си час, без знак за преместване.');
 });
+
+test('phone bulk actions sit above the persistent navigation', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openSchedule(page);
+  await page.getByRole('button', { name: 'Избери', exact: true }).click();
+  await page.getByRole('checkbox').first().click();
+  const actions = page.getByRole('region', { name: 'Избрани занимания' });
+  await expect(actions).toBeVisible();
+  const nav = page.getByRole('navigation', { name: 'Основно меню на телефон' });
+  const barBox = await actions.boundingBox(), navBox = await nav.boundingBox();
+  expect(barBox).not.toBeNull(); expect(navBox).not.toBeNull();
+  expect(barBox!.y + barBox!.height).toBeLessThanOrEqual(navBox!.y + 1);
+});

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   dashboardNavigation,
+  mobileDashboardNavigation,
   defaultDashboardNavigationCollapsed,
   dashboardNavigationStorageKey,
   ownScheduleOnly,
@@ -106,5 +107,14 @@ describe('dashboard navigation', () => {
     expect(parseDashboardNavigationPreference('false')).toBeUndefined();
     expect(parseDashboardNavigationPreference('{broken')).toBeUndefined();
     expect(parseDashboardNavigationPreference(null)).toBeUndefined();
+  });
+});
+
+describe('phone navigation', () => {
+  it('uses only authorized destinations and preserves the current nested section', () => {
+    const nav = mobileDashboardNavigation(dashboardNavigation('/dashboard/attendance/session', ['view', 'enrollment.view', 'attendance.view_month', 'team.view']));
+    expect(nav.map(item => item.id)).toEqual(['home', 'schedule', 'enrollments', 'attendance']);
+    expect(nav.filter(item => item.isActive).map(item => item.id)).toEqual(['attendance']);
+    expect(mobileDashboardNavigation(dashboardNavigation('/dashboard', ['view', 'enrollment.view_own'], { ownSchedule: true })).map(item => item.label)).toEqual(['Начало', 'Моят график']);
   });
 });

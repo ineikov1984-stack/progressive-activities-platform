@@ -19,7 +19,8 @@ import { type ActivityDraft, loadCatalogWorkspace } from '@/features/catalog/adm
 import { buildTasks, type FreedPlace, freedPlaces, greeting, plural, type Task, teachingCard } from './tasks';
 import { loadApplications, loadStaffGroups } from '@/features/enrollment/api';
 import { OrganizationStatusCard } from '@/features/organizations/application/status-card';
-import { roleLabel } from '@/features/team/presentation';
+import { ownScheduleOnly } from './navigation';
+import { OrganizationToday } from './organization-today';
 import styles from './home.module.css';
 import { canSeePending, loadPending } from '../attendance/api';
 import { TodaySection, hasMonth } from '../attendance/today';
@@ -92,6 +93,9 @@ export function Dashboard() {
   const router = useRouter();
   const { user, organization } = useDashboardContext();
   const office = isOffice(organization);
+  const personalOnly = ownScheduleOnly(organization);
+  const [homeView, setHomeView] = useState<'organization' | 'mine'>('organization');
+  const showOrganization = !personalOnly && homeView === 'organization';
   const [officeCount, setOfficeCount] = useState<number>();
   const [activities, setActivities] = useState<ActivityDraft[]>();
   const [pendingApplications, setPendingApplications] = useState(0);
@@ -148,20 +152,18 @@ export function Dashboard() {
   }, [organization.id, router, canManageEnrollments, canSeeEnrollments, canInvite, canSeeTeam, canSeeCatalog]);
 
   const isLoaded = activities !== undefined && invitations !== undefined;
-  const tasks: Task[] = isLoaded ? buildTasks(activities, invitations, pendingApplications, freed, canCreateActivity) : [];
+  const tasks: Task[] = isLoaded ? buildTasks(activities, invitations, pendingApplications, freed, canCreateActivity).filter(task => task.id !== 'first-activity') : [];
   if (canSeeAttendancePending && attendancePending?.org === organization.id && attendancePending.total > 0) tasks.unshift({id:'attendance',tone:'action',title:attendancePending.total === 1 ? '1 занимание чака отбелязване' : `${attendancePending.total} занимания чакат отбелязване`,detail:'Отворете заниманията за отбелязване',href:'/dashboard/attendance'});
-  const published = activities?.filter((activity) => activity.status === 'published').length ?? 0;
+
   const firstName = user.name.split(/\s+/)[0];
-  // For a teacher their groups are the page; for the others they come after "Какво ви чака".
-  const groupsFirst = !canSeeEnrollments;
   // Applications, drafts and invitations are the tasks: without any of them "Какво ви чака" has nothing to say.
   const mayHaveTasks = canSeeEnrollments || canSeeCatalog || canInvite || canSeeAttendancePending || office;
-  const ownGroups = teaching === undefined ? null : teaching.length > 0 || groupsFirst ? (
+  const ownGroups = teaching === undefined ? null : teaching.length > 0 || personalOnly ? (
     <>
     <TeacherSubstitutes key={organization.id} groups={teaching} />
     <section aria-labelledby="teaching-title" className={styles.section}>
       <h2 id="teaching-title" className={styles.sectionTitle}>Моите групи</h2>
-      {hasMonth(teaching) ? <Link className={styles.shortcut} href="/dashboard/attendance?view=month">Присъствия за месеца →</Link> : null}
+      {hasMonth(teaching) ? <Link className={styles.textLink} href="/dashboard/attendance?view=month">Присъствия за месеца →</Link> : null}
       {teaching.length === 0 ? (
         <p className={styles.muted}>Все още нямате групи. Когато ви добавят в група, тя ще се появи тук.</p>
       ) : (
@@ -179,9 +181,9 @@ export function Dashboard() {
       <header className={styles.header}>
         <div className={styles.heading}>
           {/* The name opens "Моят профил" — for a teacher the way to their details and rights. */}
-          <p className={styles.eyebrow}>{greeting(new Date())}, <Link className={styles.nameLink} href="/dashboard/me">{firstName}<span className="sr-only"> — Моят профил</span></Link></p>
-          <h1>{organization.name}</h1>
-          <p className={styles.muted}>{roleLabel(organization.role)}{activities && canSeeCatalog ? ` · ${plural(published, 'публикувана дейност', 'публикувани дейности')}` : ''}</p>
+          <p className={styles.eyebrow}>{new Intl.DateTimeFormat('bg-BG', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Sofia' }).format(new Date())}</p>
+          <h1>{greeting(new Date())}, <Link className={styles.nameLink} href="/dashboard/me">{firstName}<span className="sr-only"> — Моят профил</span></Link></h1>
+          <p className={styles.muted}>{showOrganization ? 'Най-важното за екипа, на едно място.' : 'Вашите занимания и задачи за днес.'}</p>
         </div>
         {canCreateActivity ? (
           <Link className={styles.primary} href="/dashboard/activities?new=1">
@@ -194,12 +196,14 @@ export function Dashboard() {
       {organization.status !== 'active' ? <OrganizationStatusCard organizationId={organization.id} /> : null}
       {loadError ? <p className={styles.error} role="alert">{loadError}</p> : null}
 
-      <TodaySection key={organization.id} organizationId={organization.id} groups={teaching ?? []} />
-      {groupsFirst ? ownGroups : null}
-
-      {mayHaveTasks ? <section aria-labelledby="tasks-title" className={styles.section}>
-        <h2 id="tasks-title" tabIndex={-1} className={styles.sectionTitle}>Какво ви чака</h2>
-        {office ? <OfficeSubstituteTasks key={organization.id} onCount={setOfficeCount} /> : null}
+      {!personalOnly ? <div className={styles.overviewSwitch} role="group" aria-label="Обхват на таблото">
+        <button type="button" aria-pressed={showOrganization} onClick={() => setHomeView('organization')}>За организацията</button>
+        <button type="button" aria-pressed={!showOrganization} onClick={() => setHomeView('mine')}>Моите занимания</button>
+      </div> : null}
+      <div className={showOrganization ? styles.homeColumns : styles.personalWorkspace}>
+      {mayHaveTasks && (showOrganization || personalOnly) ? <section aria-labelledby="tasks-title" className={styles.section}>
+        <h2 id="tasks-title" tabIndex={-1} className={styles.sectionTitle}>Изисква внимание</h2>
+        {office && showOrganization ? <OfficeSubstituteTasks key={organization.id} onCount={setOfficeCount} /> : null}
         {!isLoaded ? (
           <div className={styles.taskGrid} aria-busy="true">{[0, 1, 2].map((item) => <span className={styles.skeleton} key={item} />)}</div>
         ) : tasks.length === 0 ? (office && officeCount !== 0 ? null : (
@@ -219,8 +223,12 @@ export function Dashboard() {
         )}
       </section> : null}
 
-      {groupsFirst ? null : ownGroups}
+      {showOrganization ? <OrganizationToday key={organization.id} organizationId={organization.id} /> : <div className={styles.personalToday}><TodaySection key={organization.id} organizationId={organization.id} groups={teaching ?? []} showMonthLink={false} showEmpty /></div>}
+      </div>
+      {!showOrganization ? ownGroups : null}
 
+      <details className={styles.secondary}>
+        <summary>Още възможности</summary>
       <section aria-labelledby="shortcuts-title" className={styles.section}>
         <h2 id="shortcuts-title" className={styles.sectionTitle}>Бърз достъп</h2>
         <div className={styles.shortcuts}>
@@ -236,10 +244,11 @@ export function Dashboard() {
         </div>
       </section>
 
+      </details>
       {/* Only the roles that see the team get the last actions; a teacher has no such panel. */}
       {canSeeTeam ? (
-        <section aria-labelledby="audit-title" className={styles.panel}>
-          <h2 id="audit-title">Последни действия</h2>
+        <details className={styles.secondary}>
+          <summary>Последни действия</summary>
           {auditEvents === undefined ? <span className={styles.skeleton} /> : auditEvents.length === 0 ? (
             <p className={styles.muted}>Все още няма записани действия.</p>
           ) : (
@@ -252,7 +261,7 @@ export function Dashboard() {
               ))}
             </ul>
           )}
-        </section>
+        </details>
       ) : null}
     </div>
   );

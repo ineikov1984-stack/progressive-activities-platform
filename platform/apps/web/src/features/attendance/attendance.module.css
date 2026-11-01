@@ -28,7 +28,7 @@
 .icon { border: 0; background: transparent; color: var(--ink); width: var(--control-height); height: var(--control-height); cursor: pointer; flex: 0 0 var(--control-height); border-radius: var(--radius-sm); }
 .banner { padding: var(--space-4); background: var(--status-available-soft); color: var(--status-available); border-radius: var(--radius-md); margin: var(--space-4) 0; }
 .error { padding: var(--space-3); color: var(--status-full); background: var(--status-full-soft); border-radius: var(--radius-sm); }
-.toast { position: sticky; bottom: var(--space-4); background: var(--ink); color: var(--ink-inverse); border-radius: var(--radius-md); padding: var(--space-3); display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; flex-wrap: wrap; box-shadow: var(--shadow-raised); z-index: 2; }
+.toast { position: sticky; bottom: calc(var(--workspace-bottom-offset, 0px) + var(--space-4)); background: var(--ink); color: var(--ink-inverse); border-radius: var(--radius-md); padding: var(--space-3); display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; flex-wrap: wrap; box-shadow: var(--shadow-raised); z-index: 2; }
 .history { padding: 0; list-style: none; }
 .history li { border-bottom: 1px solid var(--border); padding: var(--space-4) 0; }
 .history p { margin: 0; }

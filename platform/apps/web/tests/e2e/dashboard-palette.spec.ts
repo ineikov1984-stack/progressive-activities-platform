@@ -10,7 +10,7 @@ async function openDashboard(page: import('@playwright/test').Page) {
     return route.fulfill({ status: 404, json: { message: 'Not mocked' } });
   });
   await page.goto(`${process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:3000'}/dashboard`);
-  await expect(page.getByRole('heading', { name: 'Progressive Academy' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 }
 
 test('administration paints its frame from the design tokens', async () => {

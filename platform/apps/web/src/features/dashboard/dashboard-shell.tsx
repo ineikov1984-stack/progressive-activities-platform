@@ -15,6 +15,7 @@ import { AccountMenu, LeaveButton, ProfileCard } from './account-menu';
 import { DashboardContext } from './dashboard-context';
 import {
   dashboardNavigation,
+  mobileDashboardNavigation,
   dashboardNavigationStorageKey,
   defaultDashboardNavigationCollapsed,
   ownScheduleOnly,
@@ -67,6 +68,33 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const [error, setError] = useState('');
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [smallScreen, setSmallScreen] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const menuRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 719px)');
+    const update = () => { setSmallScreen(media.matches); if (!media.matches) setIsMobileOpen(false); };
+    update(); media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  useEffect(() => {
+    if (!isMobileOpen || !smallScreen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const sidebar = sidebarRef.current;
+    const menuButton = menuRef.current;
+    sidebar?.querySelector<HTMLButtonElement>('button[aria-label="Затвори менюто"]')?.focus();
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); setIsMobileOpen(false); }
+      if (event.key !== 'Tab' || !sidebar) return;
+      const targets = Array.from(sidebar.querySelectorAll<HTMLElement>('a[href],button:not([disabled])')).filter(el => el.getClientRects().length > 0);
+      const first = targets[0], last = targets.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener('keydown', keydown);
+    return () => { document.body.style.overflow = previousOverflow; document.removeEventListener('keydown', keydown); menuButton?.focus(); };
+  }, [isMobileOpen, smallScreen]);
   const permissions = organization?.permissions;
   // A teacher's menu has "Моят график"; the office's — "График" (by `access`, as the rest of the menu).
   const ownSchedule = organization ? ownScheduleOnly(organization) : false;
@@ -129,26 +157,29 @@ export function DashboardShell({ children }: DashboardShellProps) {
   return <DashboardContext.Provider value={contextValue}>
     <div data-admin-shell className={`${styles.shell} ${isCollapsed ? styles.collapsed : ''} ${isMobileOpen ? styles.mobileOpen : ''}`}>
       <button className={styles.backdrop} type="button" aria-label="Затвори менюто" onClick={() => setIsMobileOpen(false)} />
-      <aside className={styles.sidebar}>
+      <aside ref={sidebarRef} className={styles.sidebar} role={smallScreen && isMobileOpen ? 'dialog' : undefined} aria-modal={smallScreen && isMobileOpen ? true : undefined} aria-label={smallScreen && isMobileOpen ? 'Всички раздели' : undefined} inert={smallScreen && !isMobileOpen}>
         <div className={styles.brand}><span className={styles.mark}>PA</span><span className={styles.brandText}><strong>Progressive</strong><small>Activities</small></span><button className={styles.mobileClose} type="button" aria-label="Затвори менюто" onClick={() => setIsMobileOpen(false)}><DashboardIcon name="close" /></button></div>
         <ProfileCard user={user} organization={organization} onOpen={() => setIsMobileOpen(false)} />
         <nav className={styles.navigation} aria-label="Административна навигация">
           {groups.map((group) => <div className={styles.navGroup} key={group.id}>
             <p className={styles.groupLabel}>{group.label}</p>
-            {group.items.map((item) => <Link className={`${styles.navItem} ${item.isActive ? styles.active : ''}`} data-label={item.label} href={item.href ?? '/dashboard'} key={item.id} aria-current={item.isActive ? 'page' : undefined} onClick={() => setIsMobileOpen(false)}><DashboardIcon name={item.icon} /><span>{item.label}</span></Link>)}
+            {group.items.map((item) => <Link className={`${styles.navItem} ${item.isActive ? styles.active : ''}`} data-label={item.label} aria-label={item.label} href={item.href ?? '/dashboard'} key={item.id} aria-current={item.isActive ? 'page' : undefined} onClick={() => setIsMobileOpen(false)}><DashboardIcon name={item.icon} /><span>{item.label}</span></Link>)}
           </div>)}
         </nav>
         <div className={styles.mobileLeave}><LeaveButton /></div>
         <button className={styles.collapseButton} type="button" onClick={toggleCollapsed} aria-label={isCollapsed ? 'Разгъни менюто' : 'Свий менюто'}><DashboardIcon name={isCollapsed ? 'chevron-right' : 'chevron-left'} /><span>{isCollapsed ? 'Разгъни менюто' : 'Свий менюто'}</span></button>
       </aside>
-      <section className={styles.workspace}>
+      <section className={styles.workspace} inert={smallScreen && isMobileOpen}>
         <header className={styles.topbar}>
-          <button className={styles.mobileMenu} type="button" aria-label="Отвори менюто" onClick={() => setIsMobileOpen(true)}><DashboardIcon name="menu" /></button>
+          <button ref={menuRef} className={styles.mobileMenu} type="button" aria-label="Отвори менюто" aria-expanded={isMobileOpen} onClick={() => setIsMobileOpen(true)}><DashboardIcon name="menu" /></button>
           <div className={styles.organization}><span className={styles.organizationIcon} aria-hidden="true">{initials(organization.name)}</span><span><small>Организация</small><strong>{organization.name}</strong></span></div>
           <div className={styles.topActions}><Link className={styles.publicLink} href={`/o/${organization.slug}`}><DashboardIcon name="eye" />Публичен профил</Link><button className={styles.notification} type="button" aria-label="Известия"><DashboardIcon name="bell" /></button><AccountMenu user={user} organization={organization} /></div>
         </header>
         <div className={styles.content}>{children}</div>
       </section>
+      <nav className={styles.bottomNavigation} aria-label="Основно меню на телефон" inert={smallScreen && isMobileOpen}>
+        {mobileDashboardNavigation(groups).map(item => <Link key={item.id} href={item.href!} aria-label={item.label} aria-current={item.isActive ? 'page' : undefined}><DashboardIcon name={item.icon} /><span>{item.id === 'schedule' ? 'График' : item.label}</span></Link>)}
+      </nav>
     </div>
   </DashboardContext.Provider>;
 }

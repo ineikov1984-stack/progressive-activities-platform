@@ -1,4 +1,6 @@
 .shell {
+  --workspace-bottom-offset: 0px;
+  --workspace-top-offset: 0px;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   min-height: 100vh;
@@ -74,7 +76,7 @@
 .leaveButton:hover { color: var(--ink-inverse); }
 .leaveButton svg { width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
-.mobileMenu, .mobileClose, .backdrop { display: none; }
+.mobileMenu, .mobileClose, .backdrop, .bottomNavigation { display: none; }
 
 .centerState { display: grid; min-height: 100vh; place-content: center; gap: var(--space-3); padding: 2rem; text-align: center; }
 .centerState h1 { margin: 0; font-size: 24px; }
@@ -91,8 +93,8 @@
 
 @media (max-width: 719px) {
   .shell, .shell.collapsed { grid-template-columns: 1fr; }
-  .sidebar { position: fixed; inset: 0 auto 0 0; width: min(18rem, 86vw); height: auto; transform: translateX(-105%); transition: transform .2s ease; box-shadow: var(--shadow-raised); }
-  .mobileOpen .sidebar { transform: translateX(0); }
+  .sidebar { position: fixed; inset: 0 auto 0 0; width: min(18rem, 86vw); height: auto; visibility: hidden; transform: translateX(-105%); transition: transform .2s ease; box-shadow: var(--shadow-raised); }
+  .mobileOpen .sidebar { visibility: visible; transform: translateX(0); }
   .backdrop { position: fixed; inset: 0; z-index: 19; border: 0; background: rgb(15 42 64 / 48%); }
   .mobileOpen .backdrop { display: block; }
   .mobileClose { display: grid; width: var(--control-height); height: var(--control-height); margin-left: auto; place-items: center; border: 1px solid var(--nav-active); border-radius: var(--radius-md); color: var(--ink-inverse); background: transparent; cursor: pointer; }
@@ -106,4 +108,17 @@
   .skeletonNav { display: none; }
   .profileCard { display: flex; }
   .mobileLeave { display: block; margin-top: auto; padding-top: var(--space-4); }
+}
+
+@media (max-width: 719px) {
+  .shell { --workspace-bottom-offset: calc(4.5rem + env(safe-area-inset-bottom)); --workspace-top-offset: 4rem; }
+  .workspace { padding-bottom: calc(var(--workspace-bottom-offset) + var(--space-4)); }
+  .topbar { position: sticky; top: 0; z-index: 10; min-height: 4rem; gap: var(--space-2); }
+  .organization { gap: var(--space-2); }
+  .organizationIcon { display: none; }
+  .organization strong { font-size: 13px; }
+  .bottomNavigation { position: fixed; bottom: 0; left: 0; right: 0; z-index: 15; display: flex; padding: var(--space-2) var(--space-2) max(var(--space-2), env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--surface); }
+  .bottomNavigation a { display: flex; flex: 1; min-width: 0; min-height: 3.5rem; align-items: center; justify-content: center; flex-direction: column; gap: var(--space-1); border-radius: var(--radius-md); color: var(--ink-muted); text-decoration: none; font-size: 11px; font-weight: 650; }
+  .bottomNavigation a[aria-current="page"] { color: var(--ink); background: var(--status-info-soft); }
+  .bottomNavigation svg { width: 1.25rem; height: 1.25rem; }
 }

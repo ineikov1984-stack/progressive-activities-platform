@@ -321,6 +321,6 @@
 .selectionBar button { min-height: 44px; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; }
 .selectionBar p button { background: transparent; color: var(--ink-inverse); border: 0; text-decoration: underline; }
 .selectionBar button:focus-visible, .daySelect:focus-visible { outline: 3px solid var(--focus-on-dark); outline-offset: 2px; }
-@media (max-width: 899px) { .selectionBar { position: fixed; bottom: 0; left: 0; right: 0; margin: 0; border-radius: var(--radius-md) var(--radius-md) 0 0; padding-bottom: max(var(--space-4), env(safe-area-inset-bottom)); } .selectionBar div { display: grid; grid-template-columns: 1fr 1fr; } .selectingPage { padding-bottom: 180px; } }
+@media (max-width: 899px) { .selectionBar { position: fixed; bottom: var(--workspace-bottom-offset, 0px); left: 0; right: 0; margin: 0; border-radius: var(--radius-md) var(--radius-md) 0 0; padding-bottom: max(var(--space-4), env(safe-area-inset-bottom)); } .selectionBar div { display: grid; grid-template-columns: 1fr 1fr; } .selectingPage { padding-bottom: 180px; } }
 
 .kidAttendance { flex: 0 0 36%; max-width: 36%; color: var(--ink); font-size: 13px; line-height: 1.4; text-align: right; overflow-wrap: anywhere; }

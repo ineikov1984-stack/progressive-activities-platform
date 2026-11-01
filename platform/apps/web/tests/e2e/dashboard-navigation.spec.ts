@@ -10,7 +10,7 @@ async function openDashboard(page: import('@playwright/test').Page) {
     return route.fulfill({ status: 404, json: { message: 'Not mocked' } });
   });
   await page.goto(`${process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:3000'}/dashboard`);
-  await expect(page.getByRole('heading', { name: 'Progressive Academy' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 }
 
 test('dashboard uses grouped accessible navigation and remembers its desktop width', async () => {
@@ -51,7 +51,7 @@ test('mobile dashboard navigation opens as a drawer', async () => {
   await openDashboard(page);
   const openMenu = page.getByRole('button', { name: 'Отвори менюто' });
   const closeMenu = page.getByRole('button', { name: 'Затвори менюто' }).last();
-  const sidebar = page.getByRole('navigation', { name: 'Административна навигация' }).locator('xpath=..');
+  const sidebar = page.getByRole('navigation', { name: 'Административна навигация', includeHidden: true }).locator('xpath=..');
   await expect(openMenu).toBeVisible();
   await expect.poll(async () => (await sidebar.boundingBox())?.x ?? 0).toBeLessThan(0);
   await openMenu.click();
