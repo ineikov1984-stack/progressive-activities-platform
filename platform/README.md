@@ -18,6 +18,8 @@ docker compose exec api php artisan db:seed --class='Database\Seeders\LocalDemoS
 - Публичен демо каталог: http://localhost:3000/o/progressive-academy-demo
 - Публична страница „Шахмат“: http://localhost:3000/o/progressive-academy-demo/activities/shahmat
 
+The Docker web service runs `next dev --turbopack` directly. In a local comparison using the same image and two fresh containers per bundler, first HTML responses for Enrollments took 1.3–4.2 s with Turbopack versus 5.7–12.6 s with Webpack; Schedule took 1.1–1.4 s versus 4.7–9.2 s. These are local development measurements, not production page-load guarantees. The host `pnpm dev` command still uses Webpack; production builds and CI browser tests keep their existing commands. After source changes, rebuild with `docker compose up --build -d` (the Docker service has no host source mount).
+
 All local data is synthetic. Never import production or Fitsys exports.
 
 ## Browser verification

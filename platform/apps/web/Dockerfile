@@ -18,4 +18,5 @@ WORKDIR /repo/apps/web
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --retries=10 \
   CMD wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1
-CMD ["pnpm", "dev", "--hostname", "0.0.0.0"]
+# Use the measured faster bundler in Docker; the host dev script remains available for Webpack.
+CMD ["node", "node_modules/next/dist/bin/next", "dev", "--turbopack", "--hostname", "0.0.0.0"]

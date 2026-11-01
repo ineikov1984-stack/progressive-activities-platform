@@ -107,7 +107,10 @@ for (const width of widths) {
     await expect(page.getByText('Демо Дете 1', { exact: true }).first()).toBeVisible(); await layout(page);
     if (width < 720) {
       await page.getByRole('button', { name: 'Отвори менюто', exact: true }).click();
-      await expect(page.getByRole('navigation', { name: 'Административна навигация' })).toBeVisible(); await layout(page);
+      await expect(page.getByRole('navigation', { name: 'Административна навигация' })).toBeVisible();
+      await expect(page.locator('aside')).toBeInViewport({ ratio: 1 });
+      await layout(page);
+      if (width === 390) await page.screenshot({ path: test.info().outputPath('mobile-navigation-390.png'), fullPage: true });
       await page.keyboard.press('Escape');
     }
     expect(errors).toEqual([]);
