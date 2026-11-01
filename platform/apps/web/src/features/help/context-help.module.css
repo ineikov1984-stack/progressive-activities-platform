@@ -1,0 +1,29 @@
+.entry { display: flex; justify-content: flex-end; padding: var(--space-2) var(--space-4) 0; }
+.trigger, .close, .secondary, .primary { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-width: var(--control-height); min-height: var(--control-height); padding: var(--space-2) var(--space-4); border: 1px solid var(--border-control); border-radius: var(--radius-md); color: var(--ink); background: var(--surface); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.trigger:hover, .secondary:hover, .close:hover { background: var(--surface-sunken); }
+.info { display: grid; place-items: center; width: 18px; height: 18px; border: 1px solid currentColor; border-radius: var(--radius-pill); font-size: 12px; }
+.dialog { position: fixed; inset: 0 0 0 auto; width: min(30rem, 100vw); max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; padding: 0; border: 0; border-left: 1px solid var(--border); color: var(--ink-body); background: var(--surface); box-shadow: var(--shadow-raised); box-sizing: border-box; }
+.dialog::backdrop { background: color-mix(in srgb, var(--nav) 40%, transparent); }
+.panel { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }
+.header { display: flex; align-items: start; gap: var(--space-4); padding: var(--space-4); border-bottom: 1px solid var(--border); }
+.header h2 { flex: 1; margin: 0; color: var(--ink); font-size: 24px; line-height: 1.2; }
+.header h2:focus { outline: none; }
+.close { flex: none; padding: var(--space-2); font-size: 24px; }
+.body { display: grid; align-content: start; gap: var(--space-4); min-height: 0; padding: var(--space-4); overflow: auto; overscroll-behavior: contain; }
+.field { display: grid; gap: var(--space-2); min-width: 0; color: var(--ink); font-size: 14px; font-weight: 600; }
+.field select { width: 100%; min-width: 0; min-height: var(--control-height); padding: var(--space-2); border: 1px solid var(--border-control); border-radius: var(--radius-md); color: var(--ink); background: var(--surface); font: inherit; font-size: 16px; }
+.progress { display: flex; gap: var(--space-2); }
+.progress span { flex: 1; height: var(--space-1); border-radius: var(--radius-pill); background: var(--border); }
+.progress .reached { background: var(--ink); }
+.step { display: grid; gap: var(--space-3); }
+.step h3 { margin: 0; color: var(--ink); font-size: 20px; line-height: 1.3; }
+.step p { margin: 0; font-size: 16px; line-height: 1.5; }
+.step .count, .note { margin: 0; color: var(--ink-muted); font-size: 14px; line-height: 1.5; }
+.example { display: grid; gap: var(--space-2); padding: var(--space-4); border-radius: var(--radius-md); background: var(--surface-sunken); }
+.example strong { color: var(--ink); }
+.actions { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-4); padding-bottom: max(var(--space-4), env(safe-area-inset-bottom)); border-top: 1px solid var(--border); }
+.primary { color: var(--ink-inverse); background: var(--ink); border-color: var(--ink); }
+.primary:hover { background: var(--nav); }
+.secondary:disabled { opacity: .5; cursor: default; }
+@media (min-width: 820px) { .entry { padding-inline: var(--space-8); } .header, .body { padding: var(--space-6); } }
+@media (max-width: 560px) { .dialog { inset: auto 0 0; width: 100%; height: 90dvh; border-left: 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; } }

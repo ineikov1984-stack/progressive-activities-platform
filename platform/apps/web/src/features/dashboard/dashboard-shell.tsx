@@ -12,6 +12,7 @@ import {
   withAccess,
 } from './api';
 import { AccountMenu, LeaveButton, ProfileCard } from './account-menu';
+import { ContextHelp } from '../help/context-help';
 import { DashboardContext } from './dashboard-context';
 import {
   dashboardNavigation,
@@ -175,7 +176,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
           <div className={styles.organization}><span className={styles.organizationIcon} aria-hidden="true">{initials(organization.name)}</span><span><small>Организация</small><strong>{organization.name}</strong></span></div>
           <div className={styles.topActions}><Link className={styles.publicLink} href={`/o/${organization.slug}`}><DashboardIcon name="eye" />Публичен профил</Link><button className={styles.notification} type="button" aria-label="Известия"><DashboardIcon name="bell" /></button><AccountMenu user={user} organization={organization} /></div>
         </header>
-        <div className={styles.content}>{children}</div>
+        <div className={styles.content}><ContextHelp key={`${organization.id}:${pathname}:${organization.permissions.join(',')}`} pathname={pathname} permissions={organization.permissions} />{children}</div>
       </section>
       <nav className={styles.bottomNavigation} aria-label="Основно меню на телефон" inert={smallScreen && isMobileOpen}>
         {mobileDashboardNavigation(groups).map(item => <Link key={item.id} href={item.href!} aria-label={item.label} aria-current={item.isActive ? 'page' : undefined}><DashboardIcon name={item.icon} /><span>{item.id === 'schedule' ? 'График' : item.label}</span></Link>)}
