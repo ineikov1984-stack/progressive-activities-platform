@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import {AttendanceSessionButton} from '../attendance/session-dialog';
 import { type MouseEvent, type RefObject, useEffect, useRef, useState } from 'react';
 import { loadSessionPanel, type ScheduleSession, ScheduleApiError, type SessionChild, type SessionPanel } from './api';
 import { ScheduleChangeDialog } from './change-dialog';
@@ -29,6 +29,7 @@ type Props = {
   board: ScheduleBoard;
   selection?: SessionSelection;
   onChanged: (result: ChangeResult) => void;
+  onAttendanceChanged?: () => void;
   /** A child's name from their card, for the label of the filter "Дете". */
   onChildNamed?: (id: string, name: string) => void;
 };
@@ -38,7 +39,7 @@ type Props = {
  * that time, each opening its own. A modal panel — the heading takes the focus, Esc and ✕ close it and the page gives
  * the focus back to where it was opened. Change actions follow the fresh panel permissions.
  */
-export function SchedulePanel({ organizationId, target, names, now, withDetails, onClose, onChildNamed, board, onChanged, selection }: Props) {
+export function SchedulePanel({ organizationId, target, names, now, withDetails, onClose, onChildNamed, board, onChanged, onAttendanceChanged, selection }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const [chosen, setChosen] = useState<ScheduleSession | undefined>(target.kind === 'session' ? target.session : undefined);
@@ -60,7 +61,7 @@ export function SchedulePanel({ organizationId, target, names, now, withDetails,
       <div className={styles.drawerInner}>
         {chosen ? (
           <SessionDetails key={chosen.id} organizationId={organizationId} session={chosen} names={names} now={now} withDetails={withDetails} heading={heading} onClose={close}
-            board={board} onChanged={onChanged} onBack={target.kind === 'more' ? () => setChosen(undefined) : undefined} onChildNamed={onChildNamed} />
+            board={board} onChanged={onChanged} onAttendanceChanged={onAttendanceChanged} onBack={target.kind === 'more' ? () => setChosen(undefined) : undefined} onChildNamed={onChildNamed} />
         ) : target.kind === 'more' ? (
           <MoreList sessions={target.sessions} names={names} now={now} heading={heading} onClose={close} onChoose={setChosen} selection={selection} />
         ) : null}
@@ -101,9 +102,9 @@ function MoreList({ sessions, names, now, heading, onClose, onChoose, selection 
 
 type CardChild = SessionChild & { child_id: string };
 
-function SessionDetails({ organizationId, session, names, now, withDetails, heading, onClose, onBack, onChildNamed, board, onChanged }: {
+function SessionDetails({ organizationId, session, names, now, withDetails, heading, onClose, onBack, onChildNamed, board, onChanged, onAttendanceChanged }: {
   organizationId: string; session: ScheduleSession; names: ScheduleNames; now: Date; withDetails: boolean;
-  board: ScheduleBoard; onChanged: (result: ChangeResult) => void;
+  board: ScheduleBoard; onChanged: (result: ChangeResult) => void; onAttendanceChanged?: () => void;
   heading: RefObject<HTMLHeadingElement | null>; onClose: () => void; onBack?: () => void; onChildNamed?: (id: string, name: string) => void;
 }) {
   const [attempt, setAttempt] = useState(0);
@@ -160,7 +161,7 @@ function SessionDetails({ organizationId, session, names, now, withDetails, head
         {/* The same summary as the quick look on a computer: the state, how full with the bar, who waits. */}
         <SessionFacts session={current} now={now} />
         {panel?.last_change ? <p className={styles.reason}><strong>Причина за промяна:</strong> {panel.last_change.reason ?? reason ?? 'Промяна в графика'}{panel.last_change.by ? ` · ${panel.last_change.by}` : ''} · {new Date(panel.last_change.at).toLocaleString('bg-BG', { timeZone: 'Europe/Sofia' })}</p> : reason ? <p className={styles.reason}><strong>Причина:</strong> {reason}</p> : null}
-        {panel?.abilities.attendance ? <Link className={styles.button} href={`/dashboard/attendance/${encodeURIComponent(current.id)}?from=schedule`}>Присъствия</Link> : null}
+        {panel?.abilities.attendance ? <AttendanceSessionButton sessionId={current.id} className={styles.button} onClosed={()=>{setAttempt((n)=>n+1);onAttendanceChanged?.();}}>Отбележи присъствия</AttendanceSessionButton> : null}
         {panel?.session.not_held_detail ? <p className={styles.reason}>{panel.session.not_held_detail.reason} · {panel.session.not_held_detail.by} · {new Date(panel.session.not_held_detail.at).toLocaleString('bg-BG', {timeZone:'Europe/Sofia'})}</p> : null}
         {panel?.abilities.manage ? <div className={styles.changeActions}>{panel.actions?.map((action) => <button key={action} type="button" className={styles.button} onClick={() => setChange(action)}>{action === 'move' ? 'Премести' : action === 'cancel' ? 'Отмени' : 'Възстанови'}</button>)}</div> : null}
         {loaded?.error ? (

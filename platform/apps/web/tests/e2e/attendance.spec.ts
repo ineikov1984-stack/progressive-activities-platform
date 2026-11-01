@@ -32,7 +32,7 @@ test('late correction requires reason and conflict replaces the roster',async({p
 });
 
 test('topic debounce and paused attendance use the queue; read-only and not-held have no write controls',async({page})=>{
- const f=await fixture(page); await page.goto(`/dashboard/attendance/${id(10)}`); await page.getByLabel('Тема на заниманието (по избор)').fill('Нова тема');
+ const f=await fixture(page); await page.goto(`/dashboard/attendance/${id(10)}`); await page.getByText('Тема и история на заниманието',{exact:true}).click();await page.getByLabel('Тема на заниманието (по избор)').fill('Нова тема');
  await expect.poll(()=>f.writes.length).toBe(1); expect(JSON.parse(f.writes[0].body)).toEqual({action:'topic',topic:'Нова тема'});
  await page.getByRole('group',{name:'Николай Савов'}).getByRole('button',{name:'Присъства',exact:true}).click(); await expect(page.getByText('✓ Присъства · дошло по време на пауза',{exact:true})).toBeVisible();
  await expect.poll(()=>f.writes.length).toBe(2); expect(JSON.parse(f.writes.at(-1)!.body).marks[0].enrollment_id).toBe(id(23));
@@ -48,7 +48,7 @@ test('pending marks warn on sidebar navigation and browser Back',async({page})=>
  await page.evaluate(()=>window.history.back());await expect.poll(()=>prompts).toBe(2);await expect(page).toHaveURL(new RegExp(`/attendance/${id(10)}`));await expect(page.getByRole('group',{name:'Ана Иванова'}).getByRole('button',{name:'✓ Присъства',exact:true})).toHaveAttribute('aria-pressed','true');expect(f.writes.length).toBeGreaterThan(0);allowExit=true;await page.getByRole('link',{name:'Моят график',exact:true}).click();await expect(page).toHaveURL(/dashboard\/schedule/);expect(prompts).toBe(3);
 });
 test('a slow background refresh does not erase a topic draft',async({page})=>{
- const f=await fixture(page);await page.clock.install({time:new Date('2026-11-02T15:40:00Z')});await page.goto(`/dashboard/attendance/${id(10)}`);const topic=page.getByLabel('Тема на заниманието (по избор)');await expect(topic).toBeVisible();
+ const f=await fixture(page);await page.clock.install({time:new Date('2026-11-02T15:40:00Z')});await page.goto(`/dashboard/attendance/${id(10)}`);await page.getByText('Тема и история на заниманието',{exact:true}).click();const topic=page.getByLabel('Тема на заниманието (по избор)');await expect(topic).toBeVisible();
  let release:()=>void=()=>{};let arrived=false;const wait=new Promise<void>(r=>release=r);const stale=structuredClone(f.current);
  await page.route(`**/attendance/sessions/${id(10)}`,async route=>{arrived=true;await wait;await route.fulfill({json:stale});});
  await page.clock.fastForward(30_000);await expect.poll(()=>arrived).toBe(true);await topic.fill('Нова тема, която още пиша');release();await page.waitForTimeout(100);await expect(topic).toHaveValue('Нова тема, която още пиша');await page.clock.fastForward(900);await expect.poll(()=>f.writes.length).toBe(1);expect(JSON.parse(f.writes[0].body)).toEqual({action:'topic',topic:'Нова тема, която още пиша'});

@@ -1,4 +1,4 @@
 import {Suspense} from 'react';
-import {AttendanceMonthView} from '@/features/attendance/month-view';
+import {AttendanceWorkspace} from '@/features/attendance/workspace';
 export const metadata={title:'Присъствия | Progressive Activities'};
-export default function Page(){return <Suspense><AttendanceMonthView/></Suspense>;}
+export default function Page(){return <Suspense><AttendanceWorkspace/></Suspense>;}

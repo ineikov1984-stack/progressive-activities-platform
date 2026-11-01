@@ -35,3 +35,11 @@ export function historyLines(history: History[], children: AttendanceChild[]): {
 
 /** Clearing a mark after the deadline is forbidden by the API. */
 export const undoAllowed = (applied: Applied[], late: boolean): boolean => !late || applied.every((change) => change.from !== null);
+
+/** Explicit month links keep their view; daily work is the default only for people who can mark. */
+export function attendanceView(query:string,daily:boolean): 'pending' | 'month' {
+ const params=new URLSearchParams(query);
+ if(!daily)return 'month';
+ if(params.get('view')==='pending')return 'pending';
+ return params.get('view')==='month'||params.has('group')||params.has('month')?'month':'pending';
+}

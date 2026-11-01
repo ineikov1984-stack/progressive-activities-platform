@@ -21,7 +21,7 @@ export function TodaySection({ organizationId, groups }: { organizationId: strin
   return <section aria-labelledby="attendance-today"><h2 id="attendance-today">Днес</h2><p className={styles.muted}>{format(data.now, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</p>
     {data.pending.map((s) => <article className={styles.pending} key={s.id}><strong>Чака вас · Неотбелязано от вчера</strong><h3>{s.activity} · {s.group}{s.age_label ? ` · ${s.age_label}` : ''}</h3><p>{when(s.starts_at, s.ends_at)}</p><Link className={styles.button} href={`/dashboard/attendance/${s.id}?from=today`}>Отбележи присъствията</Link><p className={styles.muted}>Можете да отбелязвате и поправяте до края на следващия ден. След това — само собственикът или администраторът, с причина.</p></article>)}
     <h3>Моите занимания днес</h3><div className={styles.cards}>{data.sessions.map((s) => <TodayCard key={s.id} session={s} now={Date.parse(data.now)} />)}</div>
-    <Link className={styles.link} href="/dashboard/schedule">Моят график за седмицата →</Link>{hasMonth(groups) ? <Link className={styles.link} href="/dashboard/attendance">Присъствия за месеца →</Link> : null}
+    <Link className={styles.link} href="/dashboard/schedule">Моят график за седмицата →</Link>{hasMonth(groups) ? <Link className={styles.link} href="/dashboard/attendance?view=month">Присъствия за месеца →</Link> : null}
   </section>;
 }
 function TodayCard({ session: s, now }: { session: TodaySession; now: number }) {
