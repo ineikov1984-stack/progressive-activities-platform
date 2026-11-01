@@ -28,7 +28,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Присъствия — PR 5: „Днес“, „Чакат отбелязване“ и график | Codex | `codex/attendance-today` | AttendanceToday, AttendanceAccess, AccessScope, ScheduleController/Presenter, routes/api.php и тестове | По attendance.md 5.4, 5.5, 5.7; първо тестове, после код, независимо ревю и CI |
+| Присъствия — PR 5: „Днес“, „Чакат отбелязване“ и график (#131) | Codex | `codex/attendance-today` | AttendanceToday, AttendanceAccess, AccessScope/TeachingScope, ScheduleController/Presenter, routes/api.php и тестове | Реализирано по attendance.md 5.4, 5.5, 5.7; 92 засегнати теста / 786 проверки, PHPStan, Pint и docs:check зелени; постоянно заявки при 3/30 занимания; независимо ревю: 0 blocker / should-fix. Следва CI; без миграция или нов екран |
 
 ## Опашка (по приоритет)
 
