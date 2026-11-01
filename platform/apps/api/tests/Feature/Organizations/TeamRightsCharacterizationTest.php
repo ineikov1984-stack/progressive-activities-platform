@@ -113,6 +113,9 @@ class TeamRightsCharacterizationTest extends TestCase
         $mismatches = [];
         foreach ($this->routes($f) as $key => [$method, $uri, $body, $allowed, $status]) {
             $expected = in_array($role, $allowed, true) ? $status : 403;
+            if ($key === 'GET api/v1/attendance/sessions/{session}' && $role === 'platform_admin') {
+                $expected = 404;
+            }
             $actual = $this->signInTo($actor, $f['organization'])->json($method, $uri, $body)->status();
             if ($actual !== $expected) {
                 $mismatches[] = "{$key}: expected {$expected}, got {$actual}";
@@ -299,6 +302,7 @@ class TeamRightsCharacterizationTest extends TestCase
 
             // New with "График" (docs/product/schedule.md, т. 2, 6): every role sees the schedule of its scope — the teacher
             // the group they lead, which holds this session.
+            'GET api/v1/attendance/sessions/{session}' => ['GET', "/api/v1/attendance/sessions/{$f['session']->id}", [], array_values(array_diff(self::ALL, ['platform_admin'])), 200],
             'GET api/v1/schedule' => ['GET', '/api/v1/schedule?from=2026-11-02&to=2026-11-29', [], self::ALL, 200],
             'GET api/v1/schedule/sessions/{session}' => ['GET', "/api/v1/schedule/sessions/{$f['session']->id}", [], self::ALL, 200],
             // New with the changes of the schedule (docs/product/schedule-changes.md, т. 7.1): the right first, then the form.

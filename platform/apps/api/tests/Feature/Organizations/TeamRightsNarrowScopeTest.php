@@ -99,6 +99,9 @@ class TeamRightsNarrowScopeTest extends TestCase
         $this->assertSame([], $unlisted, 'Add the new routes to the narrow scope test.');
         $this->assertSame([], $answers, 'A narrow scope answers only for its group.');
 
+        $outsideSession = $this->inTenant($f['organization'], fn () => $f['thursday']->sessions()->firstOrFail()->id);
+        $this->signInTo($viewer, $f['organization'])->getJson('/api/v1/attendance/sessions/'.$outsideSession)->assertNotFound();
+
         // The lists hold only the group; the team, only the person themselves (nobody teaches "Вторник").
         $this->signInTo($viewer, $f['organization']);
         $this->assertSame([$f['tuesday']->id], array_column($this->getJson('/api/v1/enrollment/groups')->assertOk()->json('groups'), 'id'));
@@ -138,7 +141,7 @@ class TeamRightsNarrowScopeTest extends TestCase
 
     private function covered(string $method, string $uri): bool
     {
-        return str_starts_with($uri, 'api/v1/enrollment/')
+        return str_starts_with($uri, 'api/v1/attendance/') || str_starts_with($uri, 'api/v1/enrollment/')
             || $uri === 'api/v1/team' || str_starts_with($uri, 'api/v1/team/')
             || (str_starts_with($uri, 'api/v1/catalog/') && $method !== 'GET')
             || $uri === 'api/v1/enrollments/{enrollment}/visit-outcome'
@@ -163,6 +166,7 @@ class TeamRightsNarrowScopeTest extends TestCase
 
         return [
             'POST api/v1/enrollments/{enrollment}/visit-outcome' => ["/api/v1/enrollments/{$f['visit']->id}/visit-outcome", ['outcome' => 'attended'], 422],
+            'GET api/v1/attendance/sessions/{session}' => ["/api/v1/attendance/sessions/{$f['session']->id}", [], 200],
             'GET api/v1/team' => ['/api/v1/team', [], 200],
             // "Петър" teaches no group of the scope.
             'GET api/v1/team/members/{member}' => [$member, [], 403],

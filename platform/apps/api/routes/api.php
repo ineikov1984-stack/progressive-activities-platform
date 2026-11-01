@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\ActivityController;
 use App\Http\Controllers\Api\V1\ActivityGroupController;
 use App\Http\Controllers\Api\V1\ActivityPublicationController;
+use App\Http\Controllers\Api\V1\AttendanceController;
 use App\Http\Controllers\Api\V1\AuditEventController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CatalogMediaController;
@@ -123,6 +124,8 @@ Route::prefix('v1')->group(function (): void {
                     Route::delete('/enrollments/{enrollment}/skipped-sessions/{session}', [StaffEnrollmentChangeController::class, 'restoreSession'])->whereUuid(['enrollment', 'session']);
                 });
             });
+            Route::get('/attendance/sessions/{session}', [AttendanceController::class, 'show'])
+                ->whereUuid('session')->middleware(['tenant', 'organization.access:operational.read', 'throttle:120,1']);
             Route::prefix('schedule')->middleware('tenant')->group(function (): void {
                 // "График" (docs/product/schedule.md, т. 6): the sessions of the person's scope and the panel of one; read only, no audit.
                 Route::middleware(['organization.access:operational.read', 'throttle:120,1'])->group(function (): void {

@@ -78,9 +78,9 @@ class VisitOutcomeTest extends TestCase
         [$org, , $group, $session, $offer, $child] = $this->visitFixture();
         $staff = User::factory()->create();
         OrganizationMembership::create(['organization_id' => $org->id, 'user_id' => $staff->id, 'role' => 'coordinator', 'status' => 'active']);
-        $this->travelTo('2026-11-03T15:00:00Z');
+        $this->travelTo('2026-11-03T13:00:00Z');
         $enrollment = $this->visitEnrollment($child, $group, $session, 'trial', $offer);
-        app(RecordVisitOutcome::class)->handle($staff, $enrollment, 'no_show', 'Absent');
+        app(RecordVisitOutcome::class)->handle($staff, $enrollment, 'late_cancelled', 'Отказ преди началото');
         $this->assertSame('ended', $enrollment->refresh()->status->value);
         $next = $group->sessions()->create(['starts_at' => '2026-11-10T14:00:00Z', 'ends_at' => '2026-11-10T15:00:00Z', 'status' => 'scheduled']);
         $offer->sessions()->attach($next->id);
@@ -108,7 +108,7 @@ class VisitOutcomeTest extends TestCase
         $this->assertSame('submitted', $foreign->status->value);
     }
 
-    public function test_parent_cannot_cancel_after_start_and_staff_no_show_still_counts(): void
+    public function test_neither_parent_nor_staff_can_cancel_after_start_and_trial_is_still_used(): void
     {
         [$org, , $group, $session, $offer, $child] = $this->visitFixture();
         $enrollment = $this->visitEnrollment($child, $group, $session, 'trial', $offer);
@@ -122,7 +122,8 @@ class VisitOutcomeTest extends TestCase
         app(TenantContext::class)->select($org);
         $this->assertSame('active', $enrollment->refresh()->status->value);
         $this->assertSame(0, $enrollment->transitions()->count());
-        app(RecordVisitOutcome::class)->handle($staff, $enrollment, 'no_show', 'Absent');
+        $this->actingAs($staff)->withSession(['active_organization_id' => $org->id])->postJson('/api/v1/enrollments/'.$enrollment->id.'/visit-outcome', ['outcome' => 'late_cancelled'])->assertUnprocessable()->assertJsonValidationErrors('outcome');
+        app(TenantContext::class)->select($org);
         $next = $group->sessions()->create(['starts_at' => '2026-11-10T14:00:00Z', 'ends_at' => '2026-11-10T15:00:00Z', 'status' => 'scheduled']);
         $offer->sessions()->attach($next->id);
         $this->actingAs($child->owner)->withHeader('Idempotency-Key', 'after-no-show')->postJson('/api/v1/parent/enrollment-applications', [
@@ -162,7 +163,7 @@ class VisitOutcomeTest extends TestCase
         DB::table('enrollment_transitions')->where('id', $transition->id)->update(['public_reason' => 'Changed reason']);
     }
 
-    public function test_staff_records_attendance_once_and_foreign_tenant_route_cannot_see_it(): void
+    public function test_staff_attendance_is_rejected_and_foreign_tenant_route_cannot_see_it(): void
     {
         [$org, , $group, $session, $offer, $child] = $this->visitFixture();
         $enrollment = $this->visitEnrollment($child, $group, $session, 'trial', $offer);
@@ -171,13 +172,27 @@ class VisitOutcomeTest extends TestCase
         $this->actingAs($staff)->withSession(['active_organization_id' => $org->id])
             ->postJson('/api/v1/enrollments/'.$enrollment->id.'/visit-outcome', ['outcome' => 'attended'])->assertUnprocessable();
         $this->travelTo('2026-11-03T15:00:00Z');
-        $this->postJson('/api/v1/enrollments/'.$enrollment->id.'/visit-outcome', ['outcome' => 'attended'])->assertOk()->assertJsonPath('outcome', 'attended');
+        $this->postJson('/api/v1/enrollments/'.$enrollment->id.'/visit-outcome', ['outcome' => 'attended'])->assertUnprocessable()->assertJsonValidationErrors('outcome');
         $this->postJson('/api/v1/enrollments/'.$enrollment->id.'/visit-outcome', ['outcome' => 'no_show'])->assertUnprocessable();
-        $this->assertSame('ended', $enrollment->refresh()->status->value);
+        $this->assertSame('active', $enrollment->refresh()->status->value);
         [$foreignOrg] = $this->visitFixture();
         OrganizationMembership::create(['organization_id' => $foreignOrg->id, 'user_id' => $staff->id, 'role' => 'coordinator', 'status' => 'active']);
         $this->withSession(['active_organization_id' => $foreignOrg->id])
             ->postJson('/api/v1/enrollments/'.$enrollment->id.'/visit-outcome', ['outcome' => 'attended'])->assertNotFound();
+    }
+
+    public function test_staff_cancellation_is_allowed_before_start_but_not_at_or_after_start_even_on_repeat(): void
+    {
+        [$org, , $group, $session, $offer, $child] = $this->visitFixture();
+        $staff = User::factory()->create();
+        OrganizationMembership::create(['organization_id' => $org->id, 'user_id' => $staff->id, 'role' => 'coordinator', 'status' => 'active']);
+        $enrollment = $this->visitEnrollment($child, $group, $session, 'trial', $offer);
+        $this->travelTo('2026-11-03T13:59:59Z');
+        $this->actingAs($staff)->withSession(['active_organization_id' => $org->id])->postJson('/api/v1/enrollments/'.$enrollment->id.'/visit-outcome', ['outcome' => 'late_cancelled'])->assertOk();
+        foreach (['2026-11-03T14:00:00Z', '2026-11-03T14:00:01Z'] as $time) {
+            $this->travelTo($time);
+            $this->postJson('/api/v1/enrollments/'.$enrollment->id.'/visit-outcome', ['outcome' => 'late_cancelled'])->assertUnprocessable()->assertJsonValidationErrors('outcome');
+        }
     }
 
     public function test_outcome_event_payload_cannot_be_rewritten_but_delivery_can_be_recorded(): void
