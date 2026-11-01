@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Domain\Attendance\Actions\RecordAttendance;
+use App\Domain\Attendance\Actions\RecordAttendanceSession;
 use App\Domain\Attendance\Services\AttendanceAccess;
 use App\Domain\Attendance\Services\AttendanceSheet;
 use App\Domain\Catalog\Models\Session;
@@ -33,12 +34,14 @@ final class AttendanceController extends Controller
             $scope->allowsEverywhere($user, 'schedule.manage')));
     }
 
-    public function store(Request $request, string $session, RecordAttendance $action, AttendanceAccess $access, AttendanceSheet $sheet, AccessScope $scope, ScheduleReader $reader): JsonResponse
+    public function store(Request $request, string $session, RecordAttendance $action, RecordAttendanceSession $sessionAction, AttendanceAccess $access, AttendanceSheet $sheet, AccessScope $scope, ScheduleReader $reader): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
         $record = Session::query()->findOrFail(strtolower($session));
-        $result = $action->handle($user, $record, $request->all(), $request->header('Idempotency-Key', ''));
+        $result = in_array($request->input('action'), ['topic', 'not_held', 'held'], true)
+            ? $sessionAction->handle($user, $record, $request->all())
+            : $action->handle($user, $record, $request->all(), $request->header('Idempotency-Key', ''));
         if ($result['retry'] ?? false) {
             return response()->json(['message' => $result['message'], 'retry' => true], 409);
         }
