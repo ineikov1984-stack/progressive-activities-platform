@@ -31,9 +31,10 @@ final class SchedulePresenter
      * @param  array<string, int>  $taken
      * @param  array<string, int>  $waiting
      * @param  list<string>|null  $childrenGroups  where the children may be seen; null — every group
+     * @param  array<string, array<string, mixed>>  $attendance
      * @return array<string, mixed>
      */
-    public static function board(array $sessions, array $teachers, array $groups, array $dictionary, array $taken, array $waiting, ?array $childrenGroups, bool $manage): array
+    public static function board(array $sessions, array $teachers, array $groups, array $dictionary, array $taken, array $waiting, ?array $childrenGroups, bool $manage, array $attendance = []): array
     {
         $abilities = [];
         foreach ($dictionary['groups'] as $group) {
@@ -41,9 +42,9 @@ final class SchedulePresenter
         }
 
         return [
-            'sessions' => array_map(fn (Session $session): array => self::session(
+            'sessions' => array_map(fn (Session $session): array => [...self::session(
                 $session, $teachers[(string) $session->id] ?? [], $groups[(string) $session->group_id] ?? null, $taken, $waiting,
-            ), $sessions),
+            ), ...($attendance[(string) $session->id] ?? [])], $sessions),
             ...$dictionary,
             // An object by group, also when there is none.
             'abilities' => $abilities === [] ? new stdClass : $abilities,
@@ -63,9 +64,10 @@ final class SchedulePresenter
      * @param  list<array{enrollment_id: string, child_id?: string, name: string, class: string|null, state: string, scope: string}>|null  $children  null — not to be seen
      * @param  bool  $reasons  "schedule.manage" for the whole organization: why and who
      * @param  bool  $manage  and a person of the team: the actions
+     * @param  array<string, array<string, mixed>>  $attendance
      * @return array<string, mixed>
      */
-    public static function panel(array $panel, array $taken, array $waiting, ?array $children, bool $reasons, bool $manage): array
+    public static function panel(array $panel, array $taken, array $waiting, ?array $children, bool $reasons, bool $manage, array $attendance = [], ?string $attendanceAbility = null): array
     {
         $session = $panel['session'];
         $group = $panel['group'];
@@ -78,6 +80,7 @@ final class SchedulePresenter
         return [
             'session' => [
                 ...self::session($session, $panel['teachers'], $group, $taken, $waiting),
+                ...($attendance[(string) $session->id] ?? []),
                 ...($reasons ? ['change_reason' => $session->change_reason] : []),
                 ...($children === null ? [] : ['children' => $children]),
             ],
@@ -90,7 +93,7 @@ final class SchedulePresenter
                 ...($reasons ? ['by' => $last['by'], 'reason' => $last['reason']] : []),
             ],
             'actions' => $actions,
-            'abilities' => ['children' => $children !== null, 'manage' => $manage],
+            'abilities' => ['children' => $children !== null, 'manage' => $manage, 'attendance' => $attendanceAbility],
         ];
     }
 

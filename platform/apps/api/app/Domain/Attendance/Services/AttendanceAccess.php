@@ -10,6 +10,7 @@ use App\Domain\Catalog\Services\TeachingScope;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 
 /** Rights, the teacher's calendar deadline and the screen's opening are separate (attendance.md 4.1–4.2). */
 final readonly class AttendanceAccess
@@ -91,6 +92,43 @@ final readonly class AttendanceAccess
             'not_held' => $office && ! $notHeld,
             'held' => $office && $notHeld,
         ];
+    }
+
+    /** Batch equivalent of view/mark rights; no session-count-dependent queries.
+     * @param  Collection<int, Session>  $sessions
+     * @param  array<string, AttendanceSession>  $notHeld
+     * @return array<string, array{view: bool, can_mark: bool, mark: bool, late: bool, opens_at: string, deadline: string}>
+     */
+    public function forSessions(User $user, Collection $sessions, array $notHeld): array
+    {
+        $team = $this->context->hasOrganization() && $this->scope->access($user)->role?->isTeam() === true;
+        $own = $team ? $this->teaching->ownGroupsNow($user) : [];
+        $taught = $team ? $this->teaching->sessionsTaught($user, $sessions) : [];
+        $mark = $team ? $this->scope->groupsInScope($user, 'attendance.mark') : [];
+        $month = $team ? $this->scope->groupsInScope($user, 'attendance.view_month') : [];
+        $late = $team && $this->scope->allowsEverywhere($user, 'attendance.correct_late');
+        // Eagerly loading once is essential: eligibility must not load one group for every session.
+        (new \Illuminate\Database\Eloquent\Collection($sessions->all()))->loadMissing('group');
+        $result = [];
+        foreach ($sessions as $session) {
+            $id = (string) $session->id;
+            $group = (string) $session->group_id;
+            $eligible = $team && (string) $session->organization_id === $this->context->organizationId()
+                && $session->group !== null && $session->group->status !== 'draft';
+            $teaches = in_array($id, $taught, true);
+            $marks = $mark === null || in_array($group, $mark, true);
+            $view = $eligible && ($late || $marks || $month === null || in_array($group, $month, true)
+                || in_array($group, $own, true) || ($teaches && TeachingScope::standsInNow($session->starts_at)));
+            $can = $eligible && ($teaches || $marks || $late) && ($this->withinDeadline($session) || $late);
+            $result[$id] = [
+                'view' => $view, 'can_mark' => $can,
+                'mark' => $view && $can && SessionCutoff::passed($session) && $session->status === 'scheduled' && ! isset($notHeld[$id]),
+                'late' => ! $this->withinDeadline($session),
+                'opens_at' => $this->opensAt($session)->toIso8601String(), 'deadline' => $this->deadline($session)->toIso8601String(),
+            ];
+        }
+
+        return $result;
     }
 
     private function eligible(User $user, Session $session): bool

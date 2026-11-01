@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domain\Attendance\Services\AttendanceAccess;
+use App\Domain\Attendance\Services\AttendanceSheet;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Catalog\Services\AccessScope;
 use App\Domain\Catalog\Services\ScheduleReader;
@@ -35,6 +37,8 @@ final class ScheduleController extends Controller
         private readonly ScheduleReader $reader,
         private readonly EnrollmentCapacity $capacity,
         private readonly SessionRoster $roster,
+        private readonly AttendanceAccess $attendanceAccess,
+        private readonly AttendanceSheet $attendanceSheet,
     ) {}
 
     /**
@@ -84,6 +88,7 @@ final class ScheduleController extends Controller
             // Where the person only stands in, the panel decides by the session (`scheduleChildrenAt`).
             $this->scope->scheduleChildren($user),
             $this->manages($user),
+            $this->attendance($user, new Collection($sessions)),
         ));
     }
 
@@ -106,6 +111,15 @@ final class ScheduleController extends Controller
             ? $this->roster->children($record, $cards === null || in_array($groupId, $cards, true))
             : null;
 
+        $attendance = $this->attendance($user, new Collection([$record]));
+        $states = $this->attendanceSheet->notHeld(new Collection([$record]));
+        $rights = $this->attendanceAccess->forSessions($user, new Collection([$record]), $states)[(string) $record->id];
+        $attendanceAbility = CarbonImmutable::now()->gte($this->attendanceAccess->opensAt($record)) && $rights['view']
+            ? ($rights['mark'] ? 'mark' : 'view') : null;
+        if ($this->scope->allowsEverywhere($user, 'schedule.manage') && isset($states[(string) $record->id])) {
+            $attendance[(string) $record->id]['not_held_detail'] = $this->attendanceSheet->notHeldDetails($states)[(string) $record->id];
+        }
+
         return response()->json(SchedulePresenter::panel(
             $panel,
             $this->capacity->takenForSessions(new Collection([$record])),
@@ -113,7 +127,29 @@ final class ScheduleController extends Controller
             $children,
             $this->scope->allowsEverywhere($user, 'schedule.manage'),
             $this->manages($user),
+            $attendance,
+            $attendanceAbility,
         ));
+    }
+
+    /** @param Collection<int, Session> $sessions
+     * @return array<string, array<string, mixed>>
+     */
+    private function attendance(User $user, Collection $sessions): array
+    {
+        $notHeld = $this->attendanceSheet->notHeld($sessions);
+        $rights = $this->attendanceAccess->forSessions($user, $sessions, $notHeld);
+        $started = $sessions->filter(fn (Session $session): bool => $session->starts_at->lte(CarbonImmutable::now())
+            && $session->status === 'scheduled' && ! isset($notHeld[(string) $session->id]) && $rights[(string) $session->id]['view']);
+        $counts = $this->attendanceSheet->countsFor($started);
+        $result = [];
+        foreach ($sessions as $session) {
+            $id = (string) $session->id;
+            $result[$id] = ['not_held' => isset($notHeld[$id]), 'attendance' => isset($counts[$id])
+                ? array_intersect_key($counts[$id], array_flip(['present', 'absent', 'unmarked'])) : null];
+        }
+
+        return $result;
     }
 
     /**
