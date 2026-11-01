@@ -38,7 +38,7 @@
 @media (min-width: 768px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .child { padding: var(--space-4) var(--space-6); } }
 .monthFilters { display: flex; gap: var(--space-4); flex-wrap: wrap; }
 .field select { min-height: var(--control-height); max-width: 100%; color: var(--ink); background: var(--surface); border: 1px solid var(--border-control); border-radius: var(--radius-sm); padding: var(--space-2); }
-.tableScroll { max-width: 100%; overflow: auto; }
+.tableScroll { position: relative; max-width: 100%; overflow: auto; }
 .table { border-collapse: collapse; font-size: .85rem; width: 100%; }
 .table th, .table td { border-bottom: 1px solid var(--border); padding: var(--space-3); white-space: nowrap; text-align: center; }
 .table th:first-child { position: sticky; left: 0; background: var(--surface); text-align: left; z-index: 1; }
@@ -47,3 +47,20 @@
 .full { width: 100%; }
 .readRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); }
 .readStatus { margin: 0; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-size: .9rem; text-align: right; max-width: 11rem; }
+
+.pending { margin-bottom: var(--space-4); }
+.pendingRow { display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); border-bottom:1px solid var(--border); padding:var(--space-3) 0; flex-wrap:wrap; }
+.pendingRow p { flex:1; min-width: 12rem; }
+.cellButton, .nameButton { border:0; border-radius:var(--radius-sm); background:transparent; color:var(--ink); min-width:var(--control-height); min-height:var(--control-height); padding:var(--space-2); cursor:pointer; font:inherit; font-weight:600; }
+.cellButton:hover, .cellButton:focus-visible, .nameButton:hover { background:var(--surface-sunken); }
+.nameButton { text-align:left; white-space:normal; max-width:10rem; }
+.table td { padding:var(--space-1); }
+.table th:first-child { max-width:10rem; white-space:normal; }
+.drawer, .actionDialog { box-sizing:border-box; border:1px solid var(--border); color:var(--ink); background:var(--surface); border-radius:var(--radius-lg); padding:0; box-shadow:var(--shadow-raised); }
+.drawer::backdrop, .actionDialog::backdrop { background:color-mix(in srgb, var(--nav) 48%, transparent); }
+.drawer { position:fixed; inset:auto 0 0; margin:0; width:100%; max-width:none; max-height:90dvh; }
+.drawerInner { padding:var(--space-4); overflow-wrap:anywhere; }
+.drawer h2, .actionDialog h2 { font-size:1.2rem; margin:var(--space-2) 0; flex:1; }
+.drawer .full { margin-top:var(--space-4); }
+.actionDialog { max-width: min(32rem,calc(100vw - var(--space-8))); max-height:90dvh; }
+@media(min-width:900px) { .drawer { inset:0 0 0 auto; width:25rem; height:100dvh; max-height:none; border-radius:var(--radius-lg) 0 0 var(--radius-lg); } }

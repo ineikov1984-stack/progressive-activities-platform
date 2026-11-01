@@ -13,7 +13,7 @@ describe('dashboard navigation', () => {
 
     expect(groups.map((group) => group.label)).toEqual(['Управление', 'Организация']);
     expect(groups.map((group) => group.items.map((item) => item.label))).toEqual([
-      ['Начало', 'График', 'Дейности', 'Записвания', 'Отворени врати'],
+      ['Начало', 'График', 'Дейности', 'Записвания', 'Присъствия', 'Отворени врати'],
       ['Екип', 'Такси, отсъствия и отказ'],
     ]);
     expect(groups.flatMap((group) => group.items).every((item) => item.isAvailable && item.href)).toBe(true);
@@ -39,9 +39,9 @@ describe('dashboard navigation', () => {
     // "Създава и променя дейности" brings the catalog and the payment terms its editor chooses from.
     expect(labels([...teacher, 'catalog.manage', 'catalog.view', 'terms.view'], true)).toEqual(['Начало', 'Моят график', 'Дейности', 'Отворени врати', 'Такси, отсъствия и отказ']);
 
-    expect(labels(['view', 'catalog.view', 'enrollment.view', 'team.view', 'attendance.view_month'])).toEqual(['Начало', 'График', 'Дейности', 'Записвания', 'Отворени врати', 'Екип']);
+    expect(labels(['view', 'catalog.view', 'enrollment.view', 'team.view', 'attendance.view_month'])).toEqual(['Начало', 'График', 'Дейности', 'Записвания', 'Присъствия', 'Отворени врати', 'Екип']);
     expect(labels(['finance', 'view', 'enrollment.view', 'team.view', 'attendance.view_month', 'finance.view', 'terms.view']))
-      .toEqual(['Начало', 'График', 'Записвания', 'Екип', 'Такси, отсъствия и отказ']);
+      .toEqual(['Начало', 'График', 'Записвания', 'Присъствия', 'Екип', 'Такси, отсъствия и отказ']);
     expect(labels(['view', 'catalog.view', 'catalog.manage', 'enrollment.view', 'team.view', 'terms.view']))
       .toEqual(['Начало', 'График', 'Дейности', 'Записвания', 'Отворени врати', 'Екип', 'Такси, отсъствия и отказ']);
   });
@@ -82,6 +82,7 @@ describe('dashboard navigation', () => {
     expect(active('/dashboard/open-days')).toEqual(['Отворени врати']);
     expect(active('/dashboard/enrollments')).toEqual(['Записвания']);
     expect(active('/dashboard/settings/payment-terms')).toEqual(['Такси, отсъствия и отказ']);
+    expect(active('/dashboard/attendance/session')).toEqual(['Присъствия']);
     expect(active('/dashboard/team')).toEqual(['Екип']);
     expect(active('/dashboard/team/member-1')).toEqual(['Екип']);
     expect(active('/dashboard/schedule')).toEqual(['График']);

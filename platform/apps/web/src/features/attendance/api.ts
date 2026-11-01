@@ -5,7 +5,7 @@ export type History = { id: string; at: string; by: string | null; enrollment_id
 export type Sheet = { session: { id: string; starts_at: string; ends_at: string; status: string; extra: boolean; moved_from: string | null; topic: string | null; not_held: { at: string; by?: string | null; reason?: string | null } | null; group: { id: string; name: string; age_label: string | null }; activity: { id: string; title: string }; location: { id: string; name: string } | null }; abilities: { mark: boolean; reason_required: boolean; opens_at: string; deadline: string; reasons: boolean; not_held: boolean; held: boolean }; counts: Counts; last_marked_at: string | null; children: AttendanceChild[]; history: History[] };
 export type Applied = { enrollment_id: string; from: Mark; to: Mark; version: number };
 export type Answer = Sheet & { applied: Applied[] };
-export type Change = { action: 'mark'; marks: { enrollment_id: string; status: Mark; version: number }[]; reason?: string } | { action: 'all_present'; reason?: string } | { action: 'topic'; topic: string | null };
+export type Change = { action: 'mark'; marks: { enrollment_id: string; status: Mark; version: number }[]; reason?: string } | { action: 'all_present'; reason?: string } | { action: 'topic'; topic: string | null } | { action: 'not_held' | 'held'; reason: string };
 export type TodaySession = { id: string; starts_at: string; ends_at: string; status: string; state: string; activity: string; group: string; age_label: string | null; location: string | null; my_role: string; leads: string[]; replaces: string[]; counts: Counts; last_marked_at: string | null; can_mark: boolean; opens_at: string; deadline: string };
 export type Today = { now: string; sessions: TodaySession[]; pending: TodaySession[] };
 export type ChildAttendance = { month: string; present: number; absent: number; percent: number | null; sessions: { session_id: string; starts_at: string; state: string }[] };
@@ -26,5 +26,9 @@ export const loadToday = (org: string, signal?: AbortSignal) => request<Today>(o
 export const loadSheet = (org: string, session: string, signal?: AbortSignal) => request<Sheet>(org, `/sessions/${encodeURIComponent(session)}`, undefined, undefined, signal);
 export const saveAttendance = (org: string, session: string, body: Change, key: string, signal?: AbortSignal) => request<Answer>(org, `/sessions/${encodeURIComponent(session)}/changes`, body, key, signal);
 
-export type Month = { month: string; group: {id:string;label:string}; groups:{id:string;label:string}[]; sessions:{id:string;starts_at:string;topic:string|null;extra:boolean;present:number|null;expected:number|null}[]; rows:{child_id?:string;name:string;kind:string;cells:Record<string,{state:string;enrollment_id:string}>;present:number;absent:number;percent:number|null}[] };
+export type Month = { month: string; group: {id:string;label:string}; groups:{id:string;label:string}[]; abilities:{correct_late:boolean;children:boolean}; sessions:{id:string;starts_at:string;status:string;not_held:boolean;moved:boolean;past:boolean;topic:string|null;extra:boolean;present:number|null;expected:number|null}[]; rows:{child_id?:string;name:string;kind:string;cells:Record<string,{state:string;enrollment_id:string}>;present:number;absent:number;percent:number|null}[] };
 export const loadMonth = (org: string, query: string, signal?: AbortSignal) => request<Month>(org, `/month${query ? `?${query}` : ''}`, undefined, undefined, signal);
+
+export type Pending = {total:number;sessions:{id:string;starts_at:string;activity:string;group:string;teachers:string;unmarked:number;late:boolean}[]};
+export const loadPending = (org:string,signal?:AbortSignal) => request<Pending>(org, "/pending", undefined, undefined, signal);
+export const canSeePending = (abilities: string[] = []) => abilities.includes("attendance.mark") || abilities.includes("attendance.correct_late");

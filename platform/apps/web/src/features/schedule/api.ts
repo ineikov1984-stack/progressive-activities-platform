@@ -19,6 +19,8 @@ export type ScheduleSession = {
   status: 'scheduled' | 'cancelled' | string;
   /** Whether the session has moved from its original start. */
   moved: boolean;
+  not_held?: boolean;
+  attendance?: {present:number;absent:number;unmarked:number} | null;
   version?: number;
   moved_from?: string | null;
   extra?: boolean;
@@ -57,11 +59,11 @@ export type SessionChild = {
 };
 export type SessionPanel = {
   /** `change_reason` only for who changes the schedule; `children` only where they may be seen. */
-  session: ScheduleSession & { change_reason?: string | null; children?: SessionChild[] };
+  session: ScheduleSession & { change_reason?: string | null; children?: SessionChild[]; not_held_detail?: {at:string;by:string|null;reason:string|null}|null };
   group: { id: string; name: string; age_label: string | null };
   activity: { id: string; title: string };
   location: ScheduleLocation | null;
-  abilities: GroupAbilities;
+  abilities: GroupAbilities & {attendance?: 'mark' | 'view' | null};
   actions?: ('move' | 'cancel' | 'restore')[];
   last_change?: { action: string; at: string; by?: string; reason?: string | null } | null;
 };

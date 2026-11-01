@@ -26,7 +26,7 @@ const headings = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'нд'];
 
 function dayWords(item: MonthDay, today: string): string {
   const name = dayName(item.day);
-  return `${name.weekday}, ${name.date}${item.day === today ? ', днес' : ''}: ${sessionsCount(item.held, item.cancelled)}.`;
+  return `${name.weekday}, ${name.date}${item.day === today ? ', днес' : ''}: ${sessionsCount(item.held, item.cancelled)}${item.notHeld ? `, ${item.notHeld} ${item.notHeld===1?'не се проведе':'не се проведоха'}`:''}.`;
 }
 
 /**
@@ -34,12 +34,12 @@ function dayWords(item: MonthDay, today: string): string {
  * one starts with "Отменено ·". A thin bar under it shows how full.
  */
 function MonthLine({ session, names, preview }: { session: ScheduleSession; names: ScheduleNames; preview: PreviewHandlers }) {
-  const cancelled = session.status === 'cancelled';
+  const cancelled = session.status === 'cancelled' || !!session.not_held;
   const fill = fillOf(session);
   return (
     <span className={`${styles.monthLine} ${colorClass(names.activity(session.activity_id))} ${cancelled ? styles.monthCancelled : ''}`}
       onMouseEnter={(event) => preview.enter({ kind: 'session', session }, event.currentTarget)} onMouseLeave={preview.leave}>
-      {cancelled ? <span className={styles.monthCancelWord}>Отменено ·</span> : null}
+      {cancelled ? <span className={styles.monthCancelWord}>{session.not_held?'Не се проведе':'Отменено'} ·</span> : null}
       <span className={styles.monthText}>{monthLine(session, names)}</span>
       {cancelled ? null : <span className={fill.word ? styles.monthFillWord : styles.monthFill}>{fillText(session, 'block')}</span>}
       {cancelled ? null : <FillBar session={session} className={styles.monthBar} />}

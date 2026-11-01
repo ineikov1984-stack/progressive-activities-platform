@@ -6,6 +6,7 @@ import { useDashboardContext } from '../dashboard/dashboard-context';
 import { ChildCardDialog } from '../schedule/child-card';
 import { AttendanceError, loadSheet, saveAttendance, type Answer, type Applied, type AttendanceChild, type Change, type Mark, type Sheet } from './api';
 import { childLabel, clock, date, deadlineText, historyLines, initialView, markLabel, undoAllowed, when } from './presentation';
+import { AttendanceSessionAction } from './session-action';
 import { AttendanceQueue } from './queue';
 import styles from './attendance.module.css';
 type Intent = { id: string; action: Change['action']; marks?: { enrollment_id: string; status: Mark; version?: number }[]; topic?: string; reason?: string; undo?: boolean };
@@ -39,6 +40,7 @@ function SessionLoader({ organizationId, sessionId, withDetails }: { organizatio
 }
 function SheetEditor({ initial, organizationId, withDetails }: { initial: Sheet; organizationId: string; withDetails: boolean }) {
   const search = useSearchParams(); const from = search.get('from'); const back = from === 'schedule' ? '/dashboard/schedule' : from === 'month' ? '/dashboard/attendance' : '/dashboard';
+  const [sessionAction,setSessionAction]=useState<'held'|'not_held'>();const actionButton=useRef<HTMLButtonElement|null>(null);
   const [now, setNow] = useState(() => new Date());
   const [pendingRows, setPendingRows] = useState<string[]>([]); const epoch = useRef(0);
   const [sheet, setSheet] = useState(initial); const base = useRef(initial); const intents = useRef<Intent[]>([]);
@@ -53,8 +55,26 @@ function SheetEditor({ initial, organizationId, withDetails }: { initial: Sheet;
     const abort = new AbortController(); const q = new AttendanceQueue((body, key) => saveAttendance(organizationId, initial.session.id, body, key, abort.signal), () => setQueueState({ pending: q.pending, failed: q.failed, offline: q.retrying })); queue.current = q;
     const online = () => q.retry(); window.addEventListener('online', online);
     const unload = (event: BeforeUnloadEvent) => { if (q.pending || topicRef.current.trim() !== (base.current.session.topic ?? '')) { event.preventDefault(); event.returnValue = ''; } }; window.addEventListener('beforeunload', unload);
-    const refresh = setInterval(() => { setNow(new Date()); const generation = epoch.current; if (q.pending || topicRef.current.trim() !== (base.current.session.topic ?? '')) return; loadSheet(organizationId, initial.session.id, abort.signal).then((fresh) => { if (!abort.signal.aborted && !q.pending && generation === epoch.current) { base.current = fresh; setSheet(fresh); setTopic(fresh.session.topic ?? ''); topicRef.current = fresh.session.topic ?? ''; lastTopic.current = fresh.session.topic ?? ''; } }).catch(() => {}); }, 30000);
-    return () => { q.dispose(); abort.abort(); clearInterval(refresh); window.removeEventListener('online', online); window.removeEventListener('beforeunload', unload); };
+    const dirty = () => q.pending > 0 || topicRef.current.trim() !== (base.current.session.topic ?? '');
+    const confirmExit = () => !dirty() || window.confirm('Има незаписани промени. Искате ли да излезете?');
+    const navigate = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+      if (!(link instanceof HTMLAnchorElement) || link.target === '_blank' || link.hasAttribute('download') || link.href === location.href) return;
+      if (!confirmExit()) { event.preventDefault(); event.stopImmediatePropagation(); }
+    };
+    // A same-page history entry lets Back ask before Next unmounts this editor and its in-memory queue.
+    const currentUrl = location.href;
+    if (window.history.state?.attendanceGuard !== currentUrl) window.history.pushState({...window.history.state,attendanceGuard:currentUrl}, '', currentUrl);
+    let leavingHistory = false;
+    const back = () => {
+      if (leavingHistory || location.href !== currentUrl || window.history.state?.attendanceGuard === currentUrl) return;
+      if (confirmExit()) { leavingHistory = true; window.history.back(); }
+      else window.history.forward();
+    };
+    document.addEventListener('click', navigate, true); window.addEventListener('popstate', back, true);
+    const refresh = setInterval(() => { setNow(new Date()); const generation = epoch.current; if (q.pending || topicRef.current.trim() !== (base.current.session.topic ?? '')) return; loadSheet(organizationId, initial.session.id, abort.signal).then((fresh) => { if (!abort.signal.aborted && !q.pending && generation === epoch.current && topicRef.current.trim() === (base.current.session.topic ?? '')) { base.current = fresh; setSheet(fresh); setTopic(fresh.session.topic ?? ''); topicRef.current = fresh.session.topic ?? ''; lastTopic.current = fresh.session.topic ?? ''; } }).catch(() => {}); }, 30000);
+    return () => { q.dispose(); abort.abort(); clearInterval(refresh); window.removeEventListener('online', online); window.removeEventListener('beforeunload', unload); document.removeEventListener('click', navigate, true); window.removeEventListener('popstate', back, true); };
   }, [organizationId, initial.session.id]);
   useEffect(() => { if (!toast || pauseToast) return; const timer = setTimeout(() => setToast(undefined), 6000); return () => clearTimeout(timer); }, [toast, pauseToast]);
   useEffect(() => { const timer = setTimeout(() => { if (topic.trim() !== lastTopic.current.trim()) enqueueRef.current({ action: 'topic', topic }); }, 800); return () => clearTimeout(timer); }, [topic]);
@@ -81,7 +101,7 @@ function SheetEditor({ initial, organizationId, withDetails }: { initial: Sheet;
   }
   useEffect(() => { enqueueRef.current = enqueue; });
   function saveTopic() { if (topic.trim() !== lastTopic.current.trim()) enqueue({ action: 'topic', topic }); }
-  function leave(event: React.MouseEvent<HTMLAnchorElement>) { saveTopic(); if ((queue.current?.pending || topic.trim() !== (base.current.session.topic ?? '')) && !window.confirm('Има незаписани промени. Искате ли да излезете?')) event.preventDefault(); }
+  function leave() { saveTopic(); }
   const editing = mode === 'mark' && sheet.abilities.mark; const s = sheet.session;
   const hidden = s.status === 'cancelled' || !!s.not_held;
   const history = historyLines(sheet.history, sheet.children);
@@ -104,14 +124,16 @@ function SheetEditor({ initial, organizationId, withDetails }: { initial: Sheet;
     {editing && sheet.abilities.reason_required ? <label className={styles.field}>Причина (задължителна)<textarea ref={reasonField} value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} aria-invalid={notice === 'Напишете причина за поправката.'} /><span className={styles.muted}>Поправката след срока се записва с причина.</span></label> : null}
     {editing && sheet.counts.unmarked > 0 ? <><button className={`${styles.good} ${styles.full}`} onClick={() => enqueue({ action: 'all_present' })}>✓ Всички присъстват</button><p className={styles.muted}>Отбелязва неотбелязаните. Предупредените отсъствия и децата в пауза не се променят.</p></> : null}
     <div className={styles.counts}><span className={`${styles.badge} ${styles.present}`}>Присъстват {sheet.counts.present}</span><span className={`${styles.badge} ${styles.warning}`}>Отсъстват {sheet.counts.absent}</span><span className={styles.badge}>Неотбелязани {sheet.counts.unmarked}</span>{sheet.counts.present_paused ? <span className={styles.badge}>+{sheet.counts.present_paused} в пауза</span> : null}</div>
-    {editing ? <label className={styles.field}>Тема на заниманието (по избор)<input maxLength={200} value={topic} onChange={(e) => { setTopic(e.target.value); topicRef.current = e.target.value; }} onBlur={saveTopic} /></label> : null}
+    {editing ? <label className={styles.field}>Тема на заниманието (по избор)<input maxLength={200} value={topic} onChange={(e) => { epoch.current++;setTopic(e.target.value); topicRef.current = e.target.value; }} onBlur={saveTopic} /></label> : null}
     {!sheet.abilities.mark && now.getTime() < Date.parse(sheet.abilities.opens_at) ? <p className={styles.muted}>Отбелязването започва в {clock(sheet.abilities.opens_at)}.</p> : null}
     <div className={styles.kids}>{sheet.children.filter((c) => c.expected).map(childRow)}</div>
     {sheet.children.some((c) => !c.expected) ? <><h2>Не се очакват днес</h2><div className={styles.kids}>{sheet.children.filter((c) => !c.expected).map(childRow)}</div></> : null}
     {!editing && sheet.abilities.mark ? <button className={styles.button} onClick={() => setMode('mark')}>Поправи</button> : null}
-    <p className={styles.muted}>{editing ? 'Записва се при всяко докосване. ' : ''}{sheet.abilities.reason_required ? 'Поправката след срока се записва с причина.' : deadlineText(sheet.abilities.deadline)}</p>
+    <p className={styles.muted}>{editing ? 'Записва се при всяко докосване. ' : ''}{!sheet.abilities.mark ? now.getTime() >= Date.parse(sheet.abilities.deadline) ? 'Само преглед. Срокът на учителя изтече. Поправка може да направи собственикът или администраторът.' : 'Само преглед — отбелязването още не е започнало или нямате право за промяна.' : sheet.abilities.reason_required ? 'Поправката след срока се записва с причина.' : deadlineText(sheet.abilities.deadline)}</p>
     <h2>История на промените</h2>{history.length === 0 ? <p className={styles.muted}>Все още няма промени.</p> : null}<ul className={styles.history}>{history.map((line) => <li key={line.id}><strong>{line.text}</strong><p className={styles.muted}>{date(line.at)} · {clock(line.at)}</p></li>)}</ul>
     </>}
+    {sheet.abilities.not_held || sheet.abilities.held ? <button ref={actionButton} className={styles.button} disabled={queueState.pending>0} onClick={()=>{if(topic.trim()!==(base.current.session.topic??'')){saveTopic();setNotice('Изчакайте темата да се запише и опитайте пак.');return;}setSessionAction(sheet.abilities.held?'held':'not_held');}}>{sheet.abilities.held?'Проведе се':'Не се проведе'}</button> : null}
+    {sessionAction ? <AttendanceSessionAction organizationId={organizationId} sheet={sheet} action={sessionAction} onClose={()=>{setSessionAction(undefined);actionButton.current?.focus();}} onSaved={(fresh)=>{epoch.current++;base.current=fresh;setSheet(fresh);setSessionAction(undefined);setMode(initialView(fresh));setNotice('Записано.');setTopic(fresh.session.topic??'');topicRef.current=fresh.session.topic??'';lastTopic.current=fresh.session.topic??'';actionButton.current?.focus();}}/> : null}
     <Link className={styles.button} href={back} onClick={leave}>Готово</Link>
     {toast ? <div className={styles.toast} onMouseEnter={() => setHoverToast(true)} onMouseLeave={() => setHoverToast(false)} onFocus={() => setFocusToast(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setFocusToast(false); }}><span role="status" aria-live="polite">{toast.text}</span>{toast.applied.length > 0 ? <button className={styles.button} onClick={() => { enqueue({ action: 'mark', undo: true, marks: toast.applied.map((a) => ({ enrollment_id: a.enrollment_id, status: a.from, version: a.version })) }); setToast(undefined); }}>Отмени</button> : null}</div> : null}
     {child?.child_id ? <ChildCardDialog organizationId={organizationId} child={{ ...child, child_id: child.child_id }} session={{ id: s.id, group_id: s.group.id, starts_at: s.starts_at }} withDetails={withDetails} now={now} onClose={() => { setChild(undefined); eye.current?.focus(); }} /> : null}

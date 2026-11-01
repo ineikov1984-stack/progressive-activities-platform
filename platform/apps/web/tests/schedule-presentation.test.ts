@@ -689,3 +689,8 @@ describe('schedule — the card of a child', () => {
     expect(profileLink({ groups: [] }, context, true)).toBeNull();
   });
 });
+
+it('not-held overrides current and moved states and removes capacity from block descriptions',()=>{
+ const session=at('2026-11-18','17:30',60,{not_held:true,moved:true});const now=new Date('2026-11-18T17:40:00+02:00');expect(sessionMark(session,now)).toBe('not_held');expect(sessionMark({...session,status:'cancelled'},now)).toBe('cancelled');expect(monthLayout([session],'2026-11-18').weeks.flat().find(d=>d.day==='2026-11-18')).toMatchObject({held:0,notHeld:1,cancelled:0});
+ const names=scheduleNames({activities:[{id:A,title:'Шахмат',color:0}],groups:[{id:G,name:'Група 2',activity_id:A,age_label:null}],locations:[],instructors:[]});const words=blockLines(session,'week','rooms',names,now);expect(words.label).toContain('Не се проведе');expect(words.label).not.toContain('8 от 10');
+});

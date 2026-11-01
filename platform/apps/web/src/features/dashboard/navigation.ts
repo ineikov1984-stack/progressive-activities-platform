@@ -4,6 +4,7 @@ export type DashboardIconName =
   | 'home'
   | 'activities'
   | 'calendar'
+  | 'attendance'
   | 'enrollments'
   | 'open-days'
   | 'finance'
@@ -45,6 +46,7 @@ const navigationGroups: Array<Omit<DashboardNavGroup, 'items'> & { items: Naviga
       { id: 'activities', label: 'Дейности', icon: 'activities', href: '/dashboard/activities', isAvailable: true, requires: 'catalog.view' },
       { id: 'groups', label: 'Групи и графици', icon: 'calendar', isAvailable: false },
       { id: 'enrollments', label: 'Записвания', icon: 'enrollments', href: '/dashboard/enrollments', isAvailable: true, requires: 'enrollment.view' },
+      { id: 'attendance', label: 'Присъствия', icon: 'attendance', href: '/dashboard/attendance', isAvailable: true, requires: 'attendance.view_month' },
       { id: 'open-days', label: 'Отворени врати', icon: 'open-days', href: '/dashboard/open-days', isAvailable: true, requires: 'catalog.view' },
     ],
   },
