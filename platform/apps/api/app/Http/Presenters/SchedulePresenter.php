@@ -34,11 +34,11 @@ final class SchedulePresenter
      * @param  array<string, array<string, mixed>>  $attendance
      * @return array<string, mixed>
      */
-    public static function board(array $sessions, array $teachers, array $groups, array $dictionary, array $taken, array $waiting, ?array $childrenGroups, bool $manage, array $attendance = []): array
+    public static function board(array $sessions, array $teachers, array $groups, array $dictionary, array $taken, array $waiting, ?array $childrenGroups, bool $manage, array $attendance = [], bool $substitute = false): array
     {
         $abilities = [];
         foreach ($dictionary['groups'] as $group) {
-            $abilities[$group['id']] = ['children' => $childrenGroups === null || in_array($group['id'], $childrenGroups, true), 'manage' => $manage];
+            $abilities[$group['id']] = ['children' => $childrenGroups === null || in_array($group['id'], $childrenGroups, true), 'manage' => $manage, 'substitute' => $substitute];
         }
 
         return [
@@ -58,7 +58,7 @@ final class SchedulePresenter
      * the actions the person may take now — only for the team, and none on a session that has started or of an archived
      * group (the change would be refused, т. 4.1).
      *
-     * @param  array{session: Session, teachers: list<SessionTeacher>, group: ScheduleGroup, location: array{id: string, name: string}|null, last_change: LastChange|null}  $panel
+     * @param  array{session: Session, teachers: list<SessionTeacher>, group: ScheduleGroup, location: array{id: string, name: string}|null, last_change: LastChange|null, last_substitute: LastChange|null}  $panel
      * @param  array<string, int>  $taken
      * @param  array<string, int>  $waiting
      * @param  list<array{enrollment_id: string, child_id?: string, name: string, class: string|null, state: string, scope: string}>|null  $children  null — not to be seen
@@ -67,7 +67,7 @@ final class SchedulePresenter
      * @param  array<string, array<string, mixed>>  $attendance
      * @return array<string, mixed>
      */
-    public static function panel(array $panel, array $taken, array $waiting, ?array $children, bool $reasons, bool $manage, array $attendance = [], ?string $attendanceAbility = null): array
+    public static function panel(array $panel, array $taken, array $waiting, ?array $children, bool $reasons, bool $manage, array $attendance = [], ?string $attendanceAbility = null, bool $substitute = false, bool $requestSubstitute = false): array
     {
         $session = $panel['session'];
         $group = $panel['group'];
@@ -75,6 +75,14 @@ final class SchedulePresenter
         $actions = [];
         if ($manage && ! $group['archived'] && ! SessionCutoff::passed($session)) {
             $actions = $session->status === 'cancelled' ? ['restore'] : ['move', 'cancel'];
+        }
+
+        if (! $group['archived'] && $session->status === 'scheduled' && $session->starts_at->isFuture()) {
+            if ($substitute) {
+                $actions[] = 'substitute';
+            } elseif ($requestSubstitute) {
+                $actions[] = 'request_substitute';
+            }
         }
 
         return [
@@ -92,8 +100,9 @@ final class SchedulePresenter
                 'at' => $last['at'],
                 ...($reasons ? ['by' => $last['by'], 'reason' => $last['reason']] : []),
             ],
+            'last_substitute' => $reasons && isset($panel['last_substitute']) ? array_intersect_key($panel['last_substitute'], array_flip(['at', 'by'])) : null,
             'actions' => $actions,
-            'abilities' => ['children' => $children !== null, 'manage' => $manage, 'attendance' => $attendanceAbility],
+            'abilities' => ['children' => $children !== null, 'manage' => $manage, 'attendance' => $attendanceAbility, 'substitute' => $substitute],
         ];
     }
 

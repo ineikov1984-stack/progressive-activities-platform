@@ -24,18 +24,51 @@ final readonly class TeacherRecipients
      * now — its teachers are worked out again (т. 4.9). One letter per teacher, with each of their sessions.
      *
      * @param  list<PlannedSessionChange>  $planned
-     * @return array<string, list<array{session_id: string, effect: string}>> user => sessions
+     * @return array<string, list<array{session_id: string, effect: string, replaced_profile_id?: string, profile_id?: string}>> user => sessions
      */
     public function letters(array $planned): array
     {
         $profiles = [];
         foreach ($planned as $change) {
             array_push($profiles, ...$change->teachersBefore, ...$change->teachersAfter);
+            if ($change->replacedProfileId !== null) {
+                $profiles[] = $change->replacedProfileId;
+            }
         }
         $users = $this->users(array_values(array_unique($profiles)));
         $letters = [];
         foreach ($planned as $change) {
             $effect = $change->effect();
+            if ($effect === 'substituted' && $change->replacedProfileId !== null) {
+                $original = $change->replacedProfileId;
+                $added = $change->addedProfileId;
+                $removed = $change->removedProfileId;
+                $effects = [];
+                if ($added === $original) {
+                    $effects[$original] = 'session_back';
+                } elseif ($added !== null) {
+                    $effects[$added] = 'substitute_assigned';
+                    $effects[$original] = 'substitute_for_you';
+                } else {
+                    $effects[$original] = 'released';
+                    foreach ($change->teachersAfter as $profile) {
+                        $effects[$profile] = 'colleague_away';
+                    }
+                }
+                if ($removed !== null && $removed !== $original) {
+                    $effects[$removed] = 'substitute_removed';
+                }
+                $told = [];
+                foreach ($effects as $profile => $kind) {
+                    $userId = $users[$profile] ?? null;
+                    if ($userId !== null && ! isset($told[$userId])) {
+                        $told[$userId] = true;
+                        $letters[$userId][] = ['session_id' => $change->sessionId(), 'effect' => $kind, 'replaced_profile_id' => $original, 'profile_id' => $profile];
+                    }
+                }
+
+                continue;
+            }
             $teachers = match ($effect) {
                 'cancelled' => $change->teachersBefore,
                 'moved' => array_values(array_unique([...$change->teachersBefore, ...$change->teachersAfter])),

@@ -36,6 +36,10 @@ final readonly class ScheduleChangeRequest
         public array $locations = [],
         /** @var list<string> */
         public array $activities = [],
+        public ?string $replacesProfileId = null,
+        public ?string $substituteProfileId = null,
+        public ?string $requestId = null,
+        public ?int $requestVersion = null,
     ) {
         $this->confirmedKeys = array_fill_keys(array_map(
             fn (array $key): string => $key['type'].':'.$key['session_id'].':'.($key['other_session_id'] ?? ''), $confirmedWarnings), true);
@@ -96,6 +100,7 @@ final readonly class ScheduleChangeRequest
             'sessions' => $sessions,
             'date' => $this->date, 'from' => $this->from, 'to' => $this->to,
             'location_provided' => $this->locationProvided, 'location_id' => $this->locationId,
+            ...($this->action === 'substitute' ? ['replaces_profile_id' => $this->replacesProfileId, 'substitute_profile_id' => $this->substituteProfileId, 'request_id' => $this->requestId, 'request_version' => $this->requestVersion] : []),
             ...($this->action === 'add' ? ['group_id' => $this->groupId] : []),
             ...($this->action === 'holiday' ? ['criteria' => $criteria] : []),
         ]), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));

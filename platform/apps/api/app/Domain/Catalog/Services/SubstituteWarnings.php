@@ -57,6 +57,7 @@ final readonly class SubstituteWarnings
         $away = DB::select($cte.'SELECT s.id AS session_id, x.id AS other_session_id, away.profile_id, x.starts_at'.$awaySql.' AND (away.is_request = 0 OR x.starts_at > ?) AND away.profile_id IN ('.$marks.')', [...$bindings, $org, $org, $org, $org, $org, CarbonImmutable::now('UTC')->format('Y-m-d H:i:s'), ...$aliases]);
         $result = [];
         foreach ($people as $id => $person) {
+            /** @var array<string, array<string, mixed>> $warnings */
             $warnings = [];
             foreach ([['instructor', $busy], ['substitute_away', $away]] as [$type, $rows]) {
                 foreach ($rows as $row) {
@@ -76,6 +77,22 @@ final readonly class SubstituteWarnings
                     $warnings[$type.'|'.$row->session_id.'|'.$row->other_session_id] = $warning;
                 }
             }
+            // A single candidate would teach every selected session, including selected pairs that overlap.
+            foreach ($sessions as $session) {
+                $start = CarbonImmutable::parse($session->starts_at, 'UTC');
+                $end = CarbonImmutable::parse($session->ends_at, 'UTC');
+                foreach ($sessions as $other) {
+                    $otherStart = CarbonImmutable::parse($other->starts_at, 'UTC');
+                    $otherEnd = CarbonImmutable::parse($other->ends_at, 'UTC');
+                    if ($session->id === $other->id || $start->gte($otherEnd) || $end->lte($otherStart)) {
+                        continue;
+                    }
+                    $warnings['instructor|'.$session->id.'|'.$other->id] = ['type' => 'instructor', 'session_id' => $session->id, 'other_session_id' => $other->id,
+                        'needs_confirmation' => true, 'label' => 'Избрано занимание', 'starts_at' => $otherStart->toIso8601String(), 'ends_at' => $otherEnd->toIso8601String(),
+                        'message' => 'Избраните занимания се застъпват. '.$person['name'].' ще води и двете по това време.'];
+                }
+            }
+            /** @var array<string, array<string, mixed>> $warnings */
             ksort($warnings);
             $result[$id] = array_values($warnings);
         }

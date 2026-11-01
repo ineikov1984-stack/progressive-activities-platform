@@ -35,7 +35,7 @@ use Illuminate\Support\Collection;
  * parents; a teacher reads how many children, never who.
  *
  * @phpstan-type Line array{effect: string, session: Session, enrollment: Enrollment|null, application: EnrollmentApplication}
- * @phpstan-type Item array{session_id: string, effect: string, enrollment_id: string|null, application_id: string|null}
+ * @phpstan-type Item array{session_id: string, effect: string, enrollment_id: string|null, application_id: string|null, replaced_profile_id: string|null, profile_id: string|null}
  */
 final class ScheduleLetters
 {
@@ -55,6 +55,7 @@ final class ScheduleLetters
     public function __construct(
         private readonly SessionApplicability $applicability,
         private readonly EnrollmentCapacity $capacity,
+        private readonly SubstituteAssignmentLetters $substitutions,
     ) {}
 
     /**
@@ -79,7 +80,9 @@ final class ScheduleLetters
         if ($event->type === ScheduleChangeEffects::TEACHER_LETTER) {
             // Still a person of the team here, or nothing.
             return TeacherRecipients::team($context['organizationId'], [(string) $recipient->id]) !== []
-                ? $this->teacher($change, $items, $recipient, $address, $context) : ['skip' => 'no_recipient'];
+                ? ($change->action === 'substitute'
+                    ? $this->substitutions->handle($change, $items, $recipient, $address, $context)
+                    : $this->teacher($change, $items, $recipient, $address, $context)) : ['skip' => 'no_recipient'];
         }
 
         return $this->family($change, $items, $recipient, $address, $context);
@@ -414,6 +417,7 @@ final class ScheduleLetters
     private function newer(ScheduleChange $change, Collection $sessions): array
     {
         return SessionChange::query()->whereIn('session_id', $sessions->keys()->all())->where('schedule_change_id', '>', $change->id)
+            ->whereHas('change', fn ($query) => $query->where('action', '!=', 'substitute'))
             ->pluck('session_id')->map(fn (mixed $id): string => (string) $id)->unique()->values()->all();
     }
 
@@ -609,6 +613,8 @@ final class ScheduleLetters
                     'effect' => $item['effect'],
                     'enrollment_id' => is_string($item['enrollment_id'] ?? null) ? $item['enrollment_id'] : null,
                     'application_id' => is_string($item['application_id'] ?? null) ? $item['application_id'] : null,
+                    'replaced_profile_id' => is_string($item['replaced_profile_id'] ?? null) ? $item['replaced_profile_id'] : null,
+                    'profile_id' => is_string($item['profile_id'] ?? null) ? $item['profile_id'] : null,
                 ];
             }
         }
