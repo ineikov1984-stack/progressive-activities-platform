@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useDashboardContext } from '../dashboard/dashboard-context';
 import { ChildCardDialog } from '../schedule/child-card';
 import { AttendanceError, loadSheet, saveAttendance, type Answer, type Applied, type AttendanceChild, type Change, type Mark, type Sheet } from './api';
-import { childLabel, clock, deadlineText, historyLines, initialView, markLabel, undoAllowed, when } from './presentation';
+import { childLabel, clock, date, deadlineText, historyLines, initialView, markLabel, undoAllowed, when } from './presentation';
 import { AttendanceQueue } from './queue';
 import styles from './attendance.module.css';
 type Intent = { id: string; action: Change['action']; marks?: { enrollment_id: string; status: Mark; version?: number }[]; topic?: string; reason?: string; undo?: boolean };
@@ -99,7 +99,7 @@ function SheetEditor({ initial, organizationId, withDetails }: { initial: Sheet;
     <h1 className={styles.heading}>{s.activity.title} · {s.group.name}{s.group.age_label ? ` · ${s.group.age_label}` : ''}</h1><p className={styles.muted}>{when(s.starts_at, s.ends_at)}{s.location ? ` · ${s.location.name}` : ''}</p>
     {queueState.pending > 0 ? <div role="status" className={styles.error}>{queueState.failed ? 'Не е записано.' : queueState.offline ? 'Няма връзка. Отметките ще се запишат, щом се върне.' : 'Записва се…'}{queueState.failed ? <button className={styles.button} onClick={() => queue.current?.retry()}>Опитай пак</button> : null}</div> : null}
     {notice ? <p className={styles.error} role="alert">{notice}</p> : null}
-    {hidden ? <div className={styles.banner}><p>{s.not_held ? 'Заниманието не се проведе — присъствия не се отбелязват.' : 'Заниманието е отменено — присъствия не се отбелязват.'}</p>{s.not_held?.reason ? <p>{s.not_held.reason} · {s.not_held.by} · {when(s.not_held.at, s.not_held.at)}</p> : null}</div> : <>
+    {hidden ? <div className={styles.banner}><p>{s.not_held ? 'Заниманието не се проведе — присъствия не се отбелязват.' : 'Заниманието е отменено — присъствия не се отбелязват.'}</p>{s.not_held?.reason ? <p>{s.not_held.reason} · {s.not_held.by} · {date(s.not_held.at)} · {clock(s.not_held.at)}</p> : null}</div> : <>
     {!editing ? <div className={styles.banner}><strong>{sheet.counts.unmarked === 0 ? '✓ Всички деца са отбелязани' : `Неотбелязани ${sheet.counts.unmarked}`}</strong><p>{sheet.counts.present} присъстват · {sheet.counts.absent} отсъстват{s.topic ? ` · Тема: ${s.topic}` : ''}</p></div> : null}
     {editing && sheet.abilities.reason_required ? <label className={styles.field}>Причина (задължителна)<textarea ref={reasonField} value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} aria-invalid={notice === 'Напишете причина за поправката.'} /><span className={styles.muted}>Поправката след срока се записва с причина.</span></label> : null}
     {editing && sheet.counts.unmarked > 0 ? <><button className={`${styles.good} ${styles.full}`} onClick={() => enqueue({ action: 'all_present' })}>✓ Всички присъстват</button><p className={styles.muted}>Отбелязва неотбелязаните. Предупредените отсъствия и децата в пауза не се променят.</p></> : null}
@@ -110,7 +110,7 @@ function SheetEditor({ initial, organizationId, withDetails }: { initial: Sheet;
     {sheet.children.some((c) => !c.expected) ? <><h2>Не се очакват днес</h2><div className={styles.kids}>{sheet.children.filter((c) => !c.expected).map(childRow)}</div></> : null}
     {!editing && sheet.abilities.mark ? <button className={styles.button} onClick={() => setMode('mark')}>Поправи</button> : null}
     <p className={styles.muted}>{editing ? 'Записва се при всяко докосване. ' : ''}{sheet.abilities.reason_required ? 'Поправката след срока се записва с причина.' : deadlineText(sheet.abilities.deadline)}</p>
-    <h2>История на промените</h2>{history.length === 0 ? <p className={styles.muted}>Все още няма промени.</p> : null}<ul className={styles.history}>{history.map((line) => <li key={line.id}><strong>{line.text}</strong><p className={styles.muted}>{when(line.at, line.at)}</p></li>)}</ul>
+    <h2>История на промените</h2>{history.length === 0 ? <p className={styles.muted}>Все още няма промени.</p> : null}<ul className={styles.history}>{history.map((line) => <li key={line.id}><strong>{line.text}</strong><p className={styles.muted}>{date(line.at)} · {clock(line.at)}</p></li>)}</ul>
     </>}
     <Link className={styles.button} href={back} onClick={leave}>Готово</Link>
     {toast ? <div className={styles.toast} onMouseEnter={() => setHoverToast(true)} onMouseLeave={() => setHoverToast(false)} onFocus={() => setFocusToast(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setFocusToast(false); }}><span role="status" aria-live="polite">{toast.text}</span>{toast.applied.length > 0 ? <button className={styles.button} onClick={() => { enqueue({ action: 'mark', undo: true, marks: toast.applied.map((a) => ({ enrollment_id: a.enrollment_id, status: a.from, version: a.version })) }); setToast(undefined); }}>Отмени</button> : null}</div> : null}
