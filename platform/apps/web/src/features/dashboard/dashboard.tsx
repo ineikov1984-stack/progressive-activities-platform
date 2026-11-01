@@ -18,6 +18,7 @@ import { loadApplications, loadStaffGroups } from '@/features/enrollment/api';
 import { OrganizationStatusCard } from '@/features/organizations/application/status-card';
 import { roleLabel } from '@/features/team/presentation';
 import styles from './home.module.css';
+import { TodaySection, hasMonth } from '../attendance/today';
 
 const auditActionLabels: Record<string, string> = {
   'identity.login_succeeded': 'Вход в системата',
@@ -140,6 +141,7 @@ export function Dashboard() {
   const ownGroups = teaching === undefined ? null : teaching.length > 0 || groupsFirst ? (
     <section aria-labelledby="teaching-title" className={styles.section}>
       <h2 id="teaching-title" className={styles.sectionTitle}>Моите групи</h2>
+      {hasMonth(teaching) ? <Link className={styles.shortcut} href="/dashboard/attendance">Присъствия за месеца →</Link> : null}
       {teaching.length === 0 ? (
         <p className={styles.muted}>Все още нямате групи. Когато ви добавят в група, тя ще се появи тук.</p>
       ) : (
@@ -172,6 +174,7 @@ export function Dashboard() {
       {organization.status !== 'active' ? <OrganizationStatusCard organizationId={organization.id} /> : null}
       {loadError ? <p className={styles.error} role="alert">{loadError}</p> : null}
 
+      <TodaySection key={organization.id} organizationId={organization.id} groups={teaching ?? []} />
       {groupsFirst ? ownGroups : null}
 
       {mayHaveTasks ? <section aria-labelledby="tasks-title" className={styles.section}>
