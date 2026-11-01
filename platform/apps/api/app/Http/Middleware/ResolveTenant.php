@@ -8,6 +8,7 @@ use App\Domain\Organizations\Services\MembershipActivity;
 use App\Domain\Organizations\Services\StaffRights;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Closure;
+use Illuminate\Database\DeadlockException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -72,7 +73,15 @@ class ResolveTenant
                 }
 
                 // The rights of the request's user are read once for the request (docs/product/team-rights.md, т. 4.5).
-                return $this->rights->remembering(fn (): Response => $next($request));
+                $response = $this->rights->remembering(fn (): Response => $next($request));
+                // Routing's pipeline renders exceptions before returning through middleware. A nested deadlock has
+                // aborted PostgreSQL's transaction; rethrow its response exception so this outer transaction rolls back.
+                $error = $response instanceof JsonResponse ? $response->exception : null;
+                if ($error instanceof DeadlockException || $error?->getPrevious() instanceof DeadlockException) {
+                    throw $error;
+                }
+
+                return $response;
             } finally {
                 $this->context->clear();
             }

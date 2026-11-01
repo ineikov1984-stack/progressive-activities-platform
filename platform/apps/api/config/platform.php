@@ -10,5 +10,6 @@ return [
 
     // How long a change of the schedule waits for the groups another change holds before it answers 409, in milliseconds
     // (docs/product/schedule-changes.md, т. 4.1а). The tests set it short.
+    'attendance_lock_timeout_ms' => (int) env('ATTENDANCE_LOCK_TIMEOUT_MS', 5000),
     'schedule_lock_timeout_ms' => (int) env('SCHEDULE_LOCK_TIMEOUT_MS', 5000),
 ];

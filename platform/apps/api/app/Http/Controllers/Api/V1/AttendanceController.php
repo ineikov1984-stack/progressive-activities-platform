@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domain\Attendance\Actions\RecordAttendance;
 use App\Domain\Attendance\Services\AttendanceAccess;
 use App\Domain\Attendance\Services\AttendanceSheet;
 use App\Domain\Catalog\Models\Session;
@@ -30,5 +31,21 @@ final class AttendanceController extends Controller
             $cards === null || in_array((string) $record->group_id, $cards, true),
             $scope->allowsInScope($user, 'attendance.view_month', (string) $record->group_id),
             $scope->allowsEverywhere($user, 'schedule.manage')));
+    }
+
+    public function store(Request $request, string $session, RecordAttendance $action, AttendanceAccess $access, AttendanceSheet $sheet, AccessScope $scope, ScheduleReader $reader): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $record = Session::query()->findOrFail(strtolower($session));
+        $result = $action->handle($user, $record, $request->all(), $request->header('Idempotency-Key', ''));
+        if ($result['retry'] ?? false) {
+            return response()->json(['message' => $result['message'], 'retry' => true], 409);
+        }
+        $body = $this->show($request, $session, $access, $sheet, $scope, $reader)->getData(true);
+        $status = $result['status'];
+        unset($result['status']);
+
+        return response()->json([...$body, ...$result], $status);
     }
 }
