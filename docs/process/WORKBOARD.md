@@ -28,7 +28,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Присъствия — PR 4: тема и непроведено занимание | Codex | `codex/attendance-session` | RecordAttendanceSession, dispatch в съществуващия контролер, audit и тестове | Реализирано по attendance.md PR 4. 130 засегнати теста / 1093 проверки, PHPStan и docs:check зелени; PostgreSQL restricted-role commit с история/одит; независимо ревю: 0 blocker / should-fix. Следва CI; без нов маршрут, миграция или екран |
+| Присъствия — PR 4: тема и непроведено занимание (#130) | Codex | `codex/attendance-session` | RecordAttendanceSession, dispatch в съществуващия контролер, audit и тестове | Реализирано по attendance.md PR 4. 130 засегнати теста / 1093 проверки, PHPStan и docs:check зелени; PostgreSQL restricted-role commit с история/одит; независимо ревю: 0 blocker / should-fix. Следва CI; без нов маршрут, миграция или екран |
 
 ## Опашка (по приоритет)
 
