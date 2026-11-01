@@ -28,7 +28,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| UX: екип и профил | Codex | `codex/team-workspace-ux` | features/team списък/оформление, засегнати тестове и UX снимки; без горещи файлове | Реализирано: компактни филтри/мобилни карти/профил; 55 unit и 6 browser, UX 0 blocker / 1 should-fix поправен; снимки reviews/team-workspace; чака CI/merge |
+| UX: екип и профил | Codex | `codex/team-workspace-ux` | features/team списък/оформление, засегнати тестове и UX снимки; без горещи файлове | Реализирано: компактни филтри/мобилни карти/профил; 55 unit и 6 browser, UX 0 blocker / 1 should-fix поправен; снимки reviews/team-workspace; PR #154, чака CI/merge |
 
 ## Опашка (по приоритет)
 

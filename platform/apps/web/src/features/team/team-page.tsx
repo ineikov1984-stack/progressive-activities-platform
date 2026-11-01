@@ -219,25 +219,25 @@ export function TeamPage() {
         <>
           <div className={styles.filterPanel} role="search" aria-label="Търсене в екипа">
             <div className={styles.searchRow}>
-            <div className={styles.field}>
-              <label htmlFor="team-search">Търси по име</label>
-              <input id="team-search" className={styles.input} type="search" autoComplete="off" value={filters.search}
-                onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} />
-            </div>
-            <button type="button" className={`${styles.secondary} ${styles.filterToggle}`} aria-expanded={filtersOpen} aria-controls="team-extra-filters" onClick={() => setFiltersOpen((open) => !open)}>
-              Филтри{filterCount ? ` · ${filterCount}` : ''}<Chevron open={filtersOpen} />
-            </button>
+              <div className={styles.field}>
+                <label htmlFor="team-search">Търси по име</label>
+                <input id="team-search" className={styles.input} type="search" autoComplete="off" value={filters.search}
+                  onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} />
+              </div>
+              <button type="button" className={`${styles.secondary} ${styles.filterToggle}`} aria-expanded={filtersOpen} aria-controls="team-extra-filters" onClick={() => setFiltersOpen((open) => !open)}>
+                Филтри{filterCount ? ` · ${filterCount}` : ''}<Chevron open={filtersOpen} />
+              </button>
             </div>
             <div id="team-extra-filters" className={`${styles.extraFilters} ${filtersOpen ? styles.filtersOpen : ''}`}>
-            <RolesFilter roles={filters.roles} onChange={(roles) => setFilters((current) => ({ ...current, roles }))} />
-            <div className={styles.field}>
-              <label htmlFor="team-state">Достъп</label>
-              <select id="team-state" className={styles.input} value={filters.state}
-                onChange={(event) => setFilters((current) => ({ ...current, state: event.target.value as StateFilter }))}>
-                <option value="">Всички (без архива)</option>
-                {(Object.keys(stateFilterLabels) as Exclude<StateFilter, ''>[]).map((state) => <option key={state} value={state}>{stateFilterLabels[state]}</option>)}
-              </select>
-            </div>
+              <RolesFilter roles={filters.roles} onChange={(roles) => setFilters((current) => ({ ...current, roles }))} />
+              <div className={styles.field}>
+                <label htmlFor="team-state">Достъп</label>
+                <select id="team-state" className={styles.input} value={filters.state}
+                  onChange={(event) => setFilters((current) => ({ ...current, state: event.target.value as StateFilter }))}>
+                  <option value="">Всички (без архива)</option>
+                  {(Object.keys(stateFilterLabels) as Exclude<StateFilter, ''>[]).map((state) => <option key={state} value={state}>{stateFilterLabels[state]}</option>)}
+                </select>
+              </div>
             </div>
             {hasFilters ? <div className={styles.filterSummary}>
               <span>{[filters.search ? `Име: ${filters.search}` : '', filters.roles.map(roleLabel).join(', '), filters.state ? stateFilterLabels[filters.state] : ''].filter(Boolean).join(' · ')}</span>
