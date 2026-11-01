@@ -83,7 +83,7 @@ test('demo owner sees the published chess activity in administration and its pub
     await assertAdministrativeWrite(browser.page);
     await Promise.all([
       browser.page.waitForURL(/\/dashboard\/activities\/[^/]+$/),
-      chessCard.getByRole('link', { name: /Редактирай/ }).click(),
+      chessCard.getByRole('link', { name: 'Прегледай', exact: true }).click(),
     ]);
     await catalogExpect(browser.page.getByRole('heading', { level: 1, name: 'Шахмат' })).toBeVisible();
     await catalogExpect(browser.page.getByRole('heading', { name: 'Група 1 · 1.–2. клас' })).toBeVisible();
