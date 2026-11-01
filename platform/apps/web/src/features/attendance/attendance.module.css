@@ -111,7 +111,7 @@
 .sectionHeading { font-size:1rem;margin:var(--space-6) 0 var(--space-3); }
 .empty { padding:var(--space-6);border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface); }
 .empty h3 { margin-top:0; }
-@media(min-width:560px) { .child { display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--space-3); } .child .buttons { margin:0;grid-template-columns:repeat(2,minmax(100px,1fr)); } .child.readRow { grid-template-columns:minmax(0,1fr) auto; } }
+@media(min-width:560px) { .child { display:grid;grid-template-columns:minmax(0,1fr) minmax(14rem,18rem);align-items:center;gap:var(--space-3); } .child .buttons { margin:0;grid-template-columns:repeat(2,minmax(100px,1fr)); } .child.readRow { grid-template-columns:minmax(0,1fr) auto; } }
 @media(max-width:559px) { .sessionDialog { width:calc(100vw - var(--space-4));max-height:calc(100dvh - var(--space-4)); } .modalEditor { max-height:calc(100dvh - var(--space-4)); } .modalEditor .editorHead,.modalEditor .editorBody { padding:var(--space-4); } .modalEditor .editorFoot { padding:var(--space-3) var(--space-4); } .editorFoot>span { font-size:.8rem;flex:1; } .viewTabs { width:100%; } .viewTabs a { flex:1; padding-inline:var(--space-2); } .dailyCard { flex-wrap:wrap; } .dailyCard>button { margin-left:4rem; } }
 
 .editorToolbar { display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);flex-wrap:wrap; }
@@ -135,3 +135,28 @@
 
 @media(min-width:560px) { .child.readRow { grid-template-columns:minmax(0,1fr) 11.5rem; } }
 @media(max-width:559px) { .child.readRow { grid-template-columns:minmax(0,1fr);gap:var(--space-1); } .readRow .readStatus { justify-self:start;max-width:100%;text-align:left; } }
+
+/* Approved MobileWorkspace: one contained surface and a clear return to the roster. */
+.workspace { max-width:1120px; }
+.workspaceHead { display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap; }
+.workspaceHead h1 { margin:0 0 var(--space-2);font-size:1.75rem;line-height:1.2; }
+.workspaceHead>.button { flex-shrink:0; }
+.workspace .viewTabs { margin:var(--space-4) 0; }
+.workspace .sectionHeading { margin-top:var(--space-4); }
+.workspace .dailyCard { border-radius:var(--radius-md); }
+.editorScreen { display:contents; }
+.editorScreen[hidden] { display:none; }
+.inlineCard { display:flex;flex-direction:column;min-height:0;overflow:hidden; }
+.inlineCard>div:last-child { overflow:auto;min-height:0;overscroll-behavior:contain; }
+.cardBack { display:flex;align-items:center;flex-shrink:0;min-height:var(--control-height);padding:var(--space-3) var(--space-4);border:0;border-bottom:1px solid var(--border);background:var(--surface-sunken);color:var(--ink);font:inherit;font-weight:650;text-align:left;cursor:pointer; }
+@media(max-width:559px) {
+ .workspaceHead { gap:var(--space-2); }
+ .workspaceHead>.button { padding-inline:0;border-color:transparent;background:transparent; }
+ .workspace .dailyCard { gap:var(--space-3);padding:var(--space-3); }
+ .workspace .dailyCard>button { margin-left:0;width:100%; }
+ .workspace .dailyInfo { gap:var(--space-3); }
+ .workspace .dailyCard .muted { font-size:.8rem; }
+}
+
+.inlineCard { flex:1; }
+.inlineCard>header { flex-shrink:0; }
