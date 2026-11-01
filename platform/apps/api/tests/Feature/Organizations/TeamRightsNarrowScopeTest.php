@@ -166,6 +166,7 @@ class TeamRightsNarrowScopeTest extends TestCase
 
         return [
             'POST api/v1/enrollments/{enrollment}/visit-outcome' => ["/api/v1/enrollments/{$f['visit']->id}/visit-outcome", ['outcome' => 'attended'], 422],
+            'POST api/v1/attendance/sessions/{session}/changes' => ["/api/v1/attendance/sessions/{$f['session']->id}/changes", [], 422],
             'GET api/v1/attendance/sessions/{session}' => ["/api/v1/attendance/sessions/{$f['session']->id}", [], 200],
             'GET api/v1/team' => ['/api/v1/team', [], 200],
             // "Петър" teaches no group of the scope.

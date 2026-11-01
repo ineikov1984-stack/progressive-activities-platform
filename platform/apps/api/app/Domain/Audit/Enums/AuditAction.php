@@ -35,6 +35,7 @@ enum AuditAction: string
     // "Махни от страницата" (docs/product/teacher-content.md, т. 5.6): the activity and its new version, never the path.
     case CatalogGalleryPhotoRemoved = 'catalog.gallery_photo_removed';
     // A change of the schedule (docs/product/schedule-changes.md, т. 7.6): identifiers and numbers, never the reason.
+    case AttendanceCorrectedLate = 'attendance.corrected_late';
     case ScheduleChangeApplied = 'schedule.change_applied';
     case TeamMemberAdded = 'team.member_added';
     case TeamMemberUpdated = 'team.member_updated';

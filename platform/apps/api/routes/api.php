@@ -124,6 +124,8 @@ Route::prefix('v1')->group(function (): void {
                     Route::delete('/enrollments/{enrollment}/skipped-sessions/{session}', [StaffEnrollmentChangeController::class, 'restoreSession'])->whereUuid(['enrollment', 'session']);
                 });
             });
+            Route::post('/attendance/sessions/{session}/changes', [AttendanceController::class, 'store'])
+                ->whereUuid('session')->middleware(['tenant', 'organization.access:operational.write', 'throttle:120,1,attendance-change']);
             Route::get('/attendance/sessions/{session}', [AttendanceController::class, 'show'])
                 ->whereUuid('session')->middleware(['tenant', 'organization.access:operational.read', 'throttle:120,1']);
             Route::prefix('schedule')->middleware('tenant')->group(function (): void {
