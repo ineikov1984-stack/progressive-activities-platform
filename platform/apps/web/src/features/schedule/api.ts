@@ -72,6 +72,7 @@ export type FoundChild = { id: string; name: string; class: string | null };
 /** What the person may do in a group of the child: show the parent's phone, skip a session, pause (т. 4.1). */
 export type ChildCardAbilities = { contacts: boolean; skip: boolean; pause: boolean };
 export type ChildCardGroup = {
+  attendance?: import('../attendance/api').ChildAttendance | null;
   enrollment_id: string;
   group_id: string;
   activity: string | null;
@@ -158,8 +159,8 @@ export function childCardErrorMessage(status: number): string {
   return 'Картата не се зареди. Проверете връзката и опитайте пак.';
 }
 
-export async function loadChildCard(organizationId: string, childId: string): Promise<ChildCard> {
-  const card = await request<Partial<ChildCard>>(organizationId, `/enrollment/children/${encodeURIComponent(childId)}`, (status) => childCardErrorMessage(status));
+export async function loadChildCard(organizationId: string, childId: string, month?: string): Promise<ChildCard> {
+  const card = await request<Partial<ChildCard>>(organizationId, `/enrollment/children/${encodeURIComponent(childId)}${month ? `?month=${encodeURIComponent(month)}` : ''}`, (status) => childCardErrorMessage(status));
   return {
     id: card.id ?? childId,
     name: card.name ?? '',

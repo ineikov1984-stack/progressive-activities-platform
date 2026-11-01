@@ -11,12 +11,16 @@ import {
 } from './presentation';
 import { CloseIcon } from './icons';
 import styles from './schedule.module.css';
+import { cellLabels, cellSigns, date, format, clock } from '../attendance/presentation';
+import attendanceStyles from '../attendance/attendance.module.css';
+
+export type CardSession = Pick<ScheduleSession, 'id' | 'group_id' | 'starts_at'> & Partial<Pick<ScheduleSession, 'ends_at' | 'status'>>;
 
 type Props = {
   organizationId: string;
   /** The child's row in the panel of the session — the card is opened from its eye. */
   child: Pick<SessionChild, 'enrollment_id' | 'name' | 'state'> & { child_id: string };
-  session: ScheduleSession;
+  session: CardSession;
   /** "Профил на детето →" for those who see the enrollments. */
   withDetails: boolean;
   now: Date;
@@ -40,7 +44,8 @@ export function ChildCardDialog({ organizationId, child, session, withDetails, n
   const heading = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
   const [attempt, setAttempt] = useState(0);
-  const key = `${child.child_id}#${attempt}`;
+  const cardKey = `${organizationId}:${child.child_id}:${session.starts_at}`;
+  const key = `${cardKey}#${attempt}`;
   const [result, setResult] = useState<{ key: string; card?: ChildCard; error?: string }>();
   // Read in the answer, not a reason to load again.
   const named = useRef(onNamed);
@@ -54,7 +59,8 @@ export function ChildCardDialog({ organizationId, child, session, withDetails, n
 
   useEffect(() => {
     let active = true;
-    loadChildCard(organizationId, child.child_id)
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Sofia', year: 'numeric', month: '2-digit' }).format(new Date(session.starts_at));
+    loadChildCard(organizationId, child.child_id, parts)
       .then((card) => {
         if (!active) return;
         setResult({ key, card });
@@ -64,13 +70,13 @@ export function ChildCardDialog({ organizationId, child, session, withDetails, n
         if (active) setResult({ key, error: reason instanceof ScheduleApiError ? reason.message : 'Картата не се зареди. Проверете връзката и опитайте пак.' });
       });
     return () => { active = false; };
-  }, [organizationId, child.child_id, key]);
+  }, [organizationId, child.child_id, key, session.starts_at]);
 
   const loaded = result?.key === key ? result : undefined;
   // After a change the card reads itself again: the last one stays until then, so nothing jumps.
-  const card = loaded?.card ?? (loaded ? undefined : result?.card);
+  const card = loaded?.card ?? (loaded ? undefined : result?.key.startsWith(`${cardKey}#`) ? result.card : undefined);
   const name = card?.name || child.name;
-  const context: CardContext = { session, child };
+  const context: CardContext = { session: { ...session, status: session.status ?? 'scheduled' }, child };
 
   // The close of this dialog is not the panel's: the event stops here.
   function closed(event: SyntheticEvent<HTMLDialogElement>) {
@@ -113,7 +119,7 @@ export function ChildCardDialog({ organizationId, child, session, withDetails, n
 }
 
 function CardContent({ organizationId, card, name, context, session, withDetails, now, onSkipped }: {
-  organizationId: string; card: ChildCard; name: string; context: CardContext; session: ScheduleSession; withDetails: boolean; now: Date; onSkipped: () => void;
+  organizationId: string; card: ChildCard; name: string; context: CardContext; session: CardSession; withDetails: boolean; now: Date; onSkipped: () => void;
 }) {
   const ids = useId();
   const contacts = contactsGroupOf(card, context);
@@ -126,6 +132,12 @@ function CardContent({ organizationId, card, name, context, session, withDetails
 
   return (
     <>
+      {own?.attendance ? <section className={styles.cardSection} aria-labelledby={`${ids}-attendance`}>
+        <h3 className={styles.cardLabel} id={`${ids}-attendance`}>Присъствия през {format(`${own.attendance.month}-01T12:00:00Z`, { month: 'long' })}</h3>
+        <strong>{own.attendance.present} от {own.attendance.present + own.attendance.absent} · {own.attendance.percent === null ? '—' : `${own.attendance.percent} %`}</strong>
+        <div className={attendanceStyles.dots}>{own.attendance.sessions.map((item, index) => <span key={`${item.session_id}-${index}`} className={`${attendanceStyles.dot} ${item.state === 'present' ? attendanceStyles.present : ''}`}><span aria-hidden="true">{cellSigns[item.state] ?? '?'}</span><span className="sr-only">{date(item.starts_at)}: {cellLabels[item.state] ?? item.state}</span></span>)}</div>
+        <p className={styles.small}>{own.attendance.sessions.map((item) => `${date(item.starts_at)}${['cancelled', 'not_held'].includes(item.state) ? ` (${cellLabels[item.state].toLowerCase()})` : ''}`).join(', ') || 'Няма минали занимания през месеца.'}</p>
+      </section> : null}
       <section className={styles.cardSection} aria-labelledby={`${ids}-groups`}>
         <h3 id={`${ids}-groups`} className={styles.cardLabel}>Групи</h3>
         {card.groups.length === 0 ? <p className={styles.small}>Няма групи, в които виждате децата.</p> : (
@@ -165,6 +177,7 @@ function CardContent({ organizationId, card, name, context, session, withDetails
           {pause ? <Link className={styles.button} href={pauseLink(pause)}>Пауза</Link> : null}
         </div>
       ) : null}
+      {!card.groups.some((group) => group.abilities.contacts) ? <p className={styles.small}>Учителят не вижда телефоните на родителите и плащанията.</p> : null}
       {profile ? <Link className={styles.buttonPrimary} href={profile}>Профил на детето <span aria-hidden="true">→</span></Link> : null}
     </>
   );
@@ -172,7 +185,7 @@ function CardContent({ organizationId, card, name, context, session, withDetails
 
 /** A short confirmation: which session, and the explanation for the parent the API asks for (as in "Записвания"). */
 function SkipForm({ organizationId, enrollment, session, name, onCancel, onDone }: {
-  organizationId: string; enrollment: { id: string; version: number }; session: ScheduleSession; name: string;
+  organizationId: string; enrollment: { id: string; version: number }; session: CardSession; name: string;
   onCancel: () => void; onDone: (message: string) => void;
 }) {
   const id = useId();
@@ -180,7 +193,7 @@ function SkipForm({ organizationId, enrollment, session, name, onCancel, onDone 
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const when = sessionWhen(session);
+  const when = session.ends_at ? sessionWhen({ starts_at: session.starts_at, ends_at: session.ends_at }) : `${date(session.starts_at)} · ${clock(session.starts_at)}`;
 
   useEffect(() => { field.current?.focus(); }, []);
 
