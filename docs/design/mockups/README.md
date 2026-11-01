@@ -16,7 +16,7 @@
 | `ScheduleChild` | Панелът с бутоните и картата на детето | `schedule.md` т. 4, 4.1; бутоните — `schedule-changes.md` т. 8 | картата е направена (#96); Премести/Отмени са готови (#104), присъствията са модални (#135); останалите бутони чакат своите етапи |
 | `ScheduleBulk` | Избор на няколко занимания, лентата „Избрани N“ и „Почивен ден“ | `docs/product/schedule-changes.md` т. 4.5–4.6, 8 | направено (#103, #104) |
 | `ScheduleNew` | „+ Ново“, „Премести“, „Отмени“ | `schedule-changes.md` т. 4.2–4.3, 4.7, 8 | Премести/Отмени/Допълнително занимание — направено (#98, #102, #104); пълното „+ Ново“ чака Нова група/Запиши дете |
-| `Substitute` | „Търся заместник“ | `docs/product/substitute.md` | основа PR 1 — #136; API/уеб предстоят |
+| `Substitute` | „Търся заместник“ | `docs/product/substitute.md` | API PR 1–3б — #136, #140–142; уеб за учителя PR 4 — `codex/substitute-teacher-web`; офисът предстои (PR 5) |
 | `Main`, `MarkA`, `ChildSheet`, `History` | Присъствия — учителят на телефона: днес, отбелязване, детето, поправка и история | `docs/product/attendance.md`, т. 6.1–6.4 | направено (#133); общото UX ревю с PR 8 |
 | `Admin` | Присъствия — администраторът вижда месеца | `docs/product/attendance.md`, т. 6.5–6.8 | PR 8: месец, поправки и непроведено; снимки в `docs/design/reviews/attendance-office/` |
 | `AttendanceModal`, `AttendanceWorkspace` | Одобрен на 01.11 компактен модален прозорец и ежедневна работа / месечен преглед | `attendance.md` т. 6.9; HTML съдържа целия одобрен интерактивен поток | направено (#135); замества уеб подредбата от PR 7–8; attendance.md т. 6.10: т. 1–2 — #138 (`reviews/attendance-feedback/`); т. 3–4 — `codex/attendance-compact-actions` (`reviews/attendance-compact/`); т. 5 предстои |

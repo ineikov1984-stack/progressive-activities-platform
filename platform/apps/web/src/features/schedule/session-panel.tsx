@@ -1,5 +1,6 @@
 'use client';
 
+import { SessionSubstitutes } from '../substitute/teacher-section';
 import {loadSheet,type Sheet} from '../attendance/api';
 import {cellLabels,panelChildState,attendanceAction} from '../attendance/presentation';
 import {AttendanceSessionButton} from '../attendance/session-dialog';
@@ -166,7 +167,8 @@ function SessionDetails({ organizationId, session, names, now, withDetails, head
         {panel?.last_change ? <p className={styles.reason}><strong>Причина за промяна:</strong> {panel.last_change.reason ?? reason ?? 'Промяна в графика'}{panel.last_change.by ? ` · ${panel.last_change.by}` : ''} · {new Date(panel.last_change.at).toLocaleString('bg-BG', { timeZone: 'Europe/Sofia' })}</p> : reason ? <p className={styles.reason}><strong>Причина:</strong> {reason}</p> : null}
         {panel?.abilities.attendance ? <AttendanceSessionButton sessionId={current.id} className={attendance.primary?styles.buttonPrimary:styles.button} onClosed={()=>{setAttempt((n)=>n+1);onAttendanceChanged?.();}}>{attendance.label}</AttendanceSessionButton> : null}
         {panel?.session.not_held_detail ? <p className={styles.reason}>{panel.session.not_held_detail.reason} · {panel.session.not_held_detail.by} · {new Date(panel.session.not_held_detail.at).toLocaleString('bg-BG', {timeZone:'Europe/Sofia'})}</p> : null}
-        {panel?.abilities.manage ? <div className={styles.changeActions}>{panel.actions?.map((action) => <button key={action} type="button" className={styles.button} onClick={() => setChange(action)}>{action === 'move' ? 'Премести' : action === 'cancel' ? 'Отмени' : 'Възстанови'}</button>)}</div> : null}
+        {panel?.abilities.manage ? <div className={styles.changeActions}>{panel.actions?.filter((action): action is 'move' | 'cancel' | 'restore' => ['move','cancel','restore'].includes(action)).map((action) => <button key={action} type="button" className={styles.button} onClick={() => setChange(action)}>{action === 'move' ? 'Премести' : action === 'cancel' ? 'Отмени' : 'Възстанови'}</button>)}</div> : null}
+        {panel ? <SessionSubstitutes sessionId={current.id} day={sofiaDay(current.starts_at)} allowed={panel.actions?.includes('request_substitute') ?? false} onChanged={() => setAttempt(n => n + 1)} /> : null}
         {panel&&showChangeCutoffHint(panel.abilities.manage,panel.actions??[],current.starts_at,now.getTime())?<p className={styles.small}>„Премести“ и „Отмени“ са достъпни до 15 минути преди началото.</p>:null}
         {loaded?.error ? (
           <div className={styles.problem}>

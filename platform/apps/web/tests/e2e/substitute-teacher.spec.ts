@@ -1,0 +1,68 @@
+import { expect, test, type Page } from '@playwright/test';
+import { fixture } from './attendance-fixture';
+import type { Mine, OptionSession, SubstituteRequest } from '../../src/features/substitute/api';
+async function layout(page:Page) {
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+ const small=await page.locator('dialog[open] button, dialog[open] input, dialog[open] textarea, dialog[open] a[href]').evaluateAll(nodes=>nodes.flatMap(el=>{
+   const target=el.matches('input[type=radio],input[type=checkbox]')?el.closest('label')??el:el;
+   const r=target.getBoundingClientRect();return target.checkVisibility()&&(r.width<44||r.height<44)?[{text:target.textContent,width:r.width,height:r.height}]:[];
+ }));expect(small).toEqual([]);
+}
+const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+async function setup(page:Page, settings:{conflict?:boolean;submitStatus?:number;offline?:boolean;withdrawStatus?:number;office?:boolean;standing?:boolean}={}) {
+ const f=await fixture(page,{office:settings.office});await page.clock.setFixedTime(new Date('2026-11-02T10:00:00Z'));
+ const session:OptionSession={id:id(10),version:1,starts_at:'2026-11-02T15:30:00Z',ends_at:'2026-11-02T16:30:00Z',activity:'Шахмат',activity_id:id(3),group:'Група 2',location:'Зала „Слънце“',role:'assistant',requested:false};
+ const second={...session,id:id(11),starts_at:'2026-11-02T17:30:00Z',ends_at:'2026-11-02T18:30:00Z',group:'Група 3',requested:true};
+ const mine:Mine={requests:[],standing_in:[],email_confirmed:true,now:'2026-11-02T10:00:00Z'};
+ if(settings.standing)mine.standing_in=[{session_id:id(70),starts_at:'2026-11-03T15:30:00Z',ends_at:'2026-11-03T16:30:00Z',activity:'Рисуване',group:'Група 4',location:'Ателие',age_label:'1.–2. клас',replaces:{name:'Мария Колева'},until:'2026-11-04T21:59:59Z',children_now:false}];
+ const writes:{key:string;body:unknown}[]=[];let options=0;let withdraws=0;
+ const make=():SubstituteRequest=>({id:id(50),version:1,created_at:mine.now,reason:'personal',note:null,suggested:null,sessions:[{session_id:session.id,starts_at:session.starts_at,ends_at:session.ends_at,activity:session.activity,group:session.group,age_label:null,location:session.location,state:'open',closed_reason:null,substitute:null,decided_by:null,decided_at:null,now:{teaching:true,substitute:null}}]});
+ await page.route('**/backend/api/v1/**',async route=>{
+ const req=route.request();const url=new URL(req.url());const path=url.pathname;
+ if(path.endsWith('/me/substitute-requests/options')){options++;return route.fulfill({json:{sessions:url.searchParams.get('from')==='2026-11-04'?[]:[session,second],colleagues:[{profile_id:id(60),name:'Петър Стоянов',groups:['Шахмат · Група 5']}],now:mine.now}});}
+ if(path.endsWith('/me/substitute-requests')) {
+  if(req.method()==='POST'){
+   writes.push({key:req.headers()['idempotency-key'],body:req.postDataJSON()});
+   if((settings.conflict||settings.submitStatus)&&writes.length===1){session.version=2;return route.fulfill({status:settings.submitStatus??409,json:{message:'Графикът е променен междувременно.'}});}
+   if(settings.offline&&writes.length===1)return route.abort('failed');
+   const request=make();mine.requests=[request];session.requested=true;return route.fulfill({status:201,json:request});
+  }return route.fulfill({json:mine});
+ }
+ if(path.endsWith('/withdraw')){withdraws++;if(settings.withdrawStatus&&withdraws===1){mine.requests=[{...make(),version:2,sessions:make().sessions.map(s=>({...s,state:'declined'}))}];return route.fulfill({status:settings.withdrawStatus,json:{message:'Заявката е променена.'}});}mine.requests=[];session.requested=false;return route.fulfill({json:{...make(),version:2,sessions:make().sessions.map(s=>({...s,state:'withdrawn'}))}});}
+ if(path.includes('/schedule/sessions/'))return route.fulfill({json:{session:{...f.current.session,group_id:id(4),activity_id:id(3),location_id:id(5),moved:false,instructors:[],capacity:10,taken:4,waiting:0},group:f.current.session.group,activity:f.current.session.activity,location:f.current.session.location,abilities:{children:false,manage:false},actions:mine.requests.some(r=>r.sessions.some(s=>s.state==='open'))?[]:['request_substitute']}});
+ if(settings.office&&path.endsWith('/context/organization'))return route.fulfill({json:{access:{role:'organization_owner',scope:'all',abilities:['schedule.manage','team.assign'],groups:[],activities:[]}}});
+ return route.fallback();
+ });
+ return {mine,writes,f,make,get options(){return options;}};
+}
+async function open(page:Page,path='/dashboard') {await page.goto(path);await page.getByRole('button',{name:'Търся заместник',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Търся заместник',exact:true});await expect(dialog.getByLabel('Шахмат · Група 2',{exact:false})).toBeChecked();return dialog;}
+for(const width of [390,768,1440])test(`teacher request follows the mockup and returns focus at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:900});const s=await setup(page,{standing:true});const dialog=await open(page);
+ await page.screenshot({path:test.info().outputPath(`request-start-${width}.png`)});await expect(dialog.getByRole('button',{name:'Изпрати заявката'})).toBeInViewport();await expect(dialog.getByText('Вече търсите заместник')).toBeVisible();
+ await expect(dialog.getByLabel('Шахмат · Група 3',{exact:false})).not.toBeChecked();await expect(dialog.getByLabel('Шахмат · Група 3',{exact:false})).toBeDisabled();
+ await dialog.getByRole('button',{name:'Изпрати заявката'}).click();await expect(dialog.getByText('Изберете причина.',{exact:true})).toBeVisible();
+ await dialog.getByLabel('Лични причини',{exact:true}).check();await dialog.getByLabel('Бележка за офиса (по избор)').fill('а'.repeat(260));await expect(dialog.getByText(/Остават 40 знака/)).toBeVisible();
+ await dialog.getByLabel('Петър Стоянов',{exact:false}).check();await expect(dialog.getByRole('button',{name:'Изпрати заявката'})).toBeInViewport();
+ await page.screenshot({path:test.info().outputPath(`request-${width}.png`)});await layout(page);
+ await dialog.getByRole('button',{name:'Изпрати заявката'}).click();await expect(dialog).not.toBeVisible();await expect(page.getByRole('button',{name:'Търся заместник',exact:true})).toBeFocused();
+ await expect(page.getByRole('status').filter({hasText:'Заявката е изпратена.'})).toBeVisible();await expect(page.getByText('Чака решение',{exact:true})).toBeVisible();await expect(page.getByText('Ще замествате Мария Колева',{exact:true})).toBeVisible();
+ expect(s.writes[0].body).toMatchObject({sessions:[{id:id(10),version:1}],reason:'personal',suggested_profile_id:id(60)});await layout(page);await page.getByRole('region',{name:'Заместници',exact:true}).scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath(`cards-${width}.png`)});expect(s.f.errors).toEqual([]);
+});
+test('profile opens the same dialog and Escape returns focus',async({page})=>{const s=await setup(page);const dialog=await open(page,'/dashboard/me');await page.keyboard.press('Escape');await expect(dialog).not.toBeVisible();await expect(page.getByRole('button',{name:'Търся заместник',exact:true})).toBeFocused();expect(s.writes).toHaveLength(0);});
+test('conflict refreshes versions, retains selection and sends the same key',async({page})=>{const s=await setup(page,{conflict:true});const dialog=await open(page);await dialog.getByLabel('Друго',{exact:true}).check();await dialog.getByRole('button',{name:'Изпрати заявката'}).click();await expect(dialog.getByText('Графикът е променен междувременно.',{exact:true})).toBeVisible();await expect(dialog.getByLabel('Шахмат · Група 2',{exact:false})).toBeChecked();await dialog.getByRole('button',{name:'Изпрати заявката'}).click();await expect(dialog).not.toBeVisible();expect(s.options).toBeGreaterThan(1);expect(s.writes[1].body).toMatchObject({sessions:[{id:id(10),version:2}]});expect(s.writes[0].key).toBe(s.writes[1].key);});
+test('uncertain network result locks editing and retries exactly the same request',async({page})=>{const s=await setup(page,{offline:true});const dialog=await open(page);await dialog.getByLabel('Отпуск',{exact:true}).check();await dialog.getByRole('button',{name:'Изпрати заявката'}).click();await expect(dialog.getByText(/Потвърждението не пристигна/)).toBeVisible();await expect(dialog.getByLabel('Отпуск',{exact:true})).toBeDisabled();await dialog.getByRole('button',{name:'Опитай пак',exact:true}).click();await expect(dialog).not.toBeVisible();expect(s.writes[0]).toEqual(s.writes[1]);});
+for(const status of [200,409,422])test(`inline withdrawal reloads the actual decision after ${status}`,async({page})=>{const s=await setup(page,{withdrawStatus:status===200?undefined:status});s.mine.requests=[s.make()];await page.goto('/dashboard');await page.getByRole('button',{name:'Отмени заявката',exact:true}).click();await expect(page.getByText('Да отменим ли заявката?',{exact:false})).toBeVisible();await page.getByRole('button',{name:'Назад',exact:true}).click();await expect(page.getByRole('button',{name:'Отмени заявката',exact:true})).toBeFocused();await page.getByRole('button',{name:'Отмени заявката',exact:true}).click();await page.getByRole('button',{name:'Отмени заявката',exact:true}).click();if(status===200)await expect(page.getByText('Чака решение',{exact:true})).toHaveCount(0);else await expect(page.getByText('Не е одобрена',{exact:true})).toBeVisible();});
+test('date changes debounce, empty day is explained, range has two labelled dates',async({page})=>{const s=await setup(page);const dialog=await open(page);await dialog.getByLabel('Ден',{exact:true}).fill('2026-11-04');await expect(dialog.getByText('Нямате занимания в този ден.',{exact:true})).toBeVisible();await dialog.getByLabel('Няколко дни',{exact:true}).check();await expect(dialog.getByLabel('От',{exact:true})).toBeVisible();await expect(dialog.getByLabel('До',{exact:true})).toBeVisible();expect(s.options).toBeGreaterThan(1);});
+test('office never gets the teacher request button',async({page})=>{await setup(page,{office:true});await page.goto('/dashboard');await expect(page.getByRole('heading',{name:'Моите групи',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Търся заместник',exact:true})).toHaveCount(0);});
+test('schedule opens the request on the selected session and shows withdrawal while pending',async({page})=>{const s=await setup(page);await page.goto('/dashboard/schedule?view=cards&date=2026-11-02');await page.locator('[data-session-id]').first().click();const panel=page.getByRole('dialog',{name:/Група 2/});await panel.getByRole('button',{name:'Търся заместник',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Търся заместник',exact:true});await expect(dialog.getByLabel('Ден',{exact:true})).toHaveValue('2026-11-02');await dialog.getByLabel('Друго',{exact:true}).check();await dialog.getByRole('button',{name:'Изпрати заявката'}).click();await expect(panel.getByText('Търсите заместник · чака решение',{exact:true})).toBeVisible();await expect(panel.getByRole('button',{name:'Търся заместник',exact:true})).toHaveCount(0);expect(s.f.errors).toEqual([]);});
+
+test('cards follow current assignments, hide withdrawn sessions, and do not promise email without confirmation',async({page})=>{
+ const s=await setup(page);const original=s.make();s.mine.email_confirmed=false;s.mine.requests=[{...original,sessions:[{...original.sessions[0],state:'assigned',substitute:{profile_id:id(61),name:'Стар заместник'},decided_by:{id:id(62),name:'Елена Димитрова'},now:{teaching:false,substitute:{profile_id:id(63),name:'Нов заместник'}}},{...original.sessions[0],session_id:id(66),state:'withdrawn',group:'Скрита група'}]}];
+ await page.goto('/dashboard');await expect(page.getByText('Нов заместник ще ви замести',{exact:true})).toBeVisible();await expect(page.getByText('Стар заместник',{exact:false})).toHaveCount(0);await expect(page.getByText('получихте имейл',{exact:false})).toHaveCount(0);await expect(page.getByText('Скрита група',{exact:false})).toHaveCount(0);
+ s.mine.requests[0].sessions[0].now={teaching:true,substitute:null};await page.reload();await expect(page.getByText('Заниманието отново е ваше.',{exact:true})).toBeVisible();
+});
+test('a request with multiple sessions has one withdrawal confirmation for the whole request',async({page})=>{
+ const s=await setup(page);const request=s.make();request.sessions.push({...request.sessions[0],session_id:id(75),group:'Група 6'});s.mine.requests=[request];await page.goto('/dashboard');await expect(page.getByRole('article',{name:'Заявка за заместник',exact:true})).toHaveCount(1);await page.getByRole('button',{name:'Отмени заявката',exact:true}).click();await expect(page.getByText(/Ще отмените всички чакащи занимания/)).toBeVisible();await page.getByRole('button',{name:'Отмени заявката',exact:true}).click();await expect(page.getByRole('article',{name:'Заявка за заместник',exact:true})).toHaveCount(0);
+});
+
+test('a 422 submission refreshes options before another attempt',async({page})=>{const s=await setup(page,{submitStatus:422});const dialog=await open(page);await dialog.getByLabel('Друго',{exact:true}).check();await dialog.getByRole('button',{name:'Изпрати заявката'}).click();await expect(dialog.getByText('Графикът е променен междувременно.',{exact:true})).toBeVisible();await expect.poll(()=>s.options).toBe(2);await dialog.getByRole('button',{name:'Изпрати заявката'}).click();await expect(dialog).not.toBeVisible();expect(s.writes[1].body).toMatchObject({sessions:[{id:id(10),version:2}]});});

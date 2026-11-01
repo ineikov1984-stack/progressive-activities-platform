@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { TeacherSubstitutes } from '../substitute/teacher-section';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -152,6 +153,8 @@ export function Dashboard() {
   // Applications, drafts and invitations are the tasks: without any of them "Какво ви чака" has nothing to say.
   const mayHaveTasks = canSeeEnrollments || canSeeCatalog || canInvite || canSeeAttendancePending;
   const ownGroups = teaching === undefined ? null : teaching.length > 0 || groupsFirst ? (
+    <>
+    <TeacherSubstitutes key={organization.id} groups={teaching} />
     <section aria-labelledby="teaching-title" className={styles.section}>
       <h2 id="teaching-title" className={styles.sectionTitle}>Моите групи</h2>
       {hasMonth(teaching) ? <Link className={styles.shortcut} href="/dashboard/attendance?view=month">Присъствия за месеца →</Link> : null}
@@ -164,7 +167,7 @@ export function Dashboard() {
           ))}
         </div>
       )}
-    </section>
+    </section></>
   ) : null;
 
   return (

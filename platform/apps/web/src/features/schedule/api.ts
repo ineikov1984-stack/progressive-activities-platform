@@ -39,7 +39,7 @@ export type ScheduleGroup = { id: string; name: string; activity_id: string; age
 export type ScheduleLocation = { id: string; name: string };
 export type SchedulePerson = { id: string; name: string };
 /** For each group: whether its children may be seen, and whether the schedule may be changed (PR 4). */
-export type GroupAbilities = { children: boolean; manage: boolean };
+export type GroupAbilities = { children: boolean; manage: boolean; substitute?: boolean };
 export type ScheduleBoard = {
   sessions: ScheduleSession[];
   activities: ScheduleActivity[];
@@ -64,7 +64,7 @@ export type SessionPanel = {
   activity: { id: string; title: string };
   location: ScheduleLocation | null;
   abilities: GroupAbilities & {attendance?: 'mark' | 'view' | null};
-  actions?: ('move' | 'cancel' | 'restore')[];
+  actions?: ('move' | 'cancel' | 'restore' | 'substitute' | 'request_substitute')[];
   last_change?: { action: string; at: string; by?: string; reason?: string | null } | null;
 };
 
