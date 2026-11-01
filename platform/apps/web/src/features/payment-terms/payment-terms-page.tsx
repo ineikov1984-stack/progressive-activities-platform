@@ -25,9 +25,6 @@ function baseDraft(workspace: PaymentTermsWorkspace, info: BillingKindInfo): Dra
   return { rules: info.presets.standard.rules, self_service: info.presets.standard.self_service };
 }
 
-/** Ways of paying shown first when no activity uses any yet; camps and kindergartens wait for such an activity. */
-const COMMON_KINDS: BillingKind[] = ['monthly', 'visit', 'full_period', 'package'];
-
 function usageText(names: string[] | undefined): string {
   if (!names?.length) return 'Още нямате дейност с такава цена.';
   const shown = names.slice(0, 3).join(', ');
@@ -56,10 +53,6 @@ export function PaymentTermsPage() {
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string }>();
   const [saving, setSaving] = useState(false);
-  const [allKinds, setAllKinds] = useState(false);
-  const [allLines, setAllLines] = useState(false);
-  const [extrasShown, setExtrasShown] = useState(false);
-  const linesRef = useRef<HTMLElement>(null);
   const noticeRef = useRef<HTMLParagraphElement>(null);
   const editorRef = useRef<HTMLElement>(null);
 
@@ -82,9 +75,14 @@ export function PaymentTermsPage() {
   useEffect(() => {
     if (!notice) return;
     const invalid = notice.tone === 'error'
-      ? editorRef.current?.querySelector<HTMLElement>('input[aria-invalid="true"], fieldset[data-invalid="true"] input:not([disabled]), fieldset[data-invalid="true"] select:not([disabled])')
+      ? (editorRef.current?.querySelector<HTMLElement>('input[aria-invalid="true"]')
+        ?? editorRef.current?.querySelector<HTMLElement>('fieldset[data-invalid="true"] input:not([disabled]), fieldset[data-invalid="true"] select:not([disabled])'))
       : null;
     if (invalid) {
+      // Open both the topic and any nested optional settings before moving focus.
+      for (let ancestor = invalid.parentElement; ancestor; ancestor = ancestor.parentElement) {
+        if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
+      }
       invalid.scrollIntoView({ block: 'center' });
       invalid.focus();
       return;
@@ -177,8 +175,6 @@ export function PaymentTermsPage() {
     disabled: !canManage || saving,
     errors,
     inMarketplace: workspace.in_marketplace,
-    // Opened on a phone by its button, or by itself when the server refused something inside.
-    extrasOpen: extrasShown || Object.keys(errors).some((key) => key.startsWith('rules.refund') || key.startsWith('self_service')),
     change: (path: string, value: Json) => changeDraft({ ...draft, rules: withValue(draft.rules, path, value) }),
   };
 
@@ -217,11 +213,6 @@ export function PaymentTermsPage() {
   // Monthly fees carry their examples under each rule; the others keep one example beside the words.
   const example = kind === 'monthly' ? null : exampleFor(kind, draft.rules);
   const usage = workspace.usage ?? {};
-  const used = workspace.billing_kinds.filter((item) => (usage[item.value] ?? []).length > 0).map((item) => item.value);
-  const primary = new Set<BillingKind>([...COMMON_KINDS, ...used, kind, ...dirtyKinds,
-    ...workspace.payment_terms.filter((set) => set.status === 'active').map((set) => set.billing_kind)]);
-  const shownKinds = workspace.billing_kinds.filter((item) => allKinds || primary.has(item.value));
-  const hiddenKinds = workspace.billing_kinds.filter((item) => !primary.has(item.value));
   const violations = saved ? Object.values(saved.marketplace_violations) : [];
   const unsavedElsewhere = workspace.billing_kinds.filter((item) => item.value !== kind && dirtyKinds.has(item.value)).map((item) => `„${item.label}“`);
   const selfServiceErrors = errorsFor(errors, ['self_service']);
@@ -232,53 +223,43 @@ export function PaymentTermsPage() {
 
       {!canManage ? <p className={styles.info}>Само собственикът и администраторът могат да променят условията. Вие ги виждате така, както са запазени.</p> : null}
 
-      <fieldset className={styles.part}>
-        <legend className={styles.partTitle}><h2>1. За кой начин на плащане настройвате?</h2></legend>
-        <div className={styles.kindGrid}>
-          {shownKinds.map((item) => (
-            <label key={item.value} className={item.value === kind ? `${styles.option} ${styles.optionOn}` : styles.option}>
-              <span className={styles.optionHead}>
-                <input type="radio" name="billing-kind" value={item.value} checked={item.value === kind} onChange={() => pickKind(item.value)} />
-                <span className={styles.optionName}>{item.label}</span>
-              </span>
-              <span className={styles.hint}>{KIND_HINTS[item.value]}</span>
-              <span className={(usage[item.value] ?? []).length ? styles.usage : styles.hint}>
-                {(usage[item.value] ?? []).length ? <strong>Ползва се при: </strong> : null}{usageText(usage[item.value])}
-              </span>
-              {dirtyKinds.has(item.value) ? <span className={styles.unsaved}><span className={styles.dot} aria-hidden="true" />Незапазени промени</span> : null}
-            </label>
-          ))}
+      <section className={styles.kindPanel} aria-labelledby="kind-title">
+        <div className={styles.kindField}>
+          <label id="kind-title" htmlFor="billing-kind">Начин на плащане</label>
+          <select id="billing-kind" className={styles.kindSelect} value={kind} onChange={(event) => pickKind(event.target.value as BillingKind)}>
+            {workspace.billing_kinds.map((item) => <option key={item.value} value={item.value}>{item.label}{dirtyKinds.has(item.value) ? ' · незапазени промени' : ''}</option>)}
+          </select>
         </div>
-        {hiddenKinds.length && !allKinds ? (
-          <button type="button" className={styles.linkButton} onClick={() => {
-            setAllKinds(true);
-            requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`input[name="billing-kind"][value="${hiddenKinds[0].value}"]`)?.focus());
-          }}>
-            Покажи още {hiddenKinds.length} {hiddenKinds.length === 1 ? 'начин' : 'начина'}: {hiddenKinds.map((item) => item.label.toLowerCase()).join(', ')} — още нямате такива дейности
-          </button>
-        ) : null}
-      </fieldset>
+        <div className={styles.kindContext}>
+          <p className={styles.hint}>{KIND_HINTS[kind]}</p>
+          <p className={(usage[kind] ?? []).length ? styles.usage : styles.hint}>
+            {(usage[kind] ?? []).length ? <strong>Ползва се при: </strong> : null}{usageText(usage[kind])}
+          </p>
+        </div>
+      </section>
 
       <fieldset className={styles.part} disabled={!canManage || saving}>
-        <legend className={styles.partTitle}><h2>2. Изберете готови условия</h2></legend>
+        <legend className={styles.partTitle}><h2>Изберете основа за условията</h2></legend>
         <div className={styles.presets}>
           {[...READY_PRESETS, 'custom' as const].map((item) => (
             <label key={item} className={[styles.option, item === preset ? styles.optionOn : '', item === 'custom' ? styles.optionCustom : ''].join(' ')}>
               <span className={styles.optionHead}>
                 <input type="radio" name={`preset-${kind}`} value={item} checked={item === preset} onChange={() => pickPreset(item)} />
                 <span className={styles.optionName}>{item === 'custom' ? 'Собствени' : info.presets[item].label}</span>
-                {item === 'standard' ? <span className={styles.recommended}>Препоръчани</span> : null}
               </span>
-              <span className={styles.hint}>{presetBlurb(kind, item)}</span>
             </label>
           ))}
         </div>
+        <p className={styles.presetDescription} role="status">
+          {preset === 'standard' ? <span className={styles.recommended}>Препоръчани</span> : null}
+          {presetBlurb(kind, preset)}
+        </p>
       </fieldset>
 
       <div className={styles.layout}>
         <section className={styles.editor} aria-labelledby="terms-title" ref={editorRef}>
           <div className={styles.editorHead}>
-            <h2 id="terms-title">3. Проверете условията за „{info.label}“</h2>
+            <h2 id="terms-title">Условия за „{info.label}“</h2>
             <p className={styles.muted}>
               {saved?.current_version
                 ? `Запазени на ${savedOn(saved.current_version.created_at)} като „${saved.preset_label}“.${dirty ? ' Имате незапазени промени.' : ''}`
@@ -294,10 +275,19 @@ export function PaymentTermsPage() {
             </div>
           ) : null}
 
-          <RuleEditor kind={kind} context={context} />
+          <div className={styles.ruleToolbar}>
+            <p className={styles.hint}>Отворете темата, която искате да прегледате или промените.</p>
+            <div className={styles.toolbarActions}>
+              <button type="button" className={styles.linkButton} onClick={() => editorRef.current?.querySelectorAll<HTMLDetailsElement>('details[data-rule-section]').forEach((section) => { section.open = true; })}>Разгъни всички</button>
+              <button type="button" className={styles.linkButton} onClick={() => editorRef.current?.querySelectorAll<HTMLDetailsElement>('details[data-rule-section]').forEach((section) => { section.open = false; })}>Прибери всички</button>
+            </div>
+          </div>
+          <RuleEditor key={kind} kind={kind} context={context} />
 
-          <fieldset className={context.extrasOpen ? styles.rule : `${styles.rule} ${styles.foldOnPhone}`}>
-            <legend className={styles.ruleTitle}><RuleIcon name="person" />Какво може родителят сам, без да ви пита</legend>
+          <details className={styles.ruleSection} data-rule-section open={selfServiceErrors.length ? true : undefined}>
+            <summary className={styles.sectionSummary}><RuleIcon name="person" /><span>Какво може родителят сам, без да ви пита</span><span className={styles.sectionSign} aria-hidden="true" /></summary>
+            <fieldset className={styles.rule} data-invalid={selfServiceErrors.length ? 'true' : undefined}>
+            <legend className="sr-only">Какво може родителят сам, без да ви пита</legend>
             <div className={styles.ruleBody}>
               <p className={styles.hint}>Ще работи, когато родителите имат профил в платформата. Дотогава ви пишат или се обаждат.</p>
               {selfServiceOptions(kind).map((option) => (
@@ -307,24 +297,16 @@ export function PaymentTermsPage() {
               {selfServiceErrors.map((message) => <p key={message} className={styles.fieldError}>{message}</p>)}
             </div>
           </fieldset>
-          {!context.extrasOpen ? (
-            <button type="button" className={`${styles.extrasToggle} ${styles.phoneOnly}`} onClick={() => {
-              setExtrasShown(true);
-              requestAnimationFrame(() => editorRef.current?.querySelector<HTMLElement>('fieldset[data-extra] input:not([disabled])')?.focus());
-            }}>Връщане на пари и какво може родителят сам</button>
-          ) : null}
+          </details>
         </section>
 
-        <aside className={styles.aside} aria-label="Как го четат родителите">
-          <section ref={linesRef} className={allLines ? styles.card : `${styles.card} ${styles.cardFolded}`}>
+        <aside className={styles.aside} aria-label="Преглед и помощ">
+          <details className={styles.preview}>
+            <summary>Преглед за родителя<span className={styles.sectionSign} aria-hidden="true" /></summary>
+            <section className={styles.card}>
             <h2>Така го четат родителите</h2>
+            <p className={styles.hint}>{dirty ? 'Преглед на незапазените промени.' : 'Преглед на текущите условия.'}</p>
             {lines.map((line) => <p key={line.title} tabIndex={-1}><strong>{line.title}:</strong> {line.text}</p>)}
-            {lines.length > 1 && !allLines ? (
-              <button type="button" className={styles.unfold} onClick={() => {
-                setAllLines(true);
-                requestAnimationFrame(() => linesRef.current?.querySelectorAll<HTMLElement>('p').item(1)?.focus());
-              }}>Виж всички условия</button>
-            ) : null}
           </section>
           {example ? (
             <section className={`${styles.card} ${styles.cardExample}`}>
@@ -334,13 +316,17 @@ export function PaymentTermsPage() {
               <p className={styles.small}>Сумите са само за пример.</p>
             </section>
           ) : null}
-          <section className={`${styles.card} ${styles.cardAlways}`}>
+          </details>
+          <details className={styles.preview}>
+            <summary>Какво важи винаги<span className={styles.sectionSign} aria-hidden="true" /></summary>
+            <section className={`${styles.card} ${styles.cardAlways}`}>
             <h2><RuleIcon name="document" />Винаги важи, каквото и да изберете</h2>
             <p>Занимание, отменено от вас, не се плаща.</p>
             <p>Записаните досега деца остават с условията, които са приели.</p>
             <p>Отказ по имейл, по телефона или от профила винаги се приема.</p>
             <p>Бележка от лекар не се качва — екипът само отбелязва, че я е видял.</p>
           </section>
+          </details>
         </aside>
       </div>
 
@@ -377,7 +363,7 @@ function Header() {
     <header className={styles.header}>
       <p className={styles.eyebrow}>Настройки на организацията</p>
       <h1>Такси, отсъствия и отказ</h1>
-      <p className={styles.lead}>Правила за такси, отсъствия, отказ и връщане на пари. Решете какво плаща родителят, когато детето спре, започне по средата на месеца, вземе пауза или отсъства. Задавате го веднъж — важи за всички дейности с този начин на плащане. Родителите виждат правилата, преди да се запишат.</p>
+      <p className={styles.lead}>Задайте правилата веднъж за всеки начин на плащане. Родителите ги виждат преди записване.</p>
     </header>
   );
 }

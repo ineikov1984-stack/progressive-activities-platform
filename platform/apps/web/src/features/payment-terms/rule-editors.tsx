@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { BillingKind, Json, Rules } from './api';
 import { absenceExample, booleanAt, errorsFor, monthChoiceExample, numberAt, ordinalSuffix, pauseExample, valueAt } from './rules';
 import styles from './payment-terms.module.css';
@@ -17,8 +17,6 @@ export type EditorContext = {
   errors: Record<string, string[]>;
   /** The organization takes applications through the platform's catalog, so its frame applies. */
   inMarketplace: boolean;
-  /** On a phone "Връщане на пари" folds under one button until opened (the approved phone board). */
-  extrasOpen: boolean;
   change: (path: string, value: Json) => void;
 };
 
@@ -49,15 +47,21 @@ export function RuleIcon({ name }: { name: string }) {
 export function RuleRow({ icon, title, paths, context, extra = false, children }: { icon: string; title: string; paths: string[]; context: EditorContext; extra?: boolean; children: ReactNode }) {
   const messages = errorsFor(context.errors, paths.map((path) => `rules.${path}`));
   const errorId = useId();
-  const classes = [styles.rule, messages.length ? styles.ruleInvalid : '', extra && !context.extrasOpen ? styles.foldOnPhone : ''].filter(Boolean).join(' ');
+  const section = useRef<HTMLDetailsElement>(null);
+  const invalid = messages.length > 0;
+  useEffect(() => { if (invalid && section.current) section.current.open = true; }, [invalid]);
+  const classes = [styles.rule, invalid ? styles.ruleInvalid : ''].filter(Boolean).join(' ');
   return (
-    <fieldset className={classes} aria-describedby={messages.length ? errorId : undefined} data-invalid={messages.length ? 'true' : undefined} data-extra={extra ? 'true' : undefined}>
-      <legend className={styles.ruleTitle}><RuleIcon name={icon} />{title}</legend>
-      <div className={styles.ruleBody}>
-        {children}
-        {messages.length ? <div id={errorId}>{messages.map((message) => <p key={message} className={styles.fieldError}>{message}</p>)}</div> : null}
-      </div>
-    </fieldset>
+    <details ref={section} className={styles.ruleSection} data-rule-section>
+      <summary className={styles.sectionSummary}><RuleIcon name={icon} /><span>{title}</span><span className={styles.sectionSign} aria-hidden="true" /></summary>
+      <fieldset className={classes} aria-describedby={messages.length ? errorId : undefined} data-invalid={messages.length ? 'true' : undefined} data-extra={extra ? 'true' : undefined}>
+        <legend className="sr-only">{title}</legend>
+        <div className={styles.ruleBody}>
+          {children}
+          {messages.length ? <div id={errorId}>{messages.map((message) => <p key={message} className={styles.fieldError}>{message}</p>)}</div> : null}
+        </div>
+      </fieldset>
+    </details>
   );
 }
 
