@@ -1,14 +1,13 @@
 // Response headers applied to every page and route of the web app.
-// The Content-Security-Policy still allows inline scripts because the App
-// Router inlines its bootstrap; moving to per-request nonces is tracked in
-// docs/process/WORKBOARD.md.
+// Page requests receive a fresh script nonce from src/proxy.ts.
+// Routes and assets outside that proxy keep a policy without inline script permission.
 
 type Header = { key: string; value: string };
 
-export function contentSecurityPolicy(isDevelopment: boolean): string {
+export function contentSecurityPolicy(isDevelopment: boolean, nonce?: string): string {
   const directives: Record<string, string[]> = {
     'default-src': ["'self'"],
-    'script-src': ["'self'", "'unsafe-inline'", ...(isDevelopment ? ["'unsafe-eval'"] : [])],
+    'script-src': ["'self'", ...(nonce ? [`'nonce-${nonce}'`] : []), ...(isDevelopment ? ["'unsafe-eval'"] : [])],
     'style-src': ["'self'", "'unsafe-inline'"],
     'img-src': ["'self'", 'data:', 'blob:'],
     'font-src': ["'self'", 'data:'],

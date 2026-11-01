@@ -3,7 +3,7 @@ import { defineConfig } from '@playwright/test';
 // These suites use synthetic API boundaries and never need the demo database.
 export default defineConfig({
   testDir: './tests/e2e',
-  testMatch: ['responsive-ui.spec.ts', 'visit-offer-admin*.spec.ts', 'open-day-admin.spec.ts', 'public-visit-offers.spec.ts', 'payment-terms-settings.spec.ts'],
+  testMatch: ['csp-nonce.spec.ts', 'responsive-ui.spec.ts', 'visit-offer-admin*.spec.ts', 'open-day-admin.spec.ts', 'public-visit-offers.spec.ts', 'payment-terms-settings.spec.ts'],
   workers: 1,
   use: { baseURL: 'http://127.0.0.1:3108', channel: process.env.PLAYWRIGHT_BROWSER_CHANNEL || undefined },
   webServer: {

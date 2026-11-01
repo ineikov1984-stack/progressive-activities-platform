@@ -17,14 +17,22 @@ describe('security headers', () => {
   });
 
   it('keeps the production CSP same-origin without eval', () => {
-    const csp = contentSecurityPolicy(false);
+    const csp = contentSecurityPolicy(false, 'dGVzdC1ub25jZS0xMjM0NTY=');
 
     expect(csp).toContain("default-src 'self'");
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("connect-src 'self'");
     expect(csp).not.toContain('unsafe-eval');
+    const scripts = csp.split('; ').find((directive) => directive.startsWith('script-src '));
+    expect(scripts).toContain("'nonce-dGVzdC1ub25jZS0xMjM0NTY='");
+    expect(scripts).not.toContain('unsafe-inline');
     expect(csp).not.toMatch(/https?:/);
+  });
+
+  it('does not allow inline scripts when no nonce is available', () => {
+    const scripts = contentSecurityPolicy(false).split('; ').find((directive) => directive.startsWith('script-src '));
+    expect(scripts).toBe("script-src 'self'");
   });
 
   it('relaxes only what the development server needs', () => {
