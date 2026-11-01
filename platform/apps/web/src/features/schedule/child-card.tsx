@@ -29,6 +29,8 @@ type Props = {
   onNamed?: (id: string, name: string) => void;
   /** A change was saved: the panel reads its children again. */
   onChanged?: () => void;
+  /** Reuse the card inside the attendance dialog, without stacking another modal. */
+  embedded?: boolean;
 };
 
 const reasonHint = 'Пишете така, както бихте казали на родителя. Без диагнози и лични подробности.';
@@ -39,7 +41,7 @@ const reasonHint = 'Пишете така, както бихте казали н
  * outside close it and the panel gives the focus back to the eye. Name, class, age and the groups the person sees; the
  * parent's phone only through "Покажи телефона" (written down), and only the buttons the person may use.
  */
-export function ChildCardDialog({ organizationId, child, session, withDetails, now, onClose, onNamed, onChanged }: Props) {
+export function ChildCardDialog({ organizationId, child, session, withDetails, now, onClose, onNamed, onChanged, embedded = false }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
@@ -87,16 +89,15 @@ export function ChildCardDialog({ organizationId, child, session, withDetails, n
     if (event.target === dialog.current) dialog.current?.close();
   }
 
-  return (
-    <dialog ref={dialog} className={styles.childCard} aria-labelledby={titleId} onClose={closed} onClick={outside}>
-      <span className={styles.grabber} aria-hidden="true" />
+  const content = <>
+      {embedded ? <button type="button" className={attendanceStyles.cardBack} onClick={onClose}>← Назад към присъствията</button> : null}
       <header className={styles.cardHead}>
         <span className={styles.avatar} aria-hidden="true">{initials(name)}</span>
         <div className={styles.cardTitle}>
           <h2 id={titleId} ref={heading} tabIndex={-1}>{name}</h2>
           {card && childCardMeta(card) ? <p className={styles.meta}>{childCardMeta(card)}</p> : null}
         </div>
-        <button type="button" className={styles.iconButton} aria-label={`Затвори картата на ${name}`} onClick={() => dialog.current?.close()}><CloseIcon /></button>
+        {!embedded ? <button type="button" className={styles.iconButton} aria-label={`Затвори картата на ${name}`} onClick={() => dialog.current?.close()}><CloseIcon /></button> : null}
       </header>
       <div className={styles.cardBody}>
         {loaded?.error ? (
@@ -114,6 +115,12 @@ export function ChildCardDialog({ organizationId, child, session, withDetails, n
             onSkipped={() => { setAttempt((value) => value + 1); onChanged?.(); }} />
         )}
       </div>
+    </>;
+
+  return embedded ? <section className={attendanceStyles.inlineCard} aria-labelledby={titleId}>{content}</section> : (
+    <dialog ref={dialog} className={styles.childCard} aria-labelledby={titleId} onClose={closed} onClick={outside}>
+      <span className={styles.grabber} aria-hidden="true" />
+      {content}
     </dialog>
   );
 }

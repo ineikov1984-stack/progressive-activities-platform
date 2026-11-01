@@ -55,6 +55,10 @@ function SheetEditor({ initial, organizationId, withDetails, onClose, closeReque
   const [toast, setToast] = useState<{ text: string; applied: Applied[] }>(); const [hoverToast, setHoverToast] = useState(false); const [focusToast, setFocusToast] = useState(false); const pauseToast = hoverToast || focusToast;
   const enqueueRef = useRef<(intent: Omit<Intent, 'id'>) => void>(() => {});
   const historyGeneration=useRef({value:0});
+  const bodyRef=useRef<HTMLDivElement>(null); const rosterScroll=useRef(0);
+  const childBack=useRef<(() => void) | null>(null);
+  function returnToRoster() { setChild(undefined); requestAnimationFrame(() => { if(bodyRef.current)bodyRef.current.scrollTop=rosterScroll.current; eye.current?.focus({preventScroll:true}); }); }
+  useEffect(() => { childBack.current = onClose && child ? returnToRoster : null; });
   const repaint = () => { setSheet(project(base.current, intents.current)); setPendingRows(intents.current.flatMap((i) => i.action === 'all_present' ? ['all'] : (i.marks ?? []).map((m) => m.enrollment_id))); };
   useEffect(() => {
     const lifecycle=historyGeneration.current;
@@ -77,6 +81,7 @@ function SheetEditor({ initial, organizationId, withDetails, onClose, closeReque
     let leavingHistory = false;
     const back = () => {
       if (leavingHistory || location.href !== currentUrl || window.history.state?.[guard] === currentUrl) return;
+      if (childBack.current) { childBack.current(); window.history.forward(); return; }
       if (confirmExit()) { leavingHistory = true; if (onClose) onClose(); else window.history.back(); }
       else window.history.forward();
     };
@@ -111,7 +116,7 @@ function SheetEditor({ initial, organizationId, withDetails, onClose, closeReque
   useEffect(() => { enqueueRef.current = enqueue; });
   function saveTopic() { if (topic.trim() !== lastTopic.current.trim()) enqueue({ action: 'topic', topic }); }
   function leave() { saveTopic(); }
-  function requestClose() { saveTopic(); if ((queue.current?.pending || topicRef.current.trim() !== (base.current.session.topic ?? '')) && !window.confirm('Има незаписани промени. Искате ли да излезете?')) return; onClose?.(); }
+  function requestClose() { if (onClose && child) { returnToRoster(); return; } saveTopic(); if ((queue.current?.pending || topicRef.current.trim() !== (base.current.session.topic ?? '')) && !window.confirm('Има незаписани промени. Искате ли да излезете?')) return; onClose?.(); }
   useEffect(() => { if(closeRequestRef)closeRequestRef.current=requestClose; return()=>{if(closeRequestRef)closeRequestRef.current=null;}; });
   const headingRef=useRef<HTMLHeadingElement>(null);
   useEffect(()=>{if(onClose)headingRef.current?.focus();},[onClose]);
@@ -121,7 +126,7 @@ function SheetEditor({ initial, organizationId, withDetails, onClose, closeReque
   const history = historyLines(sheet.history, sheet.children);
   const childRow = (c: AttendanceChild) => <div className={`${styles.child} ${!editing ? styles.readRow : ''}`} key={c.enrollment_id} role="group" aria-labelledby={`child-${c.enrollment_id}`}>
     <div className={styles.childInfo}><div className={styles.rowHead}><div className={styles.childName}><strong id={`child-${c.enrollment_id}`}>{c.name}</strong>{c.class ? <span className={styles.muted}>· {c.class}</span> : null}{c.scope !== 'full_period' ? <span className={styles.badge}>{c.scope === 'trial' ? 'Пробно' : 'Еднократно'}</span> : null}</div>
-    {c.child_id ? <button className={styles.icon} aria-label={`Виж ${c.name}`} onClick={(event) => { eye.current = event.currentTarget; setChild(c); }}><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button> : null}</div>
+    {c.child_id ? <button className={styles.icon} aria-label={`Виж ${c.name}`} onClick={(event) => { eye.current = event.currentTarget; rosterScroll.current = bodyRef.current?.scrollTop ?? 0; setChild(c); }}><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button> : null}</div>
     {!c.expected && editing ? <p className={styles.muted}>В пауза{c.paused_until ? ` до ${formatPause(c.paused_until)}` : ''}</p> : null}
     {c.warned && editing ? <p className={styles.warning}>Предупредено отсъствие · {c.skip?.by === 'parent' ? 'Родителят предупреди' : c.skip ? 'Екипът предупреди' : 'Късен отказ от посещение'}{c.skip ? ` · ${clock(c.skip.at)}` : ''}. Ако детето дойде, отбележете „Присъства“.</p> : null}
     </div>
@@ -130,8 +135,8 @@ function SheetEditor({ initial, organizationId, withDetails, onClose, closeReque
     {(pendingRows.includes('all') || pendingRows.includes(c.enrollment_id)) ? <p className={styles.muted}>{queueState.failed ? 'Не е записано · Опитай пак' : 'Записва се…'}</p> : null}
   </div>;
   return <div className={`${onClose?styles.modalEditor:styles.page} ${styles.editor}`}>
-    <header className={styles.editorHead}>{!onClose?<Link className={styles.link} href={back} onClick={leave}>← {from === 'schedule' ? 'График' : from === 'month' ? 'Присъствия' : 'Днес'}</Link>:null}
-    <div className={styles.editorTitle}><div><Heading ref={headingRef} tabIndex={-1} className={styles.heading}>{s.activity.title} · {s.group.name}{s.group.age_label ? ` · ${s.group.age_label}` : ''}</Heading><p className={styles.muted}>{when(s.starts_at, s.ends_at)}{s.location ? ` · ${s.location.name}` : ''}</p></div>{onClose?<button className={styles.icon} aria-label="Затвори присъствията" onClick={requestClose}>✕</button>:null}</div></header><div className={styles.editorBody}>
+    <div className={styles.editorScreen} hidden={!!(onClose && child)}><header className={styles.editorHead}>{!onClose?<Link className={styles.link} href={back} onClick={leave}>← {from === 'schedule' ? 'График' : from === 'month' ? 'Присъствия' : 'Днес'}</Link>:null}
+    <div className={styles.editorTitle}><div><Heading ref={headingRef} tabIndex={-1} className={styles.heading}>{s.activity.title} · {s.group.name}{s.group.age_label ? ` · ${s.group.age_label}` : ''}</Heading><p className={styles.muted}>{when(s.starts_at, s.ends_at)}{s.location ? ` · ${s.location.name}` : ''}</p></div>{onClose?<button className={styles.icon} aria-label="Затвори присъствията" onClick={requestClose}>✕</button>:null}</div></header><div className={styles.editorBody} ref={bodyRef}>
     {queueState.pending > 0 ? <div role="status" className={styles.error}>{queueState.failed ? 'Не е записано.' : queueState.offline ? 'Няма връзка. Отметките ще се запишат, щом се върне.' : 'Записва се…'}{queueState.failed ? <button className={styles.button} onClick={() => queue.current?.retry()}>Опитай пак</button> : null}</div> : null}
     {notice ? <p className={styles.error} role="alert">{notice}</p> : null}
     {hidden ? <div className={styles.banner}><p>{s.not_held ? 'Заниманието не се проведе — присъствия не се отбелязват.' : 'Заниманието е отменено — присъствия не се отбелязват.'}</p>{s.not_held?.reason ? <p>{s.not_held.reason} · {s.not_held.by} · {date(s.not_held.at)} · {clock(s.not_held.at)}</p> : null}</div> : <>
@@ -157,7 +162,9 @@ function SheetEditor({ initial, organizationId, withDetails, onClose, closeReque
     {sessionAction ? <AttendanceSessionAction organizationId={organizationId} sheet={sheet} action={sessionAction} onClose={()=>{setSessionAction(undefined);actionButton.current?.focus();}} onSaved={(fresh)=>{epoch.current++;base.current=fresh;setSheet(fresh);setSessionAction(undefined);setMode(initialView(fresh));setNotice('Записано.');setTopic(fresh.session.topic??'');topicRef.current=fresh.session.topic??'';lastTopic.current=fresh.session.topic??'';actionButton.current?.focus();}}/> : null}
     </div><footer className={styles.editorFoot}><span className={styles.muted} role="status" aria-live="polite">{saveFeedback(queueState,sheet.abilities.mark,topic.trim()!==(sheet.session.topic??'').trim(),saveRejected)}</span>{onClose?<button className={styles.primary} onClick={requestClose}>Готово</button>:<Link className={styles.primary} href={back} onClick={leave}>Готово</Link>}</footer>
     {toast ? <div className={styles.toast} onMouseEnter={() => setHoverToast(true)} onMouseLeave={() => setHoverToast(false)} onFocus={() => setFocusToast(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setFocusToast(false); }}><span role="status" aria-live="polite">{toast.text}</span>{toast.applied.length > 0 ? <button className={styles.button} onClick={() => { enqueue({ action: 'mark', undo: true, marks: toast.applied.map((a) => ({ enrollment_id: a.enrollment_id, status: a.from, version: a.version })) }); setToast(undefined); }}>Отмени</button> : null}</div> : null}
-    {child?.child_id ? <ChildCardDialog organizationId={organizationId} child={{ ...child, child_id: child.child_id }} session={{ id: s.id, group_id: s.group.id, starts_at: s.starts_at }} withDetails={withDetails} now={now} onClose={() => { setChild(undefined); eye.current?.focus(); }} /> : null}
+    </div>
+    {child?.child_id ? <ChildCardDialog organizationId={organizationId} child={{ ...child, child_id: child.child_id }} session={{ id: s.id, group_id: s.group.id, starts_at: s.starts_at }} withDetails={withDetails} now={now} embedded={!!onClose} onClose={returnToRoster} /> : null}
+    {onClose && child ? <footer className={styles.editorFoot}><span className={styles.muted} role="status" aria-live="polite">{saveFeedback(queueState,sheet.abilities.mark,topic.trim()!==(sheet.session.topic??'').trim(),saveRejected)}</span><button className={styles.primary} onClick={returnToRoster}>Назад към списъка</button></footer> : null}
   </div>;
 }
 function formatPause(value: string) { return new Intl.DateTimeFormat('bg-BG', { day: 'numeric', month: 'long', timeZone: 'Europe/Sofia' }).format(new Date(`${value}T12:00:00Z`)); }
