@@ -150,8 +150,9 @@ function MemberRow({ member, canManage, now, today }: { member: TeamMember; canM
         </div>
       </td>
       <td className={styles.cellRole}>{role ? roleLabel(role) : <span className={styles.none}>Няма роля</span>}</td>
-      <td><GroupsCell member={member} today={today} /></td>
+      <td className={styles.cellGroups}><span className={styles.mobileLabel} aria-hidden="true">Групи</span><GroupsCell member={member} today={today} /></td>
       <td className={styles.cellAccess}>
+        <span className={styles.mobileLabel} aria-hidden="true">Достъп</span>
         <div className={styles.accessCell}>
           <span className={styles.stack}>
             <span className={`${styles.badge} ${styles[`tone_${status.tone}`]}`}>{status.label}</span>
@@ -182,6 +183,9 @@ export function TeamPage() {
   const [loaded, setLoaded] = useState<{ scope: string; list: TeamList }>();
   const [failed, setFailed] = useState<{ key: string; text: string }>();
   const [adding, setAdding] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filterCount = filters.roles.length + (filters.state ? 1 : 0);
+  const hasFilters = !!filters.search || filterCount > 0;
   const [now] = useState(() => new Date());
   const [today] = useState(() => sofiaDay(new Date()));
   const scope = `${organization.id}|${archived ? 'archived' : 'current'}`;
@@ -213,21 +217,32 @@ export function TeamPage() {
 
       {!canView ? <NoTeamAccess /> : (
         <>
-          <div className={styles.filters} role="search" aria-label="Търсене в екипа">
-            <div className={styles.field}>
-              <label htmlFor="team-search">Търси по име</label>
-              <input id="team-search" className={styles.input} type="search" autoComplete="off" value={filters.search}
-                onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} />
+          <div className={styles.filterPanel} role="search" aria-label="Търсене в екипа">
+            <div className={styles.searchRow}>
+              <div className={styles.field}>
+                <label htmlFor="team-search">Търси по име</label>
+                <input id="team-search" className={styles.input} type="search" autoComplete="off" value={filters.search}
+                  onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} />
+              </div>
+              <button type="button" className={`${styles.secondary} ${styles.filterToggle}`} aria-expanded={filtersOpen} aria-controls="team-extra-filters" onClick={() => setFiltersOpen((open) => !open)}>
+                Филтри{filterCount ? ` · ${filterCount}` : ''}<Chevron open={filtersOpen} />
+              </button>
             </div>
-            <RolesFilter roles={filters.roles} onChange={(roles) => setFilters((current) => ({ ...current, roles }))} />
-            <div className={styles.field}>
-              <label htmlFor="team-state">Достъп</label>
-              <select id="team-state" className={styles.input} value={filters.state}
-                onChange={(event) => setFilters((current) => ({ ...current, state: event.target.value as StateFilter }))}>
-                <option value="">Всички (без архива)</option>
-                {(Object.keys(stateFilterLabels) as Exclude<StateFilter, ''>[]).map((state) => <option key={state} value={state}>{stateFilterLabels[state]}</option>)}
-              </select>
+            <div id="team-extra-filters" className={`${styles.extraFilters} ${filtersOpen ? styles.filtersOpen : ''}`}>
+              <RolesFilter roles={filters.roles} onChange={(roles) => setFilters((current) => ({ ...current, roles }))} />
+              <div className={styles.field}>
+                <label htmlFor="team-state">Достъп</label>
+                <select id="team-state" className={styles.input} value={filters.state}
+                  onChange={(event) => setFilters((current) => ({ ...current, state: event.target.value as StateFilter }))}>
+                  <option value="">Всички (без архива)</option>
+                  {(Object.keys(stateFilterLabels) as Exclude<StateFilter, ''>[]).map((state) => <option key={state} value={state}>{stateFilterLabels[state]}</option>)}
+                </select>
+              </div>
             </div>
+            {hasFilters ? <div className={styles.filterSummary}>
+              <span>{[filters.search ? `Име: ${filters.search}` : '', filters.roles.map(roleLabel).join(', '), filters.state ? stateFilterLabels[filters.state] : ''].filter(Boolean).join(' · ')}</span>
+              <button type="button" className={styles.rowAction} onClick={() => setFilters(noFilters)}>Изчисти всички филтри</button>
+            </div> : null}
           </div>
 
           <section aria-labelledby="team-list-title" aria-busy={list === undefined && !error}>
@@ -263,10 +278,11 @@ export function TeamPage() {
                   </table>
                 </div>
                 {archived ? null : (
-                  <p className={styles.small}>
-                    <strong>Има достъп</strong> — влиза със свой имейл и парола. <strong>Няма достъп</strong> — присъствията отбелязвате вие вместо
-                    преподавателя. <strong>Изпратена покана</strong> — чакаме да я приеме.
-                  </p>
+                  <details className={`${styles.more} ${styles.accessHelp}`}>
+                    <summary>Какво означават състоянията на достъп?</summary>
+                    <p className={styles.small}><strong>Има достъп</strong> — влиза със свой имейл и парола. <strong>Няма достъп</strong> — присъствията отбелязвате вие вместо
+                    преподавателя. <strong>Изпратена покана</strong> — чакаме да я приеме.</p>
+                  </details>
                 )}
               </>
             )}
