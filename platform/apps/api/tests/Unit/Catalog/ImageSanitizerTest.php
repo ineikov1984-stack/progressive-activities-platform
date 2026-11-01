@@ -138,6 +138,22 @@ class ImageSanitizerTest extends TestCase
         }
     }
 
+    public function test_fresh_process_memory_does_not_include_the_test_runners_resident_memory(): void
+    {
+        $previousLimit = ini_set('memory_limit', '512M');
+        $buffer = str_repeat('x', 270 * 1024 * 1024);
+        try {
+            $path = $this->tempFile(SyntheticImages::plainPng(20, 20));
+            $result = $this->cleanInFreshProcess($path, 'image/png');
+            $this->assertSame([20, 20], [$result['width'], $result['height']]);
+            $this->assertLessThan(256 * 1024 * 1024, $result['rss']);
+            $this->assertSame(270 * 1024 * 1024, strlen($buffer));
+        } finally {
+            unset($buffer);
+            ini_set('memory_limit', $previousLimit);
+        }
+    }
+
     public function test_over_the_limit_is_refused_from_the_header(): void
     {
         $tooLarge = 'Снимката е твърде голяма.';
@@ -194,7 +210,12 @@ class ImageSanitizerTest extends TestCase
         $code = 'require '.var_export(dirname(__DIR__, 3).'/vendor/autoload.php', true).';'
             .'$clean = (new \\'.ImageSanitizer::class.'(new \\'.ImageCapabilities::class.'))->sanitize('.var_export($path, true).', '.var_export($mime, true).');'
             .'echo json_encode(["width" => $clean["width"], "height" => $clean["height"], "rss" => getrusage()["ru_maxrss"] * 1024, "peak" => memory_get_peak_usage()]);';
-        $process = proc_open([PHP_BINARY, '-d', 'memory_limit=192M', '-r', $code], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        // Linux preserves ru_maxrss across exec: a direct child also counts the runner's resident memory at fork.
+        // Fork the measured process from this small launcher so the 256 MB assertion measures only the sanitizer.
+        $command = [PHP_BINARY, '-d', 'memory_limit=192M', '-r', $code];
+        $launcher = '$child = proc_open('.var_export($command, true).', [1 => STDOUT, 2 => STDERR], $pipes);'
+            .'exit(is_resource($child) ? proc_close($child) : 1);';
+        $process = proc_open([PHP_BINARY, '-d', 'memory_limit=192M', '-r', $launcher], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
         $this->assertIsResource($process);
         $output = (string) stream_get_contents($pipes[1]);
         $errors = (string) stream_get_contents($pipes[2]);
