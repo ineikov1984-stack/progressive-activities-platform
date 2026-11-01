@@ -28,7 +28,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Присъствия — PR 3: отметки | Codex | `codex/attendance-marking` | RecordAttendance, POST changes, audit/config, тестове; горещ: routes/api.php | Реализирано по attendance.md PR 3. 250 засегнати теста / 2195 проверки, PostgreSQL конкурентност и реален HTTP deadlock, постоянен брой заявки 3/30. Независимо ревю: 2 should-fix, поправени и проверени от автора с червени/зелени регресионни тестове. Следва CI; без миграция и нов екран |
+| Присъствия — PR 3: отметки (#129) | Codex | `codex/attendance-marking` | RecordAttendance, POST changes, audit/config, ResolveTenant rollback, тестове; горещ: routes/api.php | Реализирано по attendance.md PR 3. 250 засегнати теста / 2195 проверки, PostgreSQL конкурентност и реален HTTP deadlock, постоянен брой заявки 3/30. Независимо ревю: 2 should-fix, поправени и проверени от автора с червени/зелени регресионни тестове. Следва CI; без миграция и нов екран |
 
 ## Опашка (по приоритет)
 
