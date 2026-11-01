@@ -50,3 +50,28 @@ for(const width of [390,768,1440])test(`creating and changing editor steps keeps
 test('archived activity opens for inspection with the correct status',async({page})=>{
  await page.setViewportSize({width:390,height:1000});const f=await catalog(page);await page.goto('/dashboard/activities');const archived=page.getByRole('article').filter({hasText:'Музикално приключение'});await archived.getByRole('link',{name:'Прегледай',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'Архивирана'})).toBeVisible();await expect(page.getByRole('note')).toContainText('Дейността е в архива.');await expect(page.getByLabel('Име на дейността',{exact:true})).toBeDisabled();expect(f.writes).toEqual([]);await page.screenshot({path:test.info().outputPath('archived-390.png'),fullPage:true});
 });
+
+for(const width of [390,768,1440])test(`draft page preview uses current editor content without publishing at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:1000});const f=await catalog(page);await page.goto(`/dashboard/activities/${id(40)}`);
+ await page.getByLabel('Кратко описание',{exact:true}).fill('Последно въведено описание още в редактора.');
+ const trigger=page.getByRole('button',{name:'Преглед на страницата',exact:true});await trigger.click();
+ const dialog=page.getByRole('dialog',{name:'Преглед на страницата',exact:true});await expect(dialog).toBeVisible();await expect(dialog.getByRole('heading',{name:'Преглед на страницата',exact:true})).toBeFocused();
+ await expect(dialog.getByText('Последно въведено описание още в редактора.',{exact:true})).toBeVisible();await expect(dialog.getByRole('heading',{name:'За дейността',exact:true})).toBeVisible();await expect(dialog.getByRole('link')).toHaveCount(0);
+ await expect(dialog.getByText('Играем и учим.',{exact:true})).toBeVisible();await expect(dialog.getByRole('button',{name:'Обратно към редактора'})).toBeVisible();
+ expect(await dialog.evaluate(node=>node.scrollWidth-node.clientWidth)).toBeLessThanOrEqual(1);expect(await dialog.locator('main').evaluate(node=>node.scrollWidth-node.clientWidth)).toBeLessThanOrEqual(1);
+ await page.keyboard.press('Shift+Tab');await expect(dialog.getByRole('button',{name:'Обратно към редактора'})).toBeFocused();await page.keyboard.press('Tab');await expect(dialog.getByRole('button',{name:'Затвори прегледа'})).toBeFocused();
+ await dialog.getByText('Идеи за по-пълно представяне',{exact:false}).click();await expect(dialog.getByText(/Може да добавите ползи/)).toBeVisible();
+ await page.screenshot({path:test.info().outputPath(`page-preview-${width}.png`),fullPage:true});
+ await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();await expect(page.getByLabel('Кратко описание',{exact:true})).toHaveValue('Последно въведено описание още в редактора.');
+ const choice=page.getByRole('combobox',{name:'Избери стъпка',exact:true});if(width<=820)await choice.selectOption('3');else await page.getByRole('navigation',{name:'Стъпки',exact:true}).getByRole('button').nth(2).click();
+ await page.locator('#w-about').fill('Ново подробно представяне на дейността.');await trigger.click();await expect(dialog.getByText('Ново подробно представяне на дейността.',{exact:true})).toBeVisible();await expect(dialog.getByText('Играем и учим.',{exact:true})).toHaveCount(0);
+ await dialog.getByRole('button',{name:'Обратно към редактора'}).click();await expect(page.locator('#w-about')).toHaveValue('Ново подробно представяне на дейността.');expect(f.errors).toEqual([]);expect(f.writes.every(w=>!('status' in w))).toBe(true);
+});
+
+for(const width of [390,1440])test(`rich draft preview renders private gallery and instructor photo at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:1000});
+ const f=await catalog(page);f.draft.sections={about:'Подробно представяне',benefits:['Увереност и логическо мислене'],methodology:'Учим чрез практика.',gallery:[{path:'catalog/demo/gallery.png',alt:'Демо галерия'}],faq:[{question:'Нужен ли е опит?',answer:'Не е нужен предварителен опит.'}]};f.draft.offering!.price_options=[{unit:'month',enrollment_mode:'monthly',amount_cents:6500}];
+ f.draft.offering!.lead_instructor_profile_id=id(71);await page.route('**/backend/api/v1/catalog/instructors',route=>route.fulfill({json:{instructors:[{id:id(71),public_name:'Демо преподавател',is_public:true,version:1,photo_path:'catalog/demo/portrait.png'}]}}));
+ const headers:string[]=[];await page.route('**/backend/api/v1/catalog/media/**',route=>{headers.push(route.request().headers()['x-organization-id']);return route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQAAAABJRU5ErkJggg==','base64')});});
+ await page.goto(`/dashboard/activities/${id(40)}`);await page.getByRole('button',{name:'Преглед на страницата',exact:true}).click();const dialog=page.getByRole('dialog');await expect(dialog.getByText('Увереност и логическо мислене',{exact:true})).toBeVisible();await expect(dialog.getByText('Учим чрез практика.',{exact:true})).toBeVisible();await expect(dialog.getByText(/65,00/)).toBeVisible();await expect(dialog.getByRole('img',{name:'Демо галерия'})).toBeVisible();await dialog.locator('summary').filter({hasText:'Нужен ли е опит?'}).click();await expect(dialog.getByText('Не е нужен предварителен опит.',{exact:true})).toBeVisible();const portrait=dialog.getByRole('img',{name:'Демо преподавател',exact:true});await expect(portrait).toBeVisible();const box=await portrait.boundingBox();expect(box?.width).toBe(160);expect(box?.height).toBe(160);expect(headers.length).toBeGreaterThan(0);expect(headers.every(Boolean)).toBe(true);expect(f.errors).toEqual([]);
+});

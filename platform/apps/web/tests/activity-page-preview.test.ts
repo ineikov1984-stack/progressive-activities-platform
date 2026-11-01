@@ -1,0 +1,13 @@
+import {expect,it} from 'vitest';
+import {pagePreviewData} from '../src/features/catalog/admin/wizard/page-preview-data';
+import type {ActivityDraft,ActivityGroup,InstructorProfile,Location} from '../src/features/catalog/admin/api';
+const activity:ActivityDraft={id:'a',slug:'demo',status:'draft',version:1,title:'Шахмат',category:'Логика и игри',summary:'Ново описание',age_label:'7–10 г.',sections:{about:'Подробности',gallery:[{path:'private/gallery.jpg',alt:'Игра'}],faq:[{question:'За кого?',answer:'За начинаещи.'}]},offering:{id:'o',version:1,location_id:'l',lead_instructor_profile_id:'t',price_options:[{unit:'month',enrollment_mode:'monthly',amount_cents:5000},{unit:'session',enrollment_mode:'trial',amount_cents:0},{unit:'month',enrollment_mode:'monthly',amount_cents:1000,is_available:false}]}};
+it('uses current draft content and available prices without inventing visits or public availability',()=>{
+ const {activity:preview}=pagePreviewData(activity,[],[],[],null,'Школа');expect(preview.summary).toBe('Ново описание');expect(preview.sections.gallery).toEqual([{url:'private/gallery.jpg',alt:'Игра'}]);expect(preview.price?.amount_cents).toBe(5000);expect(preview.price?.label).toContain('50,00');expect(preview.visit_offers).toBeUndefined();expect(preview.availability.remaining_places).toBeNull();expect(activity.sections.gallery?.[0].path).toBe('private/gallery.jpg');
+});
+it('includes selected public people and places, group schedule and price override, and public organization name',()=>{
+ const group:ActivityGroup={id:'g',offering_id:'o',version:1,name:'Група 1',age_label:'7 г.',status:'active',capacity_min:1,capacity_max:10,instructor_ids:['hidden'],schedule_pattern:{timezone:'Europe/Sofia',frequency:'weekly',slots:[{weekday:1,starts_at:'16:00',duration_minutes:60}]},price_options:[{unit:'month',enrollment_mode:'monthly',amount_cents:6000}],sessions:[],conflicts:[]};
+ const location:Location={id:'l',name:'Зала',type:'physical',space_usage:'exclusive',is_public:true,version:1};const instructor:InstructorProfile={id:'t',public_name:'Публично име',is_public:true,version:1};
+ const response=pagePreviewData(activity,[group,{...group,id:'old',status:'archived'}],[location],[instructor,{...instructor,id:'hidden',is_public:false}],{public_name:'Публична школа',slug:'public'},'Офисно име');
+ expect(response.organization.public_name).toBe('Публична школа');expect(response.activity.instructors.map(x=>x.public_name)).toEqual(['Публично име']);expect(response.activity.groups).toHaveLength(1);expect(response.activity.groups[0].location?.name).toBe('Зала');expect(response.activity.groups[0].prices[0].amount_cents).toBe(6000);expect(response.activity.groups[0].schedule?.slots?.[0].starts_at).toBe('16:00');
+});

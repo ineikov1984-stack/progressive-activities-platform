@@ -6,7 +6,7 @@ import { type ChangeEvent, useCallback, useEffect, useRef, useState } from 'reac
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useDashboardContext } from '@/features/dashboard/dashboard-context';
 import { CategoryIllustration } from '@/features/catalog/public/category-illustration';
-import { type ActivityDraft, type ActivityGroup, type ActivitySections, type InstructorProfile, loadActivity, loadCatalogWorkspace, loadGroups, type Location, publishActivity, updateActivity, uploadCatalogMedia } from '../api';
+import { type ActivityDraft, type CatalogProfile, type ActivityGroup, type ActivitySections, type InstructorProfile, loadActivity, loadCatalogWorkspace, loadGroups, type Location, publishActivity, updateActivity, uploadCatalogMedia } from '../api';
 import { activityCategories, activityCompleteness, activityStatusLabel, formatEur } from '../presentation';
 import { PrivateImage, usePrivateMedia } from '../private-image';
 import { Autosave, type AutosaveState } from './autosave';
@@ -17,6 +17,7 @@ import { StepPrice } from './step-price';
 import { StepSpecial } from './step-special';
 import { agePresets, completedSteps, contentBlocker, contentFromActivity, draftActivity, savedAgo, sectionsPayload, stepByNumber, storedBasics, summaryLimit, type WizardContent, type WizardStep, wizardSteps } from './steps';
 import { Field, Icon, icons, ListEditor } from './ui';
+import { PagePreview } from './page-preview';
 import styles from './wizard.module.css';
 
 function PreviewCard({ content, cover, organizationName, activity }: { content: WizardContent; cover?: string; organizationName: string; activity: ActivityDraft }) {
@@ -51,6 +52,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
   const step = stepByNumber(searchParams.get('step'));
 
   const [activity, setActivity] = useState<ActivityDraft>();
+  const [profile, setProfile] = useState<CatalogProfile | null>(null);
   const [groups, setGroups] = useState<ActivityGroup[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [instructors, setInstructors] = useState<InstructorProfile[]>([]);
@@ -80,6 +82,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
     ])
       .then(([loaded, loadedGroups, workspace]) => {
         if (!active) return;
+        setProfile(workspace?.profile ?? null);
         setLocations(workspace?.locations ?? []);
         setInstructors(workspace?.instructors ?? []);
         version.current = loaded.version;
@@ -232,7 +235,6 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
   const previous = wizardSteps[index - 1];
   const next = wizardSteps[index + 1];
   const statusText = saveState === 'saving' || saveState === 'pending' ? 'Запазване…' : saveState === 'error' ? 'Не е запазено' : savedAt === undefined ? 'промените се пазят автоматично' : savedAgo(savedAt, now);
-  const publicHref = `/o/${organization.slug}/activities/${activity.slug}`;
 
   return (
     <div className={styles.page}>
@@ -248,9 +250,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
             </span>
           </div>
         </div>
-        {activity.status === 'published'
-          ? <Link className={styles.secondary} href={publicHref}><Icon path={icons.eye} />Преглед като родител</Link>
-          : <span className={styles.headerHint}>„Преглед като родител“ — след публикуване</span>}
+        <div className={styles.headerMain}>{activity.status === 'published' && <Link className={styles.secondary} href={`/o/${organization.slug}/activities/${activity.slug}`}>Публична страница</Link>}<PagePreview activity={draft} groups={groups} locations={locations} instructors={instructors} profile={profile} organizationId={organization.id} organizationName={organization.name} /></div>
       </header>
 
       {locked ? (
