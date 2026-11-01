@@ -6,6 +6,7 @@ use App\Domain\Catalog\Models\InstructorProfile;
 use App\Domain\Catalog\Models\OrganizationCatalogProfile;
 use App\Domain\Catalog\Models\ScheduleChange;
 use App\Domain\Catalog\Models\Session;
+use App\Domain\Catalog\Services\InstructorNames;
 use App\Domain\Catalog\Services\TeacherRecipients;
 use App\Domain\Enrollment\Models\EnrollmentEvent;
 use App\Domain\Enrollment\Models\EnrollmentEventDelivery;
@@ -21,7 +22,7 @@ final readonly class SubstituteAssignmentLetters
 {
     private const EFFECTS = ['substitute_assigned', 'substitute_for_you', 'substitute_removed', 'session_back', 'released', 'colleague_away'];
 
-    public function __construct(private TeacherRecipients $recipients, private EnrollmentCapacity $capacity) {}
+    public function __construct(private TeacherRecipients $recipients, private EnrollmentCapacity $capacity, private InstructorNames $names) {}
 
     /**
      * @param  list<array{session_id: string, effect: string, enrollment_id: string|null, application_id: string|null, replaced_profile_id: string|null, profile_id: string|null}>  $items
@@ -73,7 +74,8 @@ final readonly class SubstituteAssignmentLetters
 
             return $session;
         }, $lines)));
-        $name = fn (?string $id): string => $id === null ? '' : ($profiles->get($id)->public_name ?? 'колега');
+        $names = $this->names->forIds($profiles->modelKeys());
+        $name = fn (?string $id): string => $id === null ? '' : ($names[$id] ?? 'колега');
         $paragraphs = [];
         $facts = [];
         $subjects = [];

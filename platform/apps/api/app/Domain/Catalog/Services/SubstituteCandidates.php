@@ -12,7 +12,7 @@ use Illuminate\Validation\ValidationException;
 
 final readonly class SubstituteCandidates
 {
-    public function __construct(private TenantContext $context, private AccessScope $scope, private SubstituteWarnings $warnings) {}
+    public function __construct(private TenantContext $context, private AccessScope $scope, private SubstituteWarnings $warnings, private InstructorNames $names) {}
 
     public function authorize(User $actor): void
     {
@@ -51,6 +51,7 @@ final readonly class SubstituteCandidates
         }
         // All profiles, including old user-linked aliases, participate in person matching.
         $profiles = DB::table('instructor_profiles')->where('organization_id', $org)->get(['id', 'public_name', 'staff_member_id', 'user_id'])->keyBy('id');
+        $names = $this->names->forIds($profiles->keys()->all());
         $staff = DB::table('staff_members')->where('organization_id', $org)->whereNull('archived_at')->get(['id', 'user_id'])->keyBy('id');
         $teachers = DB::table('activity_session_instructors')->where('organization_id', $org)->whereIn('session_id', $ids)->get()->groupBy('session_id');
         $history = DB::table('session_changes as c')->join('schedule_changes as h', 'h.id', '=', 'c.schedule_change_id')->where('c.organization_id', $org)->where('h.organization_id', $org)->where('h.action', 'substitute')->whereIn('c.session_id', $ids)->orderByDesc('h.created_at')->orderByDesc('c.schedule_change_id')->get(['c.*']);
@@ -74,7 +75,7 @@ final readonly class SubstituteCandidates
                 $states[$id] = $state;
             }
         }
-        $person = fn (string $id): array => ['profile_id' => $id, 'name' => $profiles[$id]->public_name ?? ''];
+        $person = fn (string $id): array => ['profile_id' => $id, 'name' => $names[$id] ?? ''];
         if ($common === [] || ($replacesId !== null && ! in_array(strtolower($replacesId), $common, true))) {
             throw ValidationException::withMessages(['replaces' => 'Изберете занимания на един и същ преподавател.']);
         }
@@ -92,7 +93,7 @@ final readonly class SubstituteCandidates
             $on = $teachers->get($s->id, collect());
             $canGoWithout = $canGoWithout && $down !== null && $on->count() > 1;
             $sessionRows[] = ['id' => $s->id, 'version' => (int) $s->version, 'starts_at' => CarbonImmutable::parse($s->starts_at, 'UTC')->toIso8601String(), 'ends_at' => CarbonImmutable::parse($s->ends_at, 'UTC')->toIso8601String(), 'activity' => $s->activity, 'group' => $s->group_name, 'age_label' => $s->age_label, 'location' => $s->location,
-                'teachers' => SessionRoles::derive($on->map(fn ($t) => [...$person($t->instructor_profile_id), 'replaces_instructor_profile_id' => $t->replaces_instructor_profile_id, 'replaces_name' => $t->replaces_instructor_profile_id === null ? null : ($profiles[$t->replaces_instructor_profile_id]->public_name ?? '')])->all(), $assignments->get($s->group_id, collect())->map(fn ($a) => [...$person($a->instructor_profile_id), 'role' => $a->role, 'starts_on' => $a->starts_on, 'ends_on' => $a->ends_on])->all(), $s->lead_instructor_profile_id, CarbonImmutable::parse($s->starts_at, 'UTC')->setTimezone('Europe/Sofia')->toDateString()), 'steps_down' => $down === null ? null : $person($down)];
+                'teachers' => SessionRoles::derive($on->map(fn ($t) => [...$person($t->instructor_profile_id), 'replaces_instructor_profile_id' => $t->replaces_instructor_profile_id, 'replaces_name' => $t->replaces_instructor_profile_id === null ? null : ($names[$t->replaces_instructor_profile_id] ?? '')])->all(), $assignments->get($s->group_id, collect())->map(fn ($a) => [...$person($a->instructor_profile_id), 'role' => $a->role, 'starts_on' => $a->starts_on, 'ends_on' => $a->ends_on])->all(), $s->lead_instructor_profile_id, CarbonImmutable::parse($s->starts_at, 'UTC')->setTimezone('Europe/Sofia')->toDateString()), 'steps_down' => $down === null ? null : $person($down)];
         }
         $members = DB::table('organization_memberships as m')->join('users as u', 'u.id', '=', 'm.user_id')->where('m.organization_id', $org)->where('m.status', 'active')->get(['m.user_id', 'm.role', 'u.email_verified_at', 'u.is_active'])->keyBy('user_id');
         $links = DB::table('activity_group_instructors as i')->join('activity_groups as g', 'g.id', '=', 'i.group_id')->join('offerings as o', 'o.id', '=', 'g.offering_id')->join('activities as a', 'a.id', '=', 'o.activity_id')->where('i.organization_id', $org)->where('g.organization_id', $org)->where('o.organization_id', $org)->where('a.organization_id', $org)->where('g.status', '!=', 'archived')->get(['i.*', 'g.name', 'o.activity_id', 'a.title']);
@@ -130,8 +131,8 @@ final readonly class SubstituteCandidates
             }
             $member = $userId === null ? null : $members->get($userId);
             $hasAccess = $member !== null && $member->is_active && OrganizationRole::tryFrom($member->role)?->isTeam();
-            $candidates[$p->id] = ['profile_id' => $p->id, 'name' => $p->public_name, 'section' => $section, 'groups' => array_values(array_unique($groups)), 'return' => $isOriginal, 'has_access' => (bool) $hasAccess, 'email_confirmed' => $hasAccess && $member->email_verified_at !== null, 'suggested' => count(array_intersect($aliases, $suggested)) > 0];
-            $warningPeople[$p->id] = ['name' => $p->public_name, 'aliases' => $aliases];
+            $candidates[$p->id] = ['profile_id' => $p->id, 'name' => $names[$p->id], 'section' => $section, 'groups' => array_values(array_unique($groups)), 'return' => $isOriginal, 'has_access' => (bool) $hasAccess, 'email_confirmed' => $hasAccess && $member->email_verified_at !== null, 'suggested' => count(array_intersect($aliases, $suggested)) > 0];
+            $warningPeople[$p->id] = ['name' => $names[$p->id], 'aliases' => $aliases];
         }
         $warnings = $this->warnings->read($sessions->all(), $warningPeople);
         foreach ($candidates as $id => &$candidate) {

@@ -6,6 +6,7 @@ use App\Domain\Catalog\Models\InstructorProfile;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Catalog\Models\SubstituteRequest;
 use App\Domain\Catalog\Models\SubstituteRequestSession;
+use App\Domain\Catalog\Services\InstructorNames;
 use App\Domain\Catalog\Services\TeacherRecipients;
 use App\Domain\Enrollment\Models\EnrollmentEvent;
 use App\Domain\Enrollment\Models\EnrollmentEventDelivery;
@@ -17,7 +18,7 @@ use Illuminate\Database\Eloquent\Collection;
 
 final class SubstituteLetters
 {
-    public function __construct(private readonly StaffRights $rights) {}
+    public function __construct(private readonly StaffRights $rights, private readonly InstructorNames $names) {}
 
     public function request(EnrollmentEvent $event): ?SubstituteRequest
     {
@@ -66,8 +67,9 @@ final class SubstituteLetters
             return ['skip' => 'unverified_email'];
         }
         $profiles = InstructorProfile::query()->whereIn('id', array_filter([$request->requester_profile_id, $request->suggested_profile_id]))->get()->keyBy('id');
+        $names = $this->names->forIds($profiles->modelKeys());
         $requester = $profiles->get($request->requester_profile_id);
-        $name = $requester instanceof InstructorProfile ? $requester->public_name : 'Преподавател';
+        $name = $requester instanceof InstructorProfile ? $names[$requester->id] : 'Преподавател';
         $first = $sessions->first();
         $last = $sessions->last();
         $zone = $first->group->schedule_pattern['timezone'] ?? 'Europe/Sofia';
@@ -93,7 +95,7 @@ final class SubstituteLetters
         }];
         $suggested = $profiles->get($request->suggested_profile_id);
         if ($suggested !== null) {
-            $facts[] = ['label' => 'Предлага', 'value' => $suggested->public_name];
+            $facts[] = ['label' => 'Предлага', 'value' => $names[$suggested->id]];
         }
         if ($request->note !== null) {
             $paragraphs[] = 'Има бележка — вижте я в заявката.';

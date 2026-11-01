@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 /** Office projections share no teacher ownership restriction. Reads never persist expiry. */
 final readonly class OfficeSubstituteRequests
 {
-    public function __construct(private AccessScope $scope, private TenantContext $context, private SubstituteRequests $reader) {}
+    public function __construct(private AccessScope $scope, private TenantContext $context, private SubstituteRequests $reader, private InstructorNames $names) {}
 
     public function authorize(User $actor): void
     {
@@ -38,6 +38,7 @@ final readonly class OfficeSubstituteRequests
         $items = SubstituteRequestSession::query()->whereIn('request_id', $ids)->where('status', 'open')->get();
         $sessions = Session::query()->whereIn('id', $items->pluck('session_id'))->with(['group.offering.activity', 'location'])->get()->keyBy('id');
         $profiles = InstructorProfile::query()->whereIn('id', $requests->pluck('requester_profile_id')->merge($requests->pluck('suggested_profile_id'))->filter())->get()->keyBy('id');
+        $names = $this->names->forIds($profiles->modelKeys());
         $result = [];
         foreach ($ids as $id) {
             $request = $requests[$id];
@@ -49,8 +50,8 @@ final readonly class OfficeSubstituteRequests
                 }
                 $rows[] = ['session_id' => $session->id, 'version' => $session->version, 'starts_at' => $session->starts_at->toIso8601String(), 'ends_at' => $session->ends_at->toIso8601String(), 'activity' => $session->group->offering->activity->title, 'group' => $session->group->name, 'age_label' => $session->group->age_label, 'location' => $session->location?->name];
             }
-            $result[] = ['id' => $request->id, 'version' => $request->version, 'created_at' => $request->created_at->toIso8601String(), 'requester' => ['profile_id' => $request->requester_profile_id, 'name' => $profiles[$request->requester_profile_id]->public_name], 'reason' => $request->reason, 'note' => $request->note,
-                'suggested' => $request->suggested_profile_id === null ? null : ['profile_id' => $request->suggested_profile_id, 'name' => $profiles[$request->suggested_profile_id]->public_name], 'sessions' => $rows];
+            $result[] = ['id' => $request->id, 'version' => $request->version, 'created_at' => $request->created_at->toIso8601String(), 'requester' => ['profile_id' => $request->requester_profile_id, 'name' => $names[$request->requester_profile_id]], 'reason' => $request->reason, 'note' => $request->note,
+                'suggested' => $request->suggested_profile_id === null ? null : ['profile_id' => $request->suggested_profile_id, 'name' => $names[$request->suggested_profile_id]], 'sessions' => $rows];
         }
 
         return ['requests' => $result, 'now' => $now->toIso8601String()];
@@ -70,6 +71,6 @@ final readonly class OfficeSubstituteRequests
         }
         unset($session);
 
-        return [...$result, 'requester' => ['profile_id' => $profile->id, 'name' => $profile->public_name], 'now' => CarbonImmutable::now('UTC')->toIso8601String()];
+        return [...$result, 'requester' => ['profile_id' => $profile->id, 'name' => $this->names->forIds([$profile->id])[$profile->id]], 'now' => CarbonImmutable::now('UTC')->toIso8601String()];
     }
 }

@@ -406,7 +406,7 @@ class TeamInvitationsTest extends TestCase
 
         // The address is the invitation's; one in the request is ignored.
         $this->postJson($url, [
-            'token' => $token, 'name' => 'Нов човек', 'email' => 'someone@example.test',
+            'token' => $token, 'name' => 'Ново избрано име', 'email' => 'someone@example.test',
             'password' => 'dalga-parola-1', 'password_confirmation' => 'dalga-parola-1',
         ])->assertCreated()
             ->assertJsonPath('organization.id', $organization->id)
@@ -415,6 +415,7 @@ class TeamInvitationsTest extends TestCase
         $user = User::query()->where('email', 'new@example.test')->firstOrFail();
         $this->assertNotNull($user->email_verified_at);
         $this->assertAuthenticatedAs($user);
+        $this->assertSame('Ново избрано име', DB::table('staff_members')->where('id', $person->id)->value('full_name'));
         $this->assertDatabaseMissing('users', ['email' => 'someone@example.test']);
         $this->assertSame($user->id, DB::table('staff_members')->where('id', $person->id)->value('user_id'));
         // The new profile has signed in: "Последен вход" in its team.
