@@ -12,6 +12,7 @@ use App\Domain\Organizations\Models\StaffMember;
 use App\Domain\Organizations\Models\StaffScopeGroup;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use App\Domain\Organizations\ValueObjects\StaffAccess;
+use Illuminate\Support\Facades\DB;
 
 /**
  * What a user has in the selected organization (docs/product/team-rights.md, т. 4.4):
@@ -45,6 +46,57 @@ final class StaffRights
         }
 
         return $this->memo[$organizationId.'|'.$user->getKey()] ??= $this->resolve($organizationId, (string) $user->getKey());
+    }
+
+    /**
+     * Active team memberships holding every requested right across the selected organization.
+     * Uses one membership/person query and one active-grant query. Archived or missing people retain
+     * role rights, as in for(); delivery callers apply their own verified-email requirements.
+     *
+     * @param  list<string>  $abilities
+     * @return list<string> sorted user identifiers
+     */
+    public function holdersEverywhere(array $abilities): array
+    {
+        if (! $this->context->hasOrganization()) {
+            return [];
+        }
+        $organizationId = $this->context->organizationId();
+        $members = DB::table('organization_memberships as memberships')
+            ->leftJoin('staff_members as people', function ($join) use ($organizationId): void {
+                $join->on('people.user_id', '=', 'memberships.user_id')
+                    ->where('people.organization_id', $organizationId)->whereNull('people.archived_at');
+            })
+            ->where('memberships.organization_id', $organizationId)->where('memberships.status', 'active')
+            ->get(['memberships.user_id', 'memberships.role', 'people.id as person_id', 'people.access_scope']);
+        $grants = StaffGrant::query()->where('organization_id', $organizationId)
+            ->whereIn('staff_member_id', $members->pluck('person_id')->filter()->all())
+            ->whereNull('revoked_at')
+            ->where(fn ($open) => $open->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->orderBy('granted_at')->get(['id', 'staff_member_id', 'ability', 'expires_at'])
+            ->groupBy('staff_member_id');
+        $holders = [];
+        foreach ($members as $member) {
+            $role = OrganizationRole::tryFrom($member->role);
+            if ($role === null || ! $role->isTeam()) {
+                continue;
+            }
+            $chosen = $member->access_scope === null ? null : StaffScope::tryFrom($member->access_scope);
+            $scope = $chosen !== null && in_array($chosen, $role->allowedScopes(), true) ? $chosen : $role->defaultScope();
+            $added = [];
+            foreach ($grants->get($member->person_id, []) as $grant) {
+                if (TeamAbilities::isGrantable($grant->ability)) {
+                    $added[$grant->ability] = ['id' => (string) $grant->id, 'expires_at' => $grant->expires_at?->utc()->toIso8601String()];
+                }
+            }
+            $access = $this->access($role, $member->person_id, $scope, self::canonical($role->abilities()), $added, [], []);
+            if (array_all($abilities, $access->allowsAcrossOrganization(...))) {
+                $holders[] = (string) $member->user_id;
+            }
+        }
+        sort($holders, SORT_STRING);
+
+        return array_values(array_unique($holders));
     }
 
     /**
