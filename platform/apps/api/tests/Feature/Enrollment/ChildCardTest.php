@@ -69,15 +69,15 @@ class ChildCardTest extends TestCase
         $card->assertJsonPath('groups', [
             [
                 'enrollment_id' => $studio->id, 'group_id' => $f['studio']->id, 'activity' => 'Рисуване', 'group' => 'Ателие', 'version' => 1,
-                'state' => 'ended', 'paused_until' => null, 'ended_on' => '2026-10-20', 'abilities' => self::ALL,
+                'state' => 'ended', 'paused_until' => null, 'ended_on' => '2026-10-20', 'abilities' => self::ALL, 'attendance' => ['month' => '2026-11', 'present' => 0, 'absent' => 0, 'percent' => null, 'sessions' => []],
             ],
             [
                 'enrollment_id' => $f['enrollment']->id, 'group_id' => $f['tuesday']->id, 'activity' => 'Шах', 'group' => 'Вторник', 'version' => 1,
-                'state' => 'active', 'paused_until' => null, 'ended_on' => null, 'abilities' => self::ALL,
+                'state' => 'active', 'paused_until' => null, 'ended_on' => null, 'abilities' => self::ALL, 'attendance' => ['month' => '2026-11', 'present' => 0, 'absent' => 0, 'percent' => null, 'sessions' => []],
             ],
             [
                 'enrollment_id' => $thursday->id, 'group_id' => $f['thursday']->id, 'activity' => 'Шах', 'group' => 'Четвъртък', 'version' => 1,
-                'state' => 'paused', 'paused_until' => '2026-11-15', 'ended_on' => null, 'abilities' => self::ALL,
+                'state' => 'paused', 'paused_until' => '2026-11-15', 'ended_on' => null, 'abilities' => self::ALL, 'attendance' => ['month' => '2026-11', 'present' => 0, 'absent' => 0, 'percent' => null, 'sessions' => []],
             ],
         ]);
         // Nothing more: no birth date, school, parent, contact, money, health or note.
@@ -110,7 +110,7 @@ class ChildCardTest extends TestCase
         $this->getJson(self::CARD.$f['visit']->child_id)->assertOk()->assertJsonPath('class', null)
             ->assertJsonPath('groups', [[
                 'enrollment_id' => $f['visit']->id, 'group_id' => $f['tuesday']->id, 'activity' => 'Шах', 'group' => 'Вторник', 'version' => 1,
-                'state' => 'single', 'paused_until' => null, 'ended_on' => null, 'abilities' => self::ALL,
+                'state' => 'single', 'paused_until' => null, 'ended_on' => null, 'abilities' => self::ALL, 'attendance' => ['month' => '2026-11', 'present' => 0, 'absent' => 0, 'percent' => null, 'sessions' => []],
             ]]);
     }
 

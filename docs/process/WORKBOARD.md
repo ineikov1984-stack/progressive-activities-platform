@@ -28,7 +28,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Присъствия — PR 5: „Днес“, „Чакат отбелязване“ и график (#131) | Codex | `codex/attendance-today` | AttendanceToday, AttendanceAccess, AccessScope/TeachingScope, ScheduleController/Presenter, routes/api.php и тестове | Реализирано по attendance.md 5.4, 5.5, 5.7; 92 засегнати теста / 786 проверки, PHPStan, Pint и docs:check зелени; постоянно заявки при 3/30 занимания; независимо ревю: 0 blocker / should-fix. Следва CI; без миграция или нов екран |
+| Присъствия — PR 6: месечна таблица и карта на детето (#132) | Codex | `codex/attendance-month` | AttendanceMonth, AttendanceSheet/Access, ScheduleReader, SessionRoster, AttendanceController/Presenter, карта на детето, routes/api.php и тестове | Реализирано по attendance.md 5.6–5.7; 117 засегнати теста / 1169 проверки, PHPStan, Pint и docs:check зелени; постоянни заявки при 3/30 деца и 4/12 занимания; независимо ревю: 0 blocker / should-fix. Следва CI; без миграция или нов екран |
 
 ## Опашка (по приоритет)
 
@@ -65,6 +65,8 @@
 - Името и домейнът на marketplace-а (от плана, т. 4).
 
 ## Наскоро завършено
+
+- 01.11.2026 — PR #131: „Днес“, „Чакат отбелязване“ и присъствия в графика; 92 засегнати теста, независимо ревю и всички CI проверки зелени, слят от собственика (Codex).
 
 - 01.11.2026 — PR #130: тема, „Не се проведе“ и „Проведе се“, история и одит; независимо ревю, PostgreSQL и всички CI проверки зелени, слят от собственика (Codex).
 

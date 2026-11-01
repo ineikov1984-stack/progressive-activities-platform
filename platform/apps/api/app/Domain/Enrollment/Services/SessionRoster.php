@@ -40,10 +40,10 @@ final readonly class SessionRoster
      * @param  SupportCollection<int, Session>  $sessions
      * @return array<string, list<array<string, mixed>>>
      */
-    public function forSessions(SupportCollection $sessions): array
+    public function forSessions(SupportCollection $sessions, ?string $childId = null): array
     {
         $probes = $sessions->map(fn (Session $session): Session => self::asScheduled($session));
-        $enrollments = $this->applicability->candidates($probes);
+        $enrollments = $this->applicability->candidates($probes, $childId);
         $enrollments->load(['child', 'application']);
         $outcomes = EnrollmentTransition::query()->whereIn('enrollment_id', $enrollments->modelKeys())
             ->whereNotNull('metadata->outcome')->get()->keyBy('enrollment_id');

@@ -3,6 +3,7 @@
 namespace App\Domain\Catalog\Services;
 
 use App\Domain\Catalog\Enums\ActivityStatus;
+use App\Domain\Catalog\Models\Group;
 use App\Domain\Catalog\Models\ScheduleChange;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Catalog\Models\SessionChange;
@@ -35,6 +36,45 @@ final readonly class ScheduleReader
     private const COLORS = 5;
 
     public function __construct(private TenantContext $context) {}
+
+    /** Existence inside the current tenant, before a caller checks its group-scoped rights. */
+    public function groupExists(string $id): bool
+    {
+        return Group::query()->where('status', '!=', 'draft')->whereKey($id)->exists();
+    }
+
+    /** Group choices for a monthly report; an archived group enters only when explicitly requested.
+     * @param  list<string>|null  $ids
+     * @return list<array{id: string, label: string}>
+     */
+    public function groupChoices(?array $ids, ?string $requested): array
+    {
+        return Group::query()->where('status', '!=', 'draft')
+            ->when($ids !== null, fn ($query) => $query->whereIn('id', $ids ?? []))
+            ->where(fn ($query) => $query->where('status', '!=', 'archived')->when($requested !== null, fn ($also) => $also->orWhere('id', $requested)))
+            ->with('offering.activity')->get()->map(fn (Group $group): array => [
+                'id' => (string) $group->id, 'label' => ($group->offering->activity->title ?? '').' · '.$group->name,
+            ])->sortBy(fn (array $group): string => mb_strtolower($group['label']).'|'.$group['id'])->values()->all();
+    }
+
+    /** @param list<string> $ids
+     * @return list<string>
+     */
+    public function existingGroups(array $ids): array
+    {
+        return Group::query()->whereKey($ids)->where('status', '!=', 'draft')->pluck('id')->all();
+    }
+
+    /** Sessions in caller-authorized groups over an exclusive-ended period, cancelled ones included.
+     * @param  list<string>  $groups
+     * @return Collection<int, Session>
+     */
+    public function sessionsInGroups(array $groups, CarbonImmutable $start, CarbonImmutable $end): Collection
+    {
+        return Session::query()->whereIn('group_id', $groups)->where('starts_at', '>=', $start->utc())
+            ->where('starts_at', '<', $end->utc())->whereHas('group', fn ($query) => $query->where('status', '!=', 'draft'))
+            ->orderBy('starts_at')->orderBy('id')->get();
+    }
 
     /**
      * The sessions the person sees from one moment to another, and what the schedule shows with them (т. 6.1):

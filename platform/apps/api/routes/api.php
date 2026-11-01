@@ -124,6 +124,8 @@ Route::prefix('v1')->group(function (): void {
                     Route::delete('/enrollments/{enrollment}/skipped-sessions/{session}', [StaffEnrollmentChangeController::class, 'restoreSession'])->whereUuid(['enrollment', 'session']);
                 });
             });
+            Route::get('/attendance/month', [AttendanceController::class, 'month'])
+                ->middleware(['tenant', 'organization.access:operational.read', 'throttle:120,1']);
             Route::get('/attendance/today', [AttendanceController::class, 'today'])
                 ->middleware(['tenant', 'organization.access:operational.read', 'throttle:120,1']);
             Route::get('/attendance/pending', [AttendanceController::class, 'pending'])

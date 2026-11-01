@@ -26,6 +26,15 @@ final readonly class AttendanceSheet
         return array_map(fn (array $sheet): array => $sheet['counts'], $this->sheets($sessions));
     }
 
+    /** Monthly cells retain the applicable roster of cancelled/not-held sessions; their counts remain zero.
+     * @param  Collection<int, Session>  $sessions
+     * @return array<string, array<string, mixed>>
+     */
+    public function monthSheets(Collection $sessions, ?string $childId = null): array
+    {
+        return $this->sheets($sessions, includeHidden: true, childId: $childId);
+    }
+
     /** Counts and last mark for list responses, without loading history or actor names.
      * @param  Collection<int, Session>  $sessions
      * @return array<string, array{counts: array<string, int>, last_marked_at: string|null}>
@@ -106,9 +115,9 @@ final readonly class AttendanceSheet
     /** @param Collection<int, Session> $sessions
      * @return array<string, array<string, mixed>>
      */
-    private function sheets(Collection $sessions): array
+    private function sheets(Collection $sessions, bool $includeHidden = false, ?string $childId = null): array
     {
-        $rosters = $this->roster->forSessions($sessions);
+        $rosters = $this->roster->forSessions($sessions, $childId);
         $marks = AttendanceMark::query()->whereIn('session_id', $sessions->pluck('id'))->get()->groupBy('session_id');
         $states = AttendanceSession::query()->whereIn('session_id', $sessions->pluck('id'))->get()->keyBy('session_id');
         $result = [];
@@ -119,7 +128,7 @@ final readonly class AttendanceSheet
             $children = [];
             $last = null;
             $byEnrollment = ($marks->get((string) $session->id) ?? collect())->keyBy('enrollment_id');
-            foreach ($hidden ? [] : ($rosters[(string) $session->id] ?? []) as $row) {
+            foreach ($hidden && ! $includeHidden ? [] : ($rosters[(string) $session->id] ?? []) as $row) {
                 /** @var AttendanceMark|null $mark */
                 $mark = $byEnrollment->get($row['enrollment_id']);
                 $expected = $row['state'] !== 'paused';
@@ -150,6 +159,10 @@ final readonly class AttendanceSheet
                 }
             }
             usort($children, fn (array $a, array $b): int => [! $a['expected'], mb_strtolower($a['name']), $a['enrollment_id']] <=> [! $b['expected'], mb_strtolower($b['name']), $b['enrollment_id']]);
+            if ($hidden) {
+                $counts = array_fill_keys(array_keys($counts), 0);
+                $last = null;
+            }
             $result[(string) $session->id] = ['children' => $children, 'counts' => $counts, 'state' => $state, 'last_marked_at' => $last?->toIso8601String()];
         }
 

@@ -94,6 +94,23 @@ final readonly class AttendanceAccess
         ];
     }
 
+    /** Whole-group history: begun assignments/offering leads or an explicit right in scope.
+     * @return list<string>|null null means every group; mark is included only for child cards.
+     */
+    public function monthGroups(User $user, bool $includeMark = false): ?array
+    {
+        if (! $this->context->hasOrganization() || $this->scope->access($user)->role?->isTeam() !== true) {
+            return [];
+        }
+        $view = $this->scope->groupsInScope($user, 'attendance.view_month');
+        $mark = $includeMark ? $this->scope->groupsInScope($user, 'attendance.mark') : [];
+        if ($view === null || $mark === null) {
+            return null;
+        }
+
+        return array_values(array_unique([...$this->teaching->ownGroupsNow($user), ...$view, ...$mark]));
+    }
+
     /** Batch equivalent of view/mark rights; no session-count-dependent queries.
      * @param  Collection<int, Session>  $sessions
      * @param  array<string, AttendanceSession>  $notHeld

@@ -321,6 +321,7 @@ class TeamRightsCharacterizationTest extends TestCase
             // New with "График" (docs/product/schedule.md, т. 2, 6): every role sees the schedule of its scope — the teacher
             // the group they lead, which holds this session.
             'POST api/v1/attendance/sessions/{session}/changes' => ['POST', "/api/v1/attendance/sessions/{$f['session']->id}/changes", [], [...self::SCHEDULE_MANAGE, 'instructor'], 422],
+            'GET api/v1/attendance/month' => ['GET', "/api/v1/attendance/month?group={$f['tuesday']->id}", [], array_values(array_diff(self::ALL, ['platform_admin'])), 200],
             'GET api/v1/attendance/today' => ['GET', '/api/v1/attendance/today', [], array_values(array_diff(self::ALL, ['platform_admin'])), 200],
             'GET api/v1/attendance/pending' => ['GET', '/api/v1/attendance/pending', [], [...self::SCHEDULE_MANAGE, 'instructor'], 200],
             'GET api/v1/attendance/sessions/{session}' => ['GET', "/api/v1/attendance/sessions/{$f['session']->id}", [], array_values(array_diff(self::ALL, ['platform_admin'])), 200],
