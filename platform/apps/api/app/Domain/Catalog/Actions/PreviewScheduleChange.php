@@ -7,6 +7,7 @@ use App\Domain\Catalog\Services\TeacherRecipients;
 use App\Domain\Catalog\ValueObjects\PlannedSessionChange;
 use App\Domain\Catalog\ValueObjects\ScheduleChangeRequest;
 use App\Domain\Enrollment\Services\ScheduleChangeEffects;
+use App\Domain\Enrollment\ValueObjects\ScheduleEffects;
 use Carbon\CarbonImmutable;
 
 /**
@@ -28,10 +29,11 @@ final readonly class PreviewScheduleChange
         $now = CarbonImmutable::now();
         $this->planner->assertFound($request, $this->planner->found($request));
         $planned = $this->planner->plan($request, false, $now, $allowEmpty || $request->action === 'change_location');
-        $effects = $this->effects->assess(array_map(
+        $effects = $request->action === 'substitute' ? ScheduleEffects::none() : $this->effects->assess(array_map(
             fn (PlannedSessionChange $change): array => ['before' => $change->before, 'after' => $change->after, 'effect' => $change->effect()], $planned,
         ), $now, $request->notifyParents);
         $letters = $this->teachers->letters($planned);
+        $verifiedTeachers = $this->teachers->withConfirmedAddress(array_map('strval', array_keys($letters)));
         $single = count($planned) === 1 ? $planned[0] : null;
 
         return [
@@ -57,8 +59,8 @@ final readonly class PreviewScheduleChange
                 'children' => $effects->children,
                 'families' => count($effects->families()),
                 'letters' => $effects->letters(),
-                'teachers' => $this->teachers->withConfirmedAddress(array_map('strval', array_keys($letters))),
-                'without_verified_email' => $effects->withoutConfirmedAddress(),
+                'teachers' => $verifiedTeachers,
+                'without_verified_email' => $request->action === 'substitute' ? count($letters) - $verifiedTeachers : $effects->withoutConfirmedAddress(),
                 'visits' => array_sum(array_column($effects->sessions, 'visits')),
                 'visit_applications' => count(array_filter($effects->items, fn (array $item): bool => $item['application_id'] !== null)),
                 'skips_dropped' => array_sum(array_map('count', $effects->droppedSkips)),

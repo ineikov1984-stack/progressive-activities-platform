@@ -284,7 +284,7 @@ final class ScheduleChangeEffects
      * that say what happened. Batched: a query per kind of row, per refused session and per new start.
      *
      * @param  array<string, string>  $days  session => its day in the group's time zone, for the words of a refusal
-     * @param  array<string, list<array{session_id: string, effect: string}>>  $teachers  user => the sessions they hear of
+     * @param  array<string, list<array{session_id: string, effect: string, replaced_profile_id?: string, profile_id?: string}>>  $teachers  user => the sessions they hear of
      */
     public function apply(User $actor, string $changeId, ScheduleEffects $effects, ?string $reasonForParents, array $days, array $teachers, CarbonImmutable $now): void
     {

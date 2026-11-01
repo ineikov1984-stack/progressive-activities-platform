@@ -614,7 +614,7 @@ class ScheduleChangeApiTest extends TestCase
             ->assertJsonPath('sessions.0.version', 1)->assertJsonPath('sessions.0.moved', false)
             ->assertJsonPath('sessions.0.moved_from', null)->assertJsonPath('sessions.0.extra', false);
         $panel = fn (User $user) => $this->signInTo($user, $f['organization'])->getJson("/api/v1/schedule/sessions/{$f['session']->id}")->assertOk();
-        $panel($f['owner'])->assertJsonPath('last_change', null)->assertJsonPath('actions', ['move', 'cancel']);
+        $panel($f['owner'])->assertJsonPath('last_change', null)->assertJsonPath('actions', ['move', 'cancel', 'substitute']);
 
         $this->changeAsOwner($f, 'cancel', $f['session'], ['reason' => 'Ремонт на залата'])->assertCreated();
 

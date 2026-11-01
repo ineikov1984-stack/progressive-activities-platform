@@ -27,7 +27,7 @@ final readonly class ScheduleChangePlanner
 {
     public const TIMEZONE = 'Europe/Sofia';
 
-    public function __construct(private GroupTeachers $teachers) {}
+    public function __construct(private GroupTeachers $teachers, private SubstituteAssignmentPlanner $substitutes) {}
 
     /**
      * The sessions of the request as the organization sees them, without locks: which groups to lock (т. 7.4, step 4).
@@ -110,11 +110,11 @@ final readonly class ScheduleChangePlanner
         if ($request->action === 'add') {
             return [$this->planAddition($request, $now)];
         }
-        $query = Session::query()->with(['group.offering.activity', 'group.assignments', 'instructors'])->whereKey($request->sessionIds())->orderBy('id');
+        $query = Session::query()->with(['group.offering.activity', 'group.assignments', 'instructors' => fn ($q) => $q->withPivot('replaces_instructor_profile_id')])->whereKey($request->sessionIds())->orderBy('id');
         if ($lock) {
             $query->lockForUpdate();
         }
-        $sessions = $request->action === 'holiday' ? ($selection ?? $this->found($request))->load(['group.offering.activity', 'group.assignments', 'instructors']) : $query->get();
+        $sessions = $request->action === 'holiday' ? ($selection ?? $this->found($request))->load(['group.offering.activity', 'group.assignments', 'instructors' => fn ($q) => $q->withPivot('replaces_instructor_profile_id')]) : $query->get();
         $this->assertFound($request, $sessions);
 
         $changed = [];
@@ -130,6 +130,9 @@ final readonly class ScheduleChangePlanner
             ], 409));
         }
 
+        if ($request->action === 'substitute') {
+            return $this->substitutes->plan($request, $sessions, $now);
+        }
         $planned = [];
         foreach ($sessions as $session) {
             if ($request->action === 'holiday' && ($session->status !== 'scheduled' || SessionCutoff::passed($session, $now))) {
@@ -165,6 +168,9 @@ final readonly class ScheduleChangePlanner
      */
     public function warnings(array $planned): array
     {
+        if (($planned[0]->kind ?? null) === 'substituted') {
+            return $this->substitutes->warnings($planned);
+        }
         $active = array_values(array_filter($planned, fn (PlannedSessionChange $change): bool => $change->after->status === 'scheduled'));
         if ($active === []) {
             return [];

@@ -90,7 +90,7 @@ class ScheduleApiTest extends TestCase
         $response->assertJsonPath('groups.1', ['id' => $f['tuesday']->id, 'name' => 'Вторник', 'activity_id' => $f['activity']->id, 'age_label' => '2.–4. клас'])
             ->assertJsonPath('locations', [])->assertJsonPath('instructors', []);
         foreach ([$f['tuesday'], $f['thursday'], $f['studio']] as $group) {
-            $response->assertJsonPath("abilities.{$group->id}", ['children' => true, 'manage' => true]);
+            $response->assertJsonPath("abilities.{$group->id}", ['children' => true, 'manage' => true, 'substitute' => true]);
         }
     }
 
@@ -219,7 +219,7 @@ class ScheduleApiTest extends TestCase
         $this->assertSame([$f['tuesday']->id], array_values(array_unique(array_column($list->json('sessions'), 'group_id'))));
         $list->assertJsonPath('groups', [['id' => $f['tuesday']->id, 'name' => 'Вторник', 'activity_id' => $f['activity']->id, 'age_label' => '2.–4. клас']])
             ->assertJsonPath('activities', [['id' => $f['activity']->id, 'title' => 'Шах', 'color' => 0]])
-            ->assertJsonPath("abilities.{$f['tuesday']->id}", ['children' => true, 'manage' => false]);
+            ->assertJsonPath("abilities.{$f['tuesday']->id}", ['children' => true, 'manage' => false, 'substitute' => false]);
         $this->assertNull($list->json("abilities.{$f['thursday']->id}"));
         // A filter outside the scope gives nothing, without an error.
         $this->assertSame([], $this->sessionIds(self::NOVEMBER."&group[]={$f['thursday']->id}"));
@@ -254,7 +254,7 @@ class ScheduleApiTest extends TestCase
 
         $this->signInTo($accountant, $f['organization'])->getJson(self::NOVEMBER)->assertOk()->assertJsonCount(12, 'sessions')
             ->assertJsonPath('sessions.0.status', 'cancelled')
-            ->assertJsonPath("abilities.{$f['thursday']->id}", ['children' => true, 'manage' => false]);
+            ->assertJsonPath("abilities.{$f['thursday']->id}", ['children' => true, 'manage' => false, 'substitute' => false]);
         $this->getJson("/api/v1/schedule/sessions/{$f['session']->id}")->assertOk()
             ->assertJsonPath('session.status', 'cancelled')->assertJsonMissingPath('session.change_reason');
         $this->assertSame([$f['session']->id], $this->sessionIds(self::NOVEMBER."&child={$f['visit']->child_id}"));
@@ -272,7 +272,7 @@ class ScheduleApiTest extends TestCase
         $this->signInTo($teacher, $f['organization']);
 
         $this->getJson(self::NOVEMBER)->assertOk()->assertJsonCount(12, 'sessions')->assertJsonCount(3, 'groups')
-            ->assertJsonPath("abilities.{$f['tuesday']->id}", ['children' => false, 'manage' => false]);
+            ->assertJsonPath("abilities.{$f['tuesday']->id}", ['children' => false, 'manage' => false, 'substitute' => false]);
         $this->getJson("/api/v1/schedule/sessions/{$f['session']->id}")->assertOk()->assertJsonMissingPath('session.children');
         $this->getJson(self::NOVEMBER."&child={$f['enrollment']->child_id}")->assertForbidden();
     }
@@ -318,8 +318,8 @@ class ScheduleApiTest extends TestCase
             ->assertJsonPath('activities', [['id' => $f['activity']->id, 'title' => 'Шах', 'color' => 0]])
             ->assertJsonPath('locations', [['id' => $f['location']->id, 'name' => 'Зала 1']])
             ->assertJsonPath('instructors', [['id' => $profile->id, 'name' => $profile->public_name]])
-            ->assertJsonPath("abilities.{$f['tuesday']->id}", ['children' => true, 'manage' => false])
-            ->assertJsonPath("abilities.{$f['thursday']->id}", ['children' => false, 'manage' => false]);
+            ->assertJsonPath("abilities.{$f['tuesday']->id}", ['children' => true, 'manage' => false, 'substitute' => false])
+            ->assertJsonPath("abilities.{$f['thursday']->id}", ['children' => false, 'manage' => false, 'substitute' => false]);
         $this->assertSame([], $this->sessionIds(self::NOVEMBER."&instructor[]={$colleague->id}"));
         $this->getJson("/api/v1/schedule/sessions/{$other->id}")->assertNotFound();
         $this->getJson(self::NOVEMBER."&child={$daniel->child_id}")->assertForbidden();
@@ -365,7 +365,7 @@ class ScheduleApiTest extends TestCase
         $this->assertSame([], $this->sessionIds('/api/v1/schedule?from=2026-09-28&to=2026-11-08'));
         $this->getJson("/api/v1/schedule/sessions/{$old->id}")->assertNotFound();
         $this->assertSame([$twelfth->id, $nineteenth->id, $cancelled->id], $this->sessionIds(self::NOVEMBER));
-        $this->getJson(self::NOVEMBER)->assertJsonPath("abilities.{$f['thursday']->id}", ['children' => false, 'manage' => false]);
+        $this->getJson(self::NOVEMBER)->assertJsonPath("abilities.{$f['thursday']->id}", ['children' => false, 'manage' => false, 'substitute' => false]);
         // Today the children; a substitution later on, not yet.
         $this->getJson("/api/v1/schedule/sessions/{$twelfth->id}")->assertOk()
             ->assertJsonPath('session.children.0.enrollment_id', $daniel->id)->assertJsonPath('abilities.children', true)
@@ -428,8 +428,8 @@ class ScheduleApiTest extends TestCase
         // Ани goes to "Вторник", which the teacher sees in the schedule but not among the enrollments.
         $this->assertSame([], $this->sessionIds(self::NOVEMBER."&child={$f['enrollment']->child_id}"));
         $this->getJson(self::NOVEMBER)->assertOk()->assertJsonCount(12, 'sessions')
-            ->assertJsonPath("abilities.{$f['tuesday']->id}", ['children' => false, 'manage' => false])
-            ->assertJsonPath("abilities.{$f['thursday']->id}", ['children' => true, 'manage' => false]);
+            ->assertJsonPath("abilities.{$f['tuesday']->id}", ['children' => false, 'manage' => false, 'substitute' => false])
+            ->assertJsonPath("abilities.{$f['thursday']->id}", ['children' => true, 'manage' => false, 'substitute' => false]);
 
         // The office: every group.
         $this->signInTo($f['owner'], $f['organization']);

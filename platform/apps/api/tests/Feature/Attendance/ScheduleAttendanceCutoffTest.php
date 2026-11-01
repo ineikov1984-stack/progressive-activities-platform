@@ -47,7 +47,7 @@ class ScheduleAttendanceCutoffTest extends TestCase
         $this->applyChange($f['owner'], $f['organization'], $body)->assertUnprocessable();
     }
 
-    public function test_holiday_skips_the_open_attendance_window_and_the_panel_has_no_change_actions(): void
+    public function test_holiday_skips_the_open_attendance_window_but_teacher_substitution_remains_available(): void
     {
         $f = $this->rightsFixture();
         $this->travelTo($f['session']->starts_at->subMinutes(14));
@@ -58,7 +58,7 @@ class ScheduleAttendanceCutoffTest extends TestCase
         $this->previewChange($f['owner'], $f['organization'], $body)->assertOk()
             ->assertJsonPath('skipped.started', 1)->assertJsonPath('totals.sessions', 1);
         $this->signInTo($f['owner'], $f['organization'])->getJson('/api/v1/schedule/sessions/'.$f['session']->id)
-            ->assertOk()->assertJsonPath('actions', []);
+            ->assertOk()->assertJsonPath('actions', ['substitute']);
     }
 
     public function test_location_changes_keep_their_existing_boundary(): void

@@ -11,7 +11,7 @@ use App\Domain\Catalog\Models\Session;
 final readonly class PlannedSessionChange
 {
     /**
-     * @param  array<string, array{role: string}>|null  $syncTeachers  the teachers to put on the session from the assignments; null — they stay
+     * @param  array<string, array{role: string, replaces_instructor_profile_id?: string|null}>|null  $syncTeachers  the teachers to put on the session from the assignments; null — they stay
      * @param  list<string>  $teachersBefore  the teacher profiles on the session now
      * @param  list<string>  $teachersAfter  the teacher profiles on the session after the change
      */
@@ -22,6 +22,9 @@ final readonly class PlannedSessionChange
         public array $teachersBefore,
         public array $teachersAfter,
         public ?string $kind = null,
+        public ?string $replacedProfileId = null,
+        public ?string $removedProfileId = null,
+        public ?string $addedProfileId = null,
     ) {}
 
     public function sessionId(): string

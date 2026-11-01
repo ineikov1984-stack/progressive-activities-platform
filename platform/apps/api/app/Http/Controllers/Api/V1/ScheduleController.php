@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api\V1;
 use App\Domain\Attendance\Services\AttendanceAccess;
 use App\Domain\Attendance\Services\AttendanceSheet;
 use App\Domain\Catalog\Models\Session;
+use App\Domain\Catalog\Models\SubstituteRequestSession;
 use App\Domain\Catalog\Services\AccessScope;
 use App\Domain\Catalog\Services\ScheduleReader;
+use App\Domain\Catalog\Services\TeachingScope;
 use App\Domain\Enrollment\Services\EnrollmentCapacity;
 use App\Domain\Enrollment\Services\SessionRoster;
 use App\Domain\Identity\Models\User;
@@ -35,6 +37,7 @@ final class ScheduleController extends Controller
     public function __construct(
         private readonly AccessScope $scope,
         private readonly ScheduleReader $reader,
+        private readonly TeachingScope $teaching,
         private readonly EnrollmentCapacity $capacity,
         private readonly SessionRoster $roster,
         private readonly AttendanceAccess $attendanceAccess,
@@ -89,6 +92,7 @@ final class ScheduleController extends Controller
             $this->scope->scheduleChildren($user),
             $this->manages($user),
             $this->attendance($user, new Collection($sessions)),
+            $this->substitutes($user),
         ));
     }
 
@@ -129,6 +133,8 @@ final class ScheduleController extends Controller
             $this->manages($user),
             $attendance,
             $attendanceAbility,
+            $this->substitutes($user),
+            $this->canRequestSubstitute($user, $record, $panel['teachers']),
         ));
     }
 
@@ -160,6 +166,23 @@ final class ScheduleController extends Controller
     private function manages(User $user): bool
     {
         return $this->scope->access($user)->role?->isTeam() === true && $this->scope->allowsEverywhere($user, 'schedule.manage');
+    }
+
+    private function substitutes(User $user): bool
+    {
+        return $this->manages($user) && $this->scope->allowsEverywhere($user, 'team.assign');
+    }
+
+    /** @param list<array<string, mixed>> $teachers */
+    private function canRequestSubstitute(User $user, Session $session, array $teachers): bool
+    {
+        if ($this->substitutes($user) || $this->scope->access($user)->role?->isTeam() !== true || $session->status !== 'scheduled' || ! $session->starts_at->isFuture()) {
+            return false;
+        }
+        $profiles = $this->teaching->profilesFor($user);
+        $mine = array_intersect($profiles, array_column($teachers, 'profile_id'));
+
+        return $mine !== [] && ! SubstituteRequestSession::query()->where('session_id', $session->id)->whereIn('requester_profile_id', $mine)->where('status', 'open')->exists();
     }
 
     /** @return array<string, list<string>> */

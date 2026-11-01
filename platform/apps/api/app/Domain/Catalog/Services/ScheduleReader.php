@@ -120,7 +120,7 @@ final readonly class ScheduleReader
      * latest change from the schedule (docs/product/schedule-changes.md, т. 7.5) — none for a session cancelled in the
      * draft's editor. Null — a session of another organization, outside the person's sessions, or of a draft.
      *
-     * @return array{session: Session, teachers: list<SessionTeacher>, group: ScheduleGroup, location: array{id: string, name: string}|null, last_change: LastChange|null}|null
+     * @return array{session: Session, teachers: list<SessionTeacher>, group: ScheduleGroup, location: array{id: string, name: string}|null, last_change: LastChange|null, last_substitute: LastChange|null}|null
      */
     public function panel(ScheduleScope $scope, string $sessionId): ?array
     {
@@ -142,6 +142,7 @@ final readonly class ScheduleReader
             'group' => $group,
             'location' => $location[0] ?? null,
             'last_change' => $this->lastChange((string) $session->id),
+            'last_substitute' => $this->lastChange((string) $session->id, true),
         ];
     }
 
@@ -151,9 +152,9 @@ final readonly class ScheduleReader
      *
      * @return LastChange|null
      */
-    private function lastChange(string $sessionId): ?array
+    private function lastChange(string $sessionId, bool $substitute = false): ?array
     {
-        $last = SessionChange::query()->where('session_id', $sessionId)->orderByDesc('schedule_change_id')->first(['schedule_change_id']);
+        $last = SessionChange::query()->where('session_id', $sessionId)->whereHas('change', fn ($query) => $query->where('action', $substitute ? '=' : '!=', 'substitute'))->orderByDesc('schedule_change_id')->first(['schedule_change_id']);
         $change = $last === null ? null : ScheduleChange::query()->find($last->schedule_change_id);
         if ($change === null) {
             return null;

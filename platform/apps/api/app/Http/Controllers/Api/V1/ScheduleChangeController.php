@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Domain\Catalog\Actions\ApplyScheduleChange;
 use App\Domain\Catalog\Actions\PreviewScheduleChange;
 use App\Domain\Catalog\Services\AccessScope;
+use App\Domain\Catalog\Services\TeamAssignments;
 use App\Domain\Catalog\ValueObjects\ScheduleChangeRequest;
 use App\Domain\Identity\Models\User;
 use App\Http\Controllers\Controller;
@@ -23,10 +24,10 @@ use Illuminate\Validation\ValidationException;
 final class ScheduleChangeController extends Controller
 {
     /** The actions supported by the shared preview/apply routes. */
-    private const ACTIONS = ['move', 'cancel', 'restore', 'change_location', 'holiday', 'add'];
+    private const ACTIONS = ['move', 'cancel', 'restore', 'change_location', 'holiday', 'add', 'substitute'];
 
     /** The warnings that are confirmed by their key (т. 4.8). */
-    private const WARNINGS = ['instructor', 'shared_location', 'exclusive_location', 'overbooked', 'no_lead'];
+    private const WARNINGS = ['instructor', 'shared_location', 'exclusive_location', 'overbooked', 'no_lead', 'substitute_away'];
 
     public function __construct(private readonly AccessScope $scope) {}
 
@@ -62,13 +63,18 @@ final class ScheduleChangeController extends Controller
             'Нямате право да променяте графика.',
         );
 
+        if ($request->input('action') === 'substitute') {
+            abort_unless($this->scope->allowsEverywhere($user, 'team.assign'), 403, 'Заместник назначават собственикът, администраторът и координаторът.');
+        }
+
         return $user;
     }
 
     /** The form of the body (т. 7.4, step 3): what can be told without the database. */
     private function body(Request $request): ScheduleChangeRequest
     {
-        $sessions = 'Изберете от 1 до 300 занимания.';
+        $substitute = $request->input('action') === 'substitute';
+        $sessions = $substitute ? 'Изберете от 1 до 50 занимания.' : 'Изберете от 1 до 300 занимания.';
         $reason = 'Напишете причина (до 2000 знака).';
         $warning = 'Има ново предупреждение. Прегледайте го и потвърдете отново.';
         $inputAction = $request->input('action');
@@ -77,7 +83,7 @@ final class ScheduleChangeController extends Controller
         $needsSessions = $action !== 'add' && ($action !== 'holiday' || ! $request->is('*/preview'));
         $validated = $request->validate([
             'action' => ['required', 'string', Rule::in(self::ACTIONS)],
-            'sessions' => [$needsSessions ? 'required' : 'sometimes', 'array', 'min:1', $single ? 'max:1' : 'max:300'],
+            'sessions' => [$needsSessions ? 'required' : 'sometimes', 'array', 'min:1', $single ? 'max:1' : ($substitute ? 'max:50' : 'max:300')],
             'sessions.*' => ['required', 'array'],
             'sessions.*.id' => ['required', 'uuid', 'distinct:ignore_case'],
             'sessions.*.version' => ['required', 'integer', 'min:1'],
@@ -92,15 +98,24 @@ final class ScheduleChangeController extends Controller
             'locations.*' => ['required', 'uuid', 'distinct:ignore_case'],
             'activities' => ['sometimes', 'array', 'max:300'],
             'activities.*' => ['required', 'uuid', 'distinct:ignore_case'],
-            'notify_parents' => ['sometimes', 'boolean'],
-            'reason' => ['nullable', 'string', 'max:2000'],
-            'reason_to_parents' => ['sometimes', 'boolean'],
+            'notify_parents' => ['prohibited_if:action,substitute', 'sometimes', 'boolean'],
+            'reason' => ['prohibited_if:action,substitute', 'nullable', 'string', 'max:2000'],
+            'reason_to_parents' => ['prohibited_if:action,substitute', 'sometimes', 'boolean'],
+            'replaces_profile_id' => ['required_if:action,substitute', 'uuid'],
+            'substitute_profile_id' => ['present_if:action,substitute', 'nullable', 'uuid'],
+            'request' => ['sometimes', 'array'],
+            'request.id' => ['required_with:request', 'uuid'],
+            'request.version' => ['required_with:request', 'integer', 'min:1'],
             'confirmed_warnings' => ['sometimes', 'array', 'max:90000'],
             'confirmed_warnings.*' => ['required', 'array'],
             'confirmed_warnings.*.type' => ['required', 'string', Rule::in(self::WARNINGS)],
             'confirmed_warnings.*.session_id' => ['required', 'uuid'],
             'confirmed_warnings.*.other_session_id' => ['nullable', 'uuid'],
         ], [
+            'replaces_profile_id.*' => 'Изберете кой няма да може.',
+            'substitute_profile_id.*' => 'Изберете заместник или „Без заместник“.',
+            'request.*' => 'Заредете отново заявката.',
+            'request.*.*' => 'Заредете отново заявката.',
             'action.*' => 'Изберете действие.',
             'date.*' => 'Изберете ден от днес до една година напред.',
             'from.*' => 'Изберете начален час.',
@@ -144,13 +159,23 @@ final class ScheduleChangeController extends Controller
             ];
         }
 
+        if ($substitute && is_string($validated['substitute_profile_id'] ?? null)) {
+            /** @var User $actor */
+            $actor = $request->user();
+            app(TeamAssignments::class)->assertNotSelf($actor, [Str::lower($validated['substitute_profile_id'])]);
+        }
+
         return new ScheduleChangeRequest(
+            replacesProfileId: $substitute ? Str::lower($validated['replaces_profile_id']) : null,
+            substituteProfileId: $substitute && is_string($validated['substitute_profile_id'] ?? null) ? Str::lower($validated['substitute_profile_id']) : null,
+            requestId: $substitute && isset($validated['request']['id']) ? Str::lower($validated['request']['id']) : null,
+            requestVersion: $substitute && isset($validated['request']['version']) ? (int) $validated['request']['version'] : null,
             action: $action,
             sessions: $list,
-            reason: $text === '' ? null : $text,
-            reasonToParents: $action === 'holiday' || $request->boolean('reason_to_parents', $action === 'move'),
+            reason: $substitute || $text === '' ? null : $text,
+            reasonToParents: ! $substitute && ($action === 'holiday' || $request->boolean('reason_to_parents', $action === 'move')),
             // A change of one session always goes to the families (decision of 29.10.2026 and decision 4).
-            notifyParents: in_array($action, ['move', 'cancel', 'restore'], true) || $request->boolean('notify_parents', true),
+            notifyParents: ! $substitute && (in_array($action, ['move', 'cancel', 'restore'], true) || $request->boolean('notify_parents', true)),
             confirmedWarnings: $confirmed,
             date: in_array($action, ['move', 'add'], true) ? $validated['date'] : null,
             from: in_array($action, ['move', 'add'], true) ? $validated['from'] : null,
