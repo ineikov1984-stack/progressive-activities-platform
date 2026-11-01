@@ -1,0 +1,39 @@
+import {expect,test,type Page} from '@playwright/test';
+import {fixture} from './attendance-fixture';
+import type {PaymentTermsWorkspace} from '../../src/features/payment-terms/api';
+const rules={start:{mode:'by_sessions',cutoff_day:null,kept_until_cutoff:null,kept_after_cutoff:null},end:{mode:'full_month',cutoff_day:null,kept_until_cutoff:null,kept_after_cutoff:null,notice_days:0},pause:{notice_days:7,kept_on_time:0,kept_late:50,free_days_per_school_year:61,document_required:false,min_days:0},absences:{tiers:[{up_to:null,kept:100}]},makeup:{enabled:true,within_days:14,notice_hours:3,per_month:null,only_if_space:false},refund:'parent_choice'};
+const self={absence:true,pause_weeks:2,end:false,cancel_visit:true};
+const terms:PaymentTermsWorkspace={payment_terms:[],billing_kinds:[{value:'monthly',label:'Месечна такса',presets:{standard:{label:'Стандартни',rules,self_service:self},flexible:{label:'Гъвкави',rules:{...rules,refund:'money'},self_service:self},strict:{label:'Строги',rules:{...rules,refund:'credit'},self_service:self}}}],in_marketplace:false,usage:{monthly:['Демо шахмат']},can_manage:true,schema_version:1};
+async function workspace(page:Page,permissions=['view','enrollment.view','attendance.mark','attendance.view_month','terms.view','terms.manage']){
+ const f=await fixture(page,{office:true});const requests:string[]=[];
+ await page.route('**/backend/api/v1/**',async route=>{
+  const req=route.request(),path=new URL(req.url()).pathname;
+  if(req.method()!=='GET')requests.push(req.method()+' '+path);
+  if(path.endsWith('/organizations'))return route.fulfill({json:{organizations:[{id:'00000000-0000-4000-8000-000000000002',name:'Школа „Звезда“',slug:'demo',status:'active',role:'organization_owner',permissions}]}});
+  if(path.endsWith('/context/organization'))return route.fulfill({json:{access:{role:'organization_owner',scope:'all',abilities:permissions,groups:[],activities:[]}}});
+  if(path.endsWith('/payment-terms'))return route.fulfill({json:{...terms,can_manage:permissions.includes('terms.manage')}});
+  return route.fallback();
+ });return {...f,requests};
+}
+async function targets(page:Page){
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+ const dialog=page.getByRole('dialog',{name:'Помощ и обучение'});const bounds=await dialog.boundingBox();expect(bounds!.x).toBeGreaterThanOrEqual(0);expect(bounds!.x+bounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width+1);
+ const small=await dialog.locator('button,select').evaluateAll(nodes=>nodes.filter(el=>{const r=el.getBoundingClientRect();return r.width<44||r.height<44;}).map(el=>el.textContent));expect(small).toEqual([]);
+}
+for(const width of [390,768,1440])test(`real contextual help at ${width}px supports topic changes, closing and repeat`,async({page})=>{
+ await page.setViewportSize({width,height:1000});const f=await workspace(page);await page.goto('/dashboard/settings/payment-terms');const opener=page.getByRole('button',{name:'Помощ за този екран',exact:true});await opener.click();const dialog=page.getByRole('dialog',{name:'Помощ и обучение'});await expect(dialog.getByRole('heading',{name:'Помощ и обучение'})).toBeFocused();await page.keyboard.press('Shift+Tab');await expect(dialog.getByRole('button',{name:'Напред',exact:true})).toBeFocused();await page.keyboard.press('Tab');await expect(dialog.getByRole('button',{name:'Затвори помощта'})).toBeFocused();await expect(dialog.getByLabel('Какво искате да направите?')).toHaveValue('terms');await targets(page);await page.screenshot({path:test.info().outputPath(`panel-${width}.png`),fullPage:false});
+ await dialog.getByRole('button',{name:'Напред',exact:true}).click();await expect(dialog.getByRole('heading',{name:'Изберете основа и отворете тема'})).toBeVisible();await dialog.getByRole('button',{name:'Назад',exact:true}).click();await expect(dialog.getByText('Стъпка 1 от 3',{exact:true})).toBeVisible();await dialog.getByLabel('Какво искате да направите?').selectOption('groups');await expect(dialog.getByText('Стъпка 1 от 2',{exact:true})).toBeVisible();await dialog.getByRole('button',{name:'Напред',exact:true}).click();await dialog.getByRole('button',{name:'Готово',exact:true}).click();await expect(dialog).toHaveCount(0);await expect(opener).toBeFocused();await opener.click();await expect(page.getByRole('dialog').getByLabel('Какво искате да направите?')).toHaveValue('terms');await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(opener).toBeFocused();expect(f.requests).toEqual([]);expect(f.errors).toEqual([]);
+});
+test('review-only help does not instruct changing terms or attendance',async({page})=>{
+ await workspace(page,['view','terms.view','attendance.view_month']);await page.goto('/dashboard/settings/payment-terms');await page.getByRole('button',{name:'Помощ за този екран',exact:true}).click();const dialog=page.getByRole('dialog');await expect(dialog.getByLabel('Какво искате да направите?').locator('option')).toHaveCount(2);await expect(dialog.getByLabel('Какво искате да направите?')).toContainText('Да прегледам условията');await dialog.getByRole('button',{name:'Напред',exact:true}).click();await expect(dialog.getByRole('heading',{name:'Отворете тема за преглед'})).toBeVisible();await dialog.getByRole('button',{name:'Напред',exact:true}).click();await expect(dialog.getByRole('heading',{name:'Вижте текста за родителя'})).toBeVisible();await dialog.getByLabel('Какво искате да направите?').selectOption('attendance');await expect(dialog.getByRole('heading',{name:'Отворете „Присъствия“'})).toBeVisible();
+});
+test('teacher help starts from attendance and contains no office topics; focus remains in the modal',async({page})=>{
+ await workspace(page,['view','enrollment.view_own','attendance.mark']);await page.goto('/dashboard/schedule');await page.getByRole('button',{name:'Помощ за този екран',exact:true}).click();const dialog=page.getByRole('dialog');await expect(dialog.getByLabel('Какво искате да направите?').locator('option')).toHaveCount(1);await expect(dialog.getByLabel('Какво искате да направите?')).toHaveValue('attendance');await dialog.getByRole('button',{name:'Напред',exact:true}).focus();await page.keyboard.press('Tab');expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true);await dialog.getByRole('button',{name:'Затвори помощта'}).click();await expect(dialog).toHaveCount(0);
+});
+test('opening and closing help preserves the current attendance page without writes',async({page})=>{
+ const f=await workspace(page);await page.goto('/dashboard/attendance');await expect(page.getByRole('button',{name:'Помощ за този екран',exact:true})).toBeVisible();const before=page.url();await page.getByRole('button',{name:'Помощ за този екран',exact:true}).click();await page.keyboard.press('Escape');await expect(page).toHaveURL(before);expect(f.writes).toEqual([]);expect(f.requests).toEqual([]);
+});
+
+test('help preserves unsaved terms and does not trigger the leave confirmation',async({page})=>{
+ const f=await workspace(page);const dialogs:string[]=[];page.on('dialog',dialog=>{dialogs.push(dialog.message());void dialog.dismiss();});await page.goto('/dashboard/settings/payment-terms');await page.locator('summary').filter({hasText:'Пауза — ваканция, болест, пътуване'}).click();await page.getByLabel('Дни предизвестие за пауза').fill('9');const url=page.url();await page.getByRole('button',{name:'Помощ за този екран',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Затвори помощта'}).click();await expect(page.getByLabel('Дни предизвестие за пауза')).toHaveValue('9');await expect(page).toHaveURL(url);expect(dialogs).toEqual([]);expect(f.requests).toEqual([]);await expect(page.getByRole('button',{name:'Върни запазените',exact:true})).toBeVisible();
+});
