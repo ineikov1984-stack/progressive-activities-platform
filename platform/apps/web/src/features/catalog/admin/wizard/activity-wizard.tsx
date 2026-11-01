@@ -319,7 +319,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
 
               {step.id === 'audience' ? (
                 <>
-                  <Field id="w-age" label="За кого е подходяща" hint="Възраст или класове, както ги казвате на родителите. Изберете готов вариант или напишете свой.">
+                  <Field id="w-age" label="За кого е подходяща" hint="Възраст или класове." help={{ label: 'Как да посоча възрастта?', text: 'Изберете готов вариант или напишете свой — с думите, които използвате с родителите. Например: „3.–4. клас“ или „7–10 години“.' }}>
                     <input id="w-age" className={styles.input} value={content.age_label} placeholder="Например: 7–10 г. или 1.–4. клас"  maxLength={80} aria-describedby="w-age-hint" onChange={(event) => change({ age_label: event.target.value })} />
                   </Field>
                   <div className={styles.chips} role="group" aria-label="Готови варианти за възраст">
@@ -333,7 +333,7 @@ export function ActivityWizard({ activityId }: { activityId: string }) {
 
               {step.id === 'story' ? (
                 <>
-                  <Field id="w-about" label="Какво ще правят децата" hint="Опишете едно занимание: как започва, какво правят, с какво си тръгват.">
+                  <Field id="w-about" label="Какво ще правят децата" help={{ label: 'Как да опиша заниманието?', text: 'Опишете едно занимание: как започва, какво правят децата и с какво си тръгват. Използвайте конкретни примери вместо общи обещания.' }}>
                     <textarea id="w-about" className={`${styles.input} ${styles.textareaTall}`} value={content.sections.about ?? ''} onChange={(event) => changeSections({ about: event.target.value })} />
                   </Field>
                   <ListEditor id="w-benefits" label="Какво печелят" items={content.sections.benefits ?? []} placeholder="Например: концентрация и внимание" addLabel="Добави полза" disabled={locked} onChange={(benefits) => changeSections({ benefits })} />

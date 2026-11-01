@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { InlineHelp } from '@/features/help/inline-help';
 import { useDashboardContext } from '@/features/dashboard/dashboard-context';
 import {
   createPaymentTerms, loadPaymentTerms, PaymentTermsApiError, updatePaymentTerms,
@@ -265,7 +266,7 @@ export function PaymentTermsPage() {
                 ? `Запазени на ${savedOn(saved.current_version.created_at)} като „${saved.preset_label}“.${dirty ? ' Имате незапазени промени.' : ''}`
                 : 'Организацията още не е запазила свои условия за този начин на плащане — важат „Стандартни“.'}
             </p>
-            {kind === 'monthly' ? <p className={styles.muted}>Всички примери са за месечна такса 60,00 € и 4 занимания през ноември, по 15,00 € всяко.</p> : null}
+            {kind === 'monthly' ? <InlineHelp label="Как са сметнати примерите?">Всички примери са за месечна такса 60,00 € и 4 занимания през ноември, по 15,00 € всяко.</InlineHelp> : null}
           </div>
           {violations.length ? (
             <div className={styles.warning} role="note">
