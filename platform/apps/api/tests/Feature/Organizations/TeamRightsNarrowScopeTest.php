@@ -153,7 +153,8 @@ class TeamRightsNarrowScopeTest extends TestCase
             || $uri === 'api/v1/team' || str_starts_with($uri, 'api/v1/team/')
             || (str_starts_with($uri, 'api/v1/catalog/') && $method !== 'GET')
             || $uri === 'api/v1/enrollments/{enrollment}/visit-outcome'
-            || str_starts_with($uri, 'api/v1/schedule/changes');
+            || str_starts_with($uri, 'api/v1/schedule/changes')
+            || str_starts_with($uri, 'api/v1/schedule/substitute');
     }
 
     /**
@@ -173,6 +174,10 @@ class TeamRightsNarrowScopeTest extends TestCase
         $version = ['version' => 1];
 
         return [
+            'GET api/v1/schedule/substitute-requests' => ['/api/v1/schedule/substitute-requests', [], 403],
+            'GET api/v1/schedule/substitute-requests/{substituteRequest}' => ["/api/v1/schedule/substitute-requests/{$missing}", [], 403],
+            'POST api/v1/schedule/substitute-requests/{substituteRequest}/decline' => ["/api/v1/schedule/substitute-requests/{$missing}/decline", $version, 403],
+            'GET api/v1/schedule/substitutes/candidates' => ['/api/v1/schedule/substitutes/candidates', [], 403],
             'GET api/v1/me/substitute-requests' => ['/api/v1/me/substitute-requests', [], 200],
             'GET api/v1/me/substitute-requests/options' => ['/api/v1/me/substitute-requests/options?from=2026-11-03', [], 200],
             'POST api/v1/me/substitute-requests' => ['/api/v1/me/substitute-requests', [], 422],

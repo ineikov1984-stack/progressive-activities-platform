@@ -273,6 +273,10 @@ class TeamRightsCharacterizationTest extends TestCase
         $stale = ['version' => 999];
 
         return [
+            'GET api/v1/schedule/substitute-requests' => ['GET', '/api/v1/schedule/substitute-requests', [], ['organization_owner', 'organization_admin', 'coordinator'], 200],
+            'GET api/v1/schedule/substitute-requests/{substituteRequest}' => ['GET', "/api/v1/schedule/substitute-requests/{$missing}", [], ['organization_owner', 'organization_admin', 'coordinator'], 404],
+            'POST api/v1/schedule/substitute-requests/{substituteRequest}/decline' => ['POST', "/api/v1/schedule/substitute-requests/{$missing}/decline", ['version' => 1], ['organization_owner', 'organization_admin', 'coordinator'], 404],
+            'GET api/v1/schedule/substitutes/candidates' => ['GET', '/api/v1/schedule/substitutes/candidates', [], ['organization_owner', 'organization_admin', 'coordinator'], 422],
             'GET api/v1/me/substitute-requests' => ['GET', '/api/v1/me/substitute-requests', [], array_values(array_diff(self::ALL, ['platform_admin'])), 200],
             'GET api/v1/me/substitute-requests/options' => ['GET', '/api/v1/me/substitute-requests/options?from=2026-11-03', [], array_values(array_diff(self::ALL, ['platform_admin'])), 200],
             'POST api/v1/me/substitute-requests' => ['POST', '/api/v1/me/substitute-requests', [], array_values(array_diff(self::ALL, ['platform_admin'])), 422],

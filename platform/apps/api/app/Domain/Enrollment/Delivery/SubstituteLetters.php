@@ -6,8 +6,10 @@ use App\Domain\Catalog\Models\InstructorProfile;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Catalog\Models\SubstituteRequest;
 use App\Domain\Catalog\Models\SubstituteRequestSession;
+use App\Domain\Catalog\Services\TeacherRecipients;
 use App\Domain\Enrollment\Models\EnrollmentEvent;
 use App\Domain\Enrollment\Models\EnrollmentEventDelivery;
+use App\Domain\Enrollment\Services\TeamLetters;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Services\StaffRights;
@@ -47,6 +49,9 @@ final class SubstituteLetters
     /** @return array{to: string, mail: MailContent}|array{skip: string} */
     public function handle(EnrollmentEventDelivery $delivery, EnrollmentEvent $event): array
     {
+        if ($event->type === TeamLetters::DECLINED) {
+            return $this->declined($delivery, $event);
+        }
         $request = $this->request($event);
         $sessions = $request === null ? new Collection : $this->sessions($request);
         if ($request === null || $sessions->isEmpty()) {
@@ -102,6 +107,67 @@ final class SubstituteLetters
             heading: $name.' търси заместник', paragraphs: $paragraphs, facts: $facts, callout: null, quote: null,
             button: ['label' => 'Назначи заместник', 'url' => rtrim((string) config('platform.web_url'), '/').'/dashboard?substitute='.rawurlencode((string) $request->id).'&organization='.rawurlencode((string) $event->organization_id)],
             after: [], footer: 'Получавате това писмо, защото назначавате заместници в '.($organization instanceof Organization ? $organization->name : 'организацията').'.',
+        )];
+    }
+
+    public function declinedRecipient(EnrollmentEvent $event): ?User
+    {
+        $id = $event->payload['user_id'] ?? null;
+        $requestId = $event->payload['substitute_request_id'] ?? null;
+        if (! is_string($id) || ! is_string($requestId) || ($event->payload['requester_user_id'] ?? null) !== $id
+            || ! SubstituteRequest::query()->whereKey($requestId)->where('requester_user_id', $id)->exists()) {
+            return null;
+        }
+
+        return User::query()->whereKey(TeacherRecipients::team((string) $event->organization_id, [$id]))->where('is_active', true)->first();
+    }
+
+    /** @return array{to:string,mail:MailContent}|array{skip:string} */
+    private function declined(EnrollmentEventDelivery $delivery, EnrollmentEvent $event): array
+    {
+        $recipient = $this->declinedRecipient($event);
+        if ($recipient === null || $delivery->audience !== 'team' || $delivery->recipient_kind !== 'user'
+            || $delivery->recipient_user_id !== $recipient->id || $delivery->recipient_key !== 'user:'.$recipient->id) {
+            return ['skip' => 'no_recipient'];
+        }
+        if (! $recipient->hasVerifiedEmail() || filter_var($recipient->email, FILTER_VALIDATE_EMAIL) === false) {
+            return ['skip' => 'unverified_email'];
+        }
+        $ids = $event->payload['session_ids'] ?? [];
+        if (! is_array($ids)) {
+            return ['skip' => 'no_recipient'];
+        }
+        $items = SubstituteRequestSession::query()->where('request_id', $event->payload['substitute_request_id'])
+            ->whereIn('session_id', $ids)->where('status', 'declined')->get();
+        $sessions = Session::query()->whereIn('id', $items->pluck('session_id'))
+            ->with(['group.offering.activity', 'group.location', 'group.offering.location', 'location'])->orderBy('starts_at')->orderBy('id')->get();
+        if ($sessions->isEmpty()) {
+            return ['skip' => 'no_recipient'];
+        }
+        $deciders = User::query()->whereIn('id', $items->pluck('decided_by_user_id')->filter())->get()->keyBy('id');
+        $paragraphs = [];
+        $facts = [];
+        foreach ($sessions->take(20) as $session) {
+            $item = $items->firstWhere('session_id', $session->id);
+            $decider = $deciders->get($item->decided_by_user_id);
+            $label = $session->group->offering->activity->title.' · '.$session->group->name;
+            $when = BulgarianDates::session($session->starts_at, $session->ends_at, 'Europe/Sofia');
+            $paragraphs[] = 'Заниманието '.$label.' · '.$when.' остава ваше. Ако все пак няма да можете, свържете се с '.($decider->name ?? 'офиса').'.';
+            $facts[] = ['label' => 'Занимание', 'value' => $label.' · '.$when];
+        }
+        if ($sessions->count() > 20) {
+            $paragraphs[] = 'И още '.($sessions->count() - 20).' занимания — вижте в „Моят график“.';
+        }
+        $from = $sessions->first()->starts_at->setTimezone('Europe/Sofia')->toDateString();
+        $to = $sessions->last()->starts_at->setTimezone('Europe/Sofia')->toDateString();
+        $platform = (string) config('platform.name');
+
+        return ['to' => $recipient->email, 'mail' => new MailContent(
+            team: true, fromName: $platform, replyTo: null, subject: 'Заявката за заместник за '.BulgarianDates::period($from, $to).' не е одобрена',
+            brand: Branding::platform($platform), greeting: null, heading: 'Заявката за заместник не е одобрена',
+            paragraphs: $paragraphs, facts: $facts, callout: null, quote: null,
+            button: ['label' => 'Моят график', 'url' => rtrim((string) config('platform.web_url'), '/').'/dashboard/schedule?organization='.rawurlencode((string) $event->organization_id)],
+            after: [], footer: 'Получавате това писмо по вашата заявка за заместник.',
         )];
     }
 }

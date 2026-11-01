@@ -40,6 +40,13 @@ final class DeliveryRecipients
      */
     public function for(EnrollmentEvent $event): array
     {
+        if ($event->type === TeamLetters::DECLINED) {
+            $recipient = $this->substitutes->declinedRecipient($event);
+
+            return $recipient === null
+                ? [['audience' => 'team', 'recipient_kind' => 'user', 'recipient_key' => 'no_recipient', 'recipient_user_id' => null, 'status' => 'skipped', 'skipped_reason' => 'no_recipient']]
+                : [self::row('team', (string) $recipient->id, $recipient->hasVerifiedEmail())];
+        }
         if ($event->type === TeamLetters::REQUESTED) {
             $request = $this->substitutes->request($event);
             $users = $request === null || $this->substitutes->sessions($request)->isEmpty()

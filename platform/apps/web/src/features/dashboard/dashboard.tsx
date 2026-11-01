@@ -22,6 +22,7 @@ import { canSeePending, loadPending } from '../attendance/api';
 import { TodaySection, hasMonth } from '../attendance/today';
 
 const auditActionLabels: Record<string, string> = {
+  'schedule.substitute_request_declined': 'Отказана заявка за заместник',
   'schedule.substitute_requested': 'Поискан заместник',
   'schedule.substitute_request_withdrawn': 'Оттеглена заявка за заместник',
   'identity.login_succeeded': 'Вход в системата',
