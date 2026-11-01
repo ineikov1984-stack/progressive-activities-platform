@@ -28,7 +28,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| UX: такси, отсъствия и отказ + общ стил | Codex | `codex/payment-terms-workspace-ux` | features/payment-terms UI, засегнати тестове, дизайн правила и WORKBOARD/DECISIONS; без горещи файлове | В работа: поетапно разкриване на опциите, мобилен UX, общо ръководство за Claude |
+| UX: такси, отсъствия и отказ + общ стил | Codex | `codex/payment-terms-workspace-ux` | features/payment-terms UI, засегнати тестове, дизайн правила, CODEX/WORKBOARD/DECISIONS; горещ: CLAUDE.md (само връзка към UX ръководството) | Реализирано: компактни избори и разгъваеми теми, отделен преглед; 14 unit / 10 browser, UX 0/0; общ стил в WORKSPACE-UX.md и връзки за Claude/Codex; чака CI/merge |
 
 ## Опашка (по приоритет)
 

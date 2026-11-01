@@ -140,3 +140,50 @@
 @container terms (min-width: 960px) {
   .kindGrid, .presets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
+/* Progressive disclosure follows the approved workspace: context first, one topic at a time. */
+.page { width: 100%; margin-inline: auto; padding: var(--space-4) var(--space-4) var(--space-8); gap: var(--space-4); }
+.header { gap: var(--space-1); }
+.kindPanel { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); min-width: 0; }
+.kindField { display: grid; gap: var(--space-2); min-width: 0; }
+.kindField label { color: var(--ink); font-size: 14px; font-weight: 650; }
+.kindSelect { width: 100%; min-width: 0; min-height: var(--control-height); box-sizing: border-box; padding: var(--space-2); border: 1px solid var(--border-control); border-radius: var(--radius-md); font: inherit; font-size: 16px; color: var(--ink); background: var(--surface); }
+.kindContext { display: grid; align-content: center; gap: var(--space-1); min-width: 0; overflow-wrap: anywhere; }
+.partTitle { font-size: 17px; line-height: 24px; }
+.presets { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.optionHead { flex-wrap: wrap; }
+.optionName { font-size: 15px; }
+.recommended { margin-left: 0; }
+.presetDescription { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0; color: var(--ink-body); font-size: 14px; line-height: 20px; }
+.optionOn, .optionOn:hover, .optionCustom.optionOn { border-color: var(--ink); background: var(--status-info-soft); }
+.optionHead input { accent-color: var(--ink); }
+.ruleToolbar { display: grid; gap: var(--space-1); padding: 0 var(--space-4) var(--space-3); }
+.ruleSection { min-width: 0; border-top: 1px solid var(--border); }
+.sectionSummary { display: flex; align-items: center; gap: var(--space-3); min-height: var(--control-height); padding: var(--space-3) var(--space-4); color: var(--ink); font-size: 15px; font-weight: 650; line-height: 22px; cursor: pointer; list-style: none; }
+.sectionSummary::-webkit-details-marker, .preview > summary::-webkit-details-marker { display: none; }
+.sectionSummary > span:first-of-type { flex: 1; min-width: 0; }
+.sectionSign { flex: none; margin-left: auto; width: 24px; text-align: center; }
+.sectionSign::before { content: '+'; }
+details[open] > summary > .sectionSign::before { content: '−'; }
+.ruleSection > .rule { box-shadow: none; padding-top: var(--space-2); }
+.ruleSection[open] > summary { background: var(--surface-sunken); }
+.ruleSection .ruleBody { padding-left: 0; }
+.choiceLabel { min-height: var(--control-height); align-items: center; }
+.layout { gap: var(--space-4); }
+.aside { position: static; gap: var(--space-3); }
+.preview { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); overflow: clip; }
+.preview > summary { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control-height); padding: var(--space-3) var(--space-4); color: var(--ink); font-size: 16px; font-weight: 650; cursor: pointer; list-style: none; }
+.preview .card { border: 0; border-radius: 0; padding: var(--space-4); }
+.primary { background: var(--ink); }
+.primary:hover { background: var(--nav); }
+.saveBarSticky { bottom: var(--workspace-bottom-offset, 0px); }
+.ruleSection, .preview { scroll-margin-top: calc(var(--workspace-top-offset, 0px) + var(--space-4)); }
+@media (min-width: 820px) { .page { padding: var(--space-6) var(--space-8) var(--space-8); } }
+@container terms (min-width: 720px) {
+  .kindPanel { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .presets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .ruleToolbar { padding-inline: var(--space-6); }
+}
+@container terms (min-width: 880px) { .layout { grid-template-columns: minmax(0, 1fr) 320px; } }
+
+.toolbarActions { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }

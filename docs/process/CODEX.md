@@ -116,6 +116,8 @@ node platform/scripts/check-docs.mjs
 
 ## 6. Дизайн и UX — задължително
 
+Общият приет стил и моделите за бъдещи оформления са в `docs/design/WORKSPACE-UX.md`. Следвай ги заедно със спецификацията и одобрения макет.
+
 - **Токените** от `src/design-system/tokens.css`:
   - текст: `--ink`, `--ink-body`, `--ink-muted`;
   - действия: `--action`, `--action-hover`;
