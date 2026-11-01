@@ -95,7 +95,7 @@
   .mobileOpen .sidebar { transform: translateX(0); }
   .backdrop { position: fixed; inset: 0; z-index: 19; border: 0; background: rgb(15 42 64 / 48%); }
   .mobileOpen .backdrop { display: block; }
-  .mobileClose { display: grid; width: 2.5rem; height: 2.5rem; margin-left: auto; place-items: center; border: 1px solid var(--nav-active); border-radius: var(--radius-md); color: var(--ink-inverse); background: transparent; cursor: pointer; }
+  .mobileClose { display: grid; width: var(--control-height); height: var(--control-height); margin-left: auto; place-items: center; border: 1px solid var(--nav-active); border-radius: var(--radius-md); color: var(--ink-inverse); background: transparent; cursor: pointer; }
   .mobileMenu { display: grid; flex: 0 0 auto; width: 2.75rem; height: 2.75rem; place-items: center; border: 1px solid var(--border-control); border-radius: var(--radius-md); color: var(--ink); background: var(--surface); cursor: pointer; }
   .topbar { padding: 0 var(--space-3); }
   .publicLink, .notification { display: none; }
