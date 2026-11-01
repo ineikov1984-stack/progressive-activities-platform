@@ -10,7 +10,7 @@ export type ChangePreview = { sessions: { id: string; version: number; starts_at
   totals: { sessions: number; groups: number; children: number; families: number; letters: number; teachers: number; without_verified_email: number;
     visits: number; visit_applications: number; skips_dropped: number; not_attending_after: number; starts_changed: number };
   skipped: { started: number; cancelled: number; same_location: number }; warnings: ChangeWarning[] };
-export type ChangeResult = { change: { id: string; action: ChangeAction; sessions: { id: string; version: number }[] }; letters: { families: number; teachers: number; without_verified_email: number } };
+export type ChangeResult = { change: { id: string; action: ChangeAction | 'substitute'; sessions: { id: string; version: number }[] }; letters: { families: number; teachers: number; without_verified_email: number } };
 export type Selection = Record<string, ScheduleSession>;
 export function selectable(session: ScheduleSession, now: Date): boolean {
   return session.status === 'scheduled' && new Date(session.starts_at).getTime() > now.getTime() && Number.isInteger(session.version);
@@ -34,5 +34,6 @@ export const changeTitles: Record<ChangeAction, string> = { move: 'Премес�
 export function changeSuccess(result: ChangeResult): string {
   const text: Record<ChangeAction, string> = { move: 'Заниманието е преместено.', cancel: 'Заниманията са отменени.', restore: 'Заниманието е върнато.',
     change_location: 'Мястото е сменено.', holiday: 'Почивният ден е приложен.', add: 'Допълнителното занимание е добавено.' };
+  if (result.change.action === 'substitute') return 'Заместникът е назначен. Писмата до учителите тръгват до минута.';
   return `${text[result.change.action]} Писмата до ${result.letters.families} семейства тръгват до минута.`;
 }

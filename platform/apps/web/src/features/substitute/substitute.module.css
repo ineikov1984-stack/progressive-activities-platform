@@ -32,3 +32,13 @@ label.option { display: flex; align-items: center; gap: var(--space-3); min-heig
 .success { color: var(--status-available); padding: var(--space-3); background: var(--status-available-soft); border-radius: var(--radius-md); }
 .skeleton { min-height: var(--space-12); padding: var(--space-3); border-radius: var(--radius-md); background: var(--surface-sunken); color: var(--ink-muted); }
 .section button:disabled { opacity: .6; cursor: default; }
+
+.officeDialog { width: min(100% - var(--space-8), 640px); height: calc(100dvh - var(--space-8)); margin-right: var(--space-4); }
+.officeDialog > form { height: 100%; }
+.officeDialog button { white-space: normal; }
+.officeTask { display: flex; align-items: center; gap: var(--space-3); text-align: left; width: 100%; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); color: var(--ink); cursor: pointer; font: inherit; min-width: 0; }
+.officeTask > span:nth-child(2) { flex: 1; min-width: 0; }
+.officeTask strong, .officeTask small { display: block; overflow-wrap: anywhere; }
+.officeTask small { margin-top: var(--space-1); color: var(--ink-muted); }
+.avatar { flex-shrink: 0; display: grid; place-items: center; width: var(--space-12); height: var(--space-12); background: var(--status-info-soft); border-radius: var(--radius-pill); font-weight: 600; }
+@media(max-width:899px) { .officeDialog { width: 100%; height: 100dvh; max-height: 100dvh; margin: 0; } }

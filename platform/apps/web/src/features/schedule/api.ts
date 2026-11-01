@@ -65,6 +65,7 @@ export type SessionPanel = {
   location: ScheduleLocation | null;
   abilities: GroupAbilities & {attendance?: 'mark' | 'view' | null};
   actions?: ('move' | 'cancel' | 'restore' | 'substitute' | 'request_substitute')[];
+  last_substitute?: { at: string; by: string | null } | null;
   last_change?: { action: string; at: string; by?: string; reason?: string | null } | null;
 };
 
