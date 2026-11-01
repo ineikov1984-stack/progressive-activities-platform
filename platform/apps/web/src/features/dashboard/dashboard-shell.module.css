@@ -16,7 +16,7 @@
 .navigation { display: grid; gap: 2px; margin-top: var(--space-4); }
 .navGroup { display: grid; gap: 2px; }
 .groupLabel { margin: var(--space-4) var(--space-3) var(--space-2); color: var(--nav-muted); font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
-.navItem { position: relative; display: flex; min-height: 2.6rem; align-items: center; gap: var(--space-3); padding: 0 var(--space-3); border-radius: var(--radius-md); color: var(--nav-muted); font-size: 15px; font-weight: 500; text-decoration: none; white-space: nowrap; }
+.navItem { position: relative; display: flex; min-height: var(--control-height); align-items: center; gap: var(--space-3); padding: 0 var(--space-3); border-radius: var(--radius-md); color: var(--nav-muted); font-size: 15px; font-weight: 500; text-decoration: none; white-space: nowrap; }
 .navItem svg { flex: 0 0 auto; width: 1.2rem; height: 1.2rem; }
 .navItem:hover { color: var(--ink-inverse); background: var(--nav-active); }
 .navItem:focus-visible { outline-color: var(--focus-on-dark); }
@@ -38,10 +38,10 @@
 .organization strong { overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
 .organizationIcon { display: grid; flex: 0 0 auto; width: 2rem; height: 2rem; place-items: center; border-radius: 50%; color: var(--ink-inverse); background: var(--ink); font-size: 11px; font-weight: 700; }
 .topActions { display: flex; align-items: center; gap: var(--space-2); }
-.publicLink { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 2.5rem; padding: 0 var(--space-3); border-radius: var(--radius-md); color: var(--ink); font-size: 14px; font-weight: 600; text-decoration: none; }
+.publicLink { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--control-height); padding: 0 var(--space-3); border-radius: var(--radius-md); color: var(--ink); font-size: 14px; font-weight: 600; text-decoration: none; }
 .publicLink:hover { background: var(--surface-sunken); }
 .publicLink svg, .notification svg, .mobileMenu svg, .mobileClose svg { width: 1.2rem; height: 1.2rem; }
-.notification { display: grid; width: 2.5rem; height: 2.5rem; place-items: center; border: 0; border-radius: var(--radius-md); color: var(--ink); background: transparent; cursor: pointer; }
+.notification { display: grid; width: var(--control-height); height: var(--control-height); place-items: center; border: 0; border-radius: var(--radius-md); color: var(--ink); background: transparent; cursor: pointer; }
 .notification:hover { background: var(--surface-sunken); }
 .avatar { display: grid; width: 2.5rem; height: 2.5rem; place-items: center; border-radius: 50%; color: var(--action-hover); background: var(--brand-soft); font-size: 13px; font-weight: 700; }
 .content { min-width: 0; }
