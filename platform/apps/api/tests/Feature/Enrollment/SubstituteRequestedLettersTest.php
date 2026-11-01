@@ -31,6 +31,8 @@ class SubstituteRequestedLettersTest extends TestCase
         [$organization, , , $session] = $this->visitFixture();
         $requester = User::factory()->create();
         $profile = InstructorProfile::create(['user_id' => $requester->id, 'public_name' => 'Иван Петров']);
+        $person = StaffMember::create(['user_id' => $requester->id, 'full_name' => 'Текущо име в екипа']);
+        $profile->forceFill(['staff_member_id' => $person->id])->save();
         $office = User::factory()->create();
         $operator = User::factory()->create();
         OrganizationMembership::create(['organization_id' => $organization->id, 'user_id' => $operator->id, 'role' => 'platform_admin', 'status' => 'active']);
@@ -50,6 +52,8 @@ class SubstituteRequestedLettersTest extends TestCase
         $result = app(ComposeDelivery::class)->handle($delivery);
         $this->assertSame($office->email, $result['to']);
         $this->assertTrue($result['mail']->team);
+        $this->assertStringContainsString('Текущо име в екипа', json_encode($result['mail'], JSON_UNESCAPED_UNICODE));
+        $this->assertStringNotContainsString('Иван Петров', json_encode($result['mail'], JSON_UNESCAPED_UNICODE));
         $this->assertNull($result['mail']->replyTo);
         $this->assertStringNotContainsString('PRIVATE SECRET NOTE', json_encode($result['mail'], JSON_UNESCAPED_UNICODE));
         $this->assertContains('Има бележка — вижте я в заявката.', $result['mail']->paragraphs);

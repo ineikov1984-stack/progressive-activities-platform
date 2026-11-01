@@ -18,7 +18,7 @@ use Illuminate\Validation\ValidationException;
 /** Teacher-facing read projections. Expiry here is a projection, never a write. */
 final readonly class SubstituteRequests
 {
-    public function __construct(private TenantContext $context, private TeachingScope $scope) {}
+    public function __construct(private TenantContext $context, private TeachingScope $scope, private InstructorNames $names) {}
 
     public function authorize(User $actor): void
     {
@@ -47,7 +47,7 @@ final readonly class SubstituteRequests
                 if (! in_array($teacher->instructor_profile_id, $profiles, true) || $teacher->replaces_instructor_profile_id === null) {
                     continue;
                 }
-                $standingRows[] = [...$this->session($session), 'replaces' => ['name' => $data['profiles'][$teacher->replaces_instructor_profile_id]->public_name ?? ''],
+                $standingRows[] = [...$this->session($session), 'replaces' => ['name' => $data['names'][$teacher->replaces_instructor_profile_id] ?? ''],
                     'until' => $session->starts_at->setTimezone('Europe/Sofia')->addDay()->endOfDay()->utc()->toIso8601String(), 'children_now' => TeachingScope::standsInNow($session->starts_at)];
             }
         }
@@ -120,7 +120,9 @@ final readonly class SubstituteRequests
         }
         $profiles = InstructorProfile::query()->whereIn('id', array_keys($links))->whereNotIn('id', $ownProfiles)->whereIn('staff_member_id', DB::table('staff_members')->where('organization_id', $org)->whereNull('archived_at')->select('id'))->orderBy('public_name')->orderBy('id')->limit(50)->get();
 
-        return $profiles->map(fn ($p) => ['profile_id' => $p->id, 'name' => $p->public_name, 'groups' => array_values(array_unique($links[$p->id]))])->all();
+        $names = $this->names->forIds($profiles->modelKeys());
+
+        return $profiles->map(fn ($p) => ['profile_id' => $p->id, 'name' => $names[$p->id], 'groups' => array_values(array_unique($links[$p->id]))])->all();
     }
 
     /**
@@ -134,7 +136,7 @@ final readonly class SubstituteRequests
         $teachers = DB::table('activity_session_instructors')->where('organization_id', $this->context->organizationId())->whereIn('session_id', $sessions->keys())->get();
         $ids = [...$items->pluck('substitute_profile_id'), ...$requests->pluck('suggested_profile_id'), ...$teachers->pluck('instructor_profile_id'), ...$teachers->pluck('replaces_instructor_profile_id')];
 
-        return ['profiles' => InstructorProfile::query()->whereIn('id', array_filter($ids))->get()->keyBy('id'), 'teachers' => $teachers->groupBy('session_id'), 'users' => User::query()->whereIn('id', $items->pluck('decided_by_user_id')->filter())->get()->keyBy('id')];
+        return ['names' => $this->names->forIds($ids), 'profiles' => InstructorProfile::query()->whereIn('id', array_filter($ids))->get()->keyBy('id'), 'teachers' => $teachers->groupBy('session_id'), 'users' => User::query()->whereIn('id', $items->pluck('decided_by_user_id')->filter())->get()->keyBy('id')];
     }
 
     /**
@@ -145,7 +147,7 @@ final readonly class SubstituteRequests
      */
     private function serialize(SubstituteRequest $request, Collection $items, Collection $sessions, array $data): array
     {
-        $person = fn ($id) => $id !== null && isset($data['profiles'][$id]) ? ['profile_id' => $id, 'name' => $data['profiles'][$id]->public_name] : null;
+        $person = fn ($id) => $id !== null && isset($data['profiles'][$id]) ? ['profile_id' => $id, 'name' => $data['names'][$id]] : null;
         $rows = [];
         foreach ($items->sortBy(fn ($i) => $sessions[$i->session_id]->starts_at->format('c').$i->session_id) as $item) {
             $session = $sessions[$item->session_id];

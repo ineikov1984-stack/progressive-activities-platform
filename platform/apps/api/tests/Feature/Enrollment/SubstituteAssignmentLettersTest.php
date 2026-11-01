@@ -347,7 +347,10 @@ class SubstituteAssignmentLettersTest extends TestCase
             $user = $this->memberOf($f['organization'], 'instructor');
             $person = $this->personFor($f['organization'], $user, true);
             $profile = $this->profileOf($f['organization'], $person);
-            $this->inTenant($f['organization'], fn () => $profile->update(['public_name' => $name]));
+            $this->inTenant($f['organization'], function () use ($person, $profile, $name): void {
+                $person->update(['full_name' => $name]);
+                $profile->update(['public_name' => $name]);
+            });
             $f[$key] = $profile;
             $f[$key.'User'] = $user;
         }

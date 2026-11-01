@@ -92,7 +92,10 @@ final readonly class AcceptTeamInvitation
                     'email' => $email, 'phone' => $user->getAttribute('phone'), 'version' => 1,
                 ])->save();
             } elseif ($person->user_id === null) {
-                $person->forceFill(['user_id' => $user->id, 'email' => $person->email ?? $email, 'version' => $person->version + 1])->save();
+                // The new account's chosen name is the identity accepted from the mail invitation.
+                // Existing accounts keep the organization's own record when joining.
+                $person->forceFill(['user_id' => $user->id, 'email' => $person->email ?? $email,
+                    ...($fromMailOnly ? ['full_name' => $user->name] : []), 'version' => $person->version + 1])->save();
             }
             $invitation->forceFill(['accepted_at' => now(), 'accepted_by' => $user->id, 'active_key' => null])->save();
             // The rights follow the role of the invitation (docs/product/team-rights.md, т. 4.6).

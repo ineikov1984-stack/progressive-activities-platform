@@ -27,7 +27,7 @@ final readonly class ScheduleChangePlanner
 {
     public const TIMEZONE = 'Europe/Sofia';
 
-    public function __construct(private GroupTeachers $teachers, private SubstituteAssignmentPlanner $substitutes) {}
+    public function __construct(private GroupTeachers $teachers, private SubstituteAssignmentPlanner $substitutes, private InstructorNames $names) {}
 
     /**
      * The sessions of the request as the organization sees them, without locks: which groups to lock (т. 7.4, step 4).
@@ -189,7 +189,7 @@ final readonly class ScheduleChangePlanner
             $others[] = $copy;
         }
         $profileIds = array_values(array_unique(array_merge([], ...array_map(fn (PlannedSessionChange $change): array => $change->teachersAfter, $active))));
-        $names = InstructorProfile::query()->whereKey($profileIds)->pluck('public_name', 'id')->all();
+        $names = $this->names->forIds($profileIds);
         $locations = Location::query()->whereKey(array_values(array_filter(array_map(fn (PlannedSessionChange $change): ?string => $change->after->location_id, $active))))->get()->keyBy('id');
         $warnings = [];
         foreach ($active as $change) {

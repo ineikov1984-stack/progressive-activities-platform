@@ -35,7 +35,7 @@ final readonly class ScheduleReader
     /** The colours of the activities (`--cat-*` on the web): by the activities' order, repeated after the fifth (т. 3.6). */
     private const COLORS = 5;
 
-    public function __construct(private TenantContext $context) {}
+    public function __construct(private TenantContext $context, private InstructorNames $names) {}
 
     /** Existence inside the current tenant, before a caller checks its group-scoped rights. */
     public function groupExists(string $id): bool
@@ -219,6 +219,7 @@ final readonly class ScheduleReader
                 'offerings.lead_instructor_profile_id', 'leads.public_name as lead_name',
             ]);
 
+        $names = $this->names->forIds($rows->pluck('lead_instructor_profile_id')->all());
         $result = [];
         foreach ($rows as $row) {
             $id = (string) $row->id;
@@ -232,7 +233,7 @@ final readonly class ScheduleReader
                 'location_id' => self::text($row->location_id),
                 'capacity_max' => $row->capacity_max === null ? null : (int) $row->capacity_max,
                 'lead_profile_id' => self::text($row->lead_instructor_profile_id),
-                'lead_name' => self::text($row->lead_name),
+                'lead_name' => $names[(string) $row->lead_instructor_profile_id] ?? null,
                 // Seen with its sessions of the period; none of them is changed (т. 4.1).
                 'archived' => $row->group_status === 'archived',
             ];
@@ -242,7 +243,7 @@ final readonly class ScheduleReader
     }
 
     /**
-     * The teachers on each session, as the schedule names them (the public name of the profile).
+     * The teachers on each session, by current team identity (public name only for unlinked legacy profiles).
      *
      * @param  list<string>  $sessionIds
      * @return array<string, list<Teacher>> session => teachers
@@ -254,17 +255,19 @@ final readonly class ScheduleReader
         }
         $organizationId = $this->context->organizationId();
         $result = [];
-        foreach (DB::table('activity_session_instructors')
+        $rows = DB::table('activity_session_instructors')
             ->join('instructor_profiles', 'instructor_profiles.id', '=', 'activity_session_instructors.instructor_profile_id')
             ->leftJoin('instructor_profiles as replaced', fn ($join) => $join->on('replaced.id', '=', 'activity_session_instructors.replaces_instructor_profile_id')->where('replaced.organization_id', $organizationId))
             ->where('activity_session_instructors.organization_id', $organizationId)
             ->where('instructor_profiles.organization_id', $organizationId)
             ->whereIn('activity_session_instructors.session_id', $sessionIds)
             ->orderBy('instructor_profiles.id')
-            ->get(['activity_session_instructors.session_id', 'instructor_profiles.id', 'instructor_profiles.public_name', 'activity_session_instructors.replaces_instructor_profile_id', 'replaced.public_name as replaces_name']) as $row) {
-            $result[(string) $row->session_id][] = ['profile_id' => (string) $row->id, 'name' => (string) $row->public_name,
+            ->get(['activity_session_instructors.session_id', 'instructor_profiles.id', 'instructor_profiles.public_name', 'activity_session_instructors.replaces_instructor_profile_id', 'replaced.public_name as replaces_name']);
+        $names = $this->names->forIds([...$rows->pluck('id'), ...$rows->pluck('replaces_instructor_profile_id')]);
+        foreach ($rows as $row) {
+            $result[(string) $row->session_id][] = ['profile_id' => (string) $row->id, 'name' => $names[(string) $row->id],
                 'replaces_instructor_profile_id' => $row->replaces_instructor_profile_id === null ? null : (string) $row->replaces_instructor_profile_id,
-                'replaces_name' => $row->replaces_name === null ? null : (string) $row->replaces_name];
+                'replaces_name' => $row->replaces_instructor_profile_id === null ? null : ($names[(string) $row->replaces_instructor_profile_id] ?? null)];
         }
 
         return $result;
@@ -284,7 +287,7 @@ final readonly class ScheduleReader
         $organizationId = $this->context->organizationId();
         $day = fn (mixed $date): ?string => $date === null || $date === '' ? null : substr((string) $date, 0, 10);
         $result = [];
-        foreach (DB::table('activity_group_instructors')
+        $rows = DB::table('activity_group_instructors')
             ->join('instructor_profiles', 'instructor_profiles.id', '=', 'activity_group_instructors.instructor_profile_id')
             ->where('activity_group_instructors.organization_id', $organizationId)
             ->where('instructor_profiles.organization_id', $organizationId)
@@ -293,10 +296,12 @@ final readonly class ScheduleReader
             ->get([
                 'activity_group_instructors.group_id', 'activity_group_instructors.instructor_profile_id', 'activity_group_instructors.role',
                 'activity_group_instructors.starts_on', 'activity_group_instructors.ends_on', 'instructor_profiles.public_name',
-            ]) as $row) {
+            ]);
+        $names = $this->names->forIds($rows->pluck('instructor_profile_id')->all());
+        foreach ($rows as $row) {
             $result[(string) $row->group_id][] = [
                 'profile_id' => (string) $row->instructor_profile_id,
-                'name' => (string) $row->public_name,
+                'name' => $names[(string) $row->instructor_profile_id],
                 'role' => (string) $row->role,
                 'starts_on' => $day($row->starts_on),
                 'ends_on' => $day($row->ends_on),
