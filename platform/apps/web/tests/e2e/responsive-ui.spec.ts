@@ -128,3 +128,15 @@ for (const width of widths) {
     await keyboardFocus(page); expect(errors).toEqual([]);
   });
 }
+
+for (const width of [390, 768, 1440]) test(`activity category stays readable when selected at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 }); const errors = await fixture(page);
+  await page.goto('/dashboard/activities'); await page.getByRole('button', { name: 'Създай нова дейност', exact: true }).click();
+  const radios = page.getByRole('group', { name: 'Категория', exact: true }).getByRole('radio'); await expect(radios).toHaveCount(7);
+  for (let i = 0; i < await radios.count(); i++) {
+    const radio = radios.nth(i); await radio.locator('..').click(); await expect(radio).toBeChecked();
+    const appearance = await radio.evaluate(input => { const label = (input as HTMLInputElement).labels![0]; const style = getComputedStyle(label); return { color: style.color, background: style.backgroundColor, height: label.getBoundingClientRect().height, padding: parseFloat(style.paddingLeft) }; });
+    expect(appearance.color).not.toBe(appearance.background); expect(appearance.height).toBeGreaterThanOrEqual(44); expect(appearance.padding).toBeGreaterThan(0);
+  }
+  await layout(page); await page.screenshot({ path: test.info().outputPath(`categories-${width}.png`), fullPage: true }); expect(errors).toEqual([]);
+});
