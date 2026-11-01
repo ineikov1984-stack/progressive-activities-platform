@@ -28,7 +28,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| Присъствия — PR 6: месечна таблица и карта на детето | Codex | `codex/attendance-month` | AttendanceMonth, AttendanceSheet/Access, AttendanceController/Presenter, карта на детето, routes/api.php и тестове | По attendance.md 5.6–5.7; тестове, независимо ревю и CI; без нов екран |
+| Присъствия — PR 6: месечна таблица и карта на детето (#132) | Codex | `codex/attendance-month` | AttendanceMonth, AttendanceSheet/Access, ScheduleReader, SessionRoster, AttendanceController/Presenter, карта на детето, routes/api.php и тестове | Реализирано по attendance.md 5.6–5.7; 117 засегнати теста / 1169 проверки, PHPStan, Pint и docs:check зелени; постоянни заявки при 3/30 деца и 4/12 занимания; независимо ревю: 0 blocker / should-fix. Следва CI; без миграция или нов екран |
 
 ## Опашка (по приоритет)
 
