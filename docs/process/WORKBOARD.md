@@ -26,7 +26,7 @@
 
 | Задача | Агент | Клон | Заети области / горещи файлове | Статус / следваща стъпка |
 |---|---|---|---|---|
-| CSP с nonce за всяка заявка | Codex | `codex/csp-request-nonce` | security-headers, Next proxy/root layout, засегнати тестове, WORKBOARD; без горещи файлове | Поето от Codex след „готово“ за #124; стандартна скорост по опашката. Случаен nonce на страница вместо script unsafe-inline; първо тестове, после браузърна проверка и CI |
+| CSP с nonce за всяка заявка | Codex | `codex/csp-request-nonce` | security-headers, Next proxy/root layout, засегнати тестове, WORKBOARD; без горещи файлове | Поето от Codex след „готово“ за #124; стандартна скорост по опашката. 128-bit nonce на страница вместо script unsafe-inline; 16 unit теста, 10 responsive и 9 публични сценария, 2 CSP браузърни проверки в production/Docker dev минават. Динамичен HTML без общ кеш; чака пълен CI и merge от собственика |
 
 ## Опашка (по приоритет)
 

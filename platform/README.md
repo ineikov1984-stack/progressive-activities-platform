@@ -22,6 +22,10 @@ The Docker web service runs `next dev --turbopack` directly. In a local comparis
 
 All local data is synthetic. Never import production or Fitsys exports.
 
+## Script security policy
+
+Page responses receive a fresh 128-bit script nonce. Next.js applies it to the framework and inline bootstrap scripts; inline scripts without it are blocked. HTML is rendered per request and sent with `private, no-store` rather than shared page caching. The API proxy and static assets retain their existing handling. Development keeps the eval/WebSocket permissions needed by Next.js; production does not allow eval. Inline style permissions are unchanged.
+
 ## Browser verification
 
 Run browser tests on a supported macOS, Windows or Linux host with Node.js 22+ and pnpm 11. The Alpine development web image does not contain a supported Playwright browser; `docker compose run web pnpm test:e2e` is not a browser-test environment.
