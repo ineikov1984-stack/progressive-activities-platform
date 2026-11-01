@@ -3,12 +3,14 @@
 namespace Tests\Feature\Attendance;
 
 use App\Domain\Attendance\Actions\RecordAttendance;
+use App\Domain\Attendance\Actions\RecordAttendanceSession;
 use App\Domain\Catalog\Models\Session;
 use App\Domain\Identity\Models\User;
 use App\Domain\Organizations\Models\OrganizationMembership;
 use App\Domain\Organizations\Tenancy\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
@@ -150,6 +152,24 @@ class AttendanceConcurrencyTest extends TestCase
         $this->assertLessThan(5, microtime(true) - $started, 'The worker must be the deadlock victim, not its 15-second lock timeout.');
         $this->assertSame(0, DB::table('attendance_marks')->where('organization_id', $this->fixture[0]->id)->count());
         $this->assertSame(0, DB::table('attendance_mark_changes')->where('organization_id', $this->fixture[0]->id)->count());
+    }
+
+    public function test_session_changes_commit_with_the_restricted_role_and_matching_deferred_history(): void
+    {
+        DB::statement('SET ROLE progressive_app');
+        DB::select("SELECT set_config('app.current_organization_id', ?, false)", [$this->fixture[0]->id]);
+        Auth::guard('web')->setUser($this->actor);
+        $action = app(RecordAttendanceSession::class);
+        foreach ([['action' => 'topic', 'topic' => 'Мат с топ'], ['action' => 'not_held', 'reason' => 'Затворена зала'], ['action' => 'held', 'reason' => 'Проведе се']] as $body) {
+            $this->assertSame(200, $action->handle($this->actor, $this->fixture[3], $body)['status']);
+        }
+        $state = DB::table('attendance_sessions')->where('session_id', $this->fixture[3]->id)->first();
+        $this->assertSame(3, $state->version);
+        $this->assertSame('Мат с топ', $state->topic);
+        $this->assertNull($state->not_held_at);
+        $this->assertSame(['not_held', 'held'], DB::table('attendance_session_changes')->where('attendance_session_id', $state->id)->orderBy('version')->pluck('action')->all());
+        $this->assertSame(2, DB::table('audit_events')->where('organization_id', $this->fixture[0]->id)->where('action', 'like', 'attendance.session_%')->count());
+        $this->assertSame(1, DB::table('activity_sessions')->where('id', $this->fixture[3]->id)->value('version'));
     }
 
     private function body(string $status): array

@@ -102,6 +102,14 @@ class TeamRightsNarrowScopeTest extends TestCase
         $outsideSession = $this->inTenant($f['organization'], fn () => $f['thursday']->sessions()->firstOrFail()->id);
         $this->signInTo($viewer, $f['organization'])->getJson('/api/v1/attendance/sessions/'.$outsideSession)->assertNotFound();
 
+        $this->postJson('/api/v1/attendance/sessions/'.$f['session']->id.'/changes', ['action' => 'topic', 'topic' => str_repeat('а', 201)])->assertUnprocessable();
+        foreach (['not_held', 'held'] as $action) {
+            $this->postJson('/api/v1/attendance/sessions/'.$f['session']->id.'/changes', ['action' => $action, 'reason' => 'Причина'])->assertForbidden();
+        }
+        foreach (['topic', 'not_held', 'held'] as $action) {
+            $this->postJson('/api/v1/attendance/sessions/'.$outsideSession.'/changes', ['action' => $action, 'topic' => 'Тема', 'reason' => 'Причина'])->assertNotFound();
+        }
+
         // The lists hold only the group; the team, only the person themselves (nobody teaches "Вторник").
         $this->signInTo($viewer, $f['organization']);
         $this->assertSame([$f['tuesday']->id], array_column($this->getJson('/api/v1/enrollment/groups')->assertOk()->json('groups'), 'id'));

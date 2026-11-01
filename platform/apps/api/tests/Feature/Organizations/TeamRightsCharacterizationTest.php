@@ -215,6 +215,24 @@ class TeamRightsCharacterizationTest extends TestCase
         $this->assertSame([], array_values(array_diff(self::PERMISSIONS_BEFORE[$role], $permissions)), 'A right from before is missing.');
     }
 
+    #[DataProvider('roles')]
+    public function test_session_attendance_actions_follow_each_role(string $role): void
+    {
+        $f = $this->rightsFixture();
+        $actor = $this->memberOf($f['organization'], $role);
+        if ($role === 'instructor') {
+            $person = $this->personFor($f['organization'], $actor, true);
+            $profile = $this->profileOf($f['organization'], $person);
+            $this->inTenant($f['organization'], fn () => $f['tuesday']->assignments()->attach($profile->id, ['role' => 'lead']));
+        }
+        foreach (['topic', 'not_held', 'held'] as $action) {
+            $allowed = in_array($role, self::SCHEDULE_MANAGE, true) || ($action === 'topic' && $role === 'instructor');
+            $expected = $role === 'platform_admin' ? 404 : ($allowed ? 422 : 403);
+            $this->signInTo($actor, $f['organization'])->postJson('/api/v1/attendance/sessions/'.$f['session']->id.'/changes',
+                ['action' => $action, 'topic' => str_repeat('а', 201)])->assertStatus($expected);
+        }
+    }
+
     public function test_every_route_of_an_organization_has_an_expected_answer(): void
     {
         $f = $this->rightsFixture();
